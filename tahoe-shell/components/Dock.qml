@@ -33,7 +33,7 @@ PanelWindow {
     }
 
     exclusiveZone: 98
-    implicitHeight: 98
+    implicitHeight: 132
     color: "transparent"
 
     BackgroundEffect.blurRegion: Region {
@@ -45,7 +45,7 @@ PanelWindow {
         id: dockSurface
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.bottom: parent.bottom
-        anchors.bottomMargin: 8
+        anchors.bottomMargin: 10
         width: Math.min(parent.width - 28, dockRow.implicitWidth + 34)
         height: 78
         radius: 24
@@ -138,7 +138,8 @@ PanelWindow {
                     Rectangle {
                         id: hoverLabel
                         anchors.horizontalCenter: parent.horizontalCenter
-                        y: pinnedButton.hovered ? -31 : -22
+                        z: 10
+                        y: pinnedButton.hovered ? -34 : -24
                         width: Math.max(labelText.implicitWidth + 18, 42)
                         height: 24
                         radius: 7

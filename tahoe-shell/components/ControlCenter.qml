@@ -17,7 +17,7 @@ PanelWindow {
     aboveWindows: true
     exclusiveZone: 0
     implicitWidth: 330
-    implicitHeight: 424
+    implicitHeight: 392
     color: "transparent"
 
     anchors {
@@ -26,7 +26,7 @@ PanelWindow {
     }
 
     margins {
-        top: 42
+        top: 34
         right: 14
     }
 
@@ -37,27 +37,34 @@ PanelWindow {
 
     Rectangle {
         id: panel
-        anchors.fill: parent
+        x: 0
+        y: root.open ? 0 : -8
+        width: parent.width
+        height: parent.height
         radius: 24
         color: "#8cf5f6f8"
         border.color: "#70ffffff"
         border.width: 1
         opacity: root.open ? 1 : 0
-        scale: root.open ? 1 : 0.94
+        scale: root.open ? 1 : 0.98
         transformOrigin: Item.TopRight
 
         Behavior on opacity {
             NumberAnimation { duration: 150; easing.type: Easing.OutCubic }
         }
 
+        Behavior on y {
+            NumberAnimation { duration: 160; easing.type: Easing.OutCubic }
+        }
+
         Behavior on scale {
-            NumberAnimation { duration: 170; easing.type: Easing.OutCubic }
+            NumberAnimation { duration: 160; easing.type: Easing.OutCubic }
         }
 
         ColumnLayout {
             anchors.fill: parent
-            anchors.margins: 14
-            spacing: 10
+            anchors.margins: 12
+            spacing: 8
 
             RowLayout {
                 Layout.fillWidth: true
@@ -117,7 +124,7 @@ PanelWindow {
                 value: root.niriService ? root.niriService.activeWorkspaceName : "1"
                 accent: "#ff9f0a"
                 Layout.fillWidth: true
-                Layout.preferredHeight: 78
+                Layout.preferredHeight: 72
             }
 
             ControlTile {
@@ -125,20 +132,20 @@ PanelWindow {
                 value: "42%"
                 accent: "#30d158"
                 Layout.fillWidth: true
-                Layout.preferredHeight: 78
+                Layout.preferredHeight: 72
             }
 
             Rectangle {
                 Layout.fillWidth: true
-                Layout.preferredHeight: 76
+                Layout.preferredHeight: 70
                 radius: 18
                 color: "#52ffffff"
                 border.color: "#52ffffff"
 
                 Column {
                     anchors.fill: parent
-                    anchors.margins: 14
-                    spacing: 8
+                    anchors.margins: 12
+                    spacing: 6
 
                     Text {
                         text: "Now Playing"
@@ -162,46 +169,51 @@ PanelWindow {
         required property string value
         required property color accent
 
-        Layout.preferredHeight: 92
+        Layout.preferredHeight: 82
         radius: 18
         color: "#5cffffff"
         border.color: "#61ffffff"
 
-        Rectangle {
-            x: 14
-            y: 14
-            width: 28
-            height: 28
-            radius: 14
-            color: accent
-        }
-
-        Text {
-            anchors.left: parent.left
+        RowLayout {
+            anchors.fill: parent
             anchors.leftMargin: 14
-            anchors.right: parent.right
-            anchors.rightMargin: 14
-            anchors.bottom: valueText.top
-            anchors.bottomMargin: 3
-            text: title
-            color: "#202124"
-            font.pixelSize: 13
-            font.weight: Font.DemiBold
-            elide: Text.ElideRight
-        }
+            anchors.rightMargin: 12
+            anchors.topMargin: 12
+            anchors.bottomMargin: 12
+            spacing: 10
 
-        Text {
-            id: valueText
-            anchors.left: parent.left
-            anchors.leftMargin: 14
-            anchors.right: parent.right
-            anchors.rightMargin: 14
-            anchors.bottom: parent.bottom
-            anchors.bottomMargin: 14
-            text: value
-            color: "#5f6368"
-            font.pixelSize: 12
-            elide: Text.ElideRight
+            Rectangle {
+                Layout.preferredWidth: 28
+                Layout.preferredHeight: 28
+                Layout.alignment: Qt.AlignVCenter
+                radius: 14
+                color: accent
+            }
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                Layout.alignment: Qt.AlignVCenter
+                spacing: 3
+
+                Text {
+                    Layout.fillWidth: true
+                    text: title
+                    color: "#202124"
+                    font.pixelSize: 13
+                    font.weight: Font.DemiBold
+                    elide: Text.ElideRight
+                    maximumLineCount: 1
+                }
+
+                Text {
+                    Layout.fillWidth: true
+                    text: value
+                    color: "#5f6368"
+                    font.pixelSize: 12
+                    elide: Text.ElideRight
+                    maximumLineCount: 1
+                }
+            }
         }
     }
 }

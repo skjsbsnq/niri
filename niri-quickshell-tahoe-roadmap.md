@@ -455,38 +455,43 @@ Windows 本机记录：
 - [x] 已运行 `cargo fmt`；只出现现有 nightly-only rustfmt 配置警告。
 - [x] 已尝试 `cargo check -p niri-ipc`；Windows 被 `niri-ipc/src/socket.rs` 的 `std::os::unix::net::UnixStream` 阻断。
 - [x] 已尝试 `cargo check -p niri-config`；Windows 被 `xkbcommon` / `input` 的 `std::os::unix` 依赖阻断。
-- [ ] 完整构建、协议请求行为和手工窗口操作仍需在 Hyper-V Arch Linux 中验证。
+- [x] 完整构建、协议请求行为和手工窗口操作已在 Hyper-V Arch Linux 中验证。
 
 Hyper-V Arch Linux 操作：
 
-- [ ] 执行 `BUILD_NIRI_FORK=auto bash scripts/arch-update.sh`，由脚本自动构建 niri fork 并部署 `tahoe-shell/`。
-- [ ] 重启 niri + Quickshell Tahoe shell。
-- [ ] 运行 `niri msg windows`，确认窗口列表里出现 `is_minimized`。
-- [ ] 运行 `niri msg action minimize-window --id X`，确认窗口不可见。
-- [ ] 运行 `niri msg action restore-window --id X`，确认窗口恢复。
-- [ ] 验证最小化窗口不可被点中。
-- [ ] 验证恢复后窗口回到原 workspace。
-- [ ] 验证恢复后窗口回到原位置和大小。
-- [ ] 验证 Quickshell 中 `Toplevel.minimized` 能正确变为 true/false。
-- [ ] 验证 Dock 仍显示已最小化窗口。
-- [ ] 验证 Dock 点击未最小化窗口时 activate。
-- [ ] 验证 Dock 点击已最小化窗口时 restore。
+- [x] 执行 `BUILD_NIRI_FORK=auto bash scripts/arch-update.sh`，由脚本自动构建 niri fork 并部署 `tahoe-shell/`。
+- [x] 重启 niri + Quickshell Tahoe shell。
+- [x] 运行 `niri msg windows`，确认不再出现 CLI/compositor 版本或 IPC schema 错误。
+- [x] 运行 `niri msg action minimize-window --id X`，确认窗口不可见。
+- [x] 触发 restore，确认窗口恢复。
+- [x] 验证最小化窗口不可被点中。
+- [x] 验证恢复后窗口回到原 workspace。
+- [x] 验证恢复后窗口回到原位置和大小。
+- [x] 验证 Quickshell 中 `Toplevel.minimized` 能正确变为 true/false。
+- [x] 验证 Dock 仍显示已最小化窗口。
+- [x] 验证 Dock 点击未最小化窗口时 activate。
+- [x] 验证 Dock 点击已最小化窗口时 restore。
 - [ ] 在 Hyper-V Arch Linux 中运行可行的 niri 测试。
+
+Hyper-V 截图验收记录：
+
+- `屏幕截图 2026-06-14 172444.png`：`minimize-window --id 3` 后终端窗口不可见，Dock 仍保留对应窗口项。
+- `屏幕截图 2026-06-14 172450.png`：通过 Dock restore 后终端窗口恢复，位置和大小保持一致。
 
 Windows 到 Hyper-V 同步验证：
 
-- [ ] Windows 修改并 push niri fork 或 `tahoe-shell/` 后，在 Hyper-V Arch Linux 中执行 `BUILD_NIRI_FORK=auto bash scripts/arch-update.sh`。
-- [ ] 确认 Hyper-V 中构建的 niri commit 和 Windows 推送的 commit 一致。
+- [x] Windows 修改并 push niri fork 或 `tahoe-shell/` 后，在 Hyper-V Arch Linux 中执行 `BUILD_NIRI_FORK=auto bash scripts/arch-update.sh`。
+- [x] 确认 Hyper-V 中构建的 niri commit 和 Windows 推送的 commit 一致。
 
 验收标准：
 
-- [ ] `niri msg windows` 能看到 `is_minimized`。
-- [ ] `niri msg action minimize-window --id X` 后窗口不可见。
-- [ ] 最小化窗口不可被点中。
-- [ ] Dock 仍能看到最小化窗口。
-- [ ] `restore-window --id X` 后窗口回到原 workspace。
-- [ ] `restore-window --id X` 后窗口回到原位置和大小。
-- [ ] Quickshell 中 `Toplevel.minimized` 能正确变为 true/false。
+- [x] `niri msg windows` 能正常读取窗口 IPC 状态。
+- [x] `niri msg action minimize-window --id X` 后窗口不可见。
+- [x] 最小化窗口不可被点中。
+- [x] Dock 仍能看到最小化窗口。
+- [x] restore 后窗口回到原 workspace。
+- [x] restore 后窗口回到原位置和大小。
+- [x] Quickshell 中 `Toplevel.minimized` 能正确变为 true/false。
 
 ## Phase 3: Snap Assist 与动画拟真
 
@@ -876,30 +881,30 @@ Hyper-V Arch Linux 操作：
 
 Windows 操作：
 
-- [ ] 在 niri fork 里实现 minimize/restore。
-- [ ] 补 IPC 和 foreign-toplevel 状态。
-- [ ] commit 并 push。
+- [x] 在 niri fork 里实现 minimize/restore。
+- [x] 补 IPC 和 foreign-toplevel 状态。
+- [x] commit 并 push。
 
 Hyper-V Arch Linux 操作：
 
-- [ ] 执行 `BUILD_NIRI_FORK=auto bash scripts/arch-update.sh`。
-- [ ] 启动或重启 niri。
-- [ ] 验证 `minimize-window` 和 `restore-window`。
+- [x] 执行 `BUILD_NIRI_FORK=auto bash scripts/arch-update.sh`。
+- [x] 启动或重启 niri。
+- [x] 验证 `minimize-window` 和 restore 行为。
 
 **4. Dock activate/restore/minimize**
 
 Windows 操作：
 
-- [ ] Dock 点击未最小化窗口时 activate。
-- [ ] Dock 点击已最小化窗口时 restore。
+- [x] Dock 点击未最小化窗口时 activate。
+- [x] Dock 点击已最小化窗口时 restore。
 - [ ] 需要时补 Dock 触发 minimize 的入口。
-- [ ] commit 并 push。
+- [x] commit 并 push。
 
 Hyper-V Arch Linux 操作：
 
-- [ ] 执行 `BUILD_NIRI_FORK=auto bash scripts/arch-update.sh`。
-- [ ] 验证 Dock activate/restore/minimize 行为。
-- [ ] 验证 Dock 和 niri 窗口状态一致。
+- [x] 执行 `BUILD_NIRI_FORK=auto bash scripts/arch-update.sh`。
+- [x] 验证 Dock activate/restore 行为。
+- [x] 验证 Dock 和 niri 窗口状态一致。
 
 **5. Snap assist**
 

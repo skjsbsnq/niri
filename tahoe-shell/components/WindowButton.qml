@@ -108,8 +108,8 @@ Item {
         NumberAnimation {
             target: root
             property: "bounceOffset"
-            to: 9
-            duration: 90
+            to: 5
+            duration: 70
             easing.type: Easing.OutCubic
         }
 
@@ -117,8 +117,8 @@ Item {
             target: root
             property: "bounceOffset"
             to: 0
-            duration: 190
-            easing.type: Easing.OutBounce
+            duration: 110
+            easing.type: Easing.OutCubic
         }
     }
 }

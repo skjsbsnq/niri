@@ -194,8 +194,8 @@ PanelWindow {
                         NumberAnimation {
                             target: pinnedButton
                             property: "bounceOffset"
-                            to: 10
-                            duration: 90
+                            to: 5
+                            duration: 70
                             easing.type: Easing.OutCubic
                         }
 
@@ -203,8 +203,8 @@ PanelWindow {
                             target: pinnedButton
                             property: "bounceOffset"
                             to: 0
-                            duration: 190
-                            easing.type: Easing.OutBounce
+                            duration: 110
+                            easing.type: Easing.OutCubic
                         }
                     }
                 }

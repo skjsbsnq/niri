@@ -17,7 +17,7 @@ PanelWindow {
     aboveWindows: true
     exclusiveZone: 0
     implicitWidth: 330
-    implicitHeight: 372
+    implicitHeight: 424
     color: "transparent"
 
     anchors {
@@ -119,7 +119,7 @@ PanelWindow {
 
             Rectangle {
                 Layout.fillWidth: true
-                Layout.fillHeight: true
+                Layout.preferredHeight: 76
                 radius: 18
                 color: "#52ffffff"
                 border.color: "#52ffffff"

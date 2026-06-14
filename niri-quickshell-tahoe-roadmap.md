@@ -364,7 +364,7 @@ Windows 本地状态：
 - 已在 `config/niri/tahoe-phase0.kdl` 中加入 Tahoe Quickshell 自启动。
 - 已更新 `scripts/run-tahoe-session.sh`：nested 使用 child 启动并禁用配置自启，真实 session 使用配置自启。
 - 已新增 `scripts/tahoe-niri-session.sh` 作为登录会话启动器。
-- 已更新 `scripts/arch-update.sh`，部署 `~/.local/bin/tahoe-niri-session`、用户级 `~/.local/share/wayland-sessions/tahoe-niri.desktop` 和系统级 `/usr/share/wayland-sessions/tahoe-niri.desktop`。
+- 已更新 `scripts/arch-update.sh`，部署 `~/.local/bin/tahoe-niri-session`、系统级 `/usr/local/bin/tahoe-niri-session`、用户级 `~/.local/share/wayland-sessions/tahoe-niri.desktop`、系统级 `/usr/share/wayland-sessions/tahoe-niri.desktop` 和兼容登录器的 `/usr/share/xsessions/tahoe-niri.desktop`。
 - 已更新 `scripts/README.md`，记录 nested、TTY session 和登录管理器启动方式。
 
 Hyper-V Arch Linux 操作：
@@ -381,6 +381,7 @@ Hyper-V 截图验收记录：
 - 2026-06-14 截图确认：`NIRI_MODE=nested bash scripts/run-tahoe-session.sh` 显示 `shell launch: child`，nested niri 中仅出现一套 Tahoe 顶栏和 Dock。
 - 2026-06-14 截图确认：真实 niri session 中 Tahoe 顶栏和 Dock 自动出现，不需要手动运行 Quickshell。
 - 2026-06-14 发现：登录管理器中未显示 `Tahoe Niri`。原因判断为多数登录管理器只扫描 `/usr/share/wayland-sessions`，不扫描用户级 `~/.local/share/wayland-sessions`；后续已回补系统级 session 部署。
+- 2026-06-14 继续发现：当前登录器仍只显示 `Niri`，疑似 greeter 只读取 `/usr/share/xsessions` 或过滤 home 下 Exec；已回补 `/usr/local/bin/tahoe-niri-session` 和 `/usr/share/xsessions/tahoe-niri.desktop`。
 
 Windows 到 Hyper-V 同步验证：
 

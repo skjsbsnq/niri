@@ -142,8 +142,8 @@ Windows 操作：
 
 - [x] 确认本地目录存在：`niri/`、`quickshell/`、`macOS-26-Tahoe-for-the-Web-main/`。
 - [x] 确认 niri 当前使用 sparse checkout，源码目录包含 `src/`、`niri-config/`、`niri-ipc/`、`niri-visual-tests/`、`resources/`。
-- [ ] 创建或确认 GitHub 仓库。
-- [ ] 从 Windows 工作区 commit 并 push 当前文档、源码和配置。
+- [x] 创建或确认 GitHub 仓库。
+- [x] 从 Windows 工作区 commit 并 push 当前文档、源码和配置。
 - [x] 在仓库中新增 `scripts/` 目录。
 - [x] 编写 `scripts/arch-bootstrap.sh`。
 - [x] 编写 `scripts/arch-update.sh`。
@@ -175,7 +175,7 @@ Windows 本地状态：
 - 已落地项目专属 niri 配置：`config/niri/tahoe-phase0.kdl`。
 - 已落地 Quickshell Phase 0 原型：`tahoe-shell/shell.qml` 和 `tahoe-shell/components/`。
 - 已记录视觉参数和 Phase 1 待补组件：`tahoe-shell/docs/phase0-visual-params.md`。
-- 当前工作区根目录已初始化为聚合 Git 仓库；`niri/` 和 `quickshell/` 已登记为 submodule。GitHub 聚合仓库创建和 Windows push 仍需要在确定目标 GitHub remote 后完成。
+- 当前工作区根目录已初始化为聚合 Git 仓库；`niri/` 和 `quickshell/` 已登记为 submodule。GitHub remote 为 `https://github.com/skjsbsnq/niri`，当前 `main` 已 push 到 GitHub。
 
 Hyper-V Arch Linux 操作：
 

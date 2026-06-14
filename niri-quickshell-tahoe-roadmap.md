@@ -294,20 +294,26 @@ Windows 操作：
 
 Hyper-V Arch Linux 操作：
 
-- [ ] 执行 `bash scripts/arch-update.sh`，由脚本拉取并部署最新 `tahoe-shell/`。
-- [ ] 在 niri session 中启动 Quickshell Tahoe shell。
-- [ ] 验证顶栏固定到屏幕顶部。
-- [ ] 验证 Dock 固定到屏幕底部。
-- [ ] 验证固定 app 图标显示。
-- [ ] 验证当前窗口列表显示。
+- [x] 执行 `bash scripts/arch-update.sh`，由脚本拉取并部署最新 `tahoe-shell/`。
+- [x] 在 niri session 中启动 Quickshell Tahoe shell。
+- [x] 验证顶栏固定到屏幕顶部。
+- [x] 验证 Dock 固定到屏幕底部。
+- [x] 验证固定 app 图标显示。
+- [x] 验证当前窗口列表显示。
 - [ ] 验证点击窗口按钮能调用 `activate()`。
 - [ ] 验证控制中心能打开和关闭。
 - [ ] 验证 Launchpad 能打开和关闭。
 - [ ] 验证 `BackgroundEffect.blurRegion` 是否生效。
-- [ ] 验证 `ToplevelManager.toplevels` 是否能读到 niri 窗口。
-- [ ] 验证 `WindowManager.windowsets` 是否能读到 workspace。
+- [x] 验证 `ToplevelManager.toplevels` 是否能读到 niri 窗口。
+- [x] 验证 `WindowManager.windowsets` 是否能读到 workspace。
 - [ ] 检查多显示器下顶栏和 Dock 的位置。
 - [ ] 检查 layer-shell exclusive zone 是否符合预期。
+
+Hyper-V 截图验收记录：
+
+- 2026-06-14 截图确认：顶栏、Dock、固定 app 图标、当前窗口列表、控制中心打开状态和 workspace 状态均可见。
+- 截图发现控制中心底部内容裁切，已在 commit `847dbea` 中修复 `ControlCenter.qml` 高度和 Now Playing 区域布局；待 Hyper-V 拉取后复测。
+- 待继续手动确认：Dock 窗口项点击 `activate()`、控制中心关闭、Launchpad 打开/关闭、真实 compositor blur、多显示器位置和 exclusive zone。
 
 Windows 到 Hyper-V 同步验证：
 
@@ -316,15 +322,15 @@ Windows 到 Hyper-V 同步验证：
 
 验收标准：
 
-- [ ] 有顶部菜单栏。
-- [ ] 有底部 Dock。
-- [ ] Dock 能显示固定 app 图标。
-- [ ] Dock 能显示当前窗口列表。
+- [x] 有顶部菜单栏。
+- [x] 有底部 Dock。
+- [x] Dock 能显示固定 app 图标。
+- [x] Dock 能显示当前窗口列表。
 - [ ] 点击窗口项能 activate。
 - [ ] 控制中心能打开和关闭。
 - [ ] 面板有 compositor blur。
-- [ ] 工作区状态能从 Quickshell 读取。
-- [ ] 不修改 Quickshell 核心源码。
+- [x] 工作区状态能从 Quickshell 读取。
+- [x] 不修改 Quickshell 核心源码。
 
 ## Phase 2: niri Fork 最小化/恢复
 

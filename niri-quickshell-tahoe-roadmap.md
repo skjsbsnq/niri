@@ -573,8 +573,8 @@ Windows 操作：
 - [x] 给 Dock hover label 添加 opacity 动画。
 - [x] 给 Dock hover label 添加 y offset 动画。
 - [x] 实现 Dock icon bounce。
-- [x] 控制中心打开时使用 scale + opacity 动画。
-- [x] 控制中心关闭时使用 scale + opacity 动画。
+- [x] 控制中心打开时使用轻微 y 位移 + opacity 动画。
+- [x] 控制中心关闭时使用轻微 y 位移 + opacity 动画。
 - [x] Launchpad 打开时背景 blur。
 - [x] Launchpad 打开时 app grid scale/fade。
 - [x] Launchpad 关闭时反向 scale/fade。
@@ -586,12 +586,12 @@ Windows 操作：
 
 Hyper-V Arch Linux 操作：
 
-- [ ] 执行 `bash scripts/arch-update.sh`，由脚本拉取并部署最新 `tahoe-shell/`。
-- [ ] 重启 Quickshell Tahoe shell。
-- [ ] 验证 Dock magnification 跟随鼠标流畅。
-- [ ] 验证 Dock hover label 的 opacity 和 y offset 动画。
-- [ ] 验证 Dock icon bounce。
-- [ ] 验证控制中心打开/关闭的 scale + opacity 动画。
+- [x] 执行 `bash scripts/arch-update.sh`，由脚本拉取并部署最新 `tahoe-shell/`。
+- [x] 重启 Quickshell Tahoe shell。
+- [x] 验证 Dock magnification 跟随鼠标流畅。
+- [x] 验证 Dock hover label 的 opacity 和 y offset 动画。
+- [x] 验证 Dock icon bounce。
+- [x] 验证控制中心打开/关闭的轻微 y 位移 + opacity 动画。
 - [ ] 验证 Launchpad 打开/关闭的 scale/fade/blur 动画。
 - [ ] 验证菜单弹窗的 y 位移和 opacity 动画。
 - [ ] 验证通知从右上角滑入并 settle。
@@ -599,13 +599,13 @@ Hyper-V Arch Linux 操作：
 
 Windows 到 Hyper-V 同步验证：
 
-- [ ] Windows 修改并 push `tahoe-shell/` 动画后，在 Hyper-V Arch Linux 中执行 `bash scripts/arch-update.sh`。
-- [ ] 确认 Hyper-V 中运行的 QML 和 Windows 推送的版本一致。
+- [x] Windows 修改并 push `tahoe-shell/` 动画后，在 Hyper-V Arch Linux 中执行 `bash scripts/arch-update.sh`。
+- [x] 确认 Hyper-V 中运行的 QML 和 Windows 推送的版本一致。
 
 Quickshell 动画验收标准：
 
-- [ ] Dock magnification 跟随鼠标流畅。
-- [ ] 控制中心打开/关闭不突兀。
+- [x] Dock magnification 跟随鼠标流畅。
+- [x] 控制中心打开/关闭不突兀。
 - [ ] Launchpad 打开/关闭有 scale/fade/blur。
 - [ ] 动画不影响窗口 activate/minimize/restore。
 
@@ -912,7 +912,7 @@ Windows 操作：
 
 - [x] 在 niri fork 中实现 snap assist。
 - [x] 实现 snap preview。
-- [ ] commit 并 push。
+- [x] commit 并 push。
 
 Hyper-V Arch Linux 操作：
 
@@ -927,13 +927,14 @@ Windows 操作：
 - [x] 补 Dock 动画。
 - [x] 补控制中心动画。
 - [x] 补 Launchpad 动画。
-- [ ] commit 并 push。
+- [x] commit 并 push。
 
 Hyper-V Arch Linux 操作：
 
-- [ ] 执行 `bash scripts/arch-update.sh`。
-- [ ] 验证 Dock magnification。
-- [ ] 验证控制中心和 Launchpad 打开/关闭动画。
+- [x] 执行 `bash scripts/arch-update.sh`。
+- [x] 验证 Dock magnification。
+- [x] 验证控制中心打开/关闭动画。
+- [ ] 验证 Launchpad 打开/关闭动画。
 - [ ] 验证动画不影响窗口操作。
 
 **7. niri 窗口动画**
@@ -943,7 +944,7 @@ Windows 操作：
 - [x] 补窗口 open/close 动画。
 - [x] 补窗口 move/resize 动画。
 - [x] 补 snap apply 动画。
-- [ ] commit 并 push。
+- [x] commit 并 push。
 
 Hyper-V Arch Linux 操作：
 

@@ -315,6 +315,9 @@ Hyper-V 截图验收记录：
 - 截图发现控制中心底部内容裁切，已在 commit `847dbea` 中修复 `ControlCenter.qml` 高度和 Now Playing 区域布局；待 Hyper-V 拉取后复测。
 - 截图发现桌面壁纸未显示、面板 blur 观感不明显；已新增 Quickshell `Wallpaper.qml`，并修正为 `WlrLayer.Background` + `ExclusionMode.Ignore` 以覆盖顶栏和 Dock 背后的完整屏幕区域；待 Hyper-V 拉取后复测真实 blur 是否由 compositor 生效。
 - 2026-06-14 手动确认：Dock 窗口项点击 `activate()`、控制中心打开/关闭、Launchpad 打开/关闭均已通过。
+- 2026-06-14 控制中心控件化完成（根仓库 `f2887cc` 重写 + `666c3c8` 崩溃修复 + `01d999a` 位置微调）：原 3 个只显示文字的空 tile 替换为真控件。新增 `services/Controls.qml`（Item visible:false 容器）聚合音量（Pipewire）、亮度（brightnessctl via Process）、Wi-Fi（Networking）、蓝牙（Bluetooth）、正在播放（Mpris）。控制中心重写为 ConnectivityTile（Wi-Fi 标题卡 + 蓝牙圆钮）+ MusicTile（专辑封面 + 传输按钮）+ 亮度/音量 GlassSlider（白色填充，MouseArea 驱动）+ 可折叠 utility 行（Edit 按钮控制）。注册 Material Icons 字体（`assets/fonts/MaterialIconsRound.ttf`，codepoint 已对官方表核对）。所有 Quickshell 单例访问 null-guard，VM 缺硬件不崩。
+- 2026-06-14 崩溃教训：服务根必须用 `Item` 而不是 `QtObject`（QtObject 无默认 children 槽，会导致 `PwObjectTracker`/`Process`/`Timer` 等子对象 "Cannot assign to non-existent default property" fatal，整个 shell 启动失败）。详见 gap-analysis.md 第 1 项。
+- 2026-06-14 控制中心位置：`margins.top` 从 40 调到 36，面板紧贴 34px 顶栏下方 2px。
 - 待继续手动确认：真实 compositor blur、多显示器位置和 exclusive zone。
 
 Windows 到 Hyper-V 同步验证：

@@ -11,9 +11,11 @@
 
 对照 Web 项目 `index.html` 可以很清楚地看到：macOS 控制中心、菜单栏、Spotlight、Dock 右段、Launchpad 这些核心交互在 Web 版里都有完整 DOM + JS，但在 `tahoe-shell/` 里基本只有 QML 外壳。
 
-### 1. 控制中心 `ControlCenter.qml` —— 100% 占位，最严重
+### 1. 控制中心 `ControlCenter.qml` —— ✅ 已完成（2026-06-14）
 
-Web 参考（`index.html` 第 92–169 行）的真实控制中心包含：
+**原占位状态**：只有 3 个显示文字的空 tile（Workspace / Windows / Active），`ControlTile` 里 28×28 彩色圆点纯装饰，没有任何真实控件。
+
+Web 参考（`index.html` 第 92–169 行）包含的控件清单：
 
 ```text
 cc-wifi-tile      Wi-Fi 状态卡 + 子标题 "Home"
@@ -26,17 +28,31 @@ cc-bottom-row     深色模式 / 计算器 / 计时器 / 相机 四个圆钮
 cc-footer         Edit Controls 按钮
 ```
 
-当前 `tahoe-shell/components/ControlCenter.qml` 只有：
+**已完成的改造**（commit `f2887cc` 重写 + 崩溃修复 `666c3c8` + 位置微调 `01d999a`，VM 已验证）：
 
 ```text
-ControlTile "Workspace"   → 只显示 workspace 名字
-ControlTile "Windows"     → 只显示窗口数
-ControlTile "Active"      → 只显示当前窗口标题
+新建 services/Controls.qml  → 真服务（Item visible:false 容器），聚合：
+  - 音量（Quickshell.Services.Pipewire + PwObjectTracker 绑定 defaultAudioSink）
+  - 亮度（brightnessctl via Quickshell.Io.Process + StdioCollector，无 backlight 自动降级）
+  - Wi-Fi（Quickshell.Networking）
+  - 蓝牙（Quickshell.Bluetooth）
+  - 正在播放（Quickshell.Services.Mpris）
+
+重写 ControlCenter.qml：
+  - ConnectivityTile（Wi-Fi 标题卡 + 蓝牙圆钮，点击切 Wi-Fi/BT）
+  - MusicTile（专辑封面 + 曲目 + 传输按钮，接 MPRIS，无播放器时占位）
+  - GlassSlider ×2（亮度 + 音量，白色填充，MouseArea 驱动，无 QtQuick.Controls）
+  - 可折叠 utility 行（Edit Controls 按钮控制显隐：深色/计算器/计时器/相机）
+  - Material Icons 字体（assets/fonts/MaterialIconsRound.ttf，codepoint 已对官方表核对）
+
+降级策略：所有 Quickshell 单例访问都 null-guard + try/catch，VM 缺硬件不崩。
+崩溃教训：服务根必须用 Item 而不是 QtObject（QtObject 无默认 children 槽，
+会导致 PwObjectTracker/Process/Timer 等子对象 fatal）。
 ```
 
-`ControlTile` 里那个 28×28 彩色圆点纯装饰。**没有 Wi-Fi、蓝牙、AirDrop、亮度、音量、勿扰、专注、夜间模式、键盘亮度、播放控件、Stage Manager、屏幕镜像**。一个开关都没有。
+**剩余未做**（留后续）：AirDrop / Stage Manager / 屏幕镜像圆钮（无后端，暂为禁用占位）、深色模式按钮（接 gsettings 是独立任务）、电池电量显示（留给顶栏后续做）。
 
-Web 项目里音量/亮度是真的接的（`script.js` `updateBrightnessOverlay` 第 159–166 行，brightness 滑块驱动一个全屏黑色 overlay 改 opacity），而 `tahoe-shell/` 连 wpctl/brightnessctl 的调用都没有。
+下面其余条目（2–8）仍是占位符，未完成：
 
 ### 2. 菜单栏左侧 "Tahoe" 下拉 `MenuPopup.qml` —— 假菜单
 
@@ -266,8 +282,8 @@ Spotlight            script.js 487-499  → 新 Spotlight.qml
 
 ## 七、修复优先级建议（性价比排序）
 
-1. **控制中心做成真的**——抄 Web `index.html` 第 92–169 行的 cc-grid 布局，接 wpctl/brightnessctl/NetworkManager/BlueZ DBus，加音量/亮度/Wi-Fi/BT/勿扰 toggle。这是"像不像 macOS"的第一观感。
-2. **接真通知系统**——Quickshell NotificationServer 或 swaync，替掉假 toast。
+1. ~~**控制中心做成真的**~~ ✅ 已完成（2026-06-14，commit `f2887cc`+`666c3c8`+`01d999a`）。抄 Web `index.html` 92–169 行的 cc-grid 布局，接 Pipewire/brightnessctl/Networking/Bluetooth/Mpris，加音量/亮度/Wi-Fi/BT toggle + 正在播放。
+2. **接真通知系统**（当前最高优先）——Quickshell NotificationServer 或 swaync，替掉假 toast。
 3. **动画 spring 化**——Dock magnification 改 rAF lerp + margin 联动（抄 `script.js` 358–404）；控制中心/Launchpad/菜单改从锚点 scale 展开（spring）。
 4. **玻璃参数重做**——refraction 上限放开、edge highlight 改真法线、blur passes 加大；研究把 Web 的 SVG glass-distortion 滤镜（turbulence+specular+displacement）翻译成 niri shader 或 Qt ShaderEffect。
 5. **snap preview 重做**——改成圆角 + 模糊元素（抄 `style.css` 2455–2469 行），不是实心蓝色块。
@@ -280,4 +296,5 @@ Spotlight            script.js 487-499  → 新 Spotlight.qml
 
 ## 八、一句话总结
 
-> 当前项目状态：**niri fork 那一层（minimize/snap/glass shader）是真东西且完成度不错；Quickshell shell 那一层是"macOS 的皮 + 没有功能的骨头"**。控制中心是空壳、通知是假的、菜单是假的、Spotlight 没有、动画不用 spring、玻璃缺 SVG displacement 滤镜等价物。Web 参考项目是一份现成的"功能清单 + 视觉参数表 + 动画曲线表"，应该当成蓝图翻译成 QML，而不是只从里面拷图标和壁纸。
+> 当前项目状态：**niri fork 那一层（minimize/snap/glass shader）是真东西且完成度不错；Quickshell shell 那一层原先是"macOS 的皮 + 没有功能的骨头"，现已完成第一个真控件化改造（控制中心），但通知是假的、菜单是假的、Spotlight 没有、动画不用 spring、玻璃缺 SVG displacement 滤镜等价物**。Web 参考项目是一份现成的"功能清单 + 视觉参数表 + 动画曲线表"，应该当成蓝图继续逐项翻译成 QML。下一项：接真通知系统。
+

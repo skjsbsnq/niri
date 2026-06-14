@@ -87,6 +87,14 @@ This starts niri with the Tahoe config and lets the config autostart Quickshell.
 
 After `arch-update.sh` deploys the login entry, a display manager can start the same path by selecting `Tahoe Niri`. If the entry is not visible immediately, log out and restart the display manager so it rescans `/usr/share/wayland-sessions` and `/usr/share/xsessions`.
 
+The login launcher writes diagnostics to:
+
+```sh
+~/.local/state/tahoe-niri/session.log
+```
+
+The launcher prefers the distro `niri-session` wrapper and passes Tahoe's config through the `NIRI_CONFIG` environment variable. Set `TAHOE_USE_NIRI_SESSION_WRAPPER=false` only when debugging direct `niri --session --config ...` startup.
+
 Useful environment overrides:
 
 ```sh
@@ -97,6 +105,7 @@ NIRI_CONFIG=/path/to/config.kdl bash scripts/run-tahoe-session.sh
 TAHOE_CONFIG_DIR=/path/to/tahoe-shell bash scripts/run-tahoe-session.sh
 NIRI_BIN=/path/to/niri bash scripts/run-tahoe-session.sh
 QUICKSHELL_BIN=/path/to/quickshell bash scripts/run-tahoe-session.sh
+TAHOE_USE_NIRI_SESSION_WRAPPER=false ~/.local/bin/tahoe-niri-session
 ```
 
 By default, `run-tahoe-session.sh` uses `~/.config/niri/tahoe/config.kdl` and `~/.config/quickshell/tahoe`, which are both managed by `arch-update.sh`.

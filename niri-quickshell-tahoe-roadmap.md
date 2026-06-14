@@ -382,6 +382,7 @@ Hyper-V 截图验收记录：
 - 2026-06-14 截图确认：真实 niri session 中 Tahoe 顶栏和 Dock 自动出现，不需要手动运行 Quickshell。
 - 2026-06-14 发现：登录管理器中未显示 `Tahoe Niri`。原因判断为多数登录管理器只扫描 `/usr/share/wayland-sessions`，不扫描用户级 `~/.local/share/wayland-sessions`；后续已回补系统级 session 部署。
 - 2026-06-14 继续发现：当前登录器仍只显示 `Niri`，疑似 greeter 只读取 `/usr/share/xsessions` 或过滤 home 下 Exec；已回补 `/usr/local/bin/tahoe-niri-session` 和 `/usr/share/xsessions/tahoe-niri.desktop`。
+- 2026-06-14 截图确认：登录器已显示 `Tahoe Niri`，但选择后未能进入 session；已将 launcher 改为优先复用 distro `niri-session` wrapper，并把诊断日志写入 `~/.local/state/tahoe-niri/session.log`。
 
 Windows 到 Hyper-V 同步验证：
 

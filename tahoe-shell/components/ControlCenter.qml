@@ -16,8 +16,8 @@ PanelWindow {
     visible: open || panel.opacity > 0.01
     aboveWindows: true
     exclusiveZone: 0
-    implicitWidth: 330
-    implicitHeight: 392
+    implicitWidth: 326
+    implicitHeight: 374
     color: "transparent"
 
     anchors {
@@ -26,8 +26,8 @@ PanelWindow {
     }
 
     margins {
-        top: 34
-        right: 14
+        top: 0
+        right: 12
     }
 
     BackgroundEffect.blurRegion: Region {
@@ -38,36 +38,31 @@ PanelWindow {
     Rectangle {
         id: panel
         x: 0
-        y: root.open ? 0 : -8
+        y: root.open ? 0 : -12
         width: parent.width
         height: parent.height
-        radius: 24
+        radius: 22
         color: "#8cf5f6f8"
         border.color: "#70ffffff"
         border.width: 1
         opacity: root.open ? 1 : 0
-        scale: root.open ? 1 : 0.98
-        transformOrigin: Item.TopRight
 
         Behavior on opacity {
-            NumberAnimation { duration: 150; easing.type: Easing.OutCubic }
+            NumberAnimation { duration: 130; easing.type: Easing.OutCubic }
         }
 
         Behavior on y {
-            NumberAnimation { duration: 160; easing.type: Easing.OutCubic }
-        }
-
-        Behavior on scale {
-            NumberAnimation { duration: 160; easing.type: Easing.OutCubic }
+            NumberAnimation { duration: 150; easing.type: Easing.OutCubic }
         }
 
         ColumnLayout {
             anchors.fill: parent
-            anchors.margins: 12
-            spacing: 8
+            anchors.margins: 11
+            spacing: 7
 
             RowLayout {
                 Layout.fillWidth: true
+                Layout.preferredHeight: 25
                 spacing: 8
 
                 Text {
@@ -102,7 +97,7 @@ PanelWindow {
 
             RowLayout {
                 Layout.fillWidth: true
-                spacing: 10
+                spacing: 8
 
                 ControlTile {
                     title: "Wi-Fi"
@@ -124,7 +119,7 @@ PanelWindow {
                 value: root.niriService ? root.niriService.activeWorkspaceName : "1"
                 accent: "#ff9f0a"
                 Layout.fillWidth: true
-                Layout.preferredHeight: 72
+                Layout.preferredHeight: 68
             }
 
             ControlTile {
@@ -132,20 +127,20 @@ PanelWindow {
                 value: "42%"
                 accent: "#30d158"
                 Layout.fillWidth: true
-                Layout.preferredHeight: 72
+                Layout.preferredHeight: 68
             }
 
             Rectangle {
                 Layout.fillWidth: true
-                Layout.preferredHeight: 70
-                radius: 18
+                Layout.preferredHeight: 66
+                radius: 17
                 color: "#52ffffff"
                 border.color: "#52ffffff"
 
                 Column {
                     anchors.fill: parent
-                    anchors.margins: 12
-                    spacing: 6
+                    anchors.margins: 11
+                    spacing: 5
 
                     Text {
                         text: "Now Playing"
@@ -169,8 +164,8 @@ PanelWindow {
         required property string value
         required property color accent
 
-        Layout.preferredHeight: 82
-        radius: 18
+        Layout.preferredHeight: 76
+        radius: 17
         color: "#5cffffff"
         border.color: "#61ffffff"
 
@@ -178,9 +173,9 @@ PanelWindow {
             anchors.fill: parent
             anchors.leftMargin: 14
             anchors.rightMargin: 12
-            anchors.topMargin: 12
-            anchors.bottomMargin: 12
-            spacing: 10
+            anchors.topMargin: 10
+            anchors.bottomMargin: 10
+            spacing: 11
 
             Rectangle {
                 Layout.preferredWidth: 28

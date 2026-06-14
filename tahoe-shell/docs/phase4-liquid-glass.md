@@ -3,6 +3,7 @@
 Windows-side implementation status:
 
 - Quickshell panels use `BackgroundEffect.blurRegion` on Dock, TopBar, Control Center, and Launchpad surfaces.
+- Quickshell layer-shell panels force `xray false` so the effect samples the real framebuffer behind the panel instead of only the workspace backdrop.
 - Dock, TopBar, and Control Center now use lower-alpha QML fills so compositor blur remains visible.
 - niri `background-effect` still owns blur/noise/saturation and now carries glass tint, edge highlight, and refraction parameters.
 - The existing `postprocess.frag` path is sufficient for the first Liquid Glass pass; no new shader file is needed yet.
@@ -20,7 +21,7 @@ Current Tahoe defaults:
 - Active windows: stronger saturation, moderate tint, stronger edge highlight.
 - Inactive windows: lower saturation, lower tint, lower edge highlight, minimal refraction.
 - Popups: brighter tint and highlight than normal windows.
-- Quickshell layer-shell panels: xray blur with the strongest panel tint/highlight.
+- Quickshell layer-shell panels: framebuffer blur with light tint/highlight.
 
 Real-machine follow-up items:
 

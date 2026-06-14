@@ -16,10 +16,10 @@ PanelWindow {
     property bool appMenuOpen: false
     property date now: new Date()
     readonly property string activeApp: appsService && niriService ? appsService.toplevelLabel(niriService.activeToplevel) : "Finder"
-    readonly property color glassFill: "#30f8fbff"
-    readonly property color glassStroke: "#66ffffff"
-    readonly property color glassHairline: "#a6ffffff"
-    readonly property color glassShadowLine: "#18000000"
+    readonly property color glassFill: "#20ffffff"
+    readonly property color glassStroke: "#42ffffff"
+    readonly property color glassHairline: "#4cffffff"
+    readonly property color glassShadowLine: "#12000000"
 
     signal toggleAppMenu()
     signal toggleControlCenter()
@@ -84,8 +84,8 @@ PanelWindow {
                 Rectangle {
                     anchors.fill: parent
                     radius: 12
-                    color: root.appMenuOpen ? "#5cffffff" : "transparent"
-                    border.color: root.appMenuOpen ? "#70ffffff" : "transparent"
+                    color: root.appMenuOpen ? "#32ffffff" : "transparent"
+                    border.color: root.appMenuOpen ? "#42ffffff" : "transparent"
                 }
 
                 Text {
@@ -134,8 +134,8 @@ PanelWindow {
                         Rectangle {
                             anchors.fill: parent
                             radius: 10
-                            color: modelData.active ? "#55ffffff" : "#24ffffff"
-                            border.color: modelData.urgent ? "#ccff453a" : "#58ffffff"
+                            color: modelData.active ? "#32ffffff" : "#18ffffff"
+                            border.color: modelData.urgent ? "#ccff453a" : "#36ffffff"
                             border.width: 1
                         }
 
@@ -180,8 +180,8 @@ PanelWindow {
                 Rectangle {
                     anchors.fill: parent
                     radius: 12
-                    color: root.controlCenterOpen ? "#66ffffff" : "#32ffffff"
-                    border.color: "#72ffffff"
+                    color: root.controlCenterOpen ? "#38ffffff" : "#22ffffff"
+                    border.color: "#40ffffff"
                 }
 
                 Row {

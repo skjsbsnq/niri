@@ -182,14 +182,14 @@ layer-rule {
     }
 
     background-effect {
-        xray true
+        xray false
         blur true
-        noise 0.012
-        saturation 1.65
+        noise 0.008
+        saturation 1.18
         tint-color "#ffffff"
-        tint-amount 0.18
-        edge-highlight 0.45
-        refraction 0.01
+        tint-amount 0.08
+        edge-highlight 0.14
+        refraction 0.004
     }
 }
 

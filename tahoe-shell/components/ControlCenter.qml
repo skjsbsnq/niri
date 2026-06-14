@@ -10,11 +10,11 @@ PanelWindow {
 
     property bool open: false
     property var niriService
-    readonly property color glassFill: "#38f8fbff"
-    readonly property color glassStroke: "#a8ffffff"
-    readonly property color glassInnerFill: "#28ffffff"
-    readonly property color glassTileFill: "#42ffffff"
-    readonly property color glassTileStroke: "#70ffffff"
+    readonly property color glassFill: "#24ffffff"
+    readonly property color glassStroke: "#52ffffff"
+    readonly property color glassInnerFill: "#18ffffff"
+    readonly property color glassTileFill: "#22ffffff"
+    readonly property color glassTileStroke: "#40ffffff"
 
     signal closeRequested()
 
@@ -69,7 +69,7 @@ PanelWindow {
             anchors.topMargin: 1
             height: 1
             radius: 1
-            color: "#c8ffffff"
+            color: "#52ffffff"
         }
 
         Rectangle {
@@ -80,7 +80,7 @@ PanelWindow {
             anchors.rightMargin: 18
             height: 1
             radius: 1
-            color: "#24000000"
+            color: "#16000000"
         }
 
         ColumnLayout {
@@ -107,7 +107,7 @@ PanelWindow {
                     Layout.preferredHeight: 24
                     radius: 12
                     color: root.glassInnerFill
-                    border.color: "#6affffff"
+                    border.color: "#36ffffff"
 
                     Text {
                         anchors.centerIn: parent
@@ -192,8 +192,8 @@ PanelWindow {
         required property string title
         required property string value
         required property color accent
-        property color fillColor: "#42ffffff"
-        property color strokeColor: "#70ffffff"
+        property color fillColor: "#22ffffff"
+        property color strokeColor: "#40ffffff"
 
         Layout.preferredHeight: 76
         radius: 17

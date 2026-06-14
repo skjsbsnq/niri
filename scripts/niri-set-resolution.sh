@@ -14,6 +14,8 @@ set -Eeuo pipefail
 # The change is applied via `niri msg output`, which is a temporary change — it
 # is NOT written back to ~/.config/niri/tahoe/config.kdl. To make it permanent,
 # add an `output "<name>" { mode 1920x1080.000; }` block to that config file.
+#
+# Requires only `niri` itself; jq is optional and used only for nicer status.
 
 log() {
   printf '[niri-set-resolution] %s\n' "$*"
@@ -31,16 +33,15 @@ require_cmd() {
   command -v "$1" >/dev/null 2>&1 || die "missing required command: $1"
 }
 
-# niri msg only talks to a running niri instance. jq is used to parse JSON;
-# fall back to plain text if it is missing.
 require_cmd niri
-HAS_JQ=false
-if command -v jq >/dev/null 2>&1; then
-  HAS_JQ=true
-fi
+require_cmd sed
+require_cmd grep
 
-niri_msg() {
-  niri msg "$@"
+# Extract the connector name from the first `Output "..." ({name})` line that
+# `niri msg outputs` prints. Returns empty string if the format doesn't match
+# (e.g. niri is not reachable or returns "No output is focused.").
+extract_output_name() {
+  sed -n 's/^Output "[^"]*" (\([^)]*\)).*/\1/p' | head -n 1
 }
 
 resolve_output_name() {
@@ -49,25 +50,31 @@ resolve_output_name() {
     return
   fi
 
-  # Prefer the focused output so the script targets the screen the user is
-  # actually looking at. focused-output fails when no window is focused, in
-  # which case fall back to the first connected output from `outputs`.
   local name=""
 
-  if [[ "$HAS_JQ" == true ]]; then
-    name="$(niri_msg focused-output --json 2>/dev/null | jq -r '.name // empty' 2>/dev/null || true)"
+  # Prefer the focused output. `focused-output` prints "No output is focused."
+  # when nothing is focused; the sed pattern yields empty in that case.
+  name="$(niri msg focused-output 2>/dev/null | extract_output_name || true)"
+
+  # Fall back to the first listed output.
+  if [[ -z "$name" ]]; then
+    name="$(niri msg outputs 2>/dev/null | extract_output_name || true)"
   fi
 
   if [[ -z "$name" ]]; then
-    # Fall back to first connected output. `outputs --json` returns an object
-    # keyed by output name; pick the first one.
-    if [[ "$HAS_JQ" == true ]]; then
-      name="$(niri_msg outputs --json 2>/dev/null | jq -r 'to_entries[0].key' 2>/dev/null || true)"
-    fi
-  fi
+    cat >&2 <<'EOF'
 
-  if [[ -z "$name" ]]; then
-    die "could not determine output name; set OUTPUT_NAME explicitly or install jq"
+Could not auto-detect an output name. Likely causes:
+  - niri is not the running compositor in this session
+  - the IPC socket is unreachable
+  - no output is connected
+
+Workarounds:
+  - check IPC:    niri msg version
+  - list outputs: niri msg outputs
+  - set explicitly: OUTPUT_NAME=Virtual-1 bash scripts/niri-set-resolution.sh
+EOF
+    die "could not determine output name; set OUTPUT_NAME explicitly"
   fi
 
   printf '%s\n' "$name"
@@ -76,14 +83,11 @@ resolve_output_name() {
 describe_current_mode() {
   local output_name="$1"
 
-  if [[ "$HAS_JQ" != true ]]; then
-    return
-  fi
-
-  niri_msg outputs --json 2>/dev/null \
-    | jq -r --arg n "$output_name" \
-        '.[$n] | "current: \(.logical.width|round)x\(.logical.height|round) @ \((.logical.refresh // 0) / 1000.0|round)Hz  (\(.name // "?"))"' \
-    2>/dev/null || true
+  # Show only the matched output block from `niri msg outputs`. Falls back to
+  # the full listing if grep fails for any reason.
+  niri msg outputs 2>/dev/null \
+    | sed -n "/^Output \"[^\"]*\" (${output_name})\$/,/^Output \"[^\"]*\" /p" \
+    | head -n 20 || niri msg outputs 2>/dev/null || true
 }
 
 main() {
@@ -95,16 +99,13 @@ main() {
   log "target mode: $MODE"
   log "applying (temporary — not written to config.kdl)..."
 
-  if ! niri_msg output "$output_name" mode "$MODE"; then
+  if ! niri msg output "$output_name" mode "$MODE"; then
     die "niri rejected mode '$MODE' on '$output_name'. Check supported modes with: niri msg outputs"
   fi
 
-  log "done. New state:"
-  describe_current_mode "$output_name" || true
-
-  if [[ "$HAS_JQ" != true ]]; then
-    log "tip: install jq for richer status output. Verify with: niri msg outputs"
-  fi
+  log "done."
+  log "current state for '$output_name':"
+  describe_current_mode "$output_name" || log "(could not fetch output state)"
 }
 
 main "$@"

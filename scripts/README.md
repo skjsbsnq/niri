@@ -66,7 +66,7 @@ bash scripts/niri-set-resolution.sh 1280x800
 OUTPUT_NAME=Virtual-1 bash scripts/niri-set-resolution.sh 1600x900@60
 ```
 
-`niri-set-resolution.sh` calls `niri msg output <name> mode <WxH@Hz>` against the currently focused output (override with `OUTPUT_NAME`). The change is **temporary** — it is not written back to `~/.config/niri/tahoe/config.kdl`. To persist it, add an `output "<name>" { mode 1920x1080.000; }` block there.
+`niri-set-resolution.sh` calls `niri msg output <name> mode <WxH@Hz>` against the currently focused output (override with `OUTPUT_NAME`). It parses niri's plain-text output, so no `jq` is required. The change is **temporary** — it is not written back to `~/.config/niri/tahoe/config.kdl`. To persist it, add an `output "<name>" { mode 1920x1080.000; }` block there.
 
 On Hyper-V, switching modes only works when niri drives the virtual output directly (i.e. the hyperv_drm path). When Hyper-V Enhanced Session (RDP) is in use, the resolution is negotiated by the RDP client and `niri msg output mode` may report that the requested mode is unsupported — resize the Enhanced Session window or reconnect at the desired resolution instead.
 

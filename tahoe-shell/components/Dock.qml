@@ -270,7 +270,7 @@ PanelWindow {
                         }
                         onEntered: root.dockHovered = true
                         onClicked: {
-                            pinnedButton.bounce();
+                            // DIAG: 不调 bounce()，排除 bounceOffset spring 是否导致图标消失
                             if (modelData.shellAction === "launchpad") {
                                 root.toggleLaunchpad();
                             } else if (root.appsService) {

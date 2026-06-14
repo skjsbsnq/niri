@@ -64,25 +64,21 @@ PanelWindow {
         width: Math.min(parent.width - 72, 820)
         height: Math.min(parent.height - 96, 590)
         opacity: root.open ? 1 : 0
-        // Open: scale 1.1 -> 1, "flying in from afar" (the web Launchpad
-        // keyframe is 1.2->1; we use 1.1 for a touch less travel). The
-        // previous 0.96->1 went the WRONG direction — it grew, which reads
-        // as a zoom, not the Tahoe "settle from the distance" feel.
-        scale: root.open ? 1 : 1.1
+        // DIAG: scale 固定 1.0，禁用打开时的 spring，排除 scale spring 是否导致图标消失
+        scale: 1.0
 
         Behavior on opacity {
             NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
         }
 
-        // Spring on scale so the grid settles with a slight ease-out from
-        // its 1.1 starting point, not a linear tween.
-        Behavior on scale {
-            SpringAnimation {
-                spring: 200
-                damping: 1.0
-                epsilon: 0.01
-            }
-        }
+        // DIAG: scale spring 禁用（上面 scale 已固定 1.0）
+        // Behavior on scale {
+        //     SpringAnimation {
+        //         spring: 200
+        //         damping: 1.0
+        //         epsilon: 0.01
+        //     }
+        // }
 
         MouseArea {
             anchors.fill: parent

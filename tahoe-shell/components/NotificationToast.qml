@@ -64,15 +64,14 @@ PanelWindow {
         }
     }
 
-    // Frosted-glass blur behind the card. The blur region's radius MUST
-    // match the card's radius (18) or the blur leaks past the rounded
-    // corners. This was missing, so the card was a flat translucent
-    // rectangle while the Control Center next to it was properly frosted.
-    BackgroundEffect.blurRegion: Region {
-        item: card
-        radius: 18
-    }
-
+    // NOTE: this panel intentionally does NOT declare a
+    // BackgroundEffect.blurRegion. The toast's height is dynamic
+    // (implicitHeight: card.implicitHeight + 8, driven by the body text),
+    // and a blur Region tracking `card` created a geometry rebuild cycle
+    // that aborted the shell on login. The card stays a translucent
+    // rectangle with the inset glass-edge accents below; frosted blur can
+    // be re-added later once the geometry is made independent of the
+    // tracked item.
     Rectangle {
         id: card
 

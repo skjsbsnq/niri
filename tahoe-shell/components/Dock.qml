@@ -170,7 +170,17 @@ PanelWindow {
                         && root.appsService
                         && root.niriService
                         && root.appsService.appHasRunningWindow(modelData, root.niriService.toplevelList)
-                    readonly property real lift: (magnification - 1.0) * 22 + (hovered ? 3 : 0)
+                    // lift drives the icon's upward shift as it magnifies.
+                    // NOTE: a previous version added `+ (hovered ? 3 : 0)` for
+                    // an extra hover lift, but `hovered` (iconMouse.containsMouse)
+                    // is a discrete bool, so crossing an icon border made lift
+                    // jump 3px instantly -> the icon visibly snapped up/down
+                    // ("上下闪"). The magnification term already lifts the icon
+                    // 11px at peak (1.5), so the hover bonus is redundant and
+                    // was removed to kill the snap. If a sharper hover lift is
+                    // wanted later, drive it through a continuous property, not
+                    // a bool conditional.
+                    readonly property real lift: (magnification - 1.0) * 22
 
                     // Fixed width. NOTE: width must NOT depend on
                     // magnification — proximityScale() reads this delegate's

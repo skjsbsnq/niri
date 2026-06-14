@@ -861,7 +861,7 @@ impl<W: LayoutElement> Layout<W> {
 
         let mon = self.monitor_for_output(output)?;
         compute_snap_target(
-            mon.working_area,
+            mon.working_area(),
             pointer_pos_within_output,
             config.threshold,
         )

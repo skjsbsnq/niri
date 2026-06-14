@@ -178,12 +178,10 @@ Item {
     }
 
     // Magnification easing so the running-window half of the dock waves with
-    // the pinned half. On VMs (useSpring=false) duration is 0 — magnification
-    // is bound to proximityScale() which already tracks the pointer, so any
-    // buffer would just lag behind fast sweeps (same fix as Dock.qml).
+    // the pinned half. Same useSpring gate as bounce.
     Behavior on magnification {
         enabled: !root.useSpring
-        NumberAnimation { duration: 0 }
+        NumberAnimation { duration: 130; easing.type: Easing.OutCubic }
     }
     Behavior on magnification {
         enabled: root.useSpring

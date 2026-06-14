@@ -170,17 +170,7 @@ PanelWindow {
                         && root.appsService
                         && root.niriService
                         && root.appsService.appHasRunningWindow(modelData, root.niriService.toplevelList)
-                    // lift drives the icon's upward shift as it magnifies.
-                    // NOTE: a previous version added `+ (hovered ? 3 : 0)` for
-                    // an extra hover lift, but `hovered` (iconMouse.containsMouse)
-                    // is a discrete bool, so crossing an icon border made lift
-                    // jump 3px instantly -> the icon visibly snapped up/down
-                    // ("上下闪"). The magnification term already lifts the icon
-                    // 11px at peak (1.5), so the hover bonus is redundant and
-                    // was removed to kill the snap. If a sharper hover lift is
-                    // wanted later, drive it through a continuous property, not
-                    // a bool conditional.
-                    readonly property real lift: (magnification - 1.0) * 22
+                    readonly property real lift: (magnification - 1.0) * 22 + (hovered ? 3 : 0)
 
                     // Fixed width. NOTE: width must NOT depend on
                     // magnification — proximityScale() reads this delegate's
@@ -313,17 +303,11 @@ PanelWindow {
                     }
 
                     // Magnification easing (icon scale + lift track the pointer).
-                    // IMPORTANT for feel: magnification is bound to proximityScale()
-                    // which already tracks the pointer every move. Spring-ify added a
-                    // Behavior here, but on VMs (useSpring=false) a NumberAnimation
-                    // buffer makes magnification LAG behind fast sweeps — feels
-                    // sticky/sluggish vs the pre-spring instant tracking. So the
-                    // NumberAnimation fallback uses duration 0 (instant): the
-                    // pointer-following IS the easing. Only the spring path (real
-                    // GPU) adds its own smoothing, which is what gives the wave.
+                    // Same useSpring gate as bounce: spring on real GPUs,
+                    // NumberAnimation everywhere else.
                     Behavior on magnification {
                         enabled: !root.useSpring
-                        NumberAnimation { duration: 0 }
+                        NumberAnimation { duration: 130; easing.type: Easing.OutCubic }
                     }
                     Behavior on magnification {
                         enabled: root.useSpring

@@ -64,6 +64,15 @@ PanelWindow {
         }
     }
 
+    // Frosted-glass blur behind the card. The blur region's radius MUST
+    // match the card's radius (18) or the blur leaks past the rounded
+    // corners. This was missing, so the card was a flat translucent
+    // rectangle while the Control Center next to it was properly frosted.
+    BackgroundEffect.blurRegion: Region {
+        item: card
+        radius: 18
+    }
+
     Rectangle {
         id: card
 
@@ -77,9 +86,34 @@ PanelWindow {
         height: Math.max(86, column.implicitHeight + 28)
         radius: 18
         color: "#dff7f8fb"
-        border.color: root.accentColor
-        border.width: 1
         opacity: root.hasCurrent ? 1 : 0
+
+        // NOTE: no `border.width` on the card itself. A centered 1px
+        // border on a large-radius Rectangle is antialiased against the
+        // pixels OUTSIDE the rect and produces faint near-square corners
+        // where the arc is tangent to the straight edges. The glass edges
+        // are drawn instead by the two inset Rectangles below, whose
+        // borders sit fully inside the card and never overshoot.
+        Rectangle {
+            // Top-left light edge (the Tahoe glass highlight).
+            anchors.fill: parent
+            anchors.margins: 1
+            radius: parent.radius - 1
+            color: "transparent"
+            border.color: root.accentColor
+            border.width: 1
+        }
+
+        Rectangle {
+            // Bottom-right shadow edge.
+            anchors.fill: parent
+            anchors.margins: 1
+            radius: parent.radius - 1
+            color: "transparent"
+            border.color: "#14000000"
+            border.width: 1
+            z: -1
+        }
 
         Behavior on x {
             SpringAnimation {

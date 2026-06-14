@@ -65,9 +65,34 @@ PanelWindow {
         implicitHeight: content.implicitHeight + 28
         radius: 28
         color: root.glassFill
-        border.color: root.glassStroke
-        border.width: 1
         opacity: root.open ? 1 : 0
+
+        // NOTE: no `border.width` on the panel itself. A centered 1px
+        // border on a large-radius Rectangle is antialiased against the
+        // pixels OUTSIDE the rect, leaving faint near-square corners
+        // where the arc is tangent to the straight edges. The glass
+        // edges are drawn instead by the two inset Rectangles below,
+        // whose borders sit fully inside the panel and never overshoot.
+        Rectangle {
+            // Top-left light edge (the Tahoe glass highlight).
+            anchors.fill: parent
+            anchors.margins: 1
+            radius: parent.radius - 1
+            color: "transparent"
+            border.color: root.glassStroke
+            border.width: 1
+        }
+
+        Rectangle {
+            // Bottom-right shadow edge.
+            anchors.fill: parent
+            anchors.margins: 1
+            radius: parent.radius - 1
+            color: "transparent"
+            border.color: "#1a000000"
+            border.width: 1
+            z: -1
+        }
 
         // Top hairline highlight (project convention: anchored 1px accents).
         Rectangle {

@@ -54,9 +54,11 @@ PanelWindow {
         height: 78
         radius: 24
         color: root.glassFill
-        border.color: root.glassStroke
-        border.width: 1
 
+        // NOTE: no `border.width` on the surface itself — a centered 1px
+        // border antialiased against the outside pixels produces faint
+        // near-square corners at the arc tangents. Draw the glass edges
+        // with inset Rectangles instead, whose borders sit fully inside.
         MouseArea {
             anchors.fill: parent
             acceptedButtons: Qt.NoButton
@@ -72,10 +74,32 @@ PanelWindow {
         }
 
         Rectangle {
+            // Top-left light edge (the Tahoe glass highlight).
             anchors.fill: parent
             anchors.margins: 1
             radius: 23
-            color: "#08ffffff"
+            color: "transparent"
+            border.color: root.glassStroke
+            border.width: 1
+        }
+
+        Rectangle {
+            // Bottom-right shadow edge.
+            anchors.fill: parent
+            anchors.margins: 1
+            radius: 23
+            color: "transparent"
+            border.color: "#14000000"
+            border.width: 1
+            z: -1
+        }
+
+        Rectangle {
+            // Inner faint stroke (kept from the original double-inset).
+            anchors.fill: parent
+            anchors.margins: 2
+            radius: 22
+            color: "transparent"
             border.color: root.glassInnerStroke
             border.width: 1
         }

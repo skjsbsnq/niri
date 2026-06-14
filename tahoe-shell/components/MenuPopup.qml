@@ -44,9 +44,30 @@ PanelWindow {
         height: parent.height
         radius: 18
         color: "#e6f7f8fb"
-        border.color: "#70ffffff"
-        border.width: 1
         opacity: root.open ? 1 : 0
+
+        // NOTE: no `border.width` on the surface itself — a centered 1px
+        // border antialiased against the outside pixels produces faint
+        // near-square corners at the arc tangents. Draw the glass edges
+        // with inset Rectangles instead, whose borders sit fully inside.
+        Rectangle {
+            anchors.fill: parent
+            anchors.margins: 1
+            radius: parent.radius - 1
+            color: "transparent"
+            border.color: "#70ffffff"
+            border.width: 1
+        }
+
+        Rectangle {
+            anchors.fill: parent
+            anchors.margins: 1
+            radius: parent.radius - 1
+            color: "transparent"
+            border.color: "#14000000"
+            border.width: 1
+            z: -1
+        }
 
         Behavior on opacity {
             NumberAnimation { duration: 140; easing.type: Easing.OutCubic }

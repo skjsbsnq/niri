@@ -70,6 +70,7 @@ pub struct Window {
     pub viewport: WpViewport,
     pub pending_configure: Configure,
     pub configures_received: Vec<(u32, Configure)>,
+    pub wm_capabilities: Vec<xdg_toplevel::WmCapabilities>,
     pub close_requested: bool,
 
     pub configures_looked_at: usize,
@@ -265,6 +266,7 @@ impl State {
             viewport,
             pending_configure: Configure::default(),
             configures_received: Vec::new(),
+            wm_capabilities: Vec::new(),
             close_requested: false,
 
             configures_looked_at: 0,
@@ -683,7 +685,14 @@ impl Dispatch<XdgToplevel, ()> for State {
             xdg_toplevel::Event::ConfigureBounds { width, height } => {
                 window.pending_configure.bounds = Some((width, height));
             }
-            xdg_toplevel::Event::WmCapabilities { .. } => (),
+            xdg_toplevel::Event::WmCapabilities { capabilities } => {
+                window.wm_capabilities = capabilities
+                    .chunks_exact(4)
+                    .flat_map(TryInto::<[u8; 4]>::try_into)
+                    .map(u32::from_ne_bytes)
+                    .flat_map(xdg_toplevel::WmCapabilities::try_from)
+                    .collect();
+            }
             _ => unreachable!(),
         }
     }

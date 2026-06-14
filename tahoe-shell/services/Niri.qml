@@ -16,7 +16,15 @@ QtObject {
     readonly property string activeWorkspaceName: workspaceLabel(activeWorkspace, 0)
 
     function activateToplevel(toplevel) {
-        if (toplevel && toplevel.activate)
+        if (!toplevel)
+            return;
+
+        if (toplevel.minimized) {
+            toplevel.minimized = false;
+            return;
+        }
+
+        if (toplevel.activate)
             toplevel.activate();
     }
 

@@ -1,6 +1,7 @@
 [submodule "niri"]
 	path = niri
-	url = https://github.com/niri-wm/niri.git
+	url = https://github.com/skjsbsnq/niri
+	branch = niri-tahoe-desktop
 [submodule "quickshell"]
 	path = quickshell
 	url = https://github.com/quickshell-mirror/quickshell.git

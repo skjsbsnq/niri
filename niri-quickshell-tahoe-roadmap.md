@@ -421,34 +421,41 @@ git switch -c tahoe-desktop
 
 Windows 操作：
 
-- [ ] 在 `niri-ipc/src/lib.rs` 的 `Window` 增加 `is_minimized: bool`。
-- [ ] 在 `niri-ipc/src/lib.rs` 的 `Action` 增加 `MinimizeWindow { id: Option<u64> }`。
-- [ ] 在 `niri-ipc/src/lib.rs` 的 `Action` 增加 `RestoreWindow { id: u64 }`。
-- [ ] 评估是否需要 `ToggleWindowMinimized { id: Option<u64> }`。
-- [ ] 在 `niri-config/src/binds.rs` 增加对应 config action。
-- [ ] 在 `niri-config/src/binds.rs` 增加 `From<niri_ipc::Action>` 映射。
-- [ ] 在 `src/input/mod.rs` 的 `do_action()` 里分发 minimize action。
-- [ ] 在 `src/input/mod.rs` 的 `do_action()` 里分发 restore action。
-- [ ] 在 `src/layout/workspace.rs` 增加 minimize 状态切换 API。
-- [ ] 在 `src/layout/workspace.rs` 增加 restore 状态切换 API。
-- [ ] 在 `src/layout/workspace.rs` 处理 active/focus 窗口被最小化后的焦点切换。
-- [ ] 在 `src/layout/floating.rs` 让最小化窗口从 render 中排除。
-- [ ] 在 `src/layout/floating.rs` 让最小化窗口从 hit-test 中排除。
-- [ ] 在 `src/layout/floating.rs` 保留最小化前的位置和大小。
-- [ ] 在 `src/layout/mod.rs` 增加顶层 minimize/restore API。
-- [ ] 在 `src/layout/mod.rs` 支持根据 window id 找到所在 workspace。
-- [ ] 在 `src/ipc/server.rs` 的 `make_ipc_window()` 填充 `is_minimized`。
-- [ ] 在窗口最小化状态变化时触发 `WindowsChanged`。
-- [ ] 在需要时触发 `WindowLayoutsChanged`。
-- [ ] 在 `src/protocols/foreign_toplevel.rs` 处理 `SetMinimized`。
-- [ ] 在 `src/protocols/foreign_toplevel.rs` 处理 `UnsetMinimized`。
-- [ ] 在 foreign-toplevel state 中发送 minimized 状态。
-- [ ] 在 Quickshell Dock 中读取 `Toplevel.minimized`。
-- [ ] Dock 点击未最小化窗口时支持 activate。
-- [ ] Dock 点击已最小化窗口时支持 restore。
-- [ ] Dock 保持显示已最小化窗口。
-- [ ] 增加 IPC window state 测试。
-- [ ] 增加 foreign-toplevel minimize/unminimize 行为测试。
+- [x] 在 `niri-ipc/src/lib.rs` 的 `Window` 增加 `is_minimized: bool`。
+- [x] 在 `niri-ipc/src/lib.rs` 的 `Action` 增加 `MinimizeWindow { id: Option<u64> }`。
+- [x] 在 `niri-ipc/src/lib.rs` 的 `Action` 增加 `RestoreWindow { id: u64 }`。
+- [x] 评估是否需要 `ToggleWindowMinimized { id: Option<u64> }`：Phase 2 暂不需要，Dock 使用显式 minimize/restore。
+- [x] 在 `niri-config/src/binds.rs` 增加对应 config action。
+- [x] 在 `niri-config/src/binds.rs` 增加 `From<niri_ipc::Action>` 映射。
+- [x] 在 `src/input/mod.rs` 的 `do_action()` 里分发 minimize action。
+- [x] 在 `src/input/mod.rs` 的 `do_action()` 里分发 restore action。
+- [x] 在 `src/layout/workspace.rs` 增加 minimize 状态切换 API。
+- [x] 在 `src/layout/workspace.rs` 增加 restore 状态切换 API。
+- [x] 在 `src/layout/workspace.rs` 处理 active/focus 窗口被最小化后的焦点切换。
+- [x] 在 `src/layout/floating.rs` 让最小化窗口从 render 中排除。
+- [x] 在 `src/layout/floating.rs` 让最小化窗口从 hit-test 中排除。
+- [x] 在 `src/layout/floating.rs` 保留最小化前的位置和大小。
+- [x] 在 `src/layout/mod.rs` 增加顶层 minimize/restore API。
+- [x] 在 `src/layout/mod.rs` 支持根据 window id 找到所在 workspace。
+- [x] 在 `src/ipc/server.rs` 的 `make_ipc_window()` 填充 `is_minimized`。
+- [x] 在窗口最小化状态变化时触发 `WindowsChanged`。
+- [x] 在需要时触发 `WindowLayoutsChanged`：最小化不改变 layout 几何，状态变化走 `WindowOpenedOrChanged`。
+- [x] 在 `src/protocols/foreign_toplevel.rs` 处理 `SetMinimized`。
+- [x] 在 `src/protocols/foreign_toplevel.rs` 处理 `UnsetMinimized`。
+- [x] 在 foreign-toplevel state 中发送 minimized 状态。
+- [x] 在 Quickshell Dock 中读取 `Toplevel.minimized`。
+- [x] Dock 点击未最小化窗口时支持 activate。
+- [x] Dock 点击已最小化窗口时支持 restore。
+- [x] Dock 保持显示已最小化窗口。
+- [x] 增加 IPC window state 测试。
+- [x] 增加 foreign-toplevel minimized state 行为测试。
+
+Windows 本机记录：
+
+- [x] 已运行 `cargo fmt`；只出现现有 nightly-only rustfmt 配置警告。
+- [x] 已尝试 `cargo check -p niri-ipc`；Windows 被 `niri-ipc/src/socket.rs` 的 `std::os::unix::net::UnixStream` 阻断。
+- [x] 已尝试 `cargo check -p niri-config`；Windows 被 `xkbcommon` / `input` 的 `std::os::unix` 依赖阻断。
+- [ ] 完整构建、协议请求行为和手工窗口操作仍需在 Hyper-V Arch Linux 中验证。
 
 Hyper-V Arch Linux 操作：
 

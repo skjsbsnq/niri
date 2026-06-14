@@ -69,8 +69,11 @@ Item {
         anchors.fill: parent
         cursorShape: Qt.PointingHandCursor
         onClicked: {
-            if (root.toplevel && root.toplevel.activate)
+            if (root.toplevel && root.toplevel.minimized) {
+                root.toplevel.minimized = false;
+            } else if (root.toplevel && root.toplevel.activate) {
                 root.toplevel.activate();
+            }
             root.activateRequested(root.toplevel);
         }
     }

@@ -169,13 +169,15 @@ PanelWindow {
                         && root.appsService.appHasRunningWindow(modelData, root.niriService.toplevelList)
                     readonly property real lift: (magnification - 1.0) * 22 + (hovered ? 3 : 0)
 
-                    // Width widens with magnification so the Row pushes
-                    // neighbors out as the pointer sweeps — this is the
-                    // horizontal coupling that reads as a wave (web dock,
-                    // script.js line 378, widens neighbors' margins the
-                    // same way). The Behavior on width spring-smooths it so
-                    // the row doesn't snap.
-                    width: 62 + (magnification - 1.0) * 40
+                    // Fixed width. NOTE: width must NOT depend on
+                    // magnification — proximityScale() reads this delegate's
+                    // geometry to compute the icon center, so a
+                    // magnification-driven width creates a binding loop
+                    // (width -> magnification -> proximityScale -> width)
+                    // that runs away and crashes Quickshell. The wave feel
+                    // comes from the icon scale + lift + Row spacing spring
+                    // instead.
+                    width: 62
                     height: 70
 
                     Rectangle {
@@ -291,22 +293,10 @@ PanelWindow {
                         }
                     }
 
-                    // Critically damped spring on width — no overshoot, just
-                    // smooth easing toward the magnification-driven target so
-                    // the Row reflow reads as a wave instead of a snap.
-                    Behavior on width {
-                        SpringAnimation {
-                            spring: 240
-                            damping: 1.0
-                            epsilon: 0.01
-                        }
-                    }
-
                     // Critically damped spring on magnification. Because
-                    // magnification is read-only and bound to
-                    // proximityScale(), this Behavior fires each time the
-                    // pointer moves to a new icon, easing the scale (and thus
-                    // the icon image scale and the Row width) toward the new
+                    // magnification is bound to proximityScale(), this
+                    // Behavior fires each time the pointer moves to a new
+                    // icon, easing the icon scale + lift toward the new
                     // target. Without this the whole row snaps per-frame.
                     Behavior on magnification {
                         SpringAnimation {

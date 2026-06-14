@@ -25,10 +25,12 @@ Item {
     signal dockPointerMoved(real x)
     signal dockPointerEntered()
 
-    // Width widens with magnification for the same wave coupling as the
-    // pinned icons (see Dock.qml). showTitle tiles grow more, since the
-    // title pill has room to breathe; title-less tiles grow less.
-    width: (showTitle ? 132 : 56) + (magnification - 1.0) * (showTitle ? 60 : 40)
+    // Fixed width. Must NOT depend on magnification — WindowButton is fed
+    // into Dock's proximityScale() which reads its geometry, so a
+    // magnification-driven width is a binding loop that crashes Quickshell
+    // (same trap as the pinned-icon delegate; see Dock.qml). The wave feel
+    // comes from the icon scale + lift spring, not from reflowing the Row.
+    width: showTitle ? 132 : 56
     height: 58
 
     function updateDockRectangle(mouseX, mouseY) {
@@ -164,19 +166,11 @@ Item {
         }
     }
 
-    // Critically damped springs on magnification + width so the running-
-    // window half of the dock eases with the pinned half.
+    // Critically damped spring on magnification so the running-window half
+    // of the dock eases with the pinned half.
     Behavior on magnification {
         SpringAnimation {
             spring: 260
-            damping: 1.0
-            epsilon: 0.01
-        }
-    }
-
-    Behavior on width {
-        SpringAnimation {
-            spring: 240
             damping: 1.0
             epsilon: 0.01
         }

@@ -60,18 +60,18 @@ PanelWindow {
     Rectangle {
         id: panel
         x: 0
-        y: 0
+        // Spring-smoothed slide-down (replaces the old NumberAnimation).
+        // We deliberately do NOT use scale here: panel is the
+        // BackgroundEffect.blurRegion item, and animating its scale makes
+        // the blur region reallocate every frame, which crashes Quickshell
+        // on the Hyper-V VM (same class of bug as the historical
+        // notification-toast blur crashes). A y-translate keeps the blur
+        // geometry fixed and only moves the painted surface.
+        y: root.open ? 0 : -14
         width: parent.width
         implicitHeight: content.implicitHeight + 28
         radius: 28
         color: root.glassFill
-        // Open: scale up from the top-right corner (where the menu-bar
-        // status icon lives) + fade. macOS Tahoe opens Control Center by
-        // expanding from the icon, not sliding down. transformOrigin keeps
-        // the top-right corner pinned so the panel "grows" toward the
-        // bottom-left. Closed: scale 0.92 + faded.
-        transformOrigin: Item.TopRight
-        scale: root.open ? 1 : 0.92
         opacity: root.open ? 1 : 0
 
         // NOTE: no `border.width` on the panel itself. A centered 1px
@@ -129,12 +129,12 @@ PanelWindow {
             NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
         }
 
-        // Spring on scale so the panel expands from the status icon with a
-        // touch of overshoot — the Tahoe "pop", not a linear tween.
-        Behavior on scale {
+        // Spring on y so the panel slides down with a touch of overshoot
+        // (the Tahoe "settle") rather than a linear OutCubic tween.
+        Behavior on y {
             SpringAnimation {
                 spring: 380
-                damping: 0.78
+                damping: 0.82
                 epsilon: 0.01
             }
         }

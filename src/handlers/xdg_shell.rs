@@ -817,6 +817,22 @@ impl XdgShellHandler for State {
         }
     }
 
+    fn minimize_request(&mut self, toplevel: ToplevelSurface) {
+        let Some((mapped, _)) = self
+            .niri
+            .layout
+            .find_window_and_output(toplevel.wl_surface())
+        else {
+            return;
+        };
+
+        let window = mapped.window.clone();
+        if self.niri.layout.minimize_window(&window) {
+            self.niri.layer_shell_on_demand_focus = None;
+            self.niri.queue_redraw_all();
+        }
+    }
+
     fn toplevel_destroyed(&mut self, surface: ToplevelSurface) {
         if self
             .niri

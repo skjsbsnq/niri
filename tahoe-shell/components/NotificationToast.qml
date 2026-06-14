@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import Quickshell
+import Quickshell.Wayland
 
 // Real notification toast.
 //
@@ -64,14 +65,21 @@ PanelWindow {
         }
     }
 
-    // NOTE: this panel intentionally does NOT declare a
-    // BackgroundEffect.blurRegion. The toast's height is dynamic
-    // (implicitHeight: card.implicitHeight + 8, driven by the body text),
-    // and a blur Region tracking `card` created a geometry rebuild cycle
-    // that aborted the shell on login. The card stays a translucent
-    // rectangle with the inset glass-edge accents below; frosted blur can
-    // be re-added later once the geometry is made independent of the
-    // tracked item.
+    // Frosted-glass blur behind the card. The blur region's radius MUST
+    // match the card's radius (18) or the blur leaks past the rounded
+    // corners.
+    //
+    // IMPORTANT: this attached type lives under Quickshell.Wayland
+    // (Quickshell.Wayland._BackgroundEffect), so the file MUST import
+    // Quickshell.Wayland. Without that import the engine silently drops
+    // the attached property -> the card renders as a flat translucent
+    // rectangle with no blur. That was the real reason the toast had no
+    // frost, NOT a geometry cycle.
+    BackgroundEffect.blurRegion: Region {
+        item: card
+        radius: 18
+    }
+
     Rectangle {
         id: card
 

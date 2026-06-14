@@ -100,11 +100,16 @@ pub fn region_to_non_overlapping_rects(
     output.clear();
 
     // Collect all unique Y coordinates.
+    // saturating_add: a malformed or animation-oscillated blur region can
+    // carry rects whose loc.y + size.h overflows i32 (observed via
+    // Quickshell's BackgroundEffect when a blur-region item's geometry is
+    // driven by a spring). Use saturating so the compositor clamps to
+    // i32::MAX instead of panicking on debug builds / wrapping on release.
     let ys = BTreeSet::from_iter(
         region
             .rects
             .iter()
-            .flat_map(|(_, r)| [r.loc.y, r.loc.y + r.size.h]),
+            .flat_map(|(_, r)| [r.loc.y, r.loc.y.saturating_add(r.size.h)]),
     );
 
     let mut ys = ys.into_iter();
@@ -122,12 +127,12 @@ pub fn region_to_non_overlapping_rects(
 
         'region: for (kind, r) in &region.rects {
             // Skip rects that don't overlap with the Y band.
-            if hi <= r.loc.y || r.loc.y + r.size.h <= lo {
+            if hi <= r.loc.y || r.loc.y.saturating_add(r.size.h) <= lo {
                 continue;
             }
 
             let mut x1 = r.loc.x;
-            let mut x2 = r.loc.x + r.size.w;
+            let mut x2 = r.loc.x.saturating_add(r.size.w);
             if x1 == x2 {
                 // Empty rect.
                 continue;

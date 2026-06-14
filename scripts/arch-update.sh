@@ -38,6 +38,7 @@ shell_deployed=false
 niri_config_deployed=false
 root_git=false
 niri_git=false
+niri_root_submodule=false
 
 require_cmd() {
   command -v "$1" >/dev/null 2>&1 || die "missing required command: $1"
@@ -45,6 +46,26 @@ require_cmd() {
 
 is_git_repo() {
   git -C "$1" rev-parse --is-inside-work-tree >/dev/null 2>&1
+}
+
+is_root_submodule_path() {
+  local path="$1"
+  local rel_path
+  local key
+  local submodule_path
+
+  [[ "$root_git" == true && -f "$REPO_DIR/.gitmodules" ]] || return 1
+
+  case "$path" in
+    "$REPO_DIR"/*) rel_path="${path#$REPO_DIR/}" ;;
+    *) return 1 ;;
+  esac
+
+  while read -r key submodule_path; do
+    [[ "$submodule_path" == "$rel_path" ]] && return 0
+  done < <(git -C "$REPO_DIR" config --file "$REPO_DIR/.gitmodules" --get-regexp '^submodule\..*\.path$')
+
+  return 1
 }
 
 changed_since_pull() {
@@ -63,6 +84,11 @@ changed_since_pull() {
 }
 
 niri_changed_since_pull() {
+  if [[ "$niri_root_submodule" == true ]]; then
+    changed_since_pull '^niri$'
+    return
+  fi
+
   if [[ "$niri_git" == true ]]; then
     if [[ -z "$niri_before_commit" || "$niri_before_commit" == "$niri_after_commit" ]]; then
       return 1
@@ -174,6 +200,10 @@ main() {
     niri_git=true
   fi
 
+  if is_root_submodule_path "$NIRI_DIR"; then
+    niri_root_submodule=true
+  fi
+
   if [[ "$root_git" != true && "$niri_git" != true ]]; then
     die "neither REPO_DIR nor NIRI_DIR is a git repository"
   fi
@@ -211,7 +241,10 @@ main() {
     niri_git=true
   fi
 
-  if [[ "$niri_git" == true ]]; then
+  if [[ "$niri_git" == true && "$niri_root_submodule" == true ]]; then
+    niri_after_commit="$(git -C "$NIRI_DIR" rev-parse HEAD)"
+    log "niri submodule commit: $niri_after_commit"
+  elif [[ "$niri_git" == true ]]; then
     niri_before_commit="$(git -C "$NIRI_DIR" rev-parse HEAD)"
     log "niri current commit: $niri_before_commit"
 
@@ -275,7 +308,10 @@ main() {
   log "  repo from: $before_commit"
   log "  repo to:   $after_commit"
   log "  build niri fork mode: $BUILD_NIRI_FORK"
-  if [[ "$niri_git" == true ]]; then
+  if [[ "$niri_git" == true && "$niri_root_submodule" == true ]]; then
+    log "  niri mode: root submodule"
+    log "  niri commit: $niri_after_commit"
+  elif [[ "$niri_git" == true ]]; then
     log "  niri from: $niri_before_commit"
     log "  niri to:   $niri_after_commit"
   fi

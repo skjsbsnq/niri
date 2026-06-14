@@ -1,0 +1,15 @@
+[32m  INFO[0m: Launching config: "/home/wwt/.config/quickshell/tahoe/shell.qml"
+[32m  INFO[0m: Shell ID: "tahoe" Path ID "e735531df70a391a9a0fd295d7c0db5a"
+[32m  INFO[0m: Saving logs to "/run/user/1000/quickshell/by-id/f02tkwmgt/log.qslog"
+[33m  WARN[97m quickshell.dbus.objectmanager[0m: Failed to create DBusObjectManagerInterface for "org.bluez" "/" : QDBusError("", "")
+[32m  INFO[0m: Configuration Loaded
+[33m  WARN[0m: Process failed to start, likely because the binary could not be found. Command: QList("brightnessctl", "-m", "info")
+[33m  WARN[97m qt.qpa.services[0m: Failed to register with host portal QDBusError("org.freedesktop.DBus.Error.NameHasNoOwner", "Could not activate remote peer 'org.freedesktop.portal.Desktop': startup job failed")
+[33m  WARN[0m: Process failed to start, likely because the binary could not be found. Command: QList("brightnessctl", "-m", "info")
+[33m  WARN[0m: Process failed to start, likely because the binary could not be found. Command: QList("brightnessctl", "-m", "info")
+[33m  WARN[0m: Process failed to start, likely because the binary could not be found. Command: QList("brightnessctl", "-m", "info")
+[33m  WARN[0m: Process failed to start, likely because the binary could not be found. Command: QList("brightnessctl", "-m", "info")
+[33m  WARN[0m: Process failed to start, likely because the binary could not be found. Command: QList("brightnessctl", "-m", "info")
+[33m  WARN[0m: Process failed to start, likely because the binary could not be found. Command: QList("brightnessctl", "-m", "info")
+[33m  WARN[0m: Process failed to start, likely because the binary could not be found. Command: QList("brightnessctl", "-m", "info")
+[33m  WARN[0m: Process failed to start, likely because the binary could not be found. Command: QList("brightnessctl", "-m", "info")

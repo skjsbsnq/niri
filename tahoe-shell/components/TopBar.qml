@@ -16,6 +16,10 @@ PanelWindow {
     property bool appMenuOpen: false
     property date now: new Date()
     readonly property string activeApp: appsService && niriService ? appsService.toplevelLabel(niriService.activeToplevel) : "Finder"
+    readonly property color glassFill: "#30f8fbff"
+    readonly property color glassStroke: "#66ffffff"
+    readonly property color glassHairline: "#a6ffffff"
+    readonly property color glassShadowLine: "#18000000"
 
     signal toggleAppMenu()
     signal toggleControlCenter()
@@ -46,9 +50,25 @@ PanelWindow {
     Rectangle {
         id: barSurface
         anchors.fill: parent
-        color: "#58f7f8fb"
-        border.color: "#36ffffff"
+        color: root.glassFill
+        border.color: root.glassStroke
         border.width: 1
+
+        Rectangle {
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: parent.top
+            height: 1
+            color: root.glassHairline
+        }
+
+        Rectangle {
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            height: 1
+            color: root.glassShadowLine
+        }
 
         RowLayout {
             anchors.fill: parent
@@ -64,8 +84,8 @@ PanelWindow {
                 Rectangle {
                     anchors.fill: parent
                     radius: 12
-                    color: root.appMenuOpen ? "#88ffffff" : "transparent"
-                    border.color: root.appMenuOpen ? "#4dffffff" : "transparent"
+                    color: root.appMenuOpen ? "#5cffffff" : "transparent"
+                    border.color: root.appMenuOpen ? "#70ffffff" : "transparent"
                 }
 
                 Text {
@@ -114,8 +134,8 @@ PanelWindow {
                         Rectangle {
                             anchors.fill: parent
                             radius: 10
-                            color: modelData.active ? "#70ffffff" : "#30ffffff"
-                            border.color: modelData.urgent ? "#ccff453a" : "#38ffffff"
+                            color: modelData.active ? "#55ffffff" : "#24ffffff"
+                            border.color: modelData.urgent ? "#ccff453a" : "#58ffffff"
                             border.width: 1
                         }
 
@@ -160,8 +180,8 @@ PanelWindow {
                 Rectangle {
                     anchors.fill: parent
                     radius: 12
-                    color: root.controlCenterOpen ? "#96ffffff" : "#4dffffff"
-                    border.color: "#4dffffff"
+                    color: root.controlCenterOpen ? "#66ffffff" : "#32ffffff"
+                    border.color: "#72ffffff"
                 }
 
                 Row {

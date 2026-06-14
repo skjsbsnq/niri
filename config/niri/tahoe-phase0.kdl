@@ -48,10 +48,10 @@ layout {
 
 blur {
     on
-    passes 3
-    offset 4
-    noise 0.025
-    saturation 1.35
+    passes 4
+    offset 5
+    noise 0.018
+    saturation 1.5
 }
 
 hotkey-overlay {
@@ -133,8 +133,12 @@ window-rule {
     background-effect {
         xray false
         blur true
-        noise 0.025
-        saturation 1.35
+        noise 0.018
+        saturation 1.5
+        tint-color "#f8fbff"
+        tint-amount 0.12
+        edge-highlight 0.34
+        refraction 0.014
     }
 
     popups {
@@ -142,9 +146,27 @@ window-rule {
 
         background-effect {
             blur true
-            noise 0.02
-            saturation 1.3
+            noise 0.014
+            saturation 1.45
+            tint-color "#ffffff"
+            tint-amount 0.16
+            edge-highlight 0.38
+            refraction 0.012
         }
+    }
+}
+
+window-rule {
+    match is-active=false
+
+    background-effect {
+        blur true
+        noise 0.012
+        saturation 1.2
+        tint-color "#f3f6fb"
+        tint-amount 0.08
+        edge-highlight 0.18
+        refraction 0.006
     }
 }
 
@@ -160,9 +182,14 @@ layer-rule {
     }
 
     background-effect {
+        xray true
         blur true
-        noise 0.02
-        saturation 1.3
+        noise 0.012
+        saturation 1.65
+        tint-color "#ffffff"
+        tint-amount 0.18
+        edge-highlight 0.45
+        refraction 0.01
     }
 }
 

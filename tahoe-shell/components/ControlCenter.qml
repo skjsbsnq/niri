@@ -10,6 +10,11 @@ PanelWindow {
 
     property bool open: false
     property var niriService
+    readonly property color glassFill: "#38f8fbff"
+    readonly property color glassStroke: "#a8ffffff"
+    readonly property color glassInnerFill: "#28ffffff"
+    readonly property color glassTileFill: "#42ffffff"
+    readonly property color glassTileStroke: "#70ffffff"
 
     signal closeRequested()
 
@@ -42,8 +47,8 @@ PanelWindow {
         width: parent.width
         height: parent.height
         radius: 22
-        color: "#8cf5f6f8"
-        border.color: "#70ffffff"
+        color: root.glassFill
+        border.color: root.glassStroke
         border.width: 1
         opacity: root.open ? 1 : 0
 
@@ -53,6 +58,29 @@ PanelWindow {
 
         Behavior on y {
             NumberAnimation { duration: 150; easing.type: Easing.OutCubic }
+        }
+
+        Rectangle {
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: parent.top
+            anchors.leftMargin: 18
+            anchors.rightMargin: 18
+            anchors.topMargin: 1
+            height: 1
+            radius: 1
+            color: "#c8ffffff"
+        }
+
+        Rectangle {
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            anchors.leftMargin: 18
+            anchors.rightMargin: 18
+            height: 1
+            radius: 1
+            color: "#24000000"
         }
 
         ColumnLayout {
@@ -78,7 +106,8 @@ PanelWindow {
                     Layout.preferredWidth: 24
                     Layout.preferredHeight: 24
                     radius: 12
-                    color: "#52ffffff"
+                    color: root.glassInnerFill
+                    border.color: "#6affffff"
 
                     Text {
                         anchors.centerIn: parent
@@ -134,8 +163,8 @@ PanelWindow {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 66
                 radius: 17
-                color: "#52ffffff"
-                border.color: "#52ffffff"
+                color: root.glassTileFill
+                border.color: root.glassTileStroke
 
                 Column {
                     anchors.fill: parent
@@ -163,11 +192,13 @@ PanelWindow {
         required property string title
         required property string value
         required property color accent
+        property color fillColor: "#42ffffff"
+        property color strokeColor: "#70ffffff"
 
         Layout.preferredHeight: 76
         radius: 17
-        color: "#5cffffff"
-        border.color: "#61ffffff"
+        color: fillColor
+        border.color: strokeColor
 
         RowLayout {
             anchors.fill: parent

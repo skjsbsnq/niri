@@ -673,25 +673,32 @@ niri 动画验收标准：
 
 Windows 操作：
 
-- [ ] 先使用 niri 现有 `background-effect`。
-- [ ] 先使用 Quickshell `BackgroundEffect.blurRegion`。
-- [ ] 为 Dock 设置 blur region。
-- [ ] 为控制中心设置 blur region。
-- [ ] 为顶栏设置 blur region。
-- [ ] 调整 `noise` 参数。
-- [ ] 调整 `saturation` 参数。
-- [ ] 调整透明 QML 背景。
-- [ ] 在 `src/render_helpers/background_effect.rs` 研究 per-surface background effect。
-- [ ] 在 `src/render_helpers/framebuffer_effect.rs` 研究 framebuffer effect。
-- [ ] 在 `src/render_helpers/xray.rs` 研究 xray/backdrop。
-- [ ] 在 `src/render_helpers/shaders/postprocess.frag` 增加或试验 tint/highlight。
-- [ ] 评估是否需要新 shader 文件。
-- [ ] 增加 glass tint 参数。
-- [ ] 增加 edge highlight 参数。
-- [ ] 增加 refraction/displacement 原型。
-- [ ] 区分 active/inactive 窗口的玻璃强度。
-- [ ] 区分 layer-shell 面板和普通窗口的玻璃参数。
-- [ ] 记录多显示器和 fractional scale 的最终真机待测项。
+- [x] 先使用 niri 现有 `background-effect`。
+- [x] 先使用 Quickshell `BackgroundEffect.blurRegion`。
+- [x] 为 Dock 设置 blur region。
+- [x] 为控制中心设置 blur region。
+- [x] 为顶栏设置 blur region。
+- [x] 调整 `noise` 参数。
+- [x] 调整 `saturation` 参数。
+- [x] 调整透明 QML 背景。
+- [x] 在 `src/render_helpers/background_effect.rs` 研究 per-surface background effect。
+- [x] 在 `src/render_helpers/framebuffer_effect.rs` 研究 framebuffer effect。
+- [x] 在 `src/render_helpers/xray.rs` 研究 xray/backdrop。
+- [x] 在 `src/render_helpers/shaders/postprocess.frag` 增加或试验 tint/highlight。
+- [x] 评估是否需要新 shader 文件。
+- [x] 增加 glass tint 参数。
+- [x] 增加 edge highlight 参数。
+- [x] 增加 refraction/displacement 原型。
+- [x] 区分 active/inactive 窗口的玻璃强度。
+- [x] 区分 layer-shell 面板和普通窗口的玻璃参数。
+- [x] 记录多显示器和 fractional scale 的最终真机待测项。
+
+Windows 本地状态：
+
+- 已更新 `config/niri/tahoe-phase0.kdl` 的 blur/noise/saturation/glass 参数，并区分 active、inactive、popup 和 Quickshell layer-shell。
+- 已扩展 niri `background-effect` 配置、framebuffer/xray 传参和 `postprocess.frag`，当前无需新增 shader 文件。
+- 已更新 Dock、顶栏和控制中心 QML，让 `BackgroundEffect.blurRegion` 背后的真实模糊更明显。
+- 已记录 Phase 4 参数和真机待测项：`tahoe-shell/docs/phase4-liquid-glass.md`。
 
 Hyper-V Arch Linux 操作：
 
@@ -956,8 +963,8 @@ Hyper-V Arch Linux 操作：
 
 Windows 操作：
 
-- [ ] 调整 Liquid Glass 参数。
-- [ ] 试验 glass shader。
+- [x] 调整 Liquid Glass 参数。
+- [x] 试验 glass shader。
 - [ ] 实现或试验 Genie minimize。
 - [ ] commit 并 push。
 

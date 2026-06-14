@@ -1513,7 +1513,7 @@ impl<W: LayoutElement> ScrollingSpace<W> {
             self.columns[column_idx].tiles[tile_idx].animate_alpha_scale(
                 0.,
                 1.,
-                0.96,
+                1.,
                 1.,
                 self.options.animations.window_open.anim,
                 false,

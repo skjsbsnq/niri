@@ -644,7 +644,7 @@ impl<W: LayoutElement> FloatingSpace<W> {
             self.tiles[0].animate_alpha_scale(
                 0.,
                 1.,
-                0.96,
+                1.,
                 1.,
                 self.options.animations.window_open.anim,
                 false,

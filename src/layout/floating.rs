@@ -268,7 +268,7 @@ impl<W: LayoutElement> FloatingSpace<W> {
     pub fn update_render_elements(&mut self, is_active: bool, view_rect: Rectangle<f64, Logical>) {
         let active = self.active_window_id.clone();
         for (tile, offset) in self.tiles_with_offsets_mut() {
-            if tile.window().is_minimized() {
+            if tile.window().is_minimized() && !tile.should_render_minimized_animation() {
                 continue;
             }
 
@@ -539,9 +539,12 @@ impl<W: LayoutElement> FloatingSpace<W> {
             }
         }
 
-        // Store the floating size if we have one.
-        if let Some(size) = tile.window().expected_size() {
-            tile.floating_window_size = Some(size);
+        // Store the floating size if we have one. Snapped windows keep their pre-snap restore
+        // size until the user drags them away from the edge.
+        if tile.snap_restore_window_size.is_none() {
+            if let Some(size) = tile.window().expected_size() {
+                tile.floating_window_size = Some(size);
+            }
         }
         // Store the floating position.
         tile.floating_pos = Some(data.pos);
@@ -608,6 +611,15 @@ impl<W: LayoutElement> FloatingSpace<W> {
         }
 
         if minimized {
+            self.tiles[idx].animate_alpha_scale(
+                1.,
+                0.,
+                1.,
+                0.96,
+                self.options.animations.window_close.anim,
+                true,
+            );
+
             if self
                 .interactive_resize
                 .as_ref()
@@ -628,6 +640,15 @@ impl<W: LayoutElement> FloatingSpace<W> {
             self.raise_window(idx, 0);
             self.active_window_id = Some(id.clone());
             self.bring_up_descendants_of(0);
+
+            self.tiles[0].animate_alpha_scale(
+                0.,
+                1.,
+                0.96,
+                1.,
+                self.options.animations.window_open.anim,
+                false,
+            );
         }
 
         true
@@ -1126,7 +1147,7 @@ impl<W: LayoutElement> FloatingSpace<W> {
 
         let active = self.active_window_id.clone();
         for (tile, tile_pos) in self.tiles_with_render_positions() {
-            if tile.window().is_minimized() {
+            if tile.window().is_minimized() && !tile.should_render_minimized_animation() {
                 continue;
             }
 

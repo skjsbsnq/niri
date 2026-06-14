@@ -4038,6 +4038,31 @@ prop_compose! {
     }
 }
 
+#[test]
+fn snap_assist_computes_edge_targets() {
+    let area = Rectangle::new(Point::from((10., 20.)), Size::from((1000., 700.)));
+
+    let left = compute_snap_target(area, Point::from((20., 300.)), 36.).unwrap();
+    assert_eq!(left.edge, SnapEdge::Left);
+    assert_eq!(
+        left.rect,
+        Rectangle::new(Point::from((10., 20.)), Size::from((500., 700.)))
+    );
+
+    let right = compute_snap_target(area, Point::from((990., 300.)), 36.).unwrap();
+    assert_eq!(right.edge, SnapEdge::Right);
+    assert_eq!(
+        right.rect,
+        Rectangle::new(Point::from((510., 20.)), Size::from((500., 700.)))
+    );
+
+    let top = compute_snap_target(area, Point::from((500., 30.)), 36.).unwrap();
+    assert_eq!(top.edge, SnapEdge::Top);
+    assert_eq!(top.rect, area);
+
+    assert!(compute_snap_target(area, Point::from((500., 300.)), 36.).is_none());
+}
+
 proptest! {
     #![proptest_config(ProptestConfig {
         cases: if std::env::var_os("RUN_SLOW_TESTS").is_none() {

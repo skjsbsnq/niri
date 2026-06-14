@@ -1473,6 +1473,15 @@ impl<W: LayoutElement> ScrollingSpace<W> {
         }
 
         if minimized {
+            column.tiles[tile_idx].animate_alpha_scale(
+                1.,
+                0.,
+                1.,
+                0.96,
+                self.options.animations.window_close.anim,
+                true,
+            );
+
             if self
                 .interactive_resize
                 .as_ref()
@@ -1500,6 +1509,15 @@ impl<W: LayoutElement> ScrollingSpace<W> {
         } else {
             self.columns[column_idx].activate_window(window);
             self.activate_column(column_idx);
+            let tile_idx = self.columns[column_idx].position(window).unwrap();
+            self.columns[column_idx].tiles[tile_idx].animate_alpha_scale(
+                0.,
+                1.,
+                0.96,
+                1.,
+                self.options.animations.window_open.anim,
+                false,
+            );
         }
 
         true
@@ -2998,7 +3016,7 @@ impl<W: LayoutElement> ScrollingSpace<W> {
             }
 
             for (tile, tile_off, visible) in col.tiles_in_render_order() {
-                if tile.window().is_minimized() {
+                if tile.window().is_minimized() && !tile.should_render_minimized_animation() {
                     continue;
                 }
 
@@ -4175,7 +4193,7 @@ impl<W: LayoutElement> Column<W> {
     pub fn update_render_elements(&mut self, is_active: bool, view_rect: Rectangle<f64, Logical>) {
         let active_idx = self.active_tile_idx;
         for (tile_idx, (tile, tile_off)) in self.tiles_mut().enumerate() {
-            if tile.window().is_minimized() {
+            if tile.window().is_minimized() && !tile.should_render_minimized_animation() {
                 continue;
             }
 

@@ -14,6 +14,7 @@ pub struct Layout {
     pub shadow: Shadow,
     pub tab_indicator: TabIndicator,
     pub insert_hint: InsertHint,
+    pub snap_assist: SnapAssist,
     pub preset_column_widths: Vec<PresetSize>,
     pub default_column_width: Option<PresetSize>,
     pub preset_window_heights: Vec<PresetSize>,
@@ -34,6 +35,7 @@ impl Default for Layout {
             shadow: Shadow::default(),
             tab_indicator: TabIndicator::default(),
             insert_hint: InsertHint::default(),
+            snap_assist: SnapAssist::default(),
             preset_column_widths: vec![
                 PresetSize::Proportion(1. / 3.),
                 PresetSize::Proportion(0.5),
@@ -65,6 +67,7 @@ impl MergeWith<LayoutPart> for Layout {
             shadow,
             tab_indicator,
             insert_hint,
+            snap_assist,
             always_center_single_column,
             empty_workspace_above_first,
             gaps,
@@ -106,6 +109,8 @@ pub struct LayoutPart {
     pub tab_indicator: Option<TabIndicatorPart>,
     #[knuffel(child)]
     pub insert_hint: Option<InsertHintPart>,
+    #[knuffel(child)]
+    pub snap_assist: Option<SnapAssistPart>,
     #[knuffel(child, unwrap(children))]
     pub preset_column_widths: Option<Vec<PresetSize>>,
     #[knuffel(child)]
@@ -156,6 +161,51 @@ pub struct Struts {
     pub top: FloatOrInt<-65535, 65535>,
     #[knuffel(child, unwrap(argument), default)]
     pub bottom: FloatOrInt<-65535, 65535>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SnapAssist {
+    pub off: bool,
+    pub threshold: f64,
+    pub preview_color: Color,
+    pub preview_border_color: Color,
+}
+
+impl Default for SnapAssist {
+    fn default() -> Self {
+        Self {
+            off: true,
+            threshold: 36.,
+            preview_color: Color::from_rgba8_unpremul(120, 190, 255, 64),
+            preview_border_color: Color::from_rgba8_unpremul(120, 190, 255, 180),
+        }
+    }
+}
+
+impl MergeWith<SnapAssistPart> for SnapAssist {
+    fn merge_with(&mut self, part: &SnapAssistPart) {
+        self.off |= part.off;
+        if part.on {
+            self.off = false;
+        }
+
+        merge!((self, part), threshold);
+        merge_clone!((self, part), preview_color, preview_border_color);
+    }
+}
+
+#[derive(knuffel::Decode, Debug, Default, Clone, Copy, PartialEq)]
+pub struct SnapAssistPart {
+    #[knuffel(child)]
+    pub off: bool,
+    #[knuffel(child)]
+    pub on: bool,
+    #[knuffel(child, unwrap(argument))]
+    pub threshold: Option<FloatOrInt<0, 65535>>,
+    #[knuffel(child)]
+    pub preview_color: Option<Color>,
+    #[knuffel(child)]
+    pub preview_border_color: Option<Color>,
 }
 
 #[derive(knuffel::DecodeScalar, Debug, Default, PartialEq, Eq, Clone, Copy)]

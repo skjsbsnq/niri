@@ -45,6 +45,7 @@ use niri_ipc::{ColumnDisplay, PositionChange, SizeChange, WindowLayout};
 use scrolling::{Column, ColumnWidth};
 use smithay::backend::renderer::element::surface::WaylandSurfaceRenderElement;
 use smithay::backend::renderer::element::utils::RescaleRenderElement;
+use smithay::backend::renderer::element::Kind;
 use smithay::backend::renderer::gles::{GlesRenderer, GlesTexture};
 use smithay::output::{self, Output};
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
@@ -70,7 +71,7 @@ use crate::render_helpers::{BakedBuffer, RenderCtx};
 use crate::rubber_band::RubberBand;
 use crate::utils::transaction::{Transaction, TransactionBlocker};
 use crate::utils::{
-    ensure_min_max_size_maybe_zero, output_matches_name, output_size,
+    ensure_min_max_size, ensure_min_max_size_maybe_zero, output_matches_name, output_size,
     round_logical_in_physical_max1, ResizeEdge,
 };
 use crate::window::ResolvedWindowRules;
@@ -452,6 +453,8 @@ struct InteractiveMoveData<W: LayoutElement> {
     /// config overrides for the workspace where the move originated from. As soon as the window
     /// moves over some different workspace though, this override will reset.
     pub(self) workspace_config: Option<(WorkspaceId, niri_config::LayoutPart)>,
+    /// Current snap target and preview fade state.
+    pub(self) snap_preview: SnapPreviewState,
 }
 
 #[derive(Debug)]
@@ -480,6 +483,26 @@ enum DndHoldTarget<WindowId> {
 #[derive(Debug, Clone, Copy)]
 pub struct InteractiveResizeData {
     pub(self) edges: ResizeEdge,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SnapEdge {
+    Left,
+    Right,
+    Top,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct SnapTarget {
+    edge: SnapEdge,
+    rect: Rectangle<f64, Logical>,
+}
+
+#[derive(Debug)]
+struct SnapPreviewState {
+    target: Option<SnapTarget>,
+    render_target: Option<SnapTarget>,
+    opacity: Animation,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -614,6 +637,93 @@ impl<W: LayoutElement> InteractiveMoveData<W> {
     }
 }
 
+impl SnapPreviewState {
+    fn new(clock: Clock) -> Self {
+        Self {
+            target: None,
+            render_target: None,
+            opacity: Animation::new(clock, 0., 0., 0., niri_config::Animation::new_off()),
+        }
+    }
+
+    fn set_target(
+        &mut self,
+        target: Option<SnapTarget>,
+        clock: Clock,
+        show_config: niri_config::Animation,
+        hide_config: niri_config::Animation,
+    ) {
+        if self.target == target {
+            return;
+        }
+
+        let current = self.opacity.clamped_value().clamp(0., 1.);
+        self.target = target;
+
+        if let Some(target) = target {
+            self.render_target = Some(target);
+            self.opacity = Animation::new(clock, current, 1., 0., show_config);
+        } else {
+            self.opacity = Animation::new(clock, current, 0., 0., hide_config);
+        }
+    }
+
+    fn advance_animations(&mut self) {
+        if self.target.is_none() && self.opacity.is_done() {
+            self.render_target = None;
+        }
+    }
+
+    fn are_animations_ongoing(&self) -> bool {
+        self.render_target.is_some() && !self.opacity.is_done()
+    }
+
+    fn opacity(&self) -> f32 {
+        self.opacity.clamped_value().clamp(0., 1.) as f32
+    }
+}
+
+fn compute_snap_target(
+    working_area: Rectangle<f64, Logical>,
+    pointer_pos: Point<f64, Logical>,
+    threshold: f64,
+) -> Option<SnapTarget> {
+    let threshold = threshold.max(0.);
+    let left = working_area.loc.x;
+    let right = working_area.loc.x + working_area.size.w;
+    let top = working_area.loc.y;
+
+    if pointer_pos.y <= top + threshold {
+        return Some(SnapTarget {
+            edge: SnapEdge::Top,
+            rect: working_area,
+        });
+    }
+
+    let half_width = working_area.size.w / 2.;
+    if pointer_pos.x <= left + threshold {
+        return Some(SnapTarget {
+            edge: SnapEdge::Left,
+            rect: Rectangle::new(
+                working_area.loc,
+                Size::from((half_width, working_area.size.h)),
+            ),
+        });
+    }
+
+    if pointer_pos.x >= right - threshold {
+        return Some(SnapTarget {
+            edge: SnapEdge::Right,
+            rect: Rectangle::new(
+                Point::from((left + half_width, working_area.loc.y)),
+                Size::from((half_width, working_area.size.h)),
+            ),
+        });
+    }
+
+    None
+}
+
 impl ActivateWindow {
     pub fn map_smart(self, f: impl FnOnce() -> bool) -> bool {
         match self {
@@ -737,6 +847,24 @@ impl<W: LayoutElement> Layout<W> {
             overview_progress: None,
             options: opts,
         }
+    }
+
+    fn snap_target_for_output(
+        &self,
+        output: &Output,
+        pointer_pos_within_output: Point<f64, Logical>,
+    ) -> Option<SnapTarget> {
+        let config = self.options.layout.snap_assist;
+        if config.off || self.overview_open {
+            return None;
+        }
+
+        let mon = self.monitor_for_output(output)?;
+        compute_snap_target(
+            mon.working_area,
+            pointer_pos_within_output,
+            config.threshold,
+        )
     }
 
     pub fn add_output(&mut self, output: Output, layout_config: Option<LayoutPart>) {
@@ -2599,6 +2727,7 @@ impl<W: LayoutElement> Layout<W> {
 
         if let Some(InteractiveMoveState::Moving(move_)) = &mut self.interactive_move {
             move_.tile.advance_animations();
+            move_.snap_preview.advance_animations();
 
             if dnd_scroll.is_none() {
                 dnd_scroll = Some((
@@ -2742,6 +2871,10 @@ impl<W: LayoutElement> Layout<W> {
         if let Some(InteractiveMoveState::Moving(move_)) = &self.interactive_move {
             if output.is_none_or(|output| *output == move_.output) {
                 if move_.tile.are_animations_ongoing() {
+                    return true;
+                }
+
+                if move_.snap_preview.are_animations_ongoing() {
                     return true;
                 }
 
@@ -4015,6 +4148,11 @@ impl<W: LayoutElement> Layout<W> {
                 tile.update_config(view_size, scale, Rc::new(options));
 
                 if is_floating {
+                    if let Some(restore_size) = tile.snap_restore_window_size.take() {
+                        tile.floating_window_size = Some(restore_size);
+                        tile.window_mut().request_size_once(restore_size, true);
+                    }
+
                     // Unlock the view in case we locked it moving a fullscreen window that is
                     // going to unfullscreen to floating.
                     for ws in self.workspaces_mut() {
@@ -4030,6 +4168,14 @@ impl<W: LayoutElement> Layout<W> {
                     tile.hold_alpha_animation_after_done();
                 }
 
+                let mut snap_preview = SnapPreviewState::new(self.clock.clone());
+                snap_preview.set_target(
+                    self.snap_target_for_output(&output, pointer_pos_within_output),
+                    self.clock.clone(),
+                    self.options.animations.window_open.anim,
+                    self.options.animations.window_close.anim,
+                );
+
                 let mut data = InteractiveMoveData {
                     tile,
                     output,
@@ -4040,6 +4186,7 @@ impl<W: LayoutElement> Layout<W> {
                     pointer_ratio_within_window,
                     output_config,
                     workspace_config,
+                    snap_preview,
                 };
 
                 if let Some((tile_pos, zoom)) = tile_pos {
@@ -4101,6 +4248,12 @@ impl<W: LayoutElement> Layout<W> {
                 }
 
                 move_.pointer_pos_within_output = pointer_pos_within_output;
+                move_.snap_preview.set_target(
+                    self.snap_target_for_output(&output, pointer_pos_within_output),
+                    self.clock.clone(),
+                    self.options.animations.window_open.anim,
+                    self.options.animations.window_close.anim,
+                );
 
                 self.interactive_move = Some(InteractiveMoveState::Moving(move_));
             }
@@ -4245,6 +4398,7 @@ impl<W: LayoutElement> Layout<W> {
 
                 let win_id = move_.tile.window().id().clone();
                 let tile_render_loc = move_.tile_render_location(zoom);
+                let snap_target = move_.snap_preview.target;
 
                 let ws_idx = match insert_ws {
                     InsertWorkspace::Existing(ws_id) => mon
@@ -4264,6 +4418,12 @@ impl<W: LayoutElement> Layout<W> {
                             ws_idx
                         }
                     }
+                };
+
+                let position = if snap_target.is_some() {
+                    InsertPosition::Floating
+                } else {
+                    position
                 };
 
                 match position {
@@ -4298,30 +4458,66 @@ impl<W: LayoutElement> Layout<W> {
                         let mut tile = move_.tile;
                         tile.floating_pos = None;
 
-                        match insert_ws {
-                            InsertWorkspace::Existing(_) => {
-                                if let Some(offset) = offset {
-                                    let pos = (tile_render_loc - offset).downscale(zoom);
-                                    let pos =
-                                        mon.workspaces[ws_idx].floating_logical_to_size_frac(pos);
-                                    tile.floating_pos = Some(pos);
-                                } else {
-                                    error!(
-                                        "offset unset for inserting a floating tile \
-                                         to existing workspace"
-                                    );
+                        if let Some(snap_target) = snap_target {
+                            let restore_size = tile.snap_restore_window_size.unwrap_or_else(|| {
+                                tile.window()
+                                    .expected_size()
+                                    .unwrap_or_else(|| tile.window().size())
+                            });
+                            tile.snap_restore_window_size = Some(restore_size);
+
+                            let mut win_size = Size::from((
+                                tile.window_width_for_tile_width(snap_target.rect.size.w)
+                                    .round()
+                                    .clamp(1., 100000.) as i32,
+                                tile.window_height_for_tile_height(snap_target.rect.size.h)
+                                    .round()
+                                    .clamp(1., 100000.) as i32,
+                            ));
+                            let win = tile.window_mut();
+                            let min_size = win.min_size();
+                            let max_size = win.max_size();
+                            win_size.w = ensure_min_max_size(win_size.w, min_size.w, max_size.w);
+                            win_size.h = ensure_min_max_size(win_size.h, min_size.h, max_size.h);
+                            win.request_size_once(win_size, true);
+                            tile.floating_window_size = Some(win_size);
+
+                            if let Some(offset) = offset {
+                                let pos = (snap_target.rect.loc - offset).downscale(zoom);
+                                let pos = mon.workspaces[ws_idx].floating_logical_to_size_frac(pos);
+                                tile.floating_pos = Some(pos);
+                            } else {
+                                error!(
+                                    "offset unset for inserting a snapped floating tile \
+                                     to existing workspace"
+                                );
+                            }
+                        } else {
+                            match insert_ws {
+                                InsertWorkspace::Existing(_) => {
+                                    if let Some(offset) = offset {
+                                        let pos = (tile_render_loc - offset).downscale(zoom);
+                                        let pos = mon.workspaces[ws_idx]
+                                            .floating_logical_to_size_frac(pos);
+                                        tile.floating_pos = Some(pos);
+                                    } else {
+                                        error!(
+                                            "offset unset for inserting a floating tile \
+                                             to existing workspace"
+                                        );
+                                    }
+                                }
+                                InsertWorkspace::NewAt(_) => {
+                                    // When putting a floating tile on a new workspace, we don't
+                                    // really have a good pre-existing position.
                                 }
                             }
-                            InsertWorkspace::NewAt(_) => {
-                                // When putting a floating tile on a new workspace, we don't really
-                                // have a good pre-existing position.
-                            }
-                        }
 
-                        // Set the floating size so it takes into account any window resizing that
-                        // took place during the move.
-                        if let Some(size) = tile.window().expected_size() {
-                            tile.floating_window_size = Some(size);
+                            // Set the floating size so it takes into account any window resizing
+                            // that took place during the move.
+                            if let Some(size) = tile.window().expected_size() {
+                                tile.floating_window_size = Some(size);
+                            }
                         }
 
                         let ws_id = mon.workspaces[ws_idx].id();
@@ -4869,6 +5065,70 @@ impl<W: LayoutElement> Layout<W> {
                     zoom,
                 ));
             });
+    }
+
+    pub fn render_snap_preview_for_output(
+        &self,
+        output: &Output,
+        push: &mut dyn FnMut(SolidColorRenderElement),
+    ) {
+        let Some(InteractiveMoveState::Moving(move_)) = &self.interactive_move else {
+            return;
+        };
+
+        if &move_.output != output {
+            return;
+        }
+
+        let Some(target) = move_.snap_preview.render_target else {
+            return;
+        };
+
+        let alpha = move_.snap_preview.opacity();
+        if alpha <= 0. {
+            return;
+        }
+
+        let config = self.options.layout.snap_assist;
+        let mut rect = target.rect;
+        let margin = 8_f64.min(rect.size.w / 4.).min(rect.size.h / 4.);
+        rect.loc.x += margin;
+        rect.loc.y += margin;
+        rect.size.w = (rect.size.w - margin * 2.).max(1.);
+        rect.size.h = (rect.size.h - margin * 2.).max(1.);
+
+        let fill = SolidColorBuffer::new(rect.size, config.preview_color * alpha);
+        push(SolidColorRenderElement::from_buffer(
+            &fill,
+            rect.loc,
+            1.,
+            Kind::Unspecified,
+        ));
+
+        let border_width = 2.;
+        let border_color = config.preview_border_color * alpha;
+        let border_rects = [
+            Rectangle::new(rect.loc, Size::from((rect.size.w, border_width))),
+            Rectangle::new(
+                Point::from((rect.loc.x, rect.loc.y + rect.size.h - border_width)),
+                Size::from((rect.size.w, border_width)),
+            ),
+            Rectangle::new(rect.loc, Size::from((border_width, rect.size.h))),
+            Rectangle::new(
+                Point::from((rect.loc.x + rect.size.w - border_width, rect.loc.y)),
+                Size::from((border_width, rect.size.h)),
+            ),
+        ];
+
+        for border in border_rects {
+            let buffer = SolidColorBuffer::new(border.size, border_color);
+            push(SolidColorRenderElement::from_buffer(
+                &buffer,
+                border.loc,
+                1.,
+                Kind::Unspecified,
+            ));
+        }
     }
 
     pub fn refresh(&mut self, is_active: bool) {

@@ -4373,6 +4373,9 @@ impl Niri {
         // Otherwise, we will render all layer-shell pop-ups and the top layer on top.
         if mon.render_above_top_layer() {
             self.layout
+                .render_snap_preview_for_output(output, &mut |elem| push(elem.into()));
+
+            self.layout
                 .render_interactive_move_for_output(ctx.r(), output, &mut |elem| push(elem.into()));
 
             mon.render_insert_hint_between_workspaces(ctx.renderer, &mut |elem| push(elem.into()));
@@ -4394,6 +4397,9 @@ impl Niri {
         } else {
             push_popups_from_layer!(Layer::Top);
             push_normal_from_layer!(Layer::Top);
+
+            self.layout
+                .render_snap_preview_for_output(output, &mut |elem| push(elem.into()));
 
             self.layout
                 .render_interactive_move_for_output(ctx.r(), output, &mut |elem| push(elem.into()));

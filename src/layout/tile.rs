@@ -4,6 +4,9 @@ use std::rc::Rc;
 use niri_config::utils::MergeWith as _;
 use niri_config::{Color, CornerRadius, GradientInterpolation};
 use niri_ipc::WindowLayout;
+use smithay::backend::renderer::element::utils::{
+    Relocate, RelocateRenderElement, RescaleRenderElement,
+};
 use smithay::backend::renderer::element::{Element, Kind};
 use smithay::backend::renderer::gles::GlesRenderer;
 use smithay::utils::{Logical, Point, Rectangle, Scale, Size};
@@ -75,6 +78,9 @@ pub struct Tile<W: LayoutElement> {
     /// the window starts out in the tiling layout.
     pub(super) floating_pos: Option<Point<f64, SizeFrac>>,
 
+    /// Window size to restore when dragging a snapped floating window away from an edge.
+    pub(super) snap_restore_window_size: Option<Size<i32, Logical>>,
+
     /// Currently selected preset width index when this tile is floating.
     pub(super) floating_preset_width_idx: Option<usize>,
 
@@ -131,6 +137,7 @@ niri_render_elements! {
         Shadow = ShadowRenderElement,
         ClippedSurface = ClippedSurfaceRenderElement<R>,
         Offscreen = OffscreenRenderElement,
+        RescaledOffscreen = RelocateRenderElement<RescaleRenderElement<OffscreenRenderElement>>,
         ExtraDamage = ExtraDamage,
         BackgroundEffect = BackgroundEffectElement,
     }
@@ -165,6 +172,9 @@ struct MoveAnimation {
 #[derive(Debug)]
 pub(super) struct AlphaAnimation {
     pub(super) anim: Animation,
+    scale_from: f64,
+    scale_to: f64,
+    pub(super) render_when_minimized: bool,
     /// Whether the animation should persist after it's done.
     ///
     /// This is used by things like interactive move which need to animate alpha to
@@ -172,6 +182,20 @@ pub(super) struct AlphaAnimation {
     /// completes.
     pub(super) hold_after_done: bool,
     offscreen: OffscreenBuffer,
+}
+
+impl AlphaAnimation {
+    fn current_scale(&self) -> f64 {
+        let from = self.anim.from();
+        let to = self.anim.to();
+        let value = self.anim.clamped_value();
+        let progress = if (to - from).abs() > f64::EPSILON {
+            ((value - from) / (to - from)).clamp(0., 1.)
+        } else {
+            1.
+        };
+        self.scale_from + (self.scale_to - self.scale_from) * progress
+    }
 }
 
 impl<W: LayoutElement> Tile<W> {
@@ -198,6 +222,7 @@ impl<W: LayoutElement> Tile<W> {
             restore_to_floating: false,
             floating_window_size: None,
             floating_pos: None,
+            snap_restore_window_size: None,
             floating_preset_width_idx: None,
             floating_preset_height_idx: None,
             open_animation: None,
@@ -632,20 +657,45 @@ impl<W: LayoutElement> Tile<W> {
     }
 
     pub fn animate_alpha(&mut self, from: f64, to: f64, config: niri_config::Animation) {
-        let from = from.clamp(0., 1.);
-        let to = to.clamp(0., 1.);
+        self.animate_alpha_scale(from, to, 1., 1., config, false);
+    }
 
-        let (current, offscreen) = if let Some(alpha) = self.alpha_animation.take() {
-            (alpha.anim.clamped_value(), alpha.offscreen)
+    pub fn animate_alpha_scale(
+        &mut self,
+        alpha_from: f64,
+        alpha_to: f64,
+        scale_from: f64,
+        scale_to: f64,
+        config: niri_config::Animation,
+        render_when_minimized: bool,
+    ) {
+        let from = alpha_from.clamp(0., 1.);
+        let to = alpha_to.clamp(0., 1.);
+
+        let (current, current_scale, offscreen) = if let Some(alpha) = self.alpha_animation.take() {
+            (
+                alpha.anim.clamped_value(),
+                alpha.current_scale(),
+                alpha.offscreen,
+            )
         } else {
-            (from, OffscreenBuffer::default())
+            (from, scale_from, OffscreenBuffer::default())
         };
 
         self.alpha_animation = Some(AlphaAnimation {
             anim: Animation::new(self.clock.clone(), current, to, 0., config),
+            scale_from: current_scale,
+            scale_to,
+            render_when_minimized,
             hold_after_done: false,
             offscreen,
         });
+    }
+
+    pub fn should_render_minimized_animation(&self) -> bool {
+        self.alpha_animation
+            .as_ref()
+            .is_some_and(|alpha| alpha.render_when_minimized && !alpha.anim.is_done())
     }
 
     pub fn ensure_alpha_animates_to_1(&mut self) {
@@ -1374,10 +1424,27 @@ impl<W: LayoutElement> Tile<W> {
             match alpha.offscreen.render(ctx.renderer, scale, &elements) {
                 Ok((elem, _sync, data)) => {
                     let offset = elem.offset();
-                    let elem = elem.with_alpha(tile_alpha).with_offset(location + offset);
+                    let alpha_scale = alpha.current_scale().max(0.);
+                    let elem = elem.with_alpha(tile_alpha);
+                    if (alpha_scale - 1.).abs() > f64::EPSILON {
+                        let center = self.animated_tile_size().to_point().downscale(2.);
+                        let elem = RescaleRenderElement::from_element(
+                            elem,
+                            (center - offset).to_physical_precise_round(scale),
+                            alpha_scale,
+                        );
+                        let elem = RelocateRenderElement::from_element(
+                            elem,
+                            (location + offset).to_physical_precise_round(scale),
+                            Relocate::Relative,
+                        );
+                        push(elem.into());
+                    } else {
+                        let elem = elem.with_offset(location + offset);
+                        push(elem.into());
+                    }
 
                     self.window().set_offscreen_data(Some(data));
-                    push(elem.into());
                     pushed = true;
                 }
                 Err(err) => {

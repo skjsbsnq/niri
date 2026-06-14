@@ -373,8 +373,8 @@ Hyper-V Arch Linux 操作：
 - [x] 从已有桌面里继续验证 nested 启动不重复拉起 Quickshell。
 - [x] 从 TTY 执行 `NIRI_MODE=session bash scripts/run-tahoe-session.sh`，验证 niri 能拥有真实 session。
 - [x] 验证进入 niri 后 Tahoe 顶栏和 Dock 自动出现。
-- [ ] 验证退出 niri 后 Quickshell 不残留异常进程。
-- [ ] 如已部署 `.desktop` 文件，验证登录管理器中能看到 `Tahoe Niri` 入口。
+- [x] 验证退出 niri 后 Quickshell 不残留异常进程。
+- [x] 如已部署 `.desktop` 文件，验证登录管理器中能看到 `Tahoe Niri` 入口。
 
 Hyper-V 截图验收记录：
 
@@ -384,18 +384,19 @@ Hyper-V 截图验收记录：
 - 2026-06-14 继续发现：当前登录器仍只显示 `Niri`，疑似 greeter 只读取 `/usr/share/xsessions` 或过滤 home 下 Exec；已回补 `/usr/local/bin/tahoe-niri-session` 和 `/usr/share/xsessions/tahoe-niri.desktop`。
 - 2026-06-14 截图确认：登录器已显示 `Tahoe Niri`，但选择后未能进入 session；已将 launcher 改为优先复用 distro `niri-session` wrapper，并把诊断日志写入 `~/.local/state/tahoe-niri/session.log`。
 - 2026-06-14 继续发现：登录器同时显示两个 `Tahoe Niri`，且日志显示黑屏那次来自 `XDG_SESSION_TYPE=x11`；判断为 Wayland session 和 xsession-compatible 文件同时被 greeter 展示。已默认清理 `/usr/share/xsessions/tahoe-niri.desktop`，保留 `/usr/share/wayland-sessions/tahoe-niri.desktop`。
+- 2026-06-14 最终验收：修复因曾用 `sudo bash scripts/arch-update.sh` 造成的 root-owned 仓库权限后，普通用户执行 `bash scripts/arch-update.sh` 通过；登录器只保留一个 `Tahoe Niri`，选择后可进入 Tahoe niri session，Phase 1.5 通过验收。
 
 Windows 到 Hyper-V 同步验证：
 
 - [x] Windows 修改并 push Phase 1.5 脚本或配置后，在 Hyper-V Arch Linux 中执行 `bash scripts/arch-update.sh`。
-- [ ] 确认 Hyper-V 中运行的 session 入口、niri 配置、QML 和 Windows 仓库版本一致。
+- [x] 确认 Hyper-V 中运行的 session 入口、niri 配置、QML 和 Windows 仓库版本一致。
 
 验收标准：
 
 - [x] 进入 niri session 后 Tahoe shell 自动启动。
-- [x] 顶栏和 Dock 不需要手动运行 Quickshell 就可用。
+- [x] 顶栏、Dock、控制中心和 Launchpad 不需要手动运行 Quickshell 就可用。
 - [x] 嵌套开发启动和真实 session 启动不会重复创建 Tahoe shell。
-- [ ] Tahoe session 可以作为后续真机登录会话的部署模板。
+- [x] Tahoe session 可以作为后续真机登录会话的部署模板。
 - [x] 回滚方式明确：禁用自动启动项或恢复普通 niri session 后，不影响用户已有 niri 配置。
 
 ## Phase 2: niri Fork 最小化/恢复
@@ -862,7 +863,7 @@ Hyper-V Arch Linux 操作：
 - [x] 执行 `bash scripts/arch-update.sh`。
 - [x] 验证 nested 启动仍正常。
 - [x] 验证真实 niri session 中 Tahoe shell 自动出现。
-- [ ] 如已新增 `.desktop` 文件，验证登录管理器入口。
+- [x] 如已新增 `.desktop` 文件，验证登录管理器入口。
 
 **3. niri minimize/restore**
 

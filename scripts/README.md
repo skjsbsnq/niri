@@ -38,6 +38,19 @@ From Phase 2 onward, enable automatic niri fork builds when niri source changes:
 BUILD_NIRI_FORK=auto bash scripts/arch-update.sh
 ```
 
+## Deployed Paths
+
+`arch-update.sh` manages only project-owned Tahoe paths:
+
+- niri config: `~/.config/niri/tahoe/config.kdl`
+- Tahoe shell: `~/.config/quickshell/tahoe`
+- session launcher: `~/.local/bin/tahoe-niri-session`
+- user Wayland session entry: `~/.local/share/wayland-sessions/tahoe-niri.desktop`
+
+It does not overwrite `~/.config/niri/config.kdl` or the stock `niri.desktop` session.
+
+Set `DEPLOY_TAHOE_SESSION_ENTRY=false` when running `arch-update.sh` to skip the Tahoe login entry. Set `TAHOE_SESSION_DESKTOP_DIR=/usr/share/wayland-sessions` only when you intentionally want a system session entry and are running with suitable permissions.
+
 ## Start Session
 
 ```sh
@@ -45,6 +58,13 @@ bash scripts/run-tahoe-session.sh
 ```
 
 `run-tahoe-session.sh` defaults to `NIRI_MODE=auto`: it starts nested niri when it sees an existing `WAYLAND_DISPLAY` or `DISPLAY`, and starts a full session when run from a real TTY.
+
+The script also defaults to `TAHOE_SHELL_LAUNCH_MODE=auto`:
+
+- nested mode uses `child` launch mode, so niri runs Quickshell as the command after `--`.
+- session mode uses `config` launch mode, so `~/.config/niri/tahoe/config.kdl` starts Quickshell with `spawn-sh-at-startup`.
+
+In child mode the script exports `TAHOE_SKIP_QUICKSHELL_AUTOSTART=1`, which prevents the config startup hook from creating a second Tahoe shell.
 
 When running from a terminal inside an existing desktop, force nested mode if needed:
 
@@ -58,10 +78,16 @@ When running from a real TTY and you want niri to own the session:
 NIRI_MODE=session bash scripts/run-tahoe-session.sh
 ```
 
+This starts niri with the Tahoe config and lets the config autostart Quickshell. It does not pass Quickshell as a child command.
+
+After `arch-update.sh` deploys the login entry, a display manager that reads user Wayland sessions can start the same path by selecting `Tahoe Niri`. If the entry is not visible, either restart the display manager or deploy the desktop file to the system Wayland session directory for that machine.
+
 Useful environment overrides:
 
 ```sh
 NIRI_MODE=nested bash scripts/run-tahoe-session.sh
+TAHOE_SHELL_LAUNCH_MODE=child bash scripts/run-tahoe-session.sh
+TAHOE_SHELL_LAUNCH_MODE=config NIRI_MODE=session bash scripts/run-tahoe-session.sh
 NIRI_CONFIG=/path/to/config.kdl bash scripts/run-tahoe-session.sh
 TAHOE_CONFIG_DIR=/path/to/tahoe-shell bash scripts/run-tahoe-session.sh
 NIRI_BIN=/path/to/niri bash scripts/run-tahoe-session.sh
@@ -69,3 +95,11 @@ QUICKSHELL_BIN=/path/to/quickshell bash scripts/run-tahoe-session.sh
 ```
 
 By default, `run-tahoe-session.sh` uses `~/.config/niri/tahoe/config.kdl` and `~/.config/quickshell/tahoe`, which are both managed by `arch-update.sh`.
+
+To start the deployed login-session launcher directly:
+
+```sh
+~/.local/bin/tahoe-niri-session
+```
+
+Rollback is local: remove or disable the `spawn-sh-at-startup` line in `~/.config/niri/tahoe/config.kdl`, select the stock `Niri` login session instead of `Tahoe Niri`, or run with `TAHOE_SHELL_LAUNCH_MODE=none` for niri-only debugging.

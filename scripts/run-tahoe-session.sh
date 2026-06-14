@@ -19,6 +19,7 @@ QUICKSHELL_BIN="${QUICKSHELL_BIN:-quickshell}"
 TAHOE_CONFIG_DIR="${TAHOE_CONFIG_DIR:-"$HOME/.config/quickshell/tahoe"}"
 NIRI_CONFIG="${NIRI_CONFIG:-"$HOME/.config/niri/tahoe/config.kdl"}"
 NIRI_MODE="${NIRI_MODE:-auto}"
+TAHOE_SHELL_LAUNCH_MODE="${TAHOE_SHELL_LAUNCH_MODE:-auto}"
 
 require_cmd() {
   command -v "$1" >/dev/null 2>&1 || die "missing required command: $1"
@@ -41,13 +42,9 @@ resolve_niri_bin() {
 main() {
   local niri_bin
   local resolved_mode
+  local shell_launch_mode
   local -a niri_args
   local -a shell_args
-
-  require_cmd "$QUICKSHELL_BIN"
-
-  [[ -d "$TAHOE_CONFIG_DIR" ]] || die "Tahoe shell config directory does not exist: $TAHOE_CONFIG_DIR"
-  [[ -f "$TAHOE_CONFIG_DIR/shell.qml" ]] || die "Tahoe shell entry not found: $TAHOE_CONFIG_DIR/shell.qml"
 
   niri_bin="$(resolve_niri_bin)"
 
@@ -67,6 +64,28 @@ main() {
       ;;
   esac
 
+  case "$TAHOE_SHELL_LAUNCH_MODE" in
+    auto)
+      if [[ "$resolved_mode" == nested ]]; then
+        shell_launch_mode="child"
+      else
+        shell_launch_mode="config"
+      fi
+      ;;
+    child|config|none)
+      shell_launch_mode="$TAHOE_SHELL_LAUNCH_MODE"
+      ;;
+    *)
+      die "invalid TAHOE_SHELL_LAUNCH_MODE: $TAHOE_SHELL_LAUNCH_MODE; expected auto, child, config, or none"
+      ;;
+  esac
+
+  if [[ "$shell_launch_mode" != none ]]; then
+    require_cmd "$QUICKSHELL_BIN"
+    [[ -d "$TAHOE_CONFIG_DIR" ]] || die "Tahoe shell config directory does not exist: $TAHOE_CONFIG_DIR"
+    [[ -f "$TAHOE_CONFIG_DIR/shell.qml" ]] || die "Tahoe shell entry not found: $TAHOE_CONFIG_DIR/shell.qml"
+  fi
+
   niri_args=("$niri_bin")
   if [[ "$resolved_mode" == session ]]; then
     niri_args+=("--session")
@@ -82,9 +101,24 @@ main() {
   log "repo: $REPO_DIR"
   log "niri: $niri_bin"
   log "mode: $resolved_mode"
+  log "shell launch: $shell_launch_mode"
   log "Tahoe shell: $TAHOE_CONFIG_DIR"
 
-  exec "${niri_args[@]}" -- "${shell_args[@]}"
+  if [[ "$shell_launch_mode" != none ]]; then
+    export TAHOE_QUICKSHELL_BIN="$QUICKSHELL_BIN"
+    export TAHOE_CONFIG_DIR
+  fi
+
+  if [[ "$shell_launch_mode" == child ]]; then
+    export TAHOE_SKIP_QUICKSHELL_AUTOSTART=1
+    exec "${niri_args[@]}" -- "${shell_args[@]}"
+  fi
+
+  if [[ "$shell_launch_mode" == none ]]; then
+    export TAHOE_SKIP_QUICKSHELL_AUTOSTART=1
+  fi
+
+  exec "${niri_args[@]}"
 }
 
 main "$@"

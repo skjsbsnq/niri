@@ -300,9 +300,9 @@ Hyper-V Arch Linux 操作：
 - [x] 验证 Dock 固定到屏幕底部。
 - [x] 验证固定 app 图标显示。
 - [x] 验证当前窗口列表显示。
-- [ ] 验证点击窗口按钮能调用 `activate()`。
-- [ ] 验证控制中心能打开和关闭。
-- [ ] 验证 Launchpad 能打开和关闭。
+- [x] 验证点击窗口按钮能调用 `activate()`。
+- [x] 验证控制中心能打开和关闭。
+- [x] 验证 Launchpad 能打开和关闭。
 - [ ] 验证 `BackgroundEffect.blurRegion` 是否生效。
 - [x] 验证 `ToplevelManager.toplevels` 是否能读到 niri 窗口。
 - [x] 验证 `WindowManager.windowsets` 是否能读到 workspace。
@@ -314,7 +314,8 @@ Hyper-V 截图验收记录：
 - 2026-06-14 截图确认：顶栏、Dock、固定 app 图标、当前窗口列表、控制中心打开状态和 workspace 状态均可见。
 - 截图发现控制中心底部内容裁切，已在 commit `847dbea` 中修复 `ControlCenter.qml` 高度和 Now Playing 区域布局；待 Hyper-V 拉取后复测。
 - 截图发现桌面壁纸未显示、面板 blur 观感不明显；已新增 Quickshell `Wallpaper.qml`，并修正为 `WlrLayer.Background` + `ExclusionMode.Ignore` 以覆盖顶栏和 Dock 背后的完整屏幕区域；待 Hyper-V 拉取后复测真实 blur 是否由 compositor 生效。
-- 待继续手动确认：Dock 窗口项点击 `activate()`、控制中心关闭、Launchpad 打开/关闭、真实 compositor blur、多显示器位置和 exclusive zone。
+- 2026-06-14 手动确认：Dock 窗口项点击 `activate()`、控制中心打开/关闭、Launchpad 打开/关闭均已通过。
+- 待继续手动确认：真实 compositor blur、多显示器位置和 exclusive zone。
 
 Windows 到 Hyper-V 同步验证：
 
@@ -327,11 +328,66 @@ Windows 到 Hyper-V 同步验证：
 - [x] 有底部 Dock。
 - [x] Dock 能显示固定 app 图标。
 - [x] Dock 能显示当前窗口列表。
-- [ ] 点击窗口项能 activate。
-- [ ] 控制中心能打开和关闭。
+- [x] 点击窗口项能 activate。
+- [x] 控制中心能打开和关闭。
+- [x] Launchpad 能打开和关闭。
 - [ ] 面板有 compositor blur。
 - [x] 工作区状态能从 Quickshell 读取。
 - [x] 不修改 Quickshell 核心源码。
+
+## Phase 1.5: niri Session 集成
+
+阶段目标：把已经通过交互验证的 Tahoe shell 接到 niri session 启动链路里，实现进入 niri 后自动可用，并为后续真机登录会话做最小闭环。
+
+主要产出：
+
+- niri 配置中自动启动 Tahoe Quickshell。
+- 一个明确的 Tahoe niri 启动入口。
+- 可选的登录管理器 session 文件。
+- 更新和回滚路径清晰，不覆盖用户已有默认 niri 配置。
+
+小任务：
+
+Windows 操作：
+
+- [x] 在项目 niri 配置中加入 Tahoe shell 自动启动项，使用带 `TAHOE_SKIP_QUICKSHELL_AUTOSTART` 防重入的 `spawn-sh-at-startup`。
+- [x] 确认自动启动项不会和 `scripts/run-tahoe-session.sh` 的 `niri -- ... quickshell` 启动方式重复拉起 shell。
+- [x] 为 Phase 1.5 固定启动策略：开发/嵌套测试继续用 `scripts/run-tahoe-session.sh`，真实 session 使用 niri 配置自动启动 Quickshell。
+- [x] 增加或更新脚本，把 Tahoe session 入口部署到用户目录或系统 session 目录。
+- [x] 如需登录管理器显示独立入口，新增 `Tahoe Niri` 的 `.desktop` session 文件。
+- [x] 保持项目配置部署到 `~/.config/niri/tahoe/config.kdl`，不覆盖 `~/.config/niri/config.kdl`。
+- [x] 更新 `scripts/README.md`，记录嵌套测试、TTY session、登录管理器三种启动方式。
+- [x] commit 并 push。
+
+Windows 本地状态：
+
+- 已在 `config/niri/tahoe-phase0.kdl` 中加入 Tahoe Quickshell 自启动。
+- 已更新 `scripts/run-tahoe-session.sh`：nested 使用 child 启动并禁用配置自启，真实 session 使用配置自启。
+- 已新增 `scripts/tahoe-niri-session.sh` 作为登录会话启动器。
+- 已更新 `scripts/arch-update.sh`，部署 `~/.local/bin/tahoe-niri-session` 和 `~/.local/share/wayland-sessions/tahoe-niri.desktop`。
+- 已更新 `scripts/README.md`，记录 nested、TTY session 和登录管理器启动方式。
+
+Hyper-V Arch Linux 操作：
+
+- [ ] 执行 `bash scripts/arch-update.sh`，部署最新 niri 配置、Tahoe shell 和 session 入口。
+- [ ] 从已有桌面里继续验证 nested 启动不重复拉起 Quickshell。
+- [ ] 从 TTY 执行 `NIRI_MODE=session bash scripts/run-tahoe-session.sh`，验证 niri 能拥有真实 session。
+- [ ] 验证进入 niri 后 Tahoe 顶栏、Dock、控制中心、Launchpad 自动出现。
+- [ ] 验证退出 niri 后 Quickshell 不残留异常进程。
+- [ ] 如已部署 `.desktop` 文件，验证登录管理器中能看到 `Tahoe Niri` 入口。
+
+Windows 到 Hyper-V 同步验证：
+
+- [ ] Windows 修改并 push Phase 1.5 脚本或配置后，在 Hyper-V Arch Linux 中执行 `bash scripts/arch-update.sh`。
+- [ ] 确认 Hyper-V 中运行的 session 入口、niri 配置、QML 和 Windows 仓库版本一致。
+
+验收标准：
+
+- [ ] 进入 niri session 后 Tahoe shell 自动启动。
+- [ ] 顶栏、Dock、控制中心、Launchpad 不需要手动运行 Quickshell 就可用。
+- [ ] 嵌套开发启动和真实 session 启动不会重复创建 Tahoe shell。
+- [ ] Tahoe session 可以作为后续真机登录会话的部署模板。
+- [ ] 回滚方式明确：禁用自动启动项或恢复普通 niri session 后，不影响用户已有 niri 配置。
 
 ## Phase 2: niri Fork 最小化/恢复
 
@@ -757,30 +813,47 @@ Windows 到 Hyper-V 同步验证：
 
 Windows 操作：
 
-- [ ] 新建 `tahoe-shell/`。
-- [ ] 做 Quickshell 顶栏静态 UI。
-- [ ] 做 Quickshell Dock 静态 UI。
-- [ ] commit 并 push。
+- [x] 新建 `tahoe-shell/`。
+- [x] 做 Quickshell 顶栏静态 UI。
+- [x] 做 Quickshell Dock 静态 UI。
+- [x] commit 并 push。
 
 Hyper-V Arch Linux 操作：
 
-- [ ] 执行 `bash scripts/arch-update.sh`。
-- [ ] 启动 Quickshell Tahoe shell。
-- [ ] 验证顶栏和 Dock 可见。
+- [x] 执行 `bash scripts/arch-update.sh`。
+- [x] 启动 Quickshell Tahoe shell。
+- [x] 验证顶栏和 Dock 可见。
 
 **2. Dock 真实窗口列表**
 
 Windows 操作：
 
-- [ ] 接入 `ToplevelManager`。
-- [ ] 让 Dock 显示真实窗口。
-- [ ] commit 并 push。
+- [x] 接入 `ToplevelManager`。
+- [x] 让 Dock 显示真实窗口。
+- [x] commit 并 push。
+
+Hyper-V Arch Linux 操作：
+
+- [x] 执行 `bash scripts/arch-update.sh`。
+- [x] 打开多个窗口。
+- [x] 验证 Dock 能显示真实窗口列表。
+
+**2.5. Phase 1.5 niri Session 集成**
+
+Windows 操作：
+
+- [x] 给 Tahoe niri 配置增加 Quickshell 自动启动项。
+- [x] 明确 nested 调试和真实 session 的启动策略，避免重复拉起 Quickshell。
+- [x] 可选新增 `Tahoe Niri` 登录会话入口。
+- [x] 更新 `scripts/README.md`。
+- [x] commit 并 push。
 
 Hyper-V Arch Linux 操作：
 
 - [ ] 执行 `bash scripts/arch-update.sh`。
-- [ ] 打开多个窗口。
-- [ ] 验证 Dock 能显示真实窗口列表。
+- [ ] 验证 nested 启动仍正常。
+- [ ] 验证真实 niri session 中 Tahoe shell 自动出现。
+- [ ] 如已新增 `.desktop` 文件，验证登录管理器入口。
 
 **3. niri minimize/restore**
 

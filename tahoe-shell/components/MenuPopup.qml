@@ -39,11 +39,16 @@ PanelWindow {
         id: menuSurface
 
         x: 0
-        y: root.open ? 0 : -8
+        y: 0
         width: parent.width
         height: parent.height
         radius: 18
         color: "#e6f7f8fb"
+        // Open: scale down from the top-left corner (under the Apple/Tahoe
+        // menu-bar entry) + fade. macOS menus expand from the menu-bar
+        // item that spawned them, not slide.
+        transformOrigin: Item.TopLeft
+        scale: root.open ? 1 : 0.9
         opacity: root.open ? 1 : 0
 
         // NOTE: no `border.width` on the surface itself — a centered 1px
@@ -73,8 +78,14 @@ PanelWindow {
             NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
         }
 
-        Behavior on y {
-            NumberAnimation { duration: 150; easing.type: Easing.OutCubic }
+        // Spring on scale — menu expands from its top-left anchor with a
+        // hint of overshoot (the Tahoe pop) instead of a slide.
+        Behavior on scale {
+            SpringAnimation {
+                spring: 420
+                damping: 0.8
+                epsilon: 0.01
+            }
         }
 
         ColumnLayout {

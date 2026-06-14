@@ -9,6 +9,9 @@ Item {
     property var appsService
     property bool showTitle: true
     property int iconSize: 38
+    // Magnification is fed in by the Dock (proximityScale of the pointer).
+    // The SpringAnimation Behavior below eases it toward the target so the
+    // running-window half of the dock waves together with the pinned half.
     property real magnification: 1.0
     property real bounceOffset: 0
     property var dockWindow
@@ -16,13 +19,16 @@ Item {
     readonly property bool active: !!toplevel && toplevel.activated
     readonly property bool minimized: !!toplevel && toplevel.minimized
     readonly property string label: appsService ? appsService.toplevelLabel(toplevel) : String(toplevel ? toplevel.title || toplevel.appId || "Window" : "Window")
-    readonly property real lift: (magnification - 1.0) * 16
+    readonly property real lift: (magnification - 1.0) * 20
 
     signal activateRequested(var toplevel)
     signal dockPointerMoved(real x)
     signal dockPointerEntered()
 
-    width: showTitle ? 132 : 56
+    // Width widens with magnification for the same wave coupling as the
+    // pinned icons (see Dock.qml). showTitle tiles grow more, since the
+    // title pill has room to breathe; title-less tiles grow less.
+    width: (showTitle ? 132 : 56) + (magnification - 1.0) * (showTitle ? 60 : 40)
     height: 58
 
     function updateDockRectangle(mouseX, mouseY) {
@@ -82,14 +88,6 @@ Item {
         smooth: true
         opacity: root.minimized ? 0.58 : 1.0
         transformOrigin: Item.Center
-
-        Behavior on scale {
-            NumberAnimation { duration: 120; easing.type: Easing.OutCubic }
-        }
-
-        Behavior on y {
-            NumberAnimation { duration: 120; easing.type: Easing.OutCubic }
-        }
     }
 
     Text {
@@ -130,7 +128,7 @@ Item {
         }
         onEntered: root.dockPointerEntered()
         onClicked: function(mouse) {
-            bounceAnimation.restart();
+            root.bounce();
             if (mouse.button === Qt.MiddleButton)
                 root.minimize();
             else
@@ -138,23 +136,49 @@ Item {
         }
     }
 
-    SequentialAnimation {
-        id: bounceAnimation
+    // Spring bounce on click — kick bounceOffset to an overshoot then let
+    // the underdamped spring below settle it (1.5 oscillations), matching
+    // the Dock and real macOS. A single-shot Timer does the kick→release
+    // so the Behavior spring sees a real property change (setting to 14
+    // then 0 in the same JS frame would coalesce and never animate).
+    Timer {
+        id: bounceTimer
+        interval: 16
+        repeat: false
+        onTriggered: root.bounceOffset = 0
+    }
 
-        NumberAnimation {
-            target: root
-            property: "bounceOffset"
-            to: 5
-            duration: 70
-            easing.type: Easing.OutCubic
+    function bounce() {
+        // Disable the Behavior momentarily is unnecessary: jumping to 14
+        // then back to 0 in two steps gives the spring a target to chase.
+        root.bounceOffset = 14;
+        bounceTimer.restart();
+    }
+
+    Behavior on bounceOffset {
+        SpringAnimation {
+            spring: 380
+            damping: 0.32
+            mass: 0.9
+            epsilon: 0.01
         }
+    }
 
-        NumberAnimation {
-            target: root
-            property: "bounceOffset"
-            to: 0
-            duration: 110
-            easing.type: Easing.OutCubic
+    // Critically damped springs on magnification + width so the running-
+    // window half of the dock eases with the pinned half.
+    Behavior on magnification {
+        SpringAnimation {
+            spring: 260
+            damping: 1.0
+            epsilon: 0.01
+        }
+    }
+
+    Behavior on width {
+        SpringAnimation {
+            spring: 240
+            damping: 1.0
+            epsilon: 0.01
         }
     }
 }

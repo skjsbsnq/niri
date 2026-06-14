@@ -20,14 +20,25 @@ PanelWindow {
 
     signal toggleLaunchpad()
 
+    // Spring-smoothed dock magnification.
+    //
+    // This returns the *target* scale for an icon given the pointer
+    // position. The actual magnification property on each delegate has a
+    // SpringAnimation Behavior (see the delegate), so the icon eases toward
+    // this target every frame instead of snapping. The web dock does the
+    // same thing with requestAnimationFrame + exponential lerp (script.js
+    // 358-404); here the spring plays the role of the lerp.
+    //
+    // Range ~150px (web uses 195), peak scale 1.5 (web uses 1.7). Wider
+    // range + bigger peak is what makes the neighbor-coupling wave visible.
     function proximityScale(item) {
         if (!dockHovered || !item || !dockSurface)
             return 1.0;
 
         var point = item.mapToItem(dockSurface, item.width / 2, item.height / 2);
         var distance = Math.abs(dockMouseX - point.x);
-        var influence = Math.max(0, 1 - distance / 118);
-        return 1.0 + influence * 0.38;
+        var influence = Math.max(0, 1 - distance / 150);
+        return 1.0 + influence * 0.5;
     }
 
     anchors {
@@ -141,6 +152,14 @@ PanelWindow {
                     id: pinnedButton
 
                     required property var modelData
+                    // Magnification tracks the pointer position via
+                    // proximityScale(); the SpringAnimation Behavior below
+                    // eases it toward that target every frame, so neighbors
+                    // couple into a wave instead of snapping. This mirrors
+                    // the web dock's requestAnimationFrame + exponential
+                    // lerp (script.js 358-404) — the spring plays the lerp.
+                    // Kept writable (not readonly) so the Behavior reliably
+                    // intercepts binding updates.
                     property real magnification: root.proximityScale(pinnedButton)
                     property real bounceOffset: 0
                     readonly property bool hovered: iconMouse.containsMouse
@@ -148,9 +167,15 @@ PanelWindow {
                         && root.appsService
                         && root.niriService
                         && root.appsService.appHasRunningWindow(modelData, root.niriService.toplevelList)
-                    readonly property real lift: (magnification - 1.0) * 18 + (hovered ? 3 : 0)
+                    readonly property real lift: (magnification - 1.0) * 22 + (hovered ? 3 : 0)
 
-                    width: 62
+                    // Width widens with magnification so the Row pushes
+                    // neighbors out as the pointer sweeps — this is the
+                    // horizontal coupling that reads as a wave (web dock,
+                    // script.js line 378, widens neighbors' margins the
+                    // same way). The Behavior on width spring-smooths it so
+                    // the row doesn't snap.
+                    width: 62 + (magnification - 1.0) * 40
                     height: 70
 
                     Rectangle {
@@ -173,14 +198,6 @@ PanelWindow {
                         fillMode: Image.PreserveAspectFit
                         smooth: true
                         transformOrigin: Item.Center
-
-                        Behavior on scale {
-                            NumberAnimation { duration: 120; easing.type: Easing.OutCubic }
-                        }
-
-                        Behavior on y {
-                            NumberAnimation { duration: 120; easing.type: Easing.OutCubic }
-                        }
                     }
 
                     Rectangle {
@@ -236,7 +253,7 @@ PanelWindow {
                         }
                         onEntered: root.dockHovered = true
                         onClicked: {
-                            bounceAnimation.restart();
+                            pinnedButton.bounce();
                             if (modelData.shellAction === "launchpad") {
                                 root.toggleLaunchpad();
                             } else if (root.appsService) {
@@ -245,23 +262,57 @@ PanelWindow {
                         }
                     }
 
-                    SequentialAnimation {
-                        id: bounceAnimation
+                    // Spring bounce on click — kick bounceOffset to an
+                    // overshoot then let the Behavior spring below settle
+                    // it (1.5 oscillations). A single-shot Timer does the
+                    // kick→release so the spring sees a real change.
+                    Timer {
+                        id: bounceTimer
+                        interval: 16
+                        repeat: false
+                        onTriggered: pinnedButton.bounceOffset = 0
+                    }
 
-                        NumberAnimation {
-                            target: pinnedButton
-                            property: "bounceOffset"
-                            to: 5
-                            duration: 70
-                            easing.type: Easing.OutCubic
+                    function bounce() {
+                        pinnedButton.bounceOffset = 14;
+                        bounceTimer.restart();
+                    }
+
+                    // Underdamped spring on bounce — ~1.5 oscillations before
+                    // settling. SpringAnimation drives a real second-order
+                    // ODE, unlike the old two-step SequentialAnimation that
+                    // went up once and came back once (no overshoot).
+                    Behavior on bounceOffset {
+                        SpringAnimation {
+                            spring: 380
+                            damping: 0.32
+                            mass: 0.9
+                            epsilon: 0.01
                         }
+                    }
 
-                        NumberAnimation {
-                            target: pinnedButton
-                            property: "bounceOffset"
-                            to: 0
-                            duration: 110
-                            easing.type: Easing.OutCubic
+                    // Critically damped spring on width — no overshoot, just
+                    // smooth easing toward the magnification-driven target so
+                    // the Row reflow reads as a wave instead of a snap.
+                    Behavior on width {
+                        SpringAnimation {
+                            spring: 240
+                            damping: 1.0
+                            epsilon: 0.01
+                        }
+                    }
+
+                    // Critically damped spring on magnification. Because
+                    // magnification is read-only and bound to
+                    // proximityScale(), this Behavior fires each time the
+                    // pointer moves to a new icon, easing the scale (and thus
+                    // the icon image scale and the Row width) toward the new
+                    // target. Without this the whole row snaps per-frame.
+                    Behavior on magnification {
+                        SpringAnimation {
+                            spring: 260
+                            damping: 1.0
+                            epsilon: 0.01
                         }
                     }
                 }

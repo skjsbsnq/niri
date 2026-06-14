@@ -129,6 +129,8 @@ Web 参考（`index.html` 第 205–207 行）：`<hr class="column">` 分隔线
 
 ## 二、动画：为什么"做得不好"以及根因
 
+> **更新（2026-06-14）：动画 spring 化已完成。** 下表的"现状/问题"列描述的是改造**前**的状态。现已：Dock magnification 用 SpringAnimation 平滑 + 宽度随 magnification 联动（行波，抄 `script.js` 的 margin 联动）；Dock/窗口按钮点击 bounce 改欠阻尼 spring（damping 0.32）；控制中心从 TopRight 锚点 scale 展开（spring）；菜单从 TopLeft 锚点 scale 展开；Launchpad 方向修正为 1.1→1 + spring；opacity 仍用 NumberAnimation（fade 不适合 spring）。Snap preview / 窗口拖拽即时性 属 niri 侧，未在本次改造范围。
+
 ### 2.1 Quickshell 侧（普遍是廉价 NumberAnimation + OutCubic，几乎没有 spring）
 
 | 位置 | Web 参考怎么做 | `tahoe-shell/` 现状 | 问题 |
@@ -143,7 +145,9 @@ Web 参考（`index.html` 第 205–207 行）：`<hr class="column">` 分隔线
 | 窗口拖拽即时性 | `style.css` 第 2390–2394 行：拖拽时 `.is-dragging { transition: none }`，松手恢复 cubic-bezier(0.16,1,0.3,1) | niri window-movement spring damping 0.86 | niri 这块做得对，但 snap 触发瞬间没有过渡 |
 | Snap preview | `style.css` 第 2455–2469 行：`backdrop-filter: blur(12px)` 半透明圆角矩形 + `transition: opacity 0.3s, left 0.3s, width 0.3s` | niri `render_snap_preview_for_output`：`SolidColorRenderElement` 蓝色实心矩形 | Web 版**有圆角 + 真模糊**，niri 版是**直角实心蓝色块**，没有玻璃感、没有圆角、没有内部毛玻璃预览 |
 
-**核心问题**：`tahoe-shell/` 动画几乎全用 `NumberAnimation` + `OutCubic`，**只有通知用了 `SpringAnimation`**。macOS 26 的灵魂是 spring/physics。Dock magnification 也是离散 tween 不是连续物理。Web 项目至少用了 `requestAnimationFrame` lerp 做连续平滑，`tahoe-shell` 连这个都没用。
+**核心问题（改造前）**：`tahoe-shell/` 动画几乎全用 `NumberAnimation` + `OutCubic`，**只有通知用了 `SpringAnimation`**。macOS 26 的灵魂是 spring/physics。Dock magnification 也是离散 tween 不是连续物理。Web 项目至少用了 `requestAnimationFrame` lerp 做连续平滑，`tahoe-shell` 连这个都没用。
+
+> **改造后（2026-06-14）**：SpringAnimation 现在是 Quickshell 侧所有运动类动画（scale / position / size）的默认驱动；opacity fade 仍用 NumberAnimation（spring 会让 fade 抖动，且 macOS 自身 fade 也是 ease）。Dock magnification 邻居联动通过 delegate `width` 随 magnification 弹簧变化实现，Row 重排时整条 Dock 一起呼吸，等同 Web 的 margin 联动。
 
 ### 2.2 niri compositor 侧（参数调了，但 Genie / snap 动画缺失）
 
@@ -310,8 +314,8 @@ Spotlight            script.js 487-499  → 新 Spotlight.qml
 ## 七、修复优先级建议（性价比排序）
 
 1. ~~**控制中心做成真的**~~ ✅ 已完成（2026-06-14，commit `f2887cc`+`666c3c8`+`01d999a`）。抄 Web `index.html` 92–169 行的 cc-grid 布局，接 Pipewire/brightnessctl/Networking/Bluetooth/Mpris，加音量/亮度/Wi-Fi/BT toggle + 正在播放。
-2. ~~**接真通知系统**~~ ✅ 已完成（2026-06-14）。接 Quickshell `NotificationServer`，注册为 `org.freedesktop.Notifications` 守护进程，替掉假 toast。见 §1.3。下一项最高优先：动画 spring 化。
-3. **动画 spring 化**——Dock magnification 改 rAF lerp + margin 联动（抄 `script.js` 358–404）；控制中心/Launchpad/菜单改从锚点 scale 展开（spring）。
+2. ~~**接真通知系统**~~ ✅ 已完成（2026-06-14）。接 Quickshell `NotificationServer`，注册为 `org.freedesktop.Notifications` 守护进程，替掉假 toast。见 §1.3。
+3. ~~**动画 spring 化**~~ ✅ 已完成（2026-06-14）。Dock magnification 改 SpringAnimation 平滑 + 宽度随 magnification 联动（行波效应，抄 `script.js` 358–404 的 margin 联动思路）；Dock/窗口按钮点击 bounce 改欠阻尼 spring（damping 0.32，~1.5 次阻尼弹跳，替代原来的两步 SequentialAnimation）；控制中心从 TopRight 锚点 scale 展开（spring 380/damping 0.78 轻微 overshoot）；菜单从 TopLeft 锚点 scale 展开；Launchpad 修正方向为 1.1→1（原 0.96→1 方向反了，是 zoom-in 不是"从远处飞来"）+ spring。opacity 仍保留 NumberAnimation（fade 不适合 spring，会抖）。下一项最高优先：玻璃参数重做。详见 §二.1。
 4. **玻璃参数重做**——refraction 上限放开、edge highlight 改真法线、blur passes 加大；研究把 Web 的 SVG glass-distortion 滤镜（turbulence+specular+displacement）翻译成 niri shader 或 Qt ShaderEffect。
 5. **snap preview 重做**——改成圆角 + 模糊元素（抄 `style.css` 2455–2469 行），不是实心蓝色块。
 6. **加 Spotlight + Launchpad 搜索框**——抄 `index.html` 211–213 + 319–323。
@@ -323,5 +327,5 @@ Spotlight            script.js 487-499  → 新 Spotlight.qml
 
 ## 八、一句话总结
 
-> 当前项目状态：**niri fork 那一层（minimize/snap/glass shader）是真东西且完成度不错；Quickshell shell 那一层原先是"macOS 的皮 + 没有功能的骨头"，现已完成两项真控件化改造（控制中心 + 真通知系统），但菜单是假的、Spotlight 没有、动画不用 spring、玻璃缺 SVG displacement 滤镜等价物**。Web 参考项目是一份现成的"功能清单 + 视觉参数表 + 动画曲线表"，应该当成蓝图继续逐项翻译成 QML。下一项：动画 spring 化。
+> 当前项目状态：**niri fork 那一层（minimize/snap/glass shader）是真东西且完成度不错；Quickshell shell 那一层原先是"macOS 的皮 + 没有功能的骨头"，现已完成三项改造（控制中心 + 真通知系统 + 动画 spring 化），但菜单是假的、Spotlight 没有、玻璃缺 SVG displacement 滤镜等价物**。Web 参考项目是一份现成的"功能清单 + 视觉参数表 + 动画曲线表"，应该当成蓝图继续逐项翻译成 QML。下一项：玻璃参数重做。
 

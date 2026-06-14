@@ -60,11 +60,18 @@ PanelWindow {
     Rectangle {
         id: panel
         x: 0
-        y: root.open ? 0 : -14
+        y: 0
         width: parent.width
         implicitHeight: content.implicitHeight + 28
         radius: 28
         color: root.glassFill
+        // Open: scale up from the top-right corner (where the menu-bar
+        // status icon lives) + fade. macOS Tahoe opens Control Center by
+        // expanding from the icon, not sliding down. transformOrigin keeps
+        // the top-right corner pinned so the panel "grows" toward the
+        // bottom-left. Closed: scale 0.92 + faded.
+        transformOrigin: Item.TopRight
+        scale: root.open ? 1 : 0.92
         opacity: root.open ? 1 : 0
 
         // NOTE: no `border.width` on the panel itself. A centered 1px
@@ -122,8 +129,14 @@ PanelWindow {
             NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
         }
 
-        Behavior on y {
-            NumberAnimation { duration: 220; easing.type: Easing.OutCubic }
+        // Spring on scale so the panel expands from the status icon with a
+        // touch of overshoot — the Tahoe "pop", not a linear tween.
+        Behavior on scale {
+            SpringAnimation {
+                spring: 380
+                damping: 0.78
+                epsilon: 0.01
+            }
         }
 
         ColumnLayout {
@@ -234,7 +247,11 @@ PanelWindow {
                 visible: Layout.preferredHeight > 0
 
                 Behavior on Layout.preferredHeight {
-                    NumberAnimation { duration: 180; easing.type: Easing.OutCubic }
+                    SpringAnimation {
+                        spring: 320
+                        damping: 0.85
+                        epsilon: 0.01
+                    }
                 }
 
                 Behavior on opacity {

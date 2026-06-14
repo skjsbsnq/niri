@@ -11,11 +11,16 @@ PanelWindow {
 
     property var appsService
     property var niriService
+    property var notificationsService
     property bool controlCenterOpen: false
     property bool launchpadOpen: false
     property bool appMenuOpen: false
     property date now: new Date()
     readonly property string activeApp: appsService && niriService ? appsService.toplevelLabel(niriService.activeToplevel) : "Desktop"
+    // Number of undismissed notifications. Drives the bell badge to the
+    // left of the clock. Guards against a missing service (e.g. before
+    // the property is wired from the shell root).
+    readonly property int notificationCount: notificationsService ? notificationsService.activeCount : 0
     readonly property color glassFill: "#20ffffff"
     readonly property color glassStroke: "#42ffffff"
     readonly property color glassHairline: "#4cffffff"
@@ -168,6 +173,65 @@ PanelWindow {
                 Layout.preferredWidth: visible ? implicitWidth : 0
                 Layout.preferredHeight: implicitHeight
                 Layout.alignment: Qt.AlignVCenter
+            }
+
+            // Notification bell badge. Hidden when there is nothing
+            // pending so the bar stays clean. Clicking it dismisses the
+            // current toast (same as clicking the toast itself); for a
+            // count > 9 it just shows "9+".
+            Item {
+                Layout.preferredWidth: 30
+                Layout.preferredHeight: 24
+                Layout.alignment: Qt.AlignVCenter
+                visible: root.notificationCount > 0
+
+                Rectangle {
+                    anchors.fill: parent
+                    radius: 12
+                    color: badgeMouse.containsMouse ? "#38ffffff" : "#22ffffff"
+                    border.color: "#40ffffff"
+                }
+
+                Text {
+                    anchors.centerIn: parent
+                    // Material Icons "notifications" glyph.
+                    text: "\ue7f4"
+                    color: "#202124"
+                    font.family: "Material Icons"
+                    font.pixelSize: 16
+                }
+
+                Rectangle {
+                    // Count pip, top-right of the bell.
+                    x: parent.width - width - 3
+                    y: 1
+                    width: countLabel.implicitWidth + 8
+                    height: 14
+                    radius: 7
+                    color: "#ccff453a"
+                    border.color: "#ffffff"
+                    border.width: 1
+
+                    Text {
+                        id: countLabel
+                        anchors.centerIn: parent
+                        text: root.notificationCount > 9 ? "9+" : root.notificationCount
+                        color: "#ffffff"
+                        font.pixelSize: 9
+                        font.weight: Font.DemiBold
+                    }
+                }
+
+                MouseArea {
+                    id: badgeMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        if (root.notificationsService)
+                            root.notificationsService.dismissCurrent();
+                    }
+                }
             }
 
             Text {

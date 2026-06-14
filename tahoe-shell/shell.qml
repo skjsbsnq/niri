@@ -14,7 +14,6 @@ ShellRoot {
     property bool controlCenterOpen: false
     property bool launchpadOpen: false
     property bool appMenuOpen: false
-    property bool notificationOpen: false
 
     // Register the Material Icons font once for the whole shell. Used by the
     // Control Center (Text { font.family: "Material Icons" }). The font ships
@@ -35,11 +34,12 @@ ShellRoot {
         id: controls
     }
 
-    Timer {
-        interval: 900
-        running: true
-        repeat: false
-        onTriggered: shell.notificationOpen = true
+    // Owns the org.freedesktop.Notifications daemon for the session. Any
+    // app using libnotify / notify-send (or the spec directly) is routed
+    // here. Declared once at the shell root so there is exactly one
+    // server instance across all screens.
+    Notifications {
+        id: notifications
     }
 
     Variants {
@@ -57,6 +57,7 @@ ShellRoot {
                 screen: modelData
                 appsService: apps
                 niriService: niri
+                notificationsService: notifications
                 appMenuOpen: shell.appMenuOpen
                 controlCenterOpen: shell.controlCenterOpen
                 launchpadOpen: shell.launchpadOpen
@@ -113,8 +114,7 @@ ShellRoot {
 
             NotificationToast {
                 screen: modelData
-                open: shell.notificationOpen
-                onDismissRequested: shell.notificationOpen = false
+                notificationsService: notifications
             }
         }
     }

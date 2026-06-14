@@ -16,12 +16,23 @@ ShellRoot {
     property bool appMenuOpen: false
     property bool notificationOpen: false
 
+    // Register the Material Icons font once for the whole shell. Used by the
+    // Control Center (Text { font.family: "Material Icons" }). The font ships
+    // under assets/fonts/ and is resolved through Quickshell.shellPath.
+    FontLoader {
+        source: Quickshell.shellPath("assets/fonts/MaterialIconsRound.ttf")
+    }
+
     Apps {
         id: apps
     }
 
     Niri {
         id: niri
+    }
+
+    Controls {
+        id: controls
     }
 
     Timer {
@@ -88,6 +99,7 @@ ShellRoot {
             ControlCenter {
                 screen: modelData
                 niriService: niri
+                controlsService: controls
                 open: shell.controlCenterOpen
                 onCloseRequested: shell.controlCenterOpen = false
             }

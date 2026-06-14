@@ -746,17 +746,24 @@ Windows 到 Hyper-V 同步验证：
 
 小任务：
 
+Phase 5 自检（2026-06-14）：
+
+- 当前只勾选已经实现，或已经完成评估并形成决定的项目；Genie、Dock target rect、app menu、z-order/raise/lower/window switching 仍未完成。
+- 原 Phase 5 Windows 操作完成 4/21；Hyper-V 操作、同步验证和阶段验收仍保留未完成，等待最新 VM 复测后再勾。
+- 已完成并推送的相关提交：根仓库 `32eaf12`、`337734e`、`5df499d`、`f0b46bc`、`4f0dd42`；niri fork `fc38ea1`、`cf91004`、`c995056`。
+- 已确认的用户决策：不保留错误的顶栏红黄绿假控件；优先使用客户端原生窗口按钮和 xdg toplevel 能力。真正窗口绑定的自定义装饰如果以后要做，需要 compositor/decoration 级实现。
+
 Windows 操作：
 
-- [ ] 评估是否需要服务端窗口装饰。
-- [ ] 评估是否给浮动窗口添加红黄绿按钮。
-- [ ] 设计关闭、最小化、最大化按钮与 niri action 的映射。
+- [x] 评估是否需要服务端窗口装饰：Phase 5 当前不新增完整服务端装饰；优先保留客户端 CSD，补齐 niri 的 xdg minimize 能力。
+- [x] 评估是否给浮动窗口添加红黄绿按钮：不保留 QML 顶栏假按钮；真正窗口绑定控件暂缓到 compositor/decoration 级方案。
+- [x] 设计关闭、最小化、最大化按钮与 niri action 的映射：客户端原生按钮走 xdg toplevel request；minimize 已接入 niri minimize/restore 状态，close/maximize 继续走现有 xdg/niri 语义。
 - [ ] 评估 Wayland 下 app menu 的可行方案。
 - [ ] 研究 DBus/appmenu 工具链是否可接入。
 - [ ] 改进窗口 z-order 行为。
 - [ ] 增强 raise/lower 语义。
 - [ ] 增强窗口切换体验。
-- [ ] 增强任务栏/Dock 状态。
+- [x] 增强任务栏/Dock 状态：Dock 固定 app 使用真实 desktop entries 匹配真实 toplevel，运行指示不再伪造。
 - [ ] 设计 Dock icon rect 到 niri IPC 的传输格式。
 - [ ] 扩展 `MinimizeWindow { id, target_rect }`。
 - [ ] 扩展 `RestoreWindow { id, source_rect }`。
@@ -770,8 +777,18 @@ Windows 操作：
 - [ ] 处理 fractional scale 下 Dock target rect 坐标。
 - [ ] 增加 Genie 相关视觉测试或手动测试脚本。
 
+Phase 5 补充已完成项：
+
+- [x] 应用启动器改为读取真实 `.desktop` 应用，并通过 `DesktopEntries` 执行真实启动。
+- [x] 系统托盘改为读取真实 StatusNotifierItem，并支持 activate、secondaryActivate 和 context menu。
+- [x] 移除错误的顶栏红黄绿假控件，避免控件漂在顶栏而非绑定窗口。
+- [x] niri 广告 `WmCapabilities::Minimize`，原生客户端 CSD 最小化按钮不再灰置。
+- [x] niri 处理 xdg toplevel minimize request，客户端原生最小化按钮可真正最小化。
+- [x] restore 动画取消 0.96 scale 起点，避免点击 Dock 恢复时出现缩放导致的位置抖动；待 Hyper-V 最新 commit 复测。
+
 Hyper-V Arch Linux 操作：
 
+- 部分验证记录：用户已反馈原生最小化按钮现在能最小化；Dock restore 曾出现先位移再回位，修复已推送但仍待 VM 拉取最新 commit 后复测。
 - [ ] 执行 `BUILD_NIRI_FORK=auto bash scripts/arch-update.sh`，由脚本自动构建 niri fork 并部署 `tahoe-shell/`。
 - [ ] 启动或重启 niri + Quickshell Tahoe shell。
 - [ ] 验证窗口 z-order、raise/lower 和窗口切换体验。

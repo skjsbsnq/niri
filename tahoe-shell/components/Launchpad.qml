@@ -12,7 +12,7 @@ PanelWindow {
 
     signal closeRequested()
 
-    visible: open
+    visible: open || backdrop.opacity > 0.01
     aboveWindows: true
     exclusiveZone: 0
     color: "transparent"
@@ -33,14 +33,23 @@ PanelWindow {
         id: backdrop
         anchors.fill: parent
         color: "#66eef2f7"
+        opacity: root.open ? 1 : 0
+
+        Behavior on opacity {
+            NumberAnimation { duration: 170; easing.type: Easing.OutCubic }
+        }
     }
 
     Image {
         anchors.fill: parent
         source: root.appsService ? root.appsService.wallpaper : ""
         fillMode: Image.PreserveAspectCrop
-        opacity: 0.22
+        opacity: root.open ? 0.22 : 0
         smooth: true
+
+        Behavior on opacity {
+            NumberAnimation { duration: 170; easing.type: Easing.OutCubic }
+        }
     }
 
     MouseArea {
@@ -53,6 +62,16 @@ PanelWindow {
         anchors.centerIn: parent
         width: Math.min(parent.width - 72, 820)
         height: Math.min(parent.height - 96, 590)
+        opacity: root.open ? 1 : 0
+        scale: root.open ? 1 : 0.96
+
+        Behavior on opacity {
+            NumberAnimation { duration: 160; easing.type: Easing.OutCubic }
+        }
+
+        Behavior on scale {
+            NumberAnimation { duration: 190; easing.type: Easing.OutCubic }
+        }
 
         MouseArea {
             anchors.fill: parent

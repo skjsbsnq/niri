@@ -13,9 +13,11 @@ PanelWindow {
     property var niriService
     property bool controlCenterOpen: false
     property bool launchpadOpen: false
+    property bool appMenuOpen: false
     property date now: new Date()
     readonly property string activeApp: appsService && niriService ? appsService.toplevelLabel(niriService.activeToplevel) : "Finder"
 
+    signal toggleAppMenu()
     signal toggleControlCenter()
     signal toggleLaunchpad()
 
@@ -54,13 +56,33 @@ PanelWindow {
             anchors.rightMargin: 14
             spacing: 14
 
-            Text {
-                text: "Tahoe"
-                color: "#202124"
-                font.pixelSize: 13
-                font.weight: Font.DemiBold
-                verticalAlignment: Text.AlignVCenter
+            Item {
+                Layout.preferredWidth: tahoeLabel.implicitWidth + 18
+                Layout.preferredHeight: 24
                 Layout.alignment: Qt.AlignVCenter
+
+                Rectangle {
+                    anchors.fill: parent
+                    radius: 12
+                    color: root.appMenuOpen ? "#88ffffff" : "transparent"
+                    border.color: root.appMenuOpen ? "#4dffffff" : "transparent"
+                }
+
+                Text {
+                    id: tahoeLabel
+                    anchors.centerIn: parent
+                    text: "Tahoe"
+                    color: "#202124"
+                    font.pixelSize: 13
+                    font.weight: Font.DemiBold
+                    verticalAlignment: Text.AlignVCenter
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.toggleAppMenu()
+                }
             }
 
             Text {

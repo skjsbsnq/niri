@@ -511,27 +511,27 @@ Windows 到 Hyper-V 同步验证：
 
 Windows 操作：
 
-- [ ] 在 niri 配置中设计 `layout.snap-assist` 配置结构。
-- [ ] 支持 `snap-assist.on`。
-- [ ] 支持 `snap-assist.threshold`。
-- [ ] 支持 `snap-assist.preview-color`。
-- [ ] 支持 `snap-assist.preview-border-color`。
-- [ ] 在 `src/input/move_grab.rs` 监听拖动位置。
-- [ ] 判断鼠标是否靠近屏幕左边缘。
-- [ ] 判断鼠标是否靠近屏幕右边缘。
-- [ ] 判断鼠标是否靠近屏幕顶部。
-- [ ] 根据边缘位置计算 snap target。
-- [ ] 在 `src/layout/mod.rs` 的 `InteractiveMoveData` 中增加 snap target。
-- [ ] 在 `interactive_move_update()` 更新 snap target。
-- [ ] 在 `interactive_move_end()` 应用 snap target。
-- [ ] 在 `src/layout/floating.rs` 设置 floating window 的目标位置。
-- [ ] 在 `src/layout/floating.rs` 设置 floating window 的目标大小。
-- [ ] 保存 snap 前的 restore size。
-- [ ] 从 snap 状态再次拖动时恢复之前大小。
-- [ ] 新增或复用 render element 绘制 preview。
-- [ ] 参考 `insert_hint_element` 的渲染思路。
-- [ ] 给 preview 加淡入淡出状态。
-- [ ] 补充 floating/snap 相关测试。
+- [x] 在 niri 配置中设计 `layout.snap-assist` 配置结构。
+- [x] 支持 `snap-assist.on`。
+- [x] 支持 `snap-assist.threshold`。
+- [x] 支持 `snap-assist.preview-color`。
+- [x] 支持 `snap-assist.preview-border-color`。
+- [x] 在 `src/input/move_grab.rs` 监听拖动位置。
+- [x] 判断鼠标是否靠近屏幕左边缘。
+- [x] 判断鼠标是否靠近屏幕右边缘。
+- [x] 判断鼠标是否靠近屏幕顶部。
+- [x] 根据边缘位置计算 snap target。
+- [x] 在 `src/layout/mod.rs` 的 `InteractiveMoveData` 中增加 snap target。
+- [x] 在 `interactive_move_update()` 更新 snap target。
+- [x] 在 `interactive_move_end()` 应用 snap target。
+- [x] 在 `src/layout/floating.rs` 设置 floating window 的目标位置。
+- [x] 在 `src/layout/floating.rs` 设置 floating window 的目标大小。
+- [x] 保存 snap 前的 restore size。
+- [x] 从 snap 状态再次拖动时恢复之前大小。
+- [x] 新增或复用 render element 绘制 preview。
+- [x] 参考 `insert_hint_element` 的渲染思路。
+- [x] 给 preview 加淡入淡出状态。
+- [x] 补充 floating/snap 相关测试。
 
 Hyper-V Arch Linux 操作：
 
@@ -566,23 +566,23 @@ Snap assist 验收标准：
 
 Windows 操作：
 
-- [ ] 给 Dock 图标添加 hover scale。
-- [ ] 给 Dock 图标添加 y offset。
-- [ ] 实现 Dock magnification，鼠标越近图标越大。
-- [ ] 实现 Dock hover label。
-- [ ] 给 Dock hover label 添加 opacity 动画。
-- [ ] 给 Dock hover label 添加 y offset 动画。
-- [ ] 实现 Dock icon bounce。
-- [ ] 控制中心打开时使用 scale + opacity 动画。
-- [ ] 控制中心关闭时使用 scale + opacity 动画。
-- [ ] Launchpad 打开时背景 blur。
-- [ ] Launchpad 打开时 app grid scale/fade。
-- [ ] Launchpad 关闭时反向 scale/fade。
-- [ ] 菜单弹窗使用轻微 y 位移 + opacity。
-- [ ] 通知从右上角滑入。
-- [ ] 通知 settle 使用 spring。
-- [ ] 从 Web 项目 `javascript/script.js` 参考 Dock magnification。
-- [ ] 从 Web 项目 `Css/style.css` 参考 transition 和 cubic-bezier。
+- [x] 给 Dock 图标添加 hover scale。
+- [x] 给 Dock 图标添加 y offset。
+- [x] 实现 Dock magnification，鼠标越近图标越大。
+- [x] 实现 Dock hover label。
+- [x] 给 Dock hover label 添加 opacity 动画。
+- [x] 给 Dock hover label 添加 y offset 动画。
+- [x] 实现 Dock icon bounce。
+- [x] 控制中心打开时使用 scale + opacity 动画。
+- [x] 控制中心关闭时使用 scale + opacity 动画。
+- [x] Launchpad 打开时背景 blur。
+- [x] Launchpad 打开时 app grid scale/fade。
+- [x] Launchpad 关闭时反向 scale/fade。
+- [x] 菜单弹窗使用轻微 y 位移 + opacity。
+- [x] 通知从右上角滑入。
+- [x] 通知 settle 使用 spring。
+- [x] 从 Web 项目 `javascript/script.js` 参考 Dock magnification。
+- [x] 从 Web 项目 `Css/style.css` 参考 transition 和 cubic-bezier。
 
 Hyper-V Arch Linux 操作：
 
@@ -615,22 +615,22 @@ Quickshell 动画验收标准：
 
 Windows 操作：
 
-- [ ] 调整 `workspace-switch` 动画。
-- [ ] 调整 `window-open` 动画。
-- [ ] 调整 `window-close` 动画。
-- [ ] 调整 `window-movement` 动画。
-- [ ] 调整 `window-resize` 动画。
-- [ ] 调整 `overview-open-close` 动画。
-- [ ] 第一版窗口打开使用 scale 0.96 -> 1.0。
-- [ ] 第一版窗口打开使用 opacity 0 -> 1。
-- [ ] 第一版窗口关闭使用 scale 1.0 -> 0.96。
-- [ ] 第一版窗口关闭使用 opacity 1 -> 0。
-- [ ] 移动动画使用轻微 spring。
-- [ ] resize 动画使用平滑尺寸变化。
-- [ ] snap apply 使用 spring 过渡。
-- [ ] snap preview 使用 fade in/out。
-- [ ] 普通 minimize 先做 fade/scale 版本。
-- [ ] 暂不实现 Genie deformation。
+- [x] 调整 `workspace-switch` 动画。
+- [x] 调整 `window-open` 动画。
+- [x] 调整 `window-close` 动画。
+- [x] 调整 `window-movement` 动画。
+- [x] 调整 `window-resize` 动画。
+- [x] 调整 `overview-open-close` 动画。
+- [x] 第一版窗口打开使用 scale 0.96 -> 1.0。
+- [x] 第一版窗口打开使用 opacity 0 -> 1。
+- [x] 第一版窗口关闭使用 scale 1.0 -> 0.96。
+- [x] 第一版窗口关闭使用 opacity 1 -> 0。
+- [x] 移动动画使用轻微 spring。
+- [x] resize 动画使用平滑尺寸变化。
+- [x] snap apply 使用 spring 过渡。
+- [x] snap preview 使用 fade in/out。
+- [x] 普通 minimize 先做 fade/scale 版本。
+- [x] 暂不实现 Genie deformation。
 
 Hyper-V Arch Linux 操作：
 
@@ -910,8 +910,8 @@ Hyper-V Arch Linux 操作：
 
 Windows 操作：
 
-- [ ] 在 niri fork 中实现 snap assist。
-- [ ] 实现 snap preview。
+- [x] 在 niri fork 中实现 snap assist。
+- [x] 实现 snap preview。
 - [ ] commit 并 push。
 
 Hyper-V Arch Linux 操作：
@@ -924,9 +924,9 @@ Hyper-V Arch Linux 操作：
 
 Windows 操作：
 
-- [ ] 补 Dock 动画。
-- [ ] 补控制中心动画。
-- [ ] 补 Launchpad 动画。
+- [x] 补 Dock 动画。
+- [x] 补控制中心动画。
+- [x] 补 Launchpad 动画。
 - [ ] commit 并 push。
 
 Hyper-V Arch Linux 操作：
@@ -940,9 +940,9 @@ Hyper-V Arch Linux 操作：
 
 Windows 操作：
 
-- [ ] 补窗口 open/close 动画。
-- [ ] 补窗口 move/resize 动画。
-- [ ] 补 snap apply 动画。
+- [x] 补窗口 open/close 动画。
+- [x] 补窗口 move/resize 动画。
+- [x] 补 snap apply 动画。
 - [ ] commit 并 push。
 
 Hyper-V Arch Linux 操作：

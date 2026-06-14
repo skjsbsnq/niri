@@ -9,11 +9,17 @@ Item {
     property var appsService
     property bool showTitle: true
     property int iconSize: 38
+    property real magnification: 1.0
+    property real bounceOffset: 0
+    property var dockSurfaceItem
     readonly property bool active: !!toplevel && toplevel.activated
     readonly property bool minimized: !!toplevel && toplevel.minimized
     readonly property string label: appsService ? appsService.toplevelLabel(toplevel) : String(toplevel ? toplevel.title || toplevel.appId || "Window" : "Window")
+    readonly property real lift: (magnification - 1.0) * 16
 
     signal activateRequested(var toplevel)
+    signal dockPointerMoved(real x)
+    signal dockPointerEntered()
 
     width: showTitle ? 132 : 56
     height: 58
@@ -29,15 +35,24 @@ Item {
 
     Image {
         id: icon
-        anchors.left: parent.left
-        anchors.leftMargin: root.showTitle ? 9 : Math.round((parent.width - width) / 2)
-        anchors.verticalCenter: parent.verticalCenter
+        x: root.showTitle ? 9 : Math.round((parent.width - width) / 2)
+        y: Math.round((parent.height - height) / 2 - root.lift - root.bounceOffset)
         width: root.iconSize
         height: root.iconSize
+        scale: root.magnification
         source: root.appsService ? root.appsService.iconForToplevel(root.toplevel) : ""
         fillMode: Image.PreserveAspectFit
         smooth: true
         opacity: root.minimized ? 0.58 : 1.0
+        transformOrigin: Item.Center
+
+        Behavior on scale {
+            NumberAnimation { duration: 120; easing.type: Easing.OutCubic }
+        }
+
+        Behavior on y {
+            NumberAnimation { duration: 120; easing.type: Easing.OutCubic }
+        }
     }
 
     Text {
@@ -67,14 +82,43 @@ Item {
 
     MouseArea {
         anchors.fill: parent
+        hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
+        onPositionChanged: function(mouse) {
+            if (root.dockSurfaceItem) {
+                var point = root.mapToItem(root.dockSurfaceItem, mouse.x, mouse.y);
+                root.dockPointerMoved(point.x);
+            }
+        }
+        onEntered: root.dockPointerEntered()
         onClicked: {
+            bounceAnimation.restart();
             if (root.toplevel && root.toplevel.minimized) {
                 root.toplevel.minimized = false;
             } else if (root.toplevel && root.toplevel.activate) {
                 root.toplevel.activate();
             }
             root.activateRequested(root.toplevel);
+        }
+    }
+
+    SequentialAnimation {
+        id: bounceAnimation
+
+        NumberAnimation {
+            target: root
+            property: "bounceOffset"
+            to: 9
+            duration: 90
+            easing.type: Easing.OutCubic
+        }
+
+        NumberAnimation {
+            target: root
+            property: "bounceOffset"
+            to: 0
+            duration: 190
+            easing.type: Easing.OutBounce
         }
     }
 }

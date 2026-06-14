@@ -37,6 +37,13 @@ layout {
         color "#0006"
         inactive-color "#0004"
     }
+
+    snap-assist {
+        on
+        threshold 36
+        preview-color "#78beff40"
+        preview-border-color "#78beffb4"
+    }
 }
 
 blur {
@@ -54,18 +61,64 @@ hotkey-overlay {
 spawn-sh-at-startup "if [ \"${TAHOE_SKIP_QUICKSHELL_AUTOSTART:-0}\" != \"1\" ]; then exec \"${TAHOE_QUICKSHELL_BIN:-quickshell}\" -p \"${TAHOE_CONFIG_DIR:-$HOME/.config/quickshell/tahoe}\"; fi"
 
 animations {
+    workspace-switch {
+        spring damping-ratio=1.0 stiffness=780 epsilon=0.0001
+    }
+
     window-open {
         duration-ms 180
         curve "ease-out-cubic"
+        custom-shader r#"
+vec4 open_color(vec3 coords_geo, vec3 size_geo) {
+    vec2 center = size_geo.xy * 0.5;
+    float scale = mix(0.96, 1.0, niri_clamped_progress);
+    vec2 sample_geo = (coords_geo.xy - center) / scale + center;
+
+    if (sample_geo.x < 0.0 || sample_geo.y < 0.0 ||
+        sample_geo.x > size_geo.x || sample_geo.y > size_geo.y) {
+        return vec4(0.0);
+    }
+
+    vec3 coords_tex = niri_geo_to_tex * vec3(sample_geo, 1.0);
+    vec4 color = texture2D(niri_tex, coords_tex.st);
+    color *= niri_clamped_progress;
+    return color;
+}
+"#
     }
 
     window-close {
         duration-ms 140
         curve "ease-out-quad"
+        custom-shader r#"
+vec4 close_color(vec3 coords_geo, vec3 size_geo) {
+    vec2 center = size_geo.xy * 0.5;
+    float scale = mix(1.0, 0.96, niri_clamped_progress);
+    vec2 sample_geo = (coords_geo.xy - center) / scale + center;
+
+    if (sample_geo.x < 0.0 || sample_geo.y < 0.0 ||
+        sample_geo.x > size_geo.x || sample_geo.y > size_geo.y) {
+        return vec4(0.0);
+    }
+
+    vec3 coords_tex = niri_geo_to_tex * vec3(sample_geo, 1.0);
+    vec4 color = texture2D(niri_tex, coords_tex.st);
+    color *= 1.0 - niri_clamped_progress;
+    return color;
+}
+"#
     }
 
     window-movement {
-        spring damping-ratio=0.9 stiffness=650 epsilon=0.001
+        spring damping-ratio=0.86 stiffness=620 epsilon=0.001
+    }
+
+    window-resize {
+        spring damping-ratio=0.96 stiffness=700 epsilon=0.0005
+    }
+
+    overview-open-close {
+        spring damping-ratio=0.95 stiffness=760 epsilon=0.0005
     }
 }
 

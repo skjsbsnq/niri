@@ -13,7 +13,7 @@ PanelWindow {
 
     signal closeRequested()
 
-    visible: open
+    visible: open || panel.opacity > 0.01
     aboveWindows: true
     exclusiveZone: 0
     implicitWidth: 330
@@ -42,6 +42,17 @@ PanelWindow {
         color: "#8cf5f6f8"
         border.color: "#70ffffff"
         border.width: 1
+        opacity: root.open ? 1 : 0
+        scale: root.open ? 1 : 0.94
+        transformOrigin: Item.TopRight
+
+        Behavior on opacity {
+            NumberAnimation { duration: 150; easing.type: Easing.OutCubic }
+        }
+
+        Behavior on scale {
+            NumberAnimation { duration: 170; easing.type: Easing.OutCubic }
+        }
 
         ColumnLayout {
             anchors.fill: parent

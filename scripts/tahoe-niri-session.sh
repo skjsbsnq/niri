@@ -97,7 +97,10 @@ main() {
 
   case "$TAHOE_USE_NIRI_SESSION_WRAPPER" in
     auto)
-      if niri_session_bin="$(resolve_command "$NIRI_SESSION_BIN")"; then
+      if [[ -x "$NIRI_BIN" ]]; then
+        log "custom niri binary detected; using direct compositor launch"
+        use_wrapper=false
+      elif niri_session_bin="$(resolve_command "$NIRI_SESSION_BIN")"; then
         use_wrapper=true
       fi
       ;;

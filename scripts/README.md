@@ -107,7 +107,7 @@ The login launcher writes diagnostics to:
 ~/.local/state/tahoe-niri/session.log
 ```
 
-The launcher prefers the distro `niri-session` wrapper and passes Tahoe's config through the `NIRI_CONFIG` environment variable. Set `TAHOE_USE_NIRI_SESSION_WRAPPER=false` only when debugging direct `niri --session --config ...` startup.
+The launcher starts a custom built `~/.local/bin/niri` directly when that binary exists. Otherwise it falls back to the distro `niri-session` wrapper and passes Tahoe's config through the `NIRI_CONFIG` environment variable. Set `TAHOE_USE_NIRI_SESSION_WRAPPER=true` only when explicitly testing the wrapper path.
 
 Useful environment overrides:
 

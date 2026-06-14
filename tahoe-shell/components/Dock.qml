@@ -195,7 +195,12 @@ PanelWindow {
                         y: 8 - pinnedButton.lift - pinnedButton.bounceOffset
                         width: 48
                         height: 48
-                        scale: pinnedButton.magnification
+                        // DIAG (VMware 图标消失对照实验): 临时把 scale 从
+                        // pinnedButton.magnification 改成固定 1.0。如果图标
+                        // 不再消失 -> 实锤是 scale 动画（SpringAnimation 每帧
+                        // 变 scale）在 VMware 虚拟 GPU 上导致 Image 纹理失效。
+                        // 修好后这行恢复成 scale: pinnedButton.magnification。
+                        scale: 1.0
                         source: root.appsService ? root.appsService.iconForApp(modelData) : ""
                         fillMode: Image.PreserveAspectFit
                         smooth: true

@@ -9,6 +9,9 @@ PanelWindow {
 
     property bool open: false
     property var appsService
+    // See shell.qml useSpring. Spring on the launcher scale corrupts the
+    // app-icon Image textures on VMware/software GPUs. Default false.
+    property bool useSpring: false
 
     signal closeRequested()
 
@@ -24,11 +27,10 @@ PanelWindow {
         bottom: true
     }
 
-    // DIAG (VMware 图标消失对照): blurRegion 临时禁用（见 Dock.qml 同款注释）。
-    // BackgroundEffect.blurRegion: Region {
-    //     item: backdrop
-    //     radius: 0
-    // }
+    BackgroundEffect.blurRegion: Region {
+        item: backdrop
+        radius: 0
+    }
 
     Rectangle {
         id: backdrop
@@ -64,21 +66,30 @@ PanelWindow {
         width: Math.min(parent.width - 72, 820)
         height: Math.min(parent.height - 96, 590)
         opacity: root.open ? 1 : 0
-        // DIAG: scale 固定 1.0，禁用打开时的 spring，排除 scale spring 是否导致图标消失
-        scale: 1.0
+        // Open: scale 1.1 -> 1, "flying in from afar" (the web Launchpad
+        // keyframe is 1.2->1; we use 1.1 for a touch less travel).
+        scale: root.open ? 1 : 1.1
 
         Behavior on opacity {
             NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
         }
 
-        // DIAG: scale spring 禁用（上面 scale 已固定 1.0）
-        // Behavior on scale {
-        //     SpringAnimation {
-        //         spring: 200
-        //         damping: 1.0
-        //         epsilon: 0.01
-        //     }
-        // }
+        // Scale settle. Spring gives the Tahoe ease-out feel on real GPUs,
+        // but springing the launcher scale (which wraps all app-icon Images)
+        // corrupts their textures on VMware/software GPUs. NumberAnimation is
+        // the safe default; useSpring flips back to spring.
+        Behavior on scale {
+            enabled: !root.useSpring
+            NumberAnimation { duration: 220; easing.type: Easing.OutCubic }
+        }
+        Behavior on scale {
+            enabled: root.useSpring
+            SpringAnimation {
+                spring: 200
+                damping: 1.0
+                epsilon: 0.01
+            }
+        }
 
         MouseArea {
             anchors.fill: parent

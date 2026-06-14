@@ -10,6 +10,9 @@ PanelWindow {
     property var appsService
     property var niriService
     property bool launchpadOpen: false
+    // See shell.qml useSpring. Spring on Image geometry corrupts textures on
+    // VMware/software GPUs; NumberAnimation is safe. Default false.
+    property bool useSpring: false
     property real dockMouseX: -10000
     property bool dockHovered: false
     readonly property bool hasWindows: niriService && niriService.toplevelList && niriService.toplevelList.length > 0
@@ -38,14 +41,7 @@ PanelWindow {
         var point = item.mapToItem(dockSurface, item.width / 2, item.height / 2);
         var distance = Math.abs(dockMouseX - point.x);
         var influence = Math.max(0, 1 - distance / 150);
-
-        // DIAG (VMware 图标消失对照实验二分): scale 已排除, 现在彻底关掉
-        // magnification 计算, 让 magnification/lift 恒定、SpringAnimation 不跑、
-        // delegate 不再因 hover 每帧 invalidate。如果不消失 -> 实锤是 hover
-        // 触发的持续属性重算; 如果还消失 -> 问题完全不在动画链路, 换方向。
-        // 修好后恢复: return 1.0 + influence * 0.5;
-        return 1.0;
-        // (influence/distance/point 保留只为语义清晰, 不会被走到)
+        return 1.0 + influence * 0.5;
     }
 
     anchors {
@@ -58,13 +54,10 @@ PanelWindow {
     implicitHeight: 132
     color: "transparent"
 
-    // DIAG (VMware 图标消失对照): blurRegion 临时禁用。dock 与 launchpad
-    // 共享且交互时重算的唯一东西就是 blur。不消失 -> 实锤 blur 触发的
-    // layer 重绘在 VMware 上丢 Image 纹理。恢复：删掉注释让下面块生效。
-    // BackgroundEffect.blurRegion: Region {
-    //     item: dockSurface
-    //     radius: 24
-    // }
+    BackgroundEffect.blurRegion: Region {
+        item: dockSurface
+        radius: 24
+    }
 
     Rectangle {
         id: dockSurface
@@ -205,12 +198,7 @@ PanelWindow {
                         y: 8 - pinnedButton.lift - pinnedButton.bounceOffset
                         width: 48
                         height: 48
-                        // DIAG (VMware 图标消失对照实验): 临时把 scale 从
-                        // pinnedButton.magnification 改成固定 1.0。如果图标
-                        // 不再消失 -> 实锤是 scale 动画（SpringAnimation 每帧
-                        // 变 scale）在 VMware 虚拟 GPU 上导致 Image 纹理失效。
-                        // 修好后这行恢复成 scale: pinnedButton.magnification。
-                        scale: 1.0
+                        scale: pinnedButton.magnification
                         source: root.appsService ? root.appsService.iconForApp(modelData) : ""
                         fillMode: Image.PreserveAspectFit
                         smooth: true
@@ -270,7 +258,7 @@ PanelWindow {
                         }
                         onEntered: root.dockHovered = true
                         onClicked: {
-                            // DIAG: 不调 bounce()，排除 bounceOffset spring 是否导致图标消失
+                            pinnedButton.bounce();
                             if (modelData.shellAction === "launchpad") {
                                 root.toggleLaunchpad();
                             } else if (root.appsService) {
@@ -295,11 +283,17 @@ PanelWindow {
                         bounceTimer.restart();
                     }
 
-                    // Underdamped spring on bounce — ~1.5 oscillations before
-                    // settling. SpringAnimation drives a real second-order
-                    // ODE, unlike the old two-step SequentialAnimation that
-                    // went up once and came back once (no overshoot).
+                    // Bounce on click. Spring (underdamped, ~1.5 oscillations)
+                    // gives the macOS feel but corrupts the icon's Image texture
+                    // on VMware/software GPUs while it runs, so it's gated behind
+                    // useSpring. The default NumberAnimation is a single safe
+                    // tween — no overshoot, but no texture loss on VMs either.
                     Behavior on bounceOffset {
+                        enabled: !root.useSpring
+                        NumberAnimation { duration: 220; easing.type: Easing.OutCubic }
+                    }
+                    Behavior on bounceOffset {
+                        enabled: root.useSpring
                         SpringAnimation {
                             spring: 380
                             damping: 0.32
@@ -308,12 +302,15 @@ PanelWindow {
                         }
                     }
 
-                    // Critically damped spring on magnification. Because
-                    // magnification is bound to proximityScale(), this
-                    // Behavior fires each time the pointer moves to a new
-                    // icon, easing the icon scale + lift toward the new
-                    // target. Without this the whole row snaps per-frame.
+                    // Magnification easing (icon scale + lift track the pointer).
+                    // Same useSpring gate as bounce: spring on real GPUs,
+                    // NumberAnimation everywhere else.
                     Behavior on magnification {
+                        enabled: !root.useSpring
+                        NumberAnimation { duration: 130; easing.type: Easing.OutCubic }
+                    }
+                    Behavior on magnification {
+                        enabled: root.useSpring
                         SpringAnimation {
                             spring: 260
                             damping: 1.0
@@ -342,6 +339,7 @@ PanelWindow {
 
                     toplevel: modelData
                     appsService: root.appsService
+                    useSpring: root.useSpring
                     showTitle: true
                     magnification: root.proximityScale(windowButton)
                     dockWindow: root

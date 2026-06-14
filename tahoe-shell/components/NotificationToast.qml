@@ -29,6 +29,9 @@ PanelWindow {
     property var notificationsService
     property var current: notificationsService ? notificationsService.current : null
     property bool hasCurrent: !!current
+    // See shell.qml useSpring. Spring on the card x (slide-in) corrupts the
+    // icon Image texture on VMware/software GPUs. Default false.
+    property bool useSpring: false
     // Resolved icon URL for the current notification. Recomputed whenever
     // `current` changes. Empty string means "no icon" -> show the bell glyph.
     readonly property string iconUrl: hasCurrent && notificationsService
@@ -122,7 +125,15 @@ PanelWindow {
             z: -1
         }
 
+        // Slide + fade in from the right. Spring gives the settle feel on real
+        // GPUs, but springing x (the card wraps the icon Image) corrupts its
+        // texture on VMware/software GPUs. NumberAnimation is the safe default.
         Behavior on x {
+            enabled: !root.useSpring
+            NumberAnimation { duration: 260; easing.type: Easing.OutCubic }
+        }
+        Behavior on x {
+            enabled: root.useSpring
             SpringAnimation {
                 spring: 3.4
                 damping: 0.36

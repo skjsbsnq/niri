@@ -15,6 +15,16 @@ ShellRoot {
     property bool launchpadOpen: false
     property bool appMenuOpen: false
 
+    // Spring animations look great on real GPUs but corrupt Image textures
+    // on software/virtual GPUs (VMware, Hyper-V): a SpringAnimation driving
+    // an Image's geometry (x/y/scale) makes the icon turn transparent while
+    // the spring runs. NumberAnimation is safe everywhere. This is the global
+    // switch — keep false on VMs / software rendering; flip to true on a real
+    // GPU to restore the bouncy macOS feel. Components read this to gate
+    // their spring Behaviors (see Dock.qml, WindowButton.qml, Launchpad.qml,
+    // NotificationToast.qml).
+    property bool useSpring: false
+
     // Register the Material Icons font once for the whole shell. Used by the
     // Control Center (Text { font.family: "Material Icons" }). The font ships
     // under assets/fonts/ and is resolved through Quickshell.shellPath.
@@ -89,6 +99,7 @@ ShellRoot {
                 screen: modelData
                 appsService: apps
                 niriService: niri
+                useSpring: shell.useSpring
                 launchpadOpen: shell.launchpadOpen
                 onToggleLaunchpad: {
                     shell.launchpadOpen = !shell.launchpadOpen;
@@ -108,6 +119,7 @@ ShellRoot {
             Launchpad {
                 screen: modelData
                 appsService: apps
+                useSpring: shell.useSpring
                 open: shell.launchpadOpen
                 onCloseRequested: shell.launchpadOpen = false
             }
@@ -115,6 +127,7 @@ ShellRoot {
             NotificationToast {
                 screen: modelData
                 notificationsService: notifications
+                useSpring: shell.useSpring
             }
         }
     }

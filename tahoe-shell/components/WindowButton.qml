@@ -9,6 +9,9 @@ Item {
     property var appsService
     property bool showTitle: true
     property int iconSize: 38
+    // See Dock.qml useSpring. Spring on icon geometry corrupts the Image
+    // texture on VMware/software GPUs. Dock forwards its own useSpring here.
+    property bool useSpring: false
     // Magnification is fed in by the Dock (proximityScale of the pointer).
     // The SpringAnimation Behavior below eases it toward the target so the
     // running-window half of the dock waves together with the pinned half.
@@ -157,7 +160,15 @@ Item {
         bounceTimer.restart();
     }
 
+    // Bounce on click. Spring (underdamped) on real GPUs, gated by useSpring
+    // because springing the icon Image's geometry corrupts its texture on
+    // VMware/software GPUs. NumberAnimation is the safe default.
     Behavior on bounceOffset {
+        enabled: !root.useSpring
+        NumberAnimation { duration: 220; easing.type: Easing.OutCubic }
+    }
+    Behavior on bounceOffset {
+        enabled: root.useSpring
         SpringAnimation {
             spring: 380
             damping: 0.32
@@ -166,9 +177,14 @@ Item {
         }
     }
 
-    // Critically damped spring on magnification so the running-window half
-    // of the dock eases with the pinned half.
+    // Magnification easing so the running-window half of the dock waves with
+    // the pinned half. Same useSpring gate as bounce.
     Behavior on magnification {
+        enabled: !root.useSpring
+        NumberAnimation { duration: 130; easing.type: Easing.OutCubic }
+    }
+    Behavior on magnification {
+        enabled: root.useSpring
         SpringAnimation {
             spring: 260
             damping: 1.0

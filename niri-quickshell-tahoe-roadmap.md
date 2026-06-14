@@ -179,43 +179,52 @@ Windows 本地状态：
 
 Hyper-V Arch Linux 操作：
 
-- [ ] 在 Hyper-V 中创建 Arch Linux VM。
-- [ ] 在 Hyper-V Arch Linux 中通过 GitHub clone 仓库。
+- [x] 在 Hyper-V 中创建 Arch Linux VM。
+- [x] 在 Hyper-V Arch Linux 中通过 GitHub clone 仓库。
 - [ ] 在 Hyper-V Arch Linux 中执行 `bash scripts/arch-bootstrap.sh`。
 - [ ] 确认 `arch-bootstrap.sh` 已通过 pacman 安装基础图形环境依赖和系统 niri。
-- [ ] 根据实际渠道安装 Quickshell；`arch-bootstrap.sh` 只检查 Quickshell，不构建 Quickshell 核心。
-- [ ] 确认 Phase 0 使用系统 niri baseline，不要求构建 niri fork。
-- [ ] 确认 niri 能在 Hyper-V 中启动；如果不能启动，记录具体 DRM/KMS/GPU 错误。
-- [ ] 确认 Quickshell 能在 Hyper-V 中启动。
-- [ ] 在 Hyper-V Arch Linux 中执行 `bash scripts/arch-update.sh`，确认无代码变化时不会重复做无意义构建。
+- [x] 根据实际渠道安装 Quickshell；`arch-bootstrap.sh` 只检查 Quickshell，不构建 Quickshell 核心。
+- [x] 确认 Phase 0 使用系统 niri baseline，不要求构建 niri fork。
+- [x] 确认 niri 能在 Hyper-V 中启动；如果不能启动，记录具体 DRM/KMS/GPU 错误。
+- [x] 确认 Quickshell 能在 Hyper-V 中启动。
+- [x] 在 Hyper-V Arch Linux 中执行 `bash scripts/arch-update.sh`，确认无代码变化时不会重复做无意义构建。
 - [ ] 修改 niri 任意小配置并从 Windows push 后，在 Hyper-V Arch Linux 中执行 `bash scripts/arch-update.sh`，确认脚本自动拉取并完成需要的构建或部署。
 - [ ] 修改 `tahoe-shell/` 任意 QML 或 asset 并从 Windows push 后，在 Hyper-V Arch Linux 中执行 `bash scripts/arch-update.sh`，确认脚本自动拉取并部署 shell。
-- [ ] 确认后续修改只需要 Windows push、Arch 中运行 update 脚本。
-- [ ] 确认不需要在阶段验证中手动执行 `cargo build`、`cmake`、`ninja` 或复制配置。
+- [x] 确认后续修改只需要 Windows push、Arch 中运行 update 脚本。
+- [x] 确认不需要在阶段验证中手动执行 `cargo build`、`cmake`、`ninja` 或复制配置。
 - [ ] 检查浮动窗口是否默认显示在平铺窗口上方。
 - [ ] 检查弹窗和固定尺寸窗口是否保持正确浮动行为。
 - [ ] 手动验证多窗口情况下默认浮动是否可接受。
 
+Hyper-V 当前状态：
+
+- 已在 Hyper-V Arch 中通过 `git clone --recurse-submodules https://github.com/skjsbsnq/niri` 拉取聚合仓库和 submodule。
+- 已通过 pacman 安装 Quickshell，并确认 Phase 0 不构建 Quickshell 核心。
+- 已执行 `bash scripts/arch-update.sh`，成功部署 `tahoe-shell/` 到 `~/.config/quickshell/tahoe`，部署 niri 配置到 `~/.config/niri/tahoe/config.kdl`。
+- 已修复 submodule detached HEAD 下 `arch-update.sh` 误执行 `git pull` 的问题：脚本现在由根仓库管理 submodule update。
+- 直接在已有图形桌面终端运行 `niri --session` 会触发 TTY backend 初始化失败；已修复 `run-tahoe-session.sh`，默认 `NIRI_MODE=auto`，检测到现有 `WAYLAND_DISPLAY` 或 `DISPLAY` 时自动 nested 启动。
+- 已在 Hyper-V 中成功启动 nested niri，并显示 Tahoe 顶栏和 Dock。
+
 Windows 到 Hyper-V 同步验证：
 
-- [ ] Windows 修改并 push 配置或脚本后，在 Hyper-V Arch Linux 中执行 `bash scripts/arch-update.sh`。
-- [ ] 确认 Hyper-V 中运行的 niri 配置、Quickshell 原型和 Windows 仓库版本一致。
+- [x] Windows 修改并 push 配置或脚本后，在 Hyper-V Arch Linux 中执行 `bash scripts/arch-update.sh`。
+- [x] 确认 Hyper-V 中运行的 niri 配置、Quickshell 原型和 Windows 仓库版本一致。
 
 验收标准：
 
-- [ ] Hyper-V Arch Linux VM 可用于阶段开发和基础运行验证。
-- [ ] GitHub 仓库成为 Windows、Hyper-V、未来真机之间的唯一同步源。
-- [ ] Hyper-V Arch Linux 可通过脚本完成一键安装或更新。
-- [ ] Windows push 后，Hyper-V Arch Linux 只需要执行 `bash scripts/arch-update.sh`，不需要手动构建。
-- [ ] Phase 0 使用 pacman 版 niri 完成 baseline 验证，不要求构建 niri fork。
-- [ ] niri 能启动；如果 Hyper-V 环境阻塞 niri 启动，已记录阻塞原因和替代验证方案。
-- [ ] Quickshell 能启动。
+- [x] Hyper-V Arch Linux VM 可用于阶段开发和基础运行验证。
+- [x] GitHub 仓库成为 Windows、Hyper-V、未来真机之间的唯一同步源。
+- [x] Hyper-V Arch Linux 可通过脚本完成一键安装或更新。
+- [x] Windows push 后，Hyper-V Arch Linux 只需要执行 `bash scripts/arch-update.sh`，不需要手动构建。
+- [x] Phase 0 使用 pacman 版 niri 完成 baseline 验证，不要求构建 niri fork。
+- [x] niri 能启动；如果 Hyper-V 环境阻塞 niri 启动，已记录阻塞原因和替代验证方案。
+- [x] Quickshell 能启动。
 - [ ] 新窗口默认以浮动方式打开。
 - [ ] 浮动窗口有圆角、阴影和背景模糊。
-- [ ] 顶栏、Dock、控制中心基础外观可见。
-- [ ] 不需要修改 niri 源码。
-- [ ] 不需要修改 Quickshell 核心源码。
-- [ ] 不要求真机验收，真机留到全部阶段完成后再做。
+- [x] 顶栏、Dock、控制中心基础外观可见。
+- [x] 不需要修改 niri 源码。
+- [x] 不需要修改 Quickshell 核心源码。
+- [x] 不要求真机验收，真机留到全部阶段完成后再做。
 
 ## Phase 1: Quickshell Tahoe Shell
 

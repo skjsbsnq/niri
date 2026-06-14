@@ -151,6 +151,8 @@ Web 参考（`index.html` 第 205–207 行）：`<hr class="column">` 分隔线
 
 ### 2.2 niri compositor 侧（参数调了，但 Genie / snap 动画缺失）
 
+> **修复记录（2026-06-14）：region_to_non_overlapping_rects 整数溢出已修。** niri fork 的 `src/utils/region.rs` 在算 blur region 时三处裸 `i32` 加法（`r.loc.y + r.size.h` ×2、`r.loc.x + r.size.w` ×1），当 Quickshell 的 `BackgroundEffect.blurRegion` item 几何被 spring 振荡推动到极端值时，某帧 region 矩形 `loc + size` 溢出 i32::MAX → debug 构建整数溢出 panic（调用栈：`recompute_blur_region` → `region_to_non_overlapping_rects` → `render_layer_normal` → `redraw`）→ niri abort → 回到登录界面。三处改为 `saturating_add`（钳到 i32::MAX，语义等价"无限大矩形"，不产生负数干扰 subtract 分支）。QML 侧同步回退：`ControlCenter.qml` 的 `panel.y` + 可折叠行高度、`MenuPopup.qml` 的 `menuSurface.y` 三处 SpringAnimation 退回 NumberAnimation——**blur-region item 的几何一律禁用 spring，只留给非 blur 子元素**。升级时用 `FORCE_NIRI_BUILD=true bash scripts/arch-update.sh` 重编 niri（release 构建，整数溢出额外 wrapping 不 panic，双重保险）。
+
 来自 `tahoe-phase0.kdl` 和 niri diff：
 
 - ✅ window-open/close 用 custom shader 做 opacity fade。**但注意**：roadmap 声称"scale 0.96→1"，实际 `open_color`/`close_color` shader（config 第 71–104 行）只乘了 `opacity`，**没有 scale**。scale 是 minimize 才有（`animate_alpha_scale`）。

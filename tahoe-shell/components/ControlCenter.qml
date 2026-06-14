@@ -60,13 +60,14 @@ PanelWindow {
     Rectangle {
         id: panel
         x: 0
-        // Spring-smoothed slide-down (replaces the old NumberAnimation).
-        // We deliberately do NOT use scale here: panel is the
-        // BackgroundEffect.blurRegion item, and animating its scale makes
-        // the blur region reallocate every frame, which crashes Quickshell
-        // on the Hyper-V VM (same class of bug as the historical
-        // notification-toast blur crashes). A y-translate keeps the blur
-        // geometry fixed and only moves the painted surface.
+        // panel is the BackgroundEffect.blurRegion item. Its geometry MUST
+        // stay tame during open/close: niri recomputes the blur region each
+        // frame, and a SpringAnimation overshoot pushed the region's
+        // `loc + size` past i32::MAX, panicking niri's
+        // region_to_non_overlapping_rects (the crash that returned the VM
+        // to the login screen). So geometry transitions on a blur-region
+        // item use a bounded NumberAnimation, never a spring. Opacity is
+        // safe to animate any way (it doesn't change region geometry).
         y: root.open ? 0 : -14
         width: parent.width
         implicitHeight: content.implicitHeight + 28
@@ -129,14 +130,9 @@ PanelWindow {
             NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
         }
 
-        // Spring on y so the panel slides down with a touch of overshoot
-        // (the Tahoe "settle") rather than a linear OutCubic tween.
+        // Bounded tween (NOT spring) — see the geometry comment above.
         Behavior on y {
-            SpringAnimation {
-                spring: 380
-                damping: 0.82
-                epsilon: 0.01
-            }
+            NumberAnimation { duration: 220; easing.type: Easing.OutCubic }
         }
 
         ColumnLayout {
@@ -247,11 +243,11 @@ PanelWindow {
                 visible: Layout.preferredHeight > 0
 
                 Behavior on Layout.preferredHeight {
-                    SpringAnimation {
-                        spring: 320
-                        damping: 0.85
-                        epsilon: 0.01
-                    }
+                    // NumberAnimation, not spring — this height feeds the
+                    // panel's implicitHeight, which is the blur-region
+                    // geometry; a spring overshoot here is the same crash
+                    // class as animating panel.y/scale directly.
+                    NumberAnimation { duration: 180; easing.type: Easing.OutCubic }
                 }
 
                 Behavior on opacity {

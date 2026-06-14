@@ -39,11 +39,13 @@ PanelWindow {
         id: menuSurface
 
         x: 0
-        // Spring-smoothed slide (replaces the old NumberAnimation). NOT
-        // scale: menuSurface is the BackgroundEffect.blurRegion item, and
-        // animating scale on a blur item crashes Quickshell on the Hyper-V
-        // VM (blur region reallocates per frame). y-translate keeps the
-        // blur geometry fixed.
+        // menuSurface is the BackgroundEffect.blurRegion item. Its geometry
+        // MUST stay tame during open/close: niri recomputes the blur region
+        // each frame, and a SpringAnimation overshoot pushed the region's
+        // `loc + size` past i32::MAX, panicking niri's
+        // region_to_non_overlapping_rects (the crash that returned the VM
+        // to the login screen). Geometry transitions on a blur-region item
+        // use a bounded NumberAnimation, never a spring.
         y: root.open ? 0 : -8
         width: parent.width
         height: parent.height
@@ -78,14 +80,9 @@ PanelWindow {
             NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
         }
 
-        // Spring on y — menu slides in with a hint of overshoot instead of
-        // a linear tween.
+        // Bounded tween (NOT spring) — see the geometry comment above.
         Behavior on y {
-            SpringAnimation {
-                spring: 420
-                damping: 0.82
-                epsilon: 0.01
-            }
+            NumberAnimation { duration: 150; easing.type: Easing.OutCubic }
         }
 
         ColumnLayout {

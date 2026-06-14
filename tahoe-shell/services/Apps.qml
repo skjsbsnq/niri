@@ -14,32 +14,9 @@ QtObject {
     readonly property string defaultWindowIcon: dockIconRoot + "finder.png"
     readonly property string wallpaper: backgroundRoot + "iridescence.jpg"
 
-    readonly property var pinnedApps: [
-        { "id": "finder", "name": "Finder", "iconSet": "dock", "icon": "finder.png", "command": ["sh", "-c", "xdg-open \"$HOME\""] },
-        { "id": "launchpad", "name": "Launchpad", "iconSet": "dock", "icon": "launchpad.png", "command": [] },
-        { "id": "safari", "name": "Browser", "iconSet": "dock", "icon": "safari.png", "command": ["sh", "-c", "xdg-open about:blank"] },
-        { "id": "terminal", "name": "Terminal", "iconSet": "dock", "icon": "terminal.png", "command": ["sh", "-c", "foot || alacritty || kitty || xterm"] },
-        { "id": "settings", "name": "Settings", "iconSet": "dock", "icon": "preferences.png", "command": ["sh", "-c", "XDG_CURRENT_DESKTOP=GNOME gnome-control-center || systemsettings || xfce4-settings-manager"] }
-    ]
-
-    readonly property var launchpadApps: [
-        { "id": "finder", "name": "Finder", "iconSet": "dock", "icon": "finder.png", "command": ["sh", "-c", "xdg-open \"$HOME\""] },
-        { "id": "browser", "name": "Browser", "iconSet": "dock", "icon": "safari.png", "command": ["sh", "-c", "xdg-open about:blank"] },
-        { "id": "terminal", "name": "Terminal", "iconSet": "dock", "icon": "terminal.png", "command": ["sh", "-c", "foot || alacritty || kitty || xterm"] },
-        { "id": "settings", "name": "Settings", "iconSet": "dock", "icon": "preferences.png", "command": ["sh", "-c", "XDG_CURRENT_DESKTOP=GNOME gnome-control-center || systemsettings || xfce4-settings-manager"] },
-        { "id": "appstore", "name": "App Store", "iconSet": "launchpad", "icon": "appstore.png", "command": [] },
-        { "id": "calendar", "name": "Calendar", "iconSet": "launchpad", "icon": "calendar.png", "command": [] },
-        { "id": "calculator", "name": "Calculator", "iconSet": "launchpad", "icon": "calculator.png", "command": ["sh", "-c", "gnome-calculator || kcalc || galculator"] },
-        { "id": "notes", "name": "Notes", "iconSet": "launchpad", "icon": "Notes - Light.png", "command": [] },
-        { "id": "mail", "name": "Mail", "iconSet": "launchpad", "icon": "mail.png", "command": [] },
-        { "id": "maps", "name": "Maps", "iconSet": "launchpad", "icon": "Maps - Light.png", "command": [] },
-        { "id": "music", "name": "Music", "iconSet": "launchpad", "icon": "Music - Light.png", "command": [] },
-        { "id": "photos", "name": "Photos", "iconSet": "launchpad", "icon": "Photos - Light.png", "command": [] },
-        { "id": "reminders", "name": "Reminders", "iconSet": "launchpad", "icon": "Reminders - Light.png", "command": [] },
-        { "id": "activity", "name": "Activity", "iconSet": "launchpad", "icon": "activitymonitor.png", "command": ["sh", "-c", "gnome-system-monitor || plasma-systemmonitor || htop"] },
-        { "id": "shortcuts", "name": "Shortcuts", "iconSet": "launchpad", "icon": "Shortcuts - Light.png", "command": [] },
-        { "id": "vscode", "name": "Code", "iconSet": "dock", "icon": "vscode.png", "command": ["sh", "-c", "code || codium"] }
-    ]
+    readonly property var realApplications: [...DesktopEntries.applications.values].filter(isLaunchableApplication).sort(compareApplications)
+    readonly property var pinnedApps: buildPinnedApps()
+    readonly property var launchpadApps: realApplications
 
     function iconPath(iconSet, fileName) {
         if (!fileName || fileName.length === 0)
@@ -57,7 +34,40 @@ QtObject {
         if (!app)
             return defaultWindowIcon;
 
-        return iconPath(app.iconSet || "dock", app.icon || "");
+        if (app.desktopEntry)
+            app = app.desktopEntry;
+
+        if (app.icon) {
+            var iconName = String(app.icon);
+            if (iconName.length > 0) {
+                if (iconName.charAt(0) === "/")
+                    return iconName;
+
+                var themed = Quickshell.iconPath(iconName, true);
+                if (themed && themed.length > 0)
+                    return themed;
+            }
+        }
+
+        if (app.iconSet)
+            return iconPath(app.iconSet, app.icon || "");
+
+        return iconForAppId(app.id || app.startupClass || app.name || "");
+    }
+
+    function appLabel(app) {
+        if (!app)
+            return "App";
+
+        if (app.desktopEntry)
+            app = app.desktopEntry;
+
+        var name = String(app.name || "").trim();
+        if (name.length > 0)
+            return name;
+
+        var id = String(app.id || "").trim();
+        return id.length > 0 ? id : "App";
     }
 
     function iconForAppId(appId) {
@@ -101,9 +111,136 @@ QtObject {
     }
 
     function launchApp(app) {
-        if (!app || !app.command || app.command.length === 0)
+        if (!app)
             return;
 
-        Quickshell.execDetached(app.command);
+        if (app.desktopEntry)
+            app = app.desktopEntry;
+
+        if (app.execute) {
+            app.execute();
+            return;
+        }
+
+        if (!app.command || app.command.length === 0)
+            return;
+
+        Quickshell.execDetached({
+            command: app.command,
+            workingDirectory: app.workingDirectory || ""
+        });
+    }
+
+    function isLaunchableApplication(app) {
+        return !!app
+            && !app.noDisplay
+            && !!app.command
+            && app.command.length > 0
+            && String(app.name || "").trim().length > 0;
+    }
+
+    function compareApplications(a, b) {
+        var left = appLabel(a).toLowerCase();
+        var right = appLabel(b).toLowerCase();
+        if (left < right)
+            return -1;
+        if (left > right)
+            return 1;
+        return 0;
+    }
+
+    function findApplication(candidates) {
+        for (var i = 0; i < candidates.length; i++) {
+            var direct = DesktopEntries.byId(candidates[i]);
+            if (isLaunchableApplication(direct))
+                return direct;
+
+            var guessed = DesktopEntries.heuristicLookup(candidates[i]);
+            if (isLaunchableApplication(guessed))
+                return guessed;
+        }
+
+        var lowered = candidates.map(function(candidate) {
+            return String(candidate).toLowerCase();
+        });
+
+        for (var j = 0; j < realApplications.length; j++) {
+            var app = realApplications[j];
+            var haystack = [
+                app.id || "",
+                app.name || "",
+                app.genericName || "",
+                app.startupClass || "",
+                app.execString || ""
+            ].join(" ").toLowerCase();
+
+            for (var k = 0; k < lowered.length; k++) {
+                if (haystack.indexOf(lowered[k]) !== -1)
+                    return app;
+            }
+        }
+
+        return null;
+    }
+
+    function appendApplication(target, seen, app) {
+        if (!isLaunchableApplication(app))
+            return;
+
+        var key = String(app.id || app.name || "");
+        if (seen[key])
+            return;
+
+        seen[key] = true;
+        target.push(app);
+    }
+
+    function buildPinnedApps() {
+        var result = [
+            { "id": "launchpad", "name": "Launchpad", "iconSet": "dock", "icon": "launchpad.png", "shellAction": "launchpad" }
+        ];
+        var seen = {};
+
+        appendApplication(result, seen, findApplication([
+            "org.gnome.Nautilus",
+            "nautilus",
+            "org.kde.dolphin",
+            "dolphin",
+            "thunar",
+            "pcmanfm",
+            "files"
+        ]));
+        appendApplication(result, seen, findApplication([
+            "org.wezfurlong.wezterm",
+            "wezterm",
+            "org.gnome.Console",
+            "kgx",
+            "org.gnome.Terminal",
+            "gnome-terminal",
+            "org.kde.konsole",
+            "konsole",
+            "Alacritty",
+            "alacritty",
+            "kitty",
+            "foot",
+            "terminal"
+        ]));
+        appendApplication(result, seen, findApplication([
+            "firefox",
+            "org.mozilla.firefox",
+            "chromium",
+            "google-chrome",
+            "brave-browser",
+            "browser"
+        ]));
+        appendApplication(result, seen, findApplication([
+            "org.gnome.Settings",
+            "gnome-control-center",
+            "systemsettings",
+            "xfce4-settings-manager",
+            "settings"
+        ]));
+
+        return result;
     }
 }

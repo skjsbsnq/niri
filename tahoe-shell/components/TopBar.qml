@@ -105,6 +105,13 @@ PanelWindow {
                 }
             }
 
+            WindowControls {
+                toplevel: root.niriService ? root.niriService.activeToplevel : null
+                Layout.preferredWidth: implicitWidth
+                Layout.preferredHeight: implicitHeight
+                Layout.alignment: Qt.AlignVCenter
+            }
+
             Text {
                 text: root.activeApp
                 color: "#2c2d30"
@@ -163,6 +170,13 @@ PanelWindow {
                 Layout.fillWidth: true
             }
 
+            Tray {
+                panelWindow: root
+                Layout.preferredWidth: visible ? implicitWidth : 0
+                Layout.preferredHeight: implicitHeight
+                Layout.alignment: Qt.AlignVCenter
+            }
+
             Text {
                 text: Qt.formatDateTime(root.now, "ddd HH:mm")
                 color: "#2c2d30"
@@ -173,7 +187,7 @@ PanelWindow {
 
             Item {
                 id: statusButton
-                Layout.preferredWidth: 118
+                Layout.preferredWidth: 44
                 Layout.preferredHeight: 24
                 Layout.alignment: Qt.AlignVCenter
 
@@ -186,28 +200,7 @@ PanelWindow {
 
                 Row {
                     anchors.centerIn: parent
-                    spacing: 8
-
-                    Text {
-                        text: "Wi-Fi"
-                        color: "#202124"
-                        font.pixelSize: 12
-                        anchors.verticalCenter: parent.verticalCenter
-                    }
-
-                    Text {
-                        text: "100%"
-                        color: "#202124"
-                        font.pixelSize: 12
-                        anchors.verticalCenter: parent.verticalCenter
-                    }
-
-                    Rectangle {
-                        width: 1
-                        height: 12
-                        color: "#42000000"
-                        anchors.verticalCenter: parent.verticalCenter
-                    }
+                    spacing: 0
 
                     Text {
                         text: root.niriService ? root.niriService.activeWorkspaceName : "1"

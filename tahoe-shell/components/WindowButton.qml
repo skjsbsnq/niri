@@ -11,6 +11,7 @@ Item {
     property int iconSize: 38
     property real magnification: 1.0
     property real bounceOffset: 0
+    property var dockWindow
     property var dockSurfaceItem
     readonly property bool active: !!toplevel && toplevel.activated
     readonly property bool minimized: !!toplevel && toplevel.minimized
@@ -23,6 +24,42 @@ Item {
 
     width: showTitle ? 132 : 56
     height: 58
+
+    function updateDockRectangle(mouseX, mouseY) {
+        if (!root.toplevel || !root.toplevel.setRectangle || !root.dockWindow)
+            return;
+
+        var point = root.mapToItem(null, 0, 0);
+        root.toplevel.setRectangle(root.dockWindow, Qt.rect(Math.round(point.x), Math.round(point.y), Math.round(root.width), Math.round(root.height)));
+    }
+
+    function restoreOrActivate() {
+        if (!root.toplevel)
+            return;
+
+        updateDockRectangle(0, 0);
+
+        if (root.toplevel.minimized) {
+            root.toplevel.minimized = false;
+            if (root.toplevel.activate)
+                root.toplevel.activate();
+        } else if (root.toplevel.activated) {
+            root.toplevel.minimized = true;
+        } else if (root.toplevel.activate) {
+            root.toplevel.activate();
+        }
+
+        root.activateRequested(root.toplevel);
+    }
+
+    function minimize() {
+        if (!root.toplevel)
+            return;
+
+        updateDockRectangle(0, 0);
+        root.toplevel.minimized = true;
+        root.activateRequested(root.toplevel);
+    }
 
     Rectangle {
         anchors.fill: parent
@@ -83,6 +120,7 @@ Item {
     MouseArea {
         anchors.fill: parent
         hoverEnabled: true
+        acceptedButtons: Qt.LeftButton | Qt.MiddleButton
         cursorShape: Qt.PointingHandCursor
         onPositionChanged: function(mouse) {
             if (root.dockSurfaceItem) {
@@ -91,14 +129,12 @@ Item {
             }
         }
         onEntered: root.dockPointerEntered()
-        onClicked: {
+        onClicked: function(mouse) {
             bounceAnimation.restart();
-            if (root.toplevel && root.toplevel.minimized) {
-                root.toplevel.minimized = false;
-            } else if (root.toplevel && root.toplevel.activate) {
-                root.toplevel.activate();
-            }
-            root.activateRequested(root.toplevel);
+            if (mouse.button === Qt.MiddleButton)
+                root.minimize();
+            else
+                root.restoreOrActivate();
         }
     }
 

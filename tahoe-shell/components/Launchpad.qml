@@ -94,7 +94,9 @@ PanelWindow {
                 columnSpacing: 12
 
                 Repeater {
-                    model: root.appsService ? root.appsService.launchpadApps : []
+                    model: ScriptModel {
+                        values: root.appsService ? root.appsService.launchpadApps : []
+                    }
 
                     delegate: Item {
                         id: appButton
@@ -120,7 +122,7 @@ PanelWindow {
                             anchors.right: parent.right
                             anchors.top: appIcon.bottom
                             anchors.topMargin: 7
-                            text: appButton.modelData.name
+                            text: root.appsService ? root.appsService.appLabel(appButton.modelData) : ""
                             color: "#202124"
                             font.pixelSize: 12
                             horizontalAlignment: Text.AlignHCenter

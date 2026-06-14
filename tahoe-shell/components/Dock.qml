@@ -109,7 +109,9 @@ PanelWindow {
             spacing: 8
 
             Repeater {
-                model: root.appsService ? root.appsService.pinnedApps : []
+                model: ScriptModel {
+                    values: root.appsService ? root.appsService.pinnedApps : []
+                }
 
                 delegate: Item {
                     id: pinnedButton
@@ -156,7 +158,7 @@ PanelWindow {
                     Rectangle {
                         anchors.horizontalCenter: parent.horizontalCenter
                         anchors.bottom: parent.bottom
-                        width: modelData.id === "finder" ? 5 : 0
+                        width: modelData.shellAction === "launchpad" ? 0 : 5
                         height: 5
                         radius: 3
                         color: "#99000000"
@@ -178,7 +180,7 @@ PanelWindow {
                         Text {
                             id: labelText
                             anchors.centerIn: parent
-                            text: modelData.name
+                            text: root.appsService ? root.appsService.appLabel(modelData) : ""
                             color: "#202124"
                             font.pixelSize: 11
                             elide: Text.ElideRight
@@ -207,7 +209,7 @@ PanelWindow {
                         onEntered: root.dockHovered = true
                         onClicked: {
                             bounceAnimation.restart();
-                            if (modelData.id === "launchpad") {
+                            if (modelData.shellAction === "launchpad") {
                                 root.toggleLaunchpad();
                             } else if (root.appsService) {
                                 root.appsService.launchApp(modelData);
@@ -258,6 +260,7 @@ PanelWindow {
                     appsService: root.appsService
                     showTitle: true
                     magnification: root.proximityScale(windowButton)
+                    dockWindow: root
                     dockSurfaceItem: dockSurface
                     onDockPointerMoved: function(x) {
                         root.dockMouseX = x;

@@ -15,6 +15,7 @@ PanelWindow {
     readonly property color glassInnerFill: "#18ffffff"
     readonly property color glassTileFill: "#22ffffff"
     readonly property color glassTileStroke: "#40ffffff"
+    readonly property int windowCount: niriService && niriService.toplevelList ? niriService.toplevelList.length : 0
 
     signal closeRequested()
 
@@ -22,7 +23,7 @@ PanelWindow {
     aboveWindows: true
     exclusiveZone: 0
     implicitWidth: 326
-    implicitHeight: 374
+    implicitHeight: 236
     color: "transparent"
 
     anchors {
@@ -38,6 +39,19 @@ PanelWindow {
     BackgroundEffect.blurRegion: Region {
         item: panel
         radius: 24
+    }
+
+    function activeWindowLabel() {
+        var toplevel = root.niriService ? root.niriService.activeToplevel : null;
+        if (!toplevel)
+            return "Desktop";
+
+        var title = String(toplevel.title || "").trim();
+        if (title.length > 0)
+            return title;
+
+        var appId = String(toplevel.appId || "").trim();
+        return appId.length > 0 ? appId : "Window";
     }
 
     Rectangle {
@@ -129,61 +143,26 @@ PanelWindow {
                 spacing: 8
 
                 ControlTile {
-                    title: "Wi-Fi"
-                    value: "Home"
-                    accent: "#0a84ff"
+                    title: "Workspace"
+                    value: root.niriService ? root.niriService.activeWorkspaceName : "1"
+                    accent: "#ff9f0a"
                     Layout.fillWidth: true
                 }
 
                 ControlTile {
-                    title: "Bluetooth"
-                    value: "On"
+                    title: "Windows"
+                    value: String(root.windowCount)
                     accent: "#5e5ce6"
                     Layout.fillWidth: true
                 }
             }
 
             ControlTile {
-                title: "Workspace"
-                value: root.niriService ? root.niriService.activeWorkspaceName : "1"
-                accent: "#ff9f0a"
-                Layout.fillWidth: true
-                Layout.preferredHeight: 68
-            }
-
-            ControlTile {
-                title: "Sound"
-                value: "42%"
+                title: "Active"
+                value: root.activeWindowLabel()
                 accent: "#30d158"
                 Layout.fillWidth: true
                 Layout.preferredHeight: 68
-            }
-
-            Rectangle {
-                Layout.fillWidth: true
-                Layout.preferredHeight: 66
-                radius: 17
-                color: root.glassTileFill
-                border.color: root.glassTileStroke
-
-                Column {
-                    anchors.fill: parent
-                    anchors.margins: 11
-                    spacing: 5
-
-                    Text {
-                        text: "Now Playing"
-                        color: "#202124"
-                        font.pixelSize: 13
-                        font.weight: Font.DemiBold
-                    }
-
-                    Text {
-                        text: "Tahoe Preview"
-                        color: "#5f6368"
-                        font.pixelSize: 12
-                    }
-                }
             }
         }
     }

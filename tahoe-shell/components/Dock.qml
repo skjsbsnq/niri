@@ -38,7 +38,14 @@ PanelWindow {
         var point = item.mapToItem(dockSurface, item.width / 2, item.height / 2);
         var distance = Math.abs(dockMouseX - point.x);
         var influence = Math.max(0, 1 - distance / 150);
-        return 1.0 + influence * 0.5;
+
+        // DIAG (VMware 图标消失对照实验二分): scale 已排除, 现在彻底关掉
+        // magnification 计算, 让 magnification/lift 恒定、SpringAnimation 不跑、
+        // delegate 不再因 hover 每帧 invalidate。如果不消失 -> 实锤是 hover
+        // 触发的持续属性重算; 如果还消失 -> 问题完全不在动画链路, 换方向。
+        // 修好后恢复: return 1.0 + influence * 0.5;
+        return 1.0;
+        // (influence/distance/point 保留只为语义清晰, 不会被走到)
     }
 
     anchors {

@@ -120,6 +120,10 @@ PanelWindow {
                     property real magnification: root.proximityScale(pinnedButton)
                     property real bounceOffset: 0
                     readonly property bool hovered: iconMouse.containsMouse
+                    readonly property bool running: modelData.shellAction !== "launchpad"
+                        && root.appsService
+                        && root.niriService
+                        && root.appsService.appHasRunningWindow(modelData, root.niriService.toplevelList)
                     readonly property real lift: (magnification - 1.0) * 18 + (hovered ? 3 : 0)
 
                     width: 62
@@ -158,7 +162,7 @@ PanelWindow {
                     Rectangle {
                         anchors.horizontalCenter: parent.horizontalCenter
                         anchors.bottom: parent.bottom
-                        width: modelData.shellAction === "launchpad" ? 0 : 5
+                        width: pinnedButton.running ? 5 : 0
                         height: 5
                         radius: 3
                         color: "#99000000"

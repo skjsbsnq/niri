@@ -15,7 +15,7 @@ PanelWindow {
     property bool launchpadOpen: false
     property bool appMenuOpen: false
     property date now: new Date()
-    readonly property string activeApp: appsService && niriService ? appsService.toplevelLabel(niriService.activeToplevel) : "Finder"
+    readonly property string activeApp: appsService && niriService ? appsService.toplevelLabel(niriService.activeToplevel) : "Desktop"
     readonly property color glassFill: "#20ffffff"
     readonly property color glassStroke: "#42ffffff"
     readonly property color glassHairline: "#4cffffff"
@@ -103,13 +103,6 @@ PanelWindow {
                     cursorShape: Qt.PointingHandCursor
                     onClicked: root.toggleAppMenu()
                 }
-            }
-
-            WindowControls {
-                toplevel: root.niriService ? root.niriService.activeToplevel : null
-                Layout.preferredWidth: implicitWidth
-                Layout.preferredHeight: implicitHeight
-                Layout.alignment: Qt.AlignVCenter
             }
 
             Text {

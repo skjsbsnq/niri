@@ -1,5 +1,6 @@
 //@ pragma ShellId tahoe
 //@ pragma AppId org.quickshell.tahoe
+//@ pragma UseQApplication
 pragma ComponentBehavior: Bound
 
 import QtQuick

@@ -131,6 +131,114 @@ QtObject {
         });
     }
 
+    function normalizedAppToken(value) {
+        var token = String(value || "").trim().toLowerCase();
+        if (token.length === 0)
+            return "";
+
+        token = token.replace(/^application:\/\//, "");
+        token = token.replace(/\\/g, "/");
+
+        var slashIndex = token.lastIndexOf("/");
+        if (slashIndex !== -1)
+            token = token.substring(slashIndex + 1);
+
+        token = token.replace(/\.desktop$/, "");
+        return token;
+    }
+
+    function addAppToken(tokens, seen, value) {
+        var token = normalizedAppToken(value);
+        if (token.length === 0 || seen[token])
+            return;
+
+        seen[token] = true;
+        tokens.push(token);
+
+        var dotIndex = token.lastIndexOf(".");
+        if (dotIndex !== -1 && dotIndex + 1 < token.length)
+            addAppToken(tokens, seen, token.substring(dotIndex + 1));
+    }
+
+    function firstExecToken(execString) {
+        var text = String(execString || "").trim();
+        if (text.length === 0)
+            return "";
+
+        var pieces = text.split(/\s+/);
+        for (var i = 0; i < pieces.length; i++) {
+            var piece = pieces[i];
+            if (piece.indexOf("=") !== -1 || piece === "env")
+                continue;
+
+            return piece;
+        }
+
+        return pieces.length > 0 ? pieces[0] : "";
+    }
+
+    function appIdentityTokens(app) {
+        var tokens = [];
+        var seen = {};
+
+        if (!app)
+            return tokens;
+
+        if (app.desktopEntry)
+            app = app.desktopEntry;
+
+        addAppToken(tokens, seen, app.id || "");
+        addAppToken(tokens, seen, app.startupClass || "");
+        addAppToken(tokens, seen, app.name || "");
+
+        if (app.command && app.command.length > 0)
+            addAppToken(tokens, seen, app.command[0]);
+
+        addAppToken(tokens, seen, firstExecToken(app.execString || ""));
+
+        return tokens;
+    }
+
+    function tokensReferToSameApp(left, right) {
+        if (left === right)
+            return true;
+
+        var leftSuffix = "." + right;
+        var rightSuffix = "." + left;
+
+        return (left.indexOf(".") !== -1 && left.slice(-leftSuffix.length) === leftSuffix)
+            || (right.indexOf(".") !== -1 && right.slice(-rightSuffix.length) === rightSuffix);
+    }
+
+    function appMatchesToplevel(app, toplevel) {
+        if (!app || !toplevel)
+            return false;
+
+        var toplevelAppId = normalizedAppToken(toplevel.appId || "");
+        if (toplevelAppId.length === 0)
+            return false;
+
+        var tokens = appIdentityTokens(app);
+        for (var i = 0; i < tokens.length; i++) {
+            if (tokensReferToSameApp(tokens[i], toplevelAppId))
+                return true;
+        }
+
+        return false;
+    }
+
+    function appHasRunningWindow(app, toplevels) {
+        if (!toplevels)
+            return false;
+
+        for (var i = 0; i < toplevels.length; i++) {
+            if (appMatchesToplevel(app, toplevels[i]))
+                return true;
+        }
+
+        return false;
+    }
+
     function isLaunchableApplication(app) {
         return !!app
             && !app.noDisplay

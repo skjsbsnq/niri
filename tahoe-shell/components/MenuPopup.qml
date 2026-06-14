@@ -9,7 +9,7 @@ PanelWindow {
     id: root
 
     property bool open: false
-    property string activeApp: "Finder"
+    property string activeApp: "Desktop"
 
     signal closeRequested()
 

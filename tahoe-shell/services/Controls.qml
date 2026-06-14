@@ -16,8 +16,17 @@ import Quickshell.Services.Mpris
 // shell never crashes when running under a VM that lacks Wi-Fi, Bluetooth,
 // MPRIS players or a backlight.
 
-QtObject {
+// NOTE: the root is an Item (not QtObject) because this service owns child
+// QML objects (PwObjectTracker, Process, Timer, Component.onCompleted).
+// QtObject has no default `children` property, so declaring child objects
+// inside it throws "Cannot assign to non-existent default property" at load
+// time and aborts the whole shell. Item has a `children` slot and, with
+// visible:false, does not participate in rendering, so it is the idiomatic
+// container for a stateful non-visual service in Quickshell.
+
+Item {
     id: root
+    visible: false
 
     // ------------------------------------------------------------------
     // Audio (PipeWire / pipewire-pulse)

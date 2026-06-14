@@ -702,29 +702,35 @@ Windows 本地状态：
 
 Hyper-V Arch Linux 操作：
 
-- [ ] 执行 `BUILD_NIRI_FORK=auto bash scripts/arch-update.sh`，由脚本自动构建 niri fork 并部署 `tahoe-shell/`。
-- [ ] 启动或重启 niri + Quickshell Tahoe shell。
-- [ ] 记录 FPS 基线。
-- [ ] 在 Hyper-V 中测试窗口背后内容变化时 blur 是否同步。
-- [ ] 在 Hyper-V 中记录 GPU/FPS 表现，仅作为参考。
-- [ ] 检查 Dock 是否有真实背景模糊。
-- [ ] 检查控制中心是否有真实背景模糊。
-- [ ] 检查顶栏是否有真实背景模糊。
-- [ ] 检查 Hyper-V 中是否出现功能性破图。
+- [x] 执行 `BUILD_NIRI_FORK=auto bash scripts/arch-update.sh`，由脚本自动构建 niri fork 并部署 `tahoe-shell/`。
+- [x] 启动或重启 niri + Quickshell Tahoe shell。
+- [x] 记录 FPS 基线。
+- [x] 在 Hyper-V 中测试窗口背后内容变化时 blur 是否同步。
+- [x] 在 Hyper-V 中记录 GPU/FPS 表现，仅作为参考。
+- [x] 检查 Dock 是否有真实背景模糊。
+- [x] 检查控制中心是否有真实背景模糊。
+- [x] 检查顶栏是否有真实背景模糊。
+- [x] 检查 Hyper-V 中是否出现功能性破图。
+
+Hyper-V 截图验收记录：
+
+- 2026-06-14 截图 `屏幕截图 2026-06-14 193754.png`：首次 Phase 4 验收发现控制中心存在偏白硬边，且 layer-shell 面板更像采样 wallpaper/backdrop，不像真实窗口后景模糊。
+- 2026-06-14 已回补 commit `073acd0`：Quickshell layer-shell 改为 `xray false`，走 framebuffer blur；同时降低 Dock、顶栏和控制中心 QML 玻璃边缘高光。
+- 2026-06-14 截图 `屏幕截图 2026-06-14 194140.png`：根仓库 `073acd0`、niri `f0484e9` 已在 Hyper-V 中部署；控制中心覆盖终端时可看到真实背景模糊，Dock、顶栏和控制中心白边明显减弱，未发现明显功能性破图。Hyper-V 下 GPU/FPS 仅作参考，最终性能结论留到真机验收。
 
 Windows 到 Hyper-V 同步验证：
 
-- [ ] Windows 修改并 push glass/shader/QML 参数后，在 Hyper-V Arch Linux 中执行 `BUILD_NIRI_FORK=auto bash scripts/arch-update.sh`。
-- [ ] 确认 Hyper-V 中运行的 niri commit、QML 和 assets 与 Windows 推送版本一致。
+- [x] Windows 修改并 push glass/shader/QML 参数后，在 Hyper-V Arch Linux 中执行 `BUILD_NIRI_FORK=auto bash scripts/arch-update.sh`。
+- [x] 确认 Hyper-V 中运行的 niri commit、QML 和 assets 与 Windows 推送版本一致。
 
 验收标准：
 
-- [ ] Dock 有真实背景模糊。
-- [ ] 控制中心有真实背景模糊。
-- [ ] 顶栏有真实背景模糊。
-- [ ] 窗口背后内容变化时玻璃同步变化。
-- [ ] Hyper-V 中没有明显功能性破图。
-- [ ] FPS、GPU、多显示器、fractional scale 的最终结论留到真机验收。
+- [x] Dock 有真实背景模糊。
+- [x] 控制中心有真实背景模糊。
+- [x] 顶栏有真实背景模糊。
+- [x] 窗口背后内容变化时玻璃同步变化。
+- [x] Hyper-V 中没有明显功能性破图。
+- [x] FPS、GPU、多显示器、fractional scale 的最终结论留到真机验收。
 
 ## Phase 5: 更深桌面化
 
@@ -970,10 +976,10 @@ Windows 操作：
 
 Hyper-V Arch Linux 操作：
 
-- [ ] 执行 `BUILD_NIRI_FORK=auto bash scripts/arch-update.sh`。
-- [ ] 验证 Dock、顶栏、控制中心 blur/glass。
+- [x] 执行 `BUILD_NIRI_FORK=auto bash scripts/arch-update.sh`。
+- [x] 验证 Dock、顶栏、控制中心 blur/glass。
 - [ ] 验证 Genie minimize 不破坏普通 minimize/restore。
-- [ ] 记录 GPU/FPS 表现，仅作为参考。
+- [x] 记录 GPU/FPS 表现，仅作为参考。
 
 **9. 最终真机验收**
 

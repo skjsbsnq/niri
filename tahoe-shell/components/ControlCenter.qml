@@ -39,7 +39,7 @@ PanelWindow {
         id: panel
         anchors.fill: parent
         radius: 24
-        color: "#b8f5f6f8"
+        color: "#8cf5f6f8"
         border.color: "#70ffffff"
         border.width: 1
 

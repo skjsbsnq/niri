@@ -27,6 +27,11 @@ ShellRoot {
         Scope {
             required property var modelData
 
+            Wallpaper {
+                screen: modelData
+                appsService: apps
+            }
+
             TopBar {
                 screen: modelData
                 appsService: apps

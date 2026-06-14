@@ -313,6 +313,7 @@ Hyper-V 截图验收记录：
 
 - 2026-06-14 截图确认：顶栏、Dock、固定 app 图标、当前窗口列表、控制中心打开状态和 workspace 状态均可见。
 - 截图发现控制中心底部内容裁切，已在 commit `847dbea` 中修复 `ControlCenter.qml` 高度和 Now Playing 区域布局；待 Hyper-V 拉取后复测。
+- 截图发现桌面壁纸未显示、面板 blur 观感不明显；已新增 Quickshell bottom-layer `Wallpaper.qml` 并降低顶栏/控制中心面板不透明度，待 Hyper-V 拉取后复测真实 blur 是否由 compositor 生效。
 - 待继续手动确认：Dock 窗口项点击 `activate()`、控制中心关闭、Launchpad 打开/关闭、真实 compositor blur、多显示器位置和 exclusive zone。
 
 Windows 到 Hyper-V 同步验证：

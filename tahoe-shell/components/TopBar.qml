@@ -44,7 +44,7 @@ PanelWindow {
     Rectangle {
         id: barSurface
         anchors.fill: parent
-        color: "#72f7f8fb"
+        color: "#58f7f8fb"
         border.color: "#36ffffff"
         border.width: 1
 

@@ -1,126 +1,110 @@
 #!/usr/bin/env bash
-# 一键诊断 v2：托盘图标消失（hover 后永久不回）+ 启动器空白
+# 一键诊断 v3：dock/launchpad 图标 hover 后消失（spring 化后回归）
 #
-# v2 修正：RegisteredStatusNotifierItems 是 D-Bus *property* 不是 method，
-# 旧版脚本用方法调用去查 → 制造了假的 qt.dbus.integration warning，已纠正。
-#
-# 真正怀疑链路：有 app 注册了 SNI（图标出现）→ 那个 app 的 D-Bus 服务消失
-# （item 被 watcher.onServiceUnregistered 移除，图标永久消失）。本脚本会
-# *实时*监听 watcher 的 Registered/Unregistered 信号 + D-Bus 总线的服务
-# NameOwnerChanged，抓到掉线那一瞬间是哪个服务、为什么走。
+# 做法：用全量 QML 日志级别重启 quickshell，stderr 进文件，然后留出
+# 时间让你重现症状（hover dock 图标、点开 launchpad），时间到自动抓取
+# hover 那一刻 quickshell 吐出的 QML warning（TypeError / ReferenceError /
+# binding loop / Unable to assign undefined 之类——那才是根因）。
 #
 # 用法（VM 里）：
-#   bash scripts/diagnose-tray-launcher.sh          # 实时监听 60 秒
-#   bash scripts/diagnose-tray-launcher.sh 300      # 监听 300 秒
+#   bash scripts/diagnose-tray-launcher.sh          # 重启 + 等你重现 45s
+#   bash scripts/diagnose-tray-launcher.sh 90        # 等你重现 90s
 #
-# 跑起来后立刻重现症状：鼠标放托盘图标、点开启动器，等它抓到掉线事件。
-# 报告存到 /tmp/tray-launcher-diag.txt，贴回来。
+# 跑起来后：桌面会闪一下（quickshell 重启），然后立刻去 hover dock 图标、
+# 点 launchpad，把"图标消失"重现出来。倒计时结束自动出结果。
+# 报告存到 /tmp/qs-hover-diag.txt，贴回来。
 
 set -uo pipefail
 
-DURATION="${1:-60}"
-REPORT=/tmp/tray-launcher-diag.txt
+WAIT="${1:-45}"
+REPORT=/tmp/qs-hover-diag.txt
+QSLOG=/tmp/qs-hover.log
 : > "$REPORT"
 
-say() { printf '\n========== %s ==========\n' "$*" | tee -a "$REPORT"; }
+say()  { printf '\n========== %s ==========\n' "$*" | tee -a "$REPORT"; }
 line() { printf '%s\n' "$*" | tee -a "$REPORT"; }
-ts()  { printf '[%s] ' "$(date '+%H:%M:%S.%3N')"; }
+ts()   { printf '[%s] ' "$(date '+%H:%M:%S')"; }
 
-say "0. 说明 / 当前时间: $(date -Is)"
-line "本次监听时长: ${DURATION}s。跑起来后请立刻去 hover 托盘、点启动器。"
+say "0. 时间 $(date -Is)"
+line "重启后留 ${WAIT}s 给你重现症状。"
 
-say "1. 环境与进程"
-line "user=$(whoami) host=$(hostname)"
-line "XDG_SESSION_TYPE=${XDG_SESSION_TYPE:-<unset>} DESKTOP=${XDG_CURRENT_DESKTOP:-<unset>}"
-line "WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-<unset>} DBUS=${DBUS_SESSION_BUS_ADDRESS:-<unset>}"
-line "── pgrep quickshell ──"; pgrep -a quickshell 2>&1 | tee -a "$REPORT" || line "(无)"
-line "── pgrep niri ──";       pgrep -a niri 2>&1      | tee -a "$REPORT" || line "(无)"
-
-# ── 用 dbus-send 以 *属性* 方式查询（这是正确语法）──
-prop_get() {
-    # $1 = property name
-    dbus-send --session --print-reply --reply-timeout=3000 \
-        --dest=org.kde.StatusNotifierWatcher \
-        /StatusNotifierWatcher \
-        org.freedesktop.DBus.Properties.Get \
-        string:org.kde.StatusNotifierWatcher string:"$1" 2>&1
-}
-
-say "2. StatusNotifierWatcher 当前状态（属性方式，正确）"
-if ! dbus-send --session --print-reply --reply-timeout=3000 \
-        --dest=org.freedesktop.DBus \
-        /org/freedesktop/DBus org.freedesktop.DBus.NameHasOwner \
-        string:org.kde.StatusNotifierWatcher 2>&1 | grep -q 'boolean true'; then
-    line "!!! org.kde.StatusNotifierWatcher 没有所有者 — watcher 没起来。"
+# ── 1. 杀掉当前 quickshell ──
+say "1. 杀掉当前 quickshell"
+if pgrep -x quickshell >/dev/null 2>&1; then
+    pgrep -a quickshell | tee -a "$REPORT"
+    pkill -x quickshell
+    sleep 1
+    line "已杀掉。"
 else
-    line "watcher 在 D-Bus 上有所有者 ✓"
-    line "── RegisteredStatusNotifierItems（property Get）──"
-    prop_get RegisteredStatusNotifierItems | tee -a "$REPORT"
-    line "── IsStatusNotifierHostRegistered（property Get）──"
-    prop_get IsStatusNotifierHostRegistered | tee -a "$REPORT"
-    line "── ProtocolVersion（property Get）──"
-    prop_get ProtocolVersion | tee -a "$REPORT"
+    line "(没有 quickshell 进程在跑)"
 fi
 
-say "3. 所有托盘 applet 进程（没在跑 = 没人提供图标）"
-for proc in nm-applet blueman-applet pasystray volumeicon telegram vlc \
-            nextcloud fcitx5 ibus-daemon steam discord slack spotify; do
-    if pgrep -fx "$proc" >/dev/null 2>&1 || pgrep -f "$proc" >/dev/null 2>&1; then
-        line "  [运行中] $proc  (pid: $(pgrep -f "$proc" | tr '\n' ' '))"
-    fi
-done
-line "  (上面若一片空白 = 没有任何 SNI 客户端在跑，托盘本来就该是空的)"
+# ── 2. 用全量 QML 日志级别重启，stderr 进文件 ──
+say "2. 重启 quickshell（QT_LOGGING_RULES=qml=true，stderr -> $QSLOG）"
+: > "$QSLOG"
+TAHOE_CFG="${TAHOE_CONFIG_DIR:-$HOME/.config/quickshell/tahoe}"
+line "config: $TAHOE_CFG"
 
-say "4. ★ 实时监听 ${DURATION}s ★"
-line "现在去重现症状。下面会按时间打印："
-line "  [SNI+]  StatusNotifierItem 注册（图标应该出现）"
-line "  [SNI-]  StatusNotifierItem 注销（图标应该消失）"
-line "  [BUS-]  D-Bus 服务消失（看是哪个 app 的服务掉了）"
-line "  [BUS+]  D-Bus 服务出现"
-line "────────────────────────────────────────────────"
+# 启动。用 nohup + setsid 保证脱离脚本也能活，日志进文件。
+QT_LOGGING_RULES="qml=true" \
+    nohup quickshell -p "$TAHOE_CFG" >"$QSLOG" 2>&1 &
+QSPID=$!
+setsid true 2>/dev/null || true
+disown 2>/dev/null || true
 
-# 监听 1：watcher 的 Registered/Unregistered 信号
-dbus-monitor --session \
-    "type='signal',sender='org.kde.StatusNotifierWatcher',interface='org.kde.StatusNotifierWatcher'" \
-    2>&1 | while read -r l; do printf '%s[SNI] %s\n' "$(ts)" "$l"; done \
-    >> "$REPORT" &
-SNI_PID=$!
+# 等它起来
+sleep 2
+if pgrep -x quickshell >/dev/null 2>&1; then
+    line "quickshell 已重启 (pid: $(pgrep -x quickshell | tr '\n' ' '))"
+else
+    line "!!! quickshell 没起来，看 $QSLOG。"
+    line "── 启动日志前 30 行 ──"
+    head -n 30 "$QSLOG" 2>/dev/null | tee -a "$REPORT"
+    exit 1
+fi
 
-# 监听 2：会话总线上所有 NameOwnerChanged（服务增删），过滤掉无关噪音
-dbus-monitor --session \
-    "type='signal',interface='org.freedesktop.DBus',member='NameOwnerChanged'" \
-    2>&1 | while read -r l; do
-        # 只打印看起来像应用服务名（含点）且不是 quickshell/dbus 自身的
-        case "$l" in
-            *org.kde.StatusNotifier*|*:*) printf '%s[BUS] %s\n' "$(ts)" "$l" ;;
-        esac
-    done >> "$REPORT" &
-BUS_PID=$!
+# ── 3. 留时间重现症状 ──
+say "3. ★ 现在去重现症状（${WAIT}s）★"
+line "  - 鼠标放 dock 上的 pinned 图标（Launchpad/Finder/Terminal/...）"
+line "  - 点开启动器看空白"
+line "  - 把'图标消失'重现出来"
+line "倒计时："
+BEFORE=$(wc -l < "$QSLOG" 2>/dev/null || echo 0)
+line "（日志起始行数: $BEFORE，重现后行数会增加）"
 
-# 倒计时，让用户知道还剩多久
-for i in $(seq "$DURATION" -1 1); do
-    printf '\r监听中... %3ds 剩余   ' "$i" >&2
+for i in $(seq "$WAIT" -1 1); do
+    printf '\r  剩余 %2ds   ' "$i" >&2
     sleep 1
 done
-printf '\r                      \n' >&2
+printf '\r              \n' >&2
 
-kill "$SNI_PID" "$BUS_PID" 2>/dev/null || true
-wait "$SNI_PID" "$BUS_PID" 2>/dev/null || true
+AFTER=$(wc -l < "$QSLOG" 2>/dev/null || echo 0)
+line "（日志现在行数: $AFTER，新增 $((AFTER - BEFORE)) 行）"
 
-say "5. 监听期间 quickshell 有没有打 warning（再扫一次 log.log）"
-QS_DIR="/run/user/$(id -u)/quickshell/by-id"
-if [[ -d "$QS_DIR" ]]; then
-    LATEST=$(ls -t "$QS_DIR" 2>/dev/null | head -1)
-    line "实例: $QS_DIR/$LATEST"
-    # 只看最近 DURATION+30 秒内的、非 brightnessctl 的 warning
-    tail -n 400 "$QS_DIR/$LATEST/log.log" 2>/dev/null \
-        | grep -ivE "brightnessctl" \
-        | grep -iE "WARN|error|StatusNotifier|sni|tray|unregister|removed" \
-        | tail -n 30 | tee -a "$REPORT" || line "(监听期间无非 brightnessctl 的 warning)"
+# ── 4. 抓 hover 期间的 QML warning ──
+say "4. ★ hover 期间的输出（关键）★"
+line "── 全量日志中匹配 QML/错误的行（最后 80 行）──"
+grep -inE "qml|error|warn|type|binding|image|source|null|undefined|cannot|failed|assign|icon" \
+    "$QSLOG" 2>/dev/null | tail -n 80 | tee -a "$REPORT" \
+    || line "(没有任何匹配行 — 见第 5 段)"
+
+line
+line "── 如果上面空，看原始日志最后 40 行 ──"
+tail -n 40 "$QSLOG" 2>/dev/null | tee -a "$REPORT"
+
+# ── 5. 判定 ──
+say "5. 判定"
+if [[ "$AFTER" -le "$BEFORE" ]]; then
+    line "!!! hover 期间日志一行都没增加。"
+    line "这说明 hover 根本没经过 quickshell 的 QML 引擎 ——"
+    line "input 事件可能被 niri 的 input region 直接吞掉了。"
+    line "方向转向：niri layer-shell input region / PanelWindow 的 WLayer。"
 else
-    line "(quickshell 运行时目录不存在)"
+    MATCHED=$(grep -icE "qml|error|warn|type|binding|null|undefined|cannot|failed|assign" "$QSLOG" 2>/dev/null || echo 0)
+    line "hover 期间新增 $((AFTER - BEFORE)) 行日志，其中 $MATCHED 行疑似 QML 错误。"
+    line "把上面第 4 段贴给 AI 即可定位。"
 fi
 
-say "诊断完成"
+say "完成"
 line "报告: $REPORT"
-line "重点看第 4 段：SNI+/SNI- 出现的顺序和对应的服务名。"
+line "原始日志: $QSLOG"

@@ -1,0 +1,126 @@
+// Phase 0 Tahoe prototype config.
+//
+// Keep this file source-only and deploy it to ~/.config/niri/tahoe/config.kdl
+// through scripts/arch-update.sh. It intentionally does not replace the
+// user's default ~/.config/niri/config.kdl.
+
+input {
+    keyboard {
+        xkb {}
+        numlock
+    }
+
+    touchpad {
+        tap
+        natural-scroll
+    }
+}
+
+layout {
+    gaps 16
+    center-focused-column "never"
+    default-column-width { proportion 0.5; }
+
+    focus-ring {
+        off
+    }
+
+    border {
+        off
+    }
+
+    shadow {
+        on
+        softness 36
+        spread 4
+        offset x=0 y=10
+        color "#0006"
+        inactive-color "#0004"
+    }
+}
+
+blur {
+    on
+    passes 3
+    offset 4
+    noise 0.025
+    saturation 1.35
+}
+
+hotkey-overlay {
+    skip-at-startup
+}
+
+animations {
+    window-open {
+        duration-ms 180
+        curve "ease-out-cubic"
+    }
+
+    window-close {
+        duration-ms 140
+        curve "ease-out-quad"
+    }
+
+    window-movement {
+        spring damping-ratio=0.9 stiffness=650 epsilon=0.001
+    }
+}
+
+window-rule {
+    open-floating true
+    geometry-corner-radius 18
+    clip-to-geometry true
+
+    shadow {
+        on
+        softness 36
+        spread 4
+        offset x=0 y=10
+        color "#0006"
+        inactive-color "#0004"
+    }
+
+    background-effect {
+        xray false
+        blur true
+        noise 0.025
+        saturation 1.35
+    }
+
+    popups {
+        geometry-corner-radius 14
+
+        background-effect {
+            blur true
+            noise 0.02
+            saturation 1.3
+        }
+    }
+}
+
+layer-rule {
+    match namespace="^quickshell"
+
+    shadow {
+        on
+        softness 28
+        spread 2
+        offset x=0 y=8
+        color "#0004"
+    }
+
+    background-effect {
+        blur true
+        noise 0.02
+        saturation 1.3
+    }
+}
+
+binds {
+    Mod+Return hotkey-overlay-title="Terminal" { spawn "alacritty"; }
+    Mod+D hotkey-overlay-title="Launcher" { spawn "fuzzel"; }
+    Mod+Q hotkey-overlay-title="Close Window" { close-window; }
+    Mod+F hotkey-overlay-title="Toggle Fullscreen" { fullscreen-window; }
+    Mod+Shift+E hotkey-overlay-title="Exit niri" { quit; }
+}

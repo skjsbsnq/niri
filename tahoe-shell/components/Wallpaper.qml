@@ -16,8 +16,9 @@ PanelWindow {
         bottom: true
     }
 
-    aboveWindows: false
-    exclusiveZone: 0
+    exclusionMode: ExclusionMode.Ignore
+    WlrLayershell.layer: WlrLayer.Background
+    WlrLayershell.namespace: "tahoe-wallpaper"
     color: "#1c1d20"
 
     Image {

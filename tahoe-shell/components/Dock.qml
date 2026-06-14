@@ -303,11 +303,17 @@ PanelWindow {
                     }
 
                     // Magnification easing (icon scale + lift track the pointer).
-                    // Same useSpring gate as bounce: spring on real GPUs,
-                    // NumberAnimation everywhere else.
+                    // IMPORTANT for feel: magnification is bound to proximityScale()
+                    // which already tracks the pointer every move. Spring-ify added a
+                    // Behavior here, but on VMs (useSpring=false) a NumberAnimation
+                    // buffer makes magnification LAG behind fast sweeps — feels
+                    // sticky/sluggish vs the pre-spring instant tracking. So the
+                    // NumberAnimation fallback uses duration 0 (instant): the
+                    // pointer-following IS the easing. Only the spring path (real
+                    // GPU) adds its own smoothing, which is what gives the wave.
                     Behavior on magnification {
                         enabled: !root.useSpring
-                        NumberAnimation { duration: 130; easing.type: Easing.OutCubic }
+                        NumberAnimation { duration: 0 }
                     }
                     Behavior on magnification {
                         enabled: root.useSpring

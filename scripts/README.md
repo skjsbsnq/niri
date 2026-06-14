@@ -44,9 +44,24 @@ BUILD_NIRI_FORK=auto bash scripts/arch-update.sh
 bash scripts/run-tahoe-session.sh
 ```
 
+`run-tahoe-session.sh` defaults to `NIRI_MODE=auto`: it starts nested niri when it sees an existing `WAYLAND_DISPLAY` or `DISPLAY`, and starts a full session when run from a real TTY.
+
+When running from a terminal inside an existing desktop, force nested mode if needed:
+
+```sh
+NIRI_MODE=nested bash scripts/run-tahoe-session.sh
+```
+
+When running from a real TTY and you want niri to own the session:
+
+```sh
+NIRI_MODE=session bash scripts/run-tahoe-session.sh
+```
+
 Useful environment overrides:
 
 ```sh
+NIRI_MODE=nested bash scripts/run-tahoe-session.sh
 NIRI_CONFIG=/path/to/config.kdl bash scripts/run-tahoe-session.sh
 TAHOE_CONFIG_DIR=/path/to/tahoe-shell bash scripts/run-tahoe-session.sh
 NIRI_BIN=/path/to/niri bash scripts/run-tahoe-session.sh

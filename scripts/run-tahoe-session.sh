@@ -18,6 +18,7 @@ NIRI_BIN="${NIRI_BIN:-"$INSTALL_PREFIX/bin/niri"}"
 QUICKSHELL_BIN="${QUICKSHELL_BIN:-quickshell}"
 TAHOE_CONFIG_DIR="${TAHOE_CONFIG_DIR:-"$HOME/.config/quickshell/tahoe"}"
 NIRI_CONFIG="${NIRI_CONFIG:-"$HOME/.config/niri/tahoe/config.kdl"}"
+NIRI_MODE="${NIRI_MODE:-auto}"
 
 require_cmd() {
   command -v "$1" >/dev/null 2>&1 || die "missing required command: $1"
@@ -39,6 +40,7 @@ resolve_niri_bin() {
 
 main() {
   local niri_bin
+  local resolved_mode
   local -a niri_args
   local -a shell_args
 
@@ -48,7 +50,27 @@ main() {
   [[ -f "$TAHOE_CONFIG_DIR/shell.qml" ]] || die "Tahoe shell entry not found: $TAHOE_CONFIG_DIR/shell.qml"
 
   niri_bin="$(resolve_niri_bin)"
-  niri_args=("$niri_bin" "--session")
+
+  case "$NIRI_MODE" in
+    auto)
+      if [[ -n "${WAYLAND_DISPLAY:-}" || -n "${DISPLAY:-}" ]]; then
+        resolved_mode="nested"
+      else
+        resolved_mode="session"
+      fi
+      ;;
+    nested|session)
+      resolved_mode="$NIRI_MODE"
+      ;;
+    *)
+      die "invalid NIRI_MODE: $NIRI_MODE; expected auto, nested, or session"
+      ;;
+  esac
+
+  niri_args=("$niri_bin")
+  if [[ "$resolved_mode" == session ]]; then
+    niri_args+=("--session")
+  fi
 
   if [[ -n "$NIRI_CONFIG" ]]; then
     [[ -f "$NIRI_CONFIG" ]] || die "NIRI_CONFIG does not exist: $NIRI_CONFIG"
@@ -59,6 +81,7 @@ main() {
 
   log "repo: $REPO_DIR"
   log "niri: $niri_bin"
+  log "mode: $resolved_mode"
   log "Tahoe shell: $TAHOE_CONFIG_DIR"
 
   exec "${niri_args[@]}" -- "${shell_args[@]}"

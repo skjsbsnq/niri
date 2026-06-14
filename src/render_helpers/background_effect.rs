@@ -36,6 +36,46 @@ pub struct Options {
     pub xray: bool,
     pub noise: Option<f64>,
     pub saturation: Option<f64>,
+    pub glass: GlassOptions,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GlassOptions {
+    pub tint_color: [f32; 4],
+    pub tint_amount: f32,
+    pub edge_highlight: f32,
+    pub refraction: f32,
+}
+
+impl Default for GlassOptions {
+    fn default() -> Self {
+        Self {
+            tint_color: [1., 1., 1., 1.],
+            tint_amount: 0.,
+            edge_highlight: 0.,
+            refraction: 0.,
+        }
+    }
+}
+
+impl GlassOptions {
+    fn from_effect(effect: niri_config::BackgroundEffect) -> Self {
+        let tint_color = effect
+            .tint_color
+            .unwrap_or_else(|| niri_config::Color::new_unpremul(1., 1., 1., 1.))
+            .to_array_unpremul();
+
+        Self {
+            tint_color,
+            tint_amount: effect.tint_amount.unwrap_or(0.) as f32,
+            edge_highlight: effect.edge_highlight.unwrap_or(0.) as f32,
+            refraction: effect.refraction.unwrap_or(0.) as f32,
+        }
+    }
+
+    fn is_visible(&self) -> bool {
+        self.tint_amount > 0. || self.edge_highlight > 0. || self.refraction > 0.
+    }
 }
 
 impl Options {
@@ -44,6 +84,7 @@ impl Options {
             || self.blur
             || self.noise.is_some_and(|x| x > 0.)
             || self.saturation.is_some_and(|x| x != 1.)
+            || self.glass.is_visible()
     }
 }
 
@@ -126,6 +167,7 @@ impl BackgroundEffect {
             xray: effect.xray == Some(true),
             noise: effect.noise,
             saturation: effect.saturation,
+            glass: GlassOptions::from_effect(effect),
         };
 
         // If we have some background effect but xray wasn't explicitly set, default it to true
@@ -179,6 +221,7 @@ impl BackgroundEffect {
             1.
         };
         let saturation = self.options.saturation.unwrap_or(saturation) as f32;
+        let glass = self.options.glass;
 
         if self.options.xray {
             let Some(xray) = ctx.xray else {
@@ -193,13 +236,14 @@ impl BackgroundEffect {
                 blur,
                 noise,
                 saturation,
+                glass,
                 &mut |elem| push(elem.into()),
             );
         } else {
             // Render non-xray effect.
             let elem = self
                 .nonxray
-                .render(ns, params, blur_options, noise, saturation);
+                .render(ns, params, blur_options, noise, saturation, glass);
             push(elem.into());
         }
     }

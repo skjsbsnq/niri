@@ -27,18 +27,20 @@ uniform vec4 corner_radius;
 uniform mat3 input_to_geo;
 
 float niri_rounding_alpha(vec2 coords, vec2 size, vec4 corner_radius);
-vec4 postprocess(vec4 color);
+vec2 niri_refraction_offset(vec2 coords_geo);
+vec4 postprocess(vec4 color, vec2 coords_geo);
 
 void main() {
     vec3 coords_geo = input_to_geo * vec3(v_coords, 1.0);
 
     // Sample the texture.
-    vec4 color = texture2D(tex, v_coords);
+    vec2 sample_coords = v_coords + niri_refraction_offset(coords_geo.xy);
+    vec4 color = texture2D(tex, sample_coords);
 #if defined(NO_ALPHA)
     color = vec4(color.rgb, 1.0);
 #endif
 
-    color = postprocess(color);
+    color = postprocess(color, coords_geo.xy);
 
     if (coords_geo.x < 0.0 || 1.0 < coords_geo.x || coords_geo.y < 0.0 || 1.0 < coords_geo.y) {
         // Clip outside geometry.

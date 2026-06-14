@@ -1065,6 +1065,14 @@ pub struct BackgroundEffectRule {
     pub noise: Option<FloatOrInt<0, 1000>>,
     #[knuffel(child, unwrap(argument))]
     pub saturation: Option<FloatOrInt<0, 1000>>,
+    #[knuffel(child)]
+    pub tint_color: Option<Color>,
+    #[knuffel(child, unwrap(argument))]
+    pub tint_amount: Option<FloatOrInt<0, 1000>>,
+    #[knuffel(child, unwrap(argument))]
+    pub edge_highlight: Option<FloatOrInt<0, 1000>>,
+    #[knuffel(child, unwrap(argument))]
+    pub refraction: Option<FloatOrInt<0, 1000>>,
 }
 
 /// Resolved background effect rule.
@@ -1087,11 +1095,15 @@ pub struct BackgroundEffect {
 
     pub noise: Option<f64>,
     pub saturation: Option<f64>,
+    pub tint_color: Option<Color>,
+    pub tint_amount: Option<f64>,
+    pub edge_highlight: Option<f64>,
+    pub refraction: Option<f64>,
 }
 
 impl MergeWith<BackgroundEffectRule> for BackgroundEffect {
     fn merge_with(&mut self, part: &BackgroundEffectRule) {
-        merge_clone_opt!((self, part), xray, blur);
+        merge_clone_opt!((self, part), xray, blur, tint_color);
 
         if let Some(x) = part.noise {
             self.noise = Some(x.0);
@@ -1099,6 +1111,18 @@ impl MergeWith<BackgroundEffectRule> for BackgroundEffect {
 
         if let Some(x) = part.saturation {
             self.saturation = Some(x.0);
+        }
+
+        if let Some(x) = part.tint_amount {
+            self.tint_amount = Some(x.0);
+        }
+
+        if let Some(x) = part.edge_highlight {
+            self.edge_highlight = Some(x.0);
+        }
+
+        if let Some(x) = part.refraction {
+            self.refraction = Some(x.0);
         }
     }
 }
@@ -1109,6 +1133,36 @@ mod tests {
 
     use super::*;
     use crate::Config;
+
+    #[test]
+    fn parse_background_effect_glass_params() {
+        let config = Config::parse_mem(
+            r##"
+            window-rule {
+                background-effect {
+                    tint-color "#f8fbff"
+                    tint-amount 0.12
+                    edge-highlight 0.34
+                    refraction 0.014
+                }
+            }
+            "##,
+        )
+        .unwrap();
+
+        let rule = &config.window_rules[0].background_effect;
+        assert_eq!(rule.tint_color, Some("#f8fbff".parse().unwrap()));
+        assert_eq!(rule.tint_amount.map(|x| x.0), Some(0.12));
+        assert_eq!(rule.edge_highlight.map(|x| x.0), Some(0.34));
+        assert_eq!(rule.refraction.map(|x| x.0), Some(0.014));
+
+        let mut resolved = BackgroundEffect::default();
+        resolved.merge_with(rule);
+        assert_eq!(resolved.tint_color, Some("#f8fbff".parse().unwrap()));
+        assert_eq!(resolved.tint_amount, Some(0.12));
+        assert_eq!(resolved.edge_highlight, Some(0.34));
+        assert_eq!(resolved.refraction, Some(0.014));
+    }
 
     #[test]
     fn parse_gradient_interpolation() {

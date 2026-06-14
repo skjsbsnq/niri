@@ -14,7 +14,7 @@ use smithay::utils::user_data::UserDataMap;
 use smithay::utils::{Buffer, Logical, Physical, Point, Rectangle, Scale, Size, Transform};
 
 use crate::backend::tty::{TtyFrame, TtyRenderer, TtyRendererError};
-use crate::render_helpers::background_effect::RenderParams;
+use crate::render_helpers::background_effect::{GlassOptions, RenderParams};
 use crate::render_helpers::effect_buffer::EffectBuffer;
 use crate::render_helpers::renderer::AsGlesFrame as _;
 use crate::render_helpers::shaders::{mat3_uniform, Shaders};
@@ -79,6 +79,7 @@ pub struct XrayElement {
     blur: bool,
     noise: f32,
     saturation: f32,
+    glass: GlassOptions,
     bg_color: Color32F,
     program: Option<GlesTexProgram>,
 }
@@ -102,6 +103,7 @@ impl Xray {
         blur: bool,
         noise: f32,
         saturation: f32,
+        glass: GlassOptions,
         push: &mut dyn FnMut(XrayElement),
     ) {
         let program = Shaders::get(ctx.renderer).postprocess_and_clip.clone();
@@ -200,6 +202,7 @@ impl Xray {
                     blur,
                     noise,
                     saturation,
+                    glass,
                     bg_color: *bg_color,
                     program: program.clone(),
                 };
@@ -250,6 +253,7 @@ impl Xray {
                 blur,
                 noise,
                 saturation,
+                glass,
                 bg_color: self.backdrop_color,
                 program: program.clone(),
             };
@@ -259,7 +263,7 @@ impl Xray {
 }
 
 impl XrayElement {
-    fn compute_uniforms(&self) -> [Uniform<'static>; 7] {
+    fn compute_uniforms(&self) -> [Uniform<'static>; 11] {
         [
             Uniform::new("niri_scale", self.scale),
             Uniform::new("geo_size", <[f32; 2]>::from(self.clip_geo_size)),
@@ -268,6 +272,10 @@ impl XrayElement {
             Uniform::new("noise", self.noise),
             Uniform::new("saturation", self.saturation),
             Uniform::new("bg_color", self.bg_color.components()),
+            Uniform::new("tint_color", self.glass.tint_color),
+            Uniform::new("tint_amount", self.glass.tint_amount),
+            Uniform::new("edge_highlight", self.glass.edge_highlight),
+            Uniform::new("refraction", self.glass.refraction),
         ]
     }
 }

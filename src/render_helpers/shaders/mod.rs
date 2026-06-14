@@ -90,7 +90,8 @@ impl Shaders {
                 concat!(
                     include_str!("clipped_surface.frag"),
                     include_str!("rounding_alpha.frag"),
-                    "\nvec4 postprocess(vec4 color) { return color; }",
+                    "\nvec2 niri_refraction_offset(vec2 coords_geo) { return vec2(0.0); }",
+                    "\nvec4 postprocess(vec4 color, vec2 coords_geo) { return color; }",
                 ),
                 &[
                     UniformName::new("niri_scale", UniformType::_1f),
@@ -119,6 +120,10 @@ impl Shaders {
                     UniformName::new("noise", UniformType::_1f),
                     UniformName::new("saturation", UniformType::_1f),
                     UniformName::new("bg_color", UniformType::_4f),
+                    UniformName::new("tint_color", UniformType::_4f),
+                    UniformName::new("tint_amount", UniformType::_1f),
+                    UniformName::new("edge_highlight", UniformType::_1f),
+                    UniformName::new("refraction", UniformType::_1f),
                 ],
             )
             .map_err(|err| {

@@ -259,38 +259,38 @@ tahoe-shell/
 
 Windows 操作：
 
-- [ ] 新建 `tahoe-shell/`。
-- [ ] 新建 `shell.qml` 作为入口。
-- [ ] 新建 `components/`、`services/`、`assets/` 目录。
-- [ ] 从 Web 项目复制或引用 `background/`。
-- [ ] 从 Web 项目复制或引用 `icon/dock/`。
-- [ ] 从 Web 项目复制或引用 `icon/Launchpad/`。
-- [ ] 从 Web 项目复制或引用 `icon/symbols/`。
-- [ ] 实现 `TopBar.qml`。
-- [ ] 用 `PanelWindow` 把顶栏固定到屏幕顶部。
-- [ ] 顶栏显示时间、基础状态区和控制中心入口。
-- [ ] 实现 `Dock.qml`。
-- [ ] 用 `PanelWindow` 把 Dock 固定到屏幕底部。
-- [ ] Dock 支持固定 app 图标。
-- [ ] Dock 支持显示当前窗口列表。
-- [ ] 实现 `WindowButton.qml`。
-- [ ] 窗口按钮显示 app icon、title 或 appId。
-- [ ] 接入 `ToplevelManager.toplevels`。
-- [ ] 点击窗口按钮调用 `activate()`。
-- [ ] 实现 `ControlCenter.qml`。
-- [ ] 控制中心支持打开和关闭。
-- [ ] 控制中心作为 overlay 或 top layer 面板显示。
-- [ ] 控制中心使用透明背景和 blur region。
-- [ ] 接入 `BackgroundEffect.blurRegion`。
-- [ ] 实现 `Launchpad.qml`。
-- [ ] Launchpad 显示 app grid。
-- [ ] Launchpad 支持打开和关闭。
-- [ ] 实现 `services/Apps.qml`，维护固定 app 列表和图标映射。
-- [ ] 实现 `services/Niri.qml`，先用 Quickshell 现有 toplevel/workspace 能力。
-- [ ] 需要时用 `Process` 临时执行 `niri msg --json`。
-- [ ] 接入 `WindowManager.windowsets` 获取 workspace。
-- [ ] 顶栏或 Dock 显示当前 workspace。
-- [ ] 清理硬编码路径，集中管理 assets 路径。
+- [x] 新建 `tahoe-shell/`。
+- [x] 新建 `shell.qml` 作为入口。
+- [x] 新建 `components/`、`services/`、`assets/` 目录。
+- [x] 从 Web 项目复制或引用 `background/`。
+- [x] 从 Web 项目复制或引用 `icon/dock/`。
+- [x] 从 Web 项目复制或引用 `icon/Launchpad/`。
+- [x] 从 Web 项目复制或引用 `icon/symbols/`。
+- [x] 实现 `TopBar.qml`。
+- [x] 用 `PanelWindow` 把顶栏固定到屏幕顶部。
+- [x] 顶栏显示时间、基础状态区和控制中心入口。
+- [x] 实现 `Dock.qml`。
+- [x] 用 `PanelWindow` 把 Dock 固定到屏幕底部。
+- [x] Dock 支持固定 app 图标。
+- [x] Dock 支持显示当前窗口列表。
+- [x] 实现 `WindowButton.qml`。
+- [x] 窗口按钮显示 app icon、title 或 appId。
+- [x] 接入 `ToplevelManager.toplevels`。
+- [x] 点击窗口按钮调用 `activate()`。
+- [x] 实现 `ControlCenter.qml`。
+- [x] 控制中心支持打开和关闭。
+- [x] 控制中心作为 overlay 或 top layer 面板显示。
+- [x] 控制中心使用透明背景和 blur region。
+- [x] 接入 `BackgroundEffect.blurRegion`。
+- [x] 实现 `Launchpad.qml`。
+- [x] Launchpad 显示 app grid。
+- [x] Launchpad 支持打开和关闭。
+- [x] 实现 `services/Apps.qml`，维护固定 app 列表和图标映射。
+- [x] 实现 `services/Niri.qml`，先用 Quickshell 现有 toplevel/workspace 能力。
+- [x] 已评估：不需要用 `Process` 临时执行 `niri msg --json`，现有 `ToplevelManager` 和 `WindowManager.windowsets` 已覆盖 Phase 1。
+- [x] 接入 `WindowManager.windowsets` 获取 workspace。
+- [x] 顶栏或 Dock 显示当前 workspace。
+- [x] 清理硬编码路径，集中管理 assets 路径。
 
 Hyper-V Arch Linux 操作：
 

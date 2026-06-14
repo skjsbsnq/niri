@@ -9,6 +9,9 @@ PanelWindow {
     id: root
 
     property bool open: false
+    property var niriService
+
+    signal closeRequested()
 
     visible: open
     aboveWindows: true
@@ -47,6 +50,40 @@ PanelWindow {
 
             RowLayout {
                 Layout.fillWidth: true
+                spacing: 8
+
+                Text {
+                    text: "Control Center"
+                    color: "#202124"
+                    font.pixelSize: 14
+                    font.weight: Font.DemiBold
+                    Layout.fillWidth: true
+                    verticalAlignment: Text.AlignVCenter
+                }
+
+                Rectangle {
+                    Layout.preferredWidth: 24
+                    Layout.preferredHeight: 24
+                    radius: 12
+                    color: "#52ffffff"
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: "x"
+                        color: "#202124"
+                        font.pixelSize: 13
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.closeRequested()
+                    }
+                }
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
                 spacing: 10
 
                 ControlTile {
@@ -65,8 +102,8 @@ PanelWindow {
             }
 
             ControlTile {
-                title: "Display"
-                value: "70%"
+                title: "Workspace"
+                value: root.niriService ? root.niriService.activeWorkspaceName : "1"
                 accent: "#ff9f0a"
                 Layout.fillWidth: true
                 Layout.preferredHeight: 78

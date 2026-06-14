@@ -26,7 +26,10 @@ TAHOE_SESSION_LAUNCHER_SRC="${TAHOE_SESSION_LAUNCHER_SRC:-"$REPO_DIR/scripts/tah
 TAHOE_SESSION_BIN="${TAHOE_SESSION_BIN:-"$NIRI_BIN_DIR/tahoe-niri-session"}"
 TAHOE_SESSION_DESKTOP_DIR="${TAHOE_SESSION_DESKTOP_DIR:-"$HOME/.local/share/wayland-sessions"}"
 TAHOE_SESSION_DESKTOP_TARGET="${TAHOE_SESSION_DESKTOP_TARGET:-"$TAHOE_SESSION_DESKTOP_DIR/tahoe-niri.desktop"}"
+TAHOE_SYSTEM_SESSION_DESKTOP_DIR="${TAHOE_SYSTEM_SESSION_DESKTOP_DIR:-/usr/share/wayland-sessions}"
+TAHOE_SYSTEM_SESSION_DESKTOP_TARGET="${TAHOE_SYSTEM_SESSION_DESKTOP_TARGET:-"$TAHOE_SYSTEM_SESSION_DESKTOP_DIR/tahoe-niri.desktop"}"
 DEPLOY_TAHOE_SESSION_ENTRY="${DEPLOY_TAHOE_SESSION_ENTRY:-true}"
+DEPLOY_TAHOE_SYSTEM_SESSION_ENTRY="${DEPLOY_TAHOE_SYSTEM_SESSION_ENTRY:-true}"
 BUILD_NIRI_FORK="${BUILD_NIRI_FORK:-false}"
 FORCE_NIRI_BUILD="${FORCE_NIRI_BUILD:-false}"
 
@@ -44,6 +47,7 @@ shell_deployed=false
 niri_config_deployed=false
 session_launcher_deployed=false
 session_desktop_deployed=false
+system_session_desktop_deployed=false
 root_git=false
 niri_git=false
 niri_root_submodule=false
@@ -139,14 +143,33 @@ files_differ() {
 }
 
 desktop_needs_update() {
-  [[ "$DEPLOY_TAHOE_SESSION_ENTRY" == true ]] || return 1
-  [[ -f "$TAHOE_SESSION_DESKTOP_TARGET" ]] || return 0
+  local target="$1"
 
-  grep -Fxq "Name=Tahoe Niri" "$TAHOE_SESSION_DESKTOP_TARGET" || return 0
-  grep -Fxq "Exec=$TAHOE_SESSION_BIN" "$TAHOE_SESSION_DESKTOP_TARGET" || return 0
-  grep -Fxq "TryExec=$TAHOE_SESSION_BIN" "$TAHOE_SESSION_DESKTOP_TARGET" || return 0
+  [[ -f "$target" ]] || return 0
+
+  grep -Fxq "Name=Tahoe Niri" "$target" || return 0
+  grep -Fxq "Exec=$TAHOE_SESSION_BIN" "$target" || return 0
+  grep -Fxq "Type=Application" "$target" || return 0
+  grep -Fxq "DesktopNames=niri" "$target" || return 0
+
+  if grep -Fxq "TryExec=$TAHOE_SESSION_BIN" "$target"; then
+    return 0
+  fi
 
   return 1
+}
+
+write_tahoe_session_desktop() {
+  local target="$1"
+
+  {
+    printf '[Desktop Entry]\n'
+    printf 'Name=Tahoe Niri\n'
+    printf 'Comment=niri session with Tahoe Quickshell\n'
+    printf 'Exec=%s\n' "$TAHOE_SESSION_BIN"
+    printf 'Type=Application\n'
+    printf 'DesktopNames=niri\n'
+  } > "$target"
 }
 
 sync_dir() {
@@ -205,8 +228,10 @@ deploy_tahoe_shell() {
 }
 
 deploy_tahoe_session_entry() {
-  if [[ "$DEPLOY_TAHOE_SESSION_ENTRY" != true ]]; then
-    log "skipping Tahoe session entry deploy; DEPLOY_TAHOE_SESSION_ENTRY=$DEPLOY_TAHOE_SESSION_ENTRY"
+  local tmp_desktop
+
+  if [[ "$DEPLOY_TAHOE_SESSION_ENTRY" != true && "$DEPLOY_TAHOE_SYSTEM_SESSION_ENTRY" != true ]]; then
+    log "skipping Tahoe session entry deploy; DEPLOY_TAHOE_SESSION_ENTRY=$DEPLOY_TAHOE_SESSION_ENTRY DEPLOY_TAHOE_SYSTEM_SESSION_ENTRY=$DEPLOY_TAHOE_SYSTEM_SESSION_ENTRY"
     return
   fi
 
@@ -216,18 +241,24 @@ deploy_tahoe_session_entry() {
   install -Dm755 "$TAHOE_SESSION_LAUNCHER_SRC" "$TAHOE_SESSION_BIN"
   session_launcher_deployed=true
 
-  log "deploying Tahoe wayland session entry to $TAHOE_SESSION_DESKTOP_TARGET"
-  mkdir -p "$TAHOE_SESSION_DESKTOP_DIR"
-  {
-    printf '[Desktop Entry]\n'
-    printf 'Name=Tahoe Niri\n'
-    printf 'Comment=niri session with Tahoe Quickshell\n'
-    printf 'Exec=%s\n' "$TAHOE_SESSION_BIN"
-    printf 'TryExec=%s\n' "$TAHOE_SESSION_BIN"
-    printf 'Type=Application\n'
-    printf 'DesktopNames=niri\n'
-  } > "$TAHOE_SESSION_DESKTOP_TARGET"
-  session_desktop_deployed=true
+  if [[ "$DEPLOY_TAHOE_SESSION_ENTRY" == true ]]; then
+    log "deploying Tahoe user wayland session entry to $TAHOE_SESSION_DESKTOP_TARGET"
+    mkdir -p "$TAHOE_SESSION_DESKTOP_DIR"
+    write_tahoe_session_desktop "$TAHOE_SESSION_DESKTOP_TARGET"
+    session_desktop_deployed=true
+  fi
+
+  if [[ "$DEPLOY_TAHOE_SYSTEM_SESSION_ENTRY" == true ]]; then
+    require_cmd sudo
+    require_cmd mktemp
+
+    tmp_desktop="$(mktemp)"
+    write_tahoe_session_desktop "$tmp_desktop"
+    log "deploying Tahoe system wayland session entry to $TAHOE_SYSTEM_SESSION_DESKTOP_TARGET"
+    sudo install -Dm644 "$tmp_desktop" "$TAHOE_SYSTEM_SESSION_DESKTOP_TARGET"
+    rm -f "$tmp_desktop"
+    system_session_desktop_deployed=true
+  fi
 }
 
 main() {
@@ -327,10 +358,11 @@ main() {
     need_niri_config_deploy=true
   fi
 
-  if [[ "$DEPLOY_TAHOE_SESSION_ENTRY" == true ]]; then
+  if [[ "$DEPLOY_TAHOE_SESSION_ENTRY" == true || "$DEPLOY_TAHOE_SYSTEM_SESSION_ENTRY" == true ]]; then
     if changed_since_pull '^scripts/(arch-update|tahoe-niri-session)\.sh$' \
       || files_differ "$TAHOE_SESSION_LAUNCHER_SRC" "$TAHOE_SESSION_BIN" \
-      || desktop_needs_update; then
+      || { [[ "$DEPLOY_TAHOE_SESSION_ENTRY" == true ]] && desktop_needs_update "$TAHOE_SESSION_DESKTOP_TARGET"; } \
+      || { [[ "$DEPLOY_TAHOE_SYSTEM_SESSION_ENTRY" == true ]] && desktop_needs_update "$TAHOE_SYSTEM_SESSION_DESKTOP_TARGET"; }; then
       need_session_deploy=true
     fi
   fi
@@ -381,6 +413,8 @@ main() {
   log "  Tahoe session launcher deployed: $session_launcher_deployed"
   log "  Tahoe session desktop deployed: $session_desktop_deployed"
   log "  Tahoe session desktop target: $TAHOE_SESSION_DESKTOP_TARGET"
+  log "  Tahoe system session desktop deployed: $system_session_desktop_deployed"
+  log "  Tahoe system session desktop target: $TAHOE_SYSTEM_SESSION_DESKTOP_TARGET"
 
   if [[ "$scripts_changed" == true ]]; then
     log "scripts changed; rerun this script if the update modified arch-update.sh behavior"

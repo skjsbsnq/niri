@@ -46,10 +46,13 @@ BUILD_NIRI_FORK=auto bash scripts/arch-update.sh
 - Tahoe shell: `~/.config/quickshell/tahoe`
 - session launcher: `~/.local/bin/tahoe-niri-session`
 - user Wayland session entry: `~/.local/share/wayland-sessions/tahoe-niri.desktop`
+- system Wayland session entry: `/usr/share/wayland-sessions/tahoe-niri.desktop`
 
 It does not overwrite `~/.config/niri/config.kdl` or the stock `niri.desktop` session.
 
-Set `DEPLOY_TAHOE_SESSION_ENTRY=false` when running `arch-update.sh` to skip the Tahoe login entry. Set `TAHOE_SESSION_DESKTOP_DIR=/usr/share/wayland-sessions` only when you intentionally want a system session entry and are running with suitable permissions.
+Most display managers scan `/usr/share/wayland-sessions`, so `arch-update.sh` deploys the system entry by default and may prompt for `sudo` the first time that entry changes.
+
+Set `DEPLOY_TAHOE_SESSION_ENTRY=false` to skip the user entry. Set `DEPLOY_TAHOE_SYSTEM_SESSION_ENTRY=false` to skip the system entry. Set `TAHOE_SYSTEM_SESSION_DESKTOP_DIR=/custom/path` only when a machine uses a nonstandard Wayland session directory.
 
 ## Start Session
 
@@ -80,7 +83,7 @@ NIRI_MODE=session bash scripts/run-tahoe-session.sh
 
 This starts niri with the Tahoe config and lets the config autostart Quickshell. It does not pass Quickshell as a child command.
 
-After `arch-update.sh` deploys the login entry, a display manager that reads user Wayland sessions can start the same path by selecting `Tahoe Niri`. If the entry is not visible, either restart the display manager or deploy the desktop file to the system Wayland session directory for that machine.
+After `arch-update.sh` deploys the login entry, a display manager can start the same path by selecting `Tahoe Niri`. If the entry is not visible immediately, log out and restart the display manager so it rescans `/usr/share/wayland-sessions`.
 
 Useful environment overrides:
 

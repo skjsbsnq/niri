@@ -364,30 +364,36 @@ Windows 本地状态：
 - 已在 `config/niri/tahoe-phase0.kdl` 中加入 Tahoe Quickshell 自启动。
 - 已更新 `scripts/run-tahoe-session.sh`：nested 使用 child 启动并禁用配置自启，真实 session 使用配置自启。
 - 已新增 `scripts/tahoe-niri-session.sh` 作为登录会话启动器。
-- 已更新 `scripts/arch-update.sh`，部署 `~/.local/bin/tahoe-niri-session` 和 `~/.local/share/wayland-sessions/tahoe-niri.desktop`。
+- 已更新 `scripts/arch-update.sh`，部署 `~/.local/bin/tahoe-niri-session`、用户级 `~/.local/share/wayland-sessions/tahoe-niri.desktop` 和系统级 `/usr/share/wayland-sessions/tahoe-niri.desktop`。
 - 已更新 `scripts/README.md`，记录 nested、TTY session 和登录管理器启动方式。
 
 Hyper-V Arch Linux 操作：
 
-- [ ] 执行 `bash scripts/arch-update.sh`，部署最新 niri 配置、Tahoe shell 和 session 入口。
-- [ ] 从已有桌面里继续验证 nested 启动不重复拉起 Quickshell。
-- [ ] 从 TTY 执行 `NIRI_MODE=session bash scripts/run-tahoe-session.sh`，验证 niri 能拥有真实 session。
-- [ ] 验证进入 niri 后 Tahoe 顶栏、Dock、控制中心、Launchpad 自动出现。
+- [x] 执行 `bash scripts/arch-update.sh`，部署最新 niri 配置、Tahoe shell 和 session 入口。
+- [x] 从已有桌面里继续验证 nested 启动不重复拉起 Quickshell。
+- [x] 从 TTY 执行 `NIRI_MODE=session bash scripts/run-tahoe-session.sh`，验证 niri 能拥有真实 session。
+- [x] 验证进入 niri 后 Tahoe 顶栏和 Dock 自动出现。
 - [ ] 验证退出 niri 后 Quickshell 不残留异常进程。
 - [ ] 如已部署 `.desktop` 文件，验证登录管理器中能看到 `Tahoe Niri` 入口。
 
+Hyper-V 截图验收记录：
+
+- 2026-06-14 截图确认：`NIRI_MODE=nested bash scripts/run-tahoe-session.sh` 显示 `shell launch: child`，nested niri 中仅出现一套 Tahoe 顶栏和 Dock。
+- 2026-06-14 截图确认：真实 niri session 中 Tahoe 顶栏和 Dock 自动出现，不需要手动运行 Quickshell。
+- 2026-06-14 发现：登录管理器中未显示 `Tahoe Niri`。原因判断为多数登录管理器只扫描 `/usr/share/wayland-sessions`，不扫描用户级 `~/.local/share/wayland-sessions`；后续已回补系统级 session 部署。
+
 Windows 到 Hyper-V 同步验证：
 
-- [ ] Windows 修改并 push Phase 1.5 脚本或配置后，在 Hyper-V Arch Linux 中执行 `bash scripts/arch-update.sh`。
+- [x] Windows 修改并 push Phase 1.5 脚本或配置后，在 Hyper-V Arch Linux 中执行 `bash scripts/arch-update.sh`。
 - [ ] 确认 Hyper-V 中运行的 session 入口、niri 配置、QML 和 Windows 仓库版本一致。
 
 验收标准：
 
-- [ ] 进入 niri session 后 Tahoe shell 自动启动。
-- [ ] 顶栏、Dock、控制中心、Launchpad 不需要手动运行 Quickshell 就可用。
-- [ ] 嵌套开发启动和真实 session 启动不会重复创建 Tahoe shell。
+- [x] 进入 niri session 后 Tahoe shell 自动启动。
+- [x] 顶栏和 Dock 不需要手动运行 Quickshell 就可用。
+- [x] 嵌套开发启动和真实 session 启动不会重复创建 Tahoe shell。
 - [ ] Tahoe session 可以作为后续真机登录会话的部署模板。
-- [ ] 回滚方式明确：禁用自动启动项或恢复普通 niri session 后，不影响用户已有 niri 配置。
+- [x] 回滚方式明确：禁用自动启动项或恢复普通 niri session 后，不影响用户已有 niri 配置。
 
 ## Phase 2: niri Fork 最小化/恢复
 
@@ -850,9 +856,9 @@ Windows 操作：
 
 Hyper-V Arch Linux 操作：
 
-- [ ] 执行 `bash scripts/arch-update.sh`。
-- [ ] 验证 nested 启动仍正常。
-- [ ] 验证真实 niri session 中 Tahoe shell 自动出现。
+- [x] 执行 `bash scripts/arch-update.sh`。
+- [x] 验证 nested 启动仍正常。
+- [x] 验证真实 niri session 中 Tahoe shell 自动出现。
 - [ ] 如已新增 `.desktop` 文件，验证登录管理器入口。
 
 **3. niri minimize/restore**

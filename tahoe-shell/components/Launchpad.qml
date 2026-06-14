@@ -24,10 +24,11 @@ PanelWindow {
         bottom: true
     }
 
-    BackgroundEffect.blurRegion: Region {
-        item: backdrop
-        radius: 0
-    }
+    // DIAG (VMware 图标消失对照): blurRegion 临时禁用（见 Dock.qml 同款注释）。
+    // BackgroundEffect.blurRegion: Region {
+    //     item: backdrop
+    //     radius: 0
+    // }
 
     Rectangle {
         id: backdrop

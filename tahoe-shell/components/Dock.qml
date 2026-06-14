@@ -58,10 +58,13 @@ PanelWindow {
     implicitHeight: 132
     color: "transparent"
 
-    BackgroundEffect.blurRegion: Region {
-        item: dockSurface
-        radius: 24
-    }
+    // DIAG (VMware 图标消失对照): blurRegion 临时禁用。dock 与 launchpad
+    // 共享且交互时重算的唯一东西就是 blur。不消失 -> 实锤 blur 触发的
+    // layer 重绘在 VMware 上丢 Image 纹理。恢复：删掉注释让下面块生效。
+    // BackgroundEffect.blurRegion: Region {
+    //     item: dockSurface
+    //     radius: 24
+    // }
 
     Rectangle {
         id: dockSurface

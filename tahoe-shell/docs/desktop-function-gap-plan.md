@@ -16,7 +16,7 @@
 - Dock 可以显示窗口、activate、restore/minimize 状态。
 - niri fork 已经有 `WindowsChanged`、IPC window state、minimize/restore 等基础。
 - 2026-06-15 已开工：新增 `services/NiriIpc.qml`，先用 `niri msg --json windows` 快照轮询；`services/Niri.qml` 已暴露 `windowList`、`focusedWindow`、`recentWindowList`，Dock 运行状态和顶栏当前应用已开始优先读取统一窗口模型。
-- 2026-06-15 已补配置：`config/niri/tahoe-phase0.kdl` 显式启用 `recent-windows`，配置 Alt/Mod+Tab、同应用切换、高亮和预览参数；窗口切换先复用 niri compositor 侧 MRU 逻辑，不在 Quickshell 里重复实现键盘释放确认。
+- 2026-06-15 已补配置：`config/niri/tahoe-phase0.kdl` 显式启用 `recent-windows`，只配置高亮、预览和时序参数；快捷键保留 niri 默认 MRU 绑定，避免覆盖 compositor 自带 Alt/Mod+Tab 和同应用切换逻辑。窗口切换先复用 niri compositor 侧 MRU 逻辑，不在 Quickshell 里重复实现键盘释放确认。
 
 ### 功能缺口
 
@@ -36,7 +36,7 @@
 2. 在服务层统一窗口模型，保留 Quickshell toplevel 对象，同时合并 niri IPC 中的 id、app_id、title、workspace、output、focused、is_minimized、geometry。
 3. 接入 niri event stream，如果当前 fork/CLI 可用，优先使用事件流；否则短期用低频刷新作为降级。
 4. 将 Dock 的运行状态判断从 appId 模糊匹配逐步迁移到统一窗口模型。
-5. 显式配置 niri `recent-windows` 作为第一版 Alt-Tab UI；Quickshell 侧保留 `recentWindowList` 给后续自定义外观或 Stage Manager 使用。
+5. 显式配置 niri `recent-windows` 视觉/时序参数作为第一版 Alt-Tab UI；快捷键继续使用 niri 默认 MRU 绑定。Quickshell 侧保留 `recentWindowList` 给后续自定义外观或 Stage Manager 使用。
 6. 补 compositor 侧需要的 action：raise/lower 或 activate 后 raise，视 niri fork 当前语义决定。
 
 ### 完成标准

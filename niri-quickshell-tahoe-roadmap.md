@@ -18,7 +18,7 @@
 核心分工：
 
 - niri fork 负责 compositor 级能力：窗口状态、浮动/堆叠、最小化/恢复、snap assist、窗口动画、blur/glass shader、IPC 和 Wayland protocol 状态。
-- Quickshell shell 负责外壳 UI：顶栏、Dock、控制中心、Launchpad、通知中心、窗口列表、工作区 UI。
+- Quickshell shell 负责外壳 UI：顶栏、Dock、控制中心、Launchpad、Spotlight、通知中心、窗口列表、工作区 UI。
 - `macOS-26-Tahoe-for-the-Web-main/` 只作为素材和交互参考：图标、壁纸、视觉参数、动画节奏、Dock magnification、snap preview 行为等。
 
 ## 总体原则
@@ -246,6 +246,7 @@ tahoe-shell/
   - Dock.qml
   - ControlCenter.qml
   - Launchpad.qml
+  - Spotlight.qml
   - WindowButton.qml
 - services/
   - Niri.qml
@@ -285,6 +286,10 @@ Windows 操作：
 - [x] 实现 `Launchpad.qml`。
 - [x] Launchpad 显示 app grid。
 - [x] Launchpad 支持打开和关闭。
+- [x] Launchpad 支持搜索框和 `.desktop` 应用实时过滤。
+- [x] 实现 `Spotlight.qml`。
+- [x] 顶栏新增 Spotlight 入口。
+- [x] Spotlight 支持应用搜索、结果列表、Enter 启动第一条结果、Escape/外部点击关闭。
 - [x] 实现 `services/Apps.qml`，维护固定 app 列表和图标映射。
 - [x] 实现 `services/Niri.qml`，先用 Quickshell 现有 toplevel/workspace 能力。
 - [x] 已评估：不需要用 `Process` 临时执行 `niri msg --json`，现有 `ToplevelManager` 和 `WindowManager.windowsets` 已覆盖 Phase 1。
@@ -318,6 +323,7 @@ Hyper-V 截图验收记录：
 - 2026-06-14 控制中心控件化完成（根仓库 `f2887cc` 重写 + `666c3c8` 崩溃修复 + `01d999a` 位置微调）：原 3 个只显示文字的空 tile 替换为真控件。新增 `services/Controls.qml`（Item visible:false 容器）聚合音量（Pipewire）、亮度（brightnessctl via Process）、Wi-Fi（Networking）、蓝牙（Bluetooth）、正在播放（Mpris）。控制中心重写为 ConnectivityTile（Wi-Fi 标题卡 + 蓝牙圆钮）+ MusicTile（专辑封面 + 传输按钮）+ 亮度/音量 GlassSlider（白色填充，MouseArea 驱动）+ 可折叠 utility 行（Edit 按钮控制）。注册 Material Icons 字体（`assets/fonts/MaterialIconsRound.ttf`，codepoint 已对官方表核对）。所有 Quickshell 单例访问 null-guard，VM 缺硬件不崩。
 - 2026-06-14 崩溃教训：服务根必须用 `Item` 而不是 `QtObject`（QtObject 无默认 children 槽，会导致 `PwObjectTracker`/`Process`/`Timer` 等子对象 "Cannot assign to non-existent default property" fatal，整个 shell 启动失败）。详见 gap-analysis.md 第 1 项。
 - 2026-06-14 控制中心位置：`margins.top` 从 40 调到 36，面板紧贴 34px 顶栏下方 2px。
+- 2026-06-15 已补 Launchpad 搜索框和 Spotlight 基础应用搜索：`services/Apps.qml` 新增统一搜索匹配，Launchpad 过滤 app grid，`Spotlight.qml` 新增顶层搜索 overlay，`TopBar.qml` 新增 Spotlight 入口；完整全局搜索（文件、设置项、计算等）仍留后续。
 - 待继续手动确认：真实 compositor blur、多显示器位置和 exclusive zone。
 
 Windows 到 Hyper-V 同步验证：
@@ -534,6 +540,7 @@ Windows 操作：
 - [x] 新增或复用 render element 绘制 preview。
 - [x] 参考 `insert_hint_element` 的渲染思路。
 - [x] 给 preview 加淡入淡出状态。
+- [x] 2026-06-15 重做 snap preview 视觉：复用 framebuffer blur/glass、rounded border shader 和顶部高光，替换直角实心蓝色块。
 - [x] 补充 floating/snap 相关测试。
 
 Hyper-V Arch Linux 操作：
@@ -632,6 +639,7 @@ Windows 操作：
 - [x] resize 动画使用平滑尺寸变化。
 - [x] snap apply 使用 spring 过渡。
 - [x] snap preview 使用 fade in/out。
+- [x] snap preview 使用圆角毛玻璃视觉。
 - [x] 普通 minimize 先做 fade/scale 版本。
 - [x] 暂不实现 Genie deformation。
 
@@ -743,8 +751,6 @@ Windows 到 Hyper-V 同步验证：
 主要产出：
 
 - 更完整的桌面级窗口体验。
-- 可选的服务端窗口装饰。
-- 可选的红黄绿按钮。
 - 更完整 app menu。
 - 更高级的 Genie minimize。
 
@@ -797,8 +803,6 @@ Hyper-V Arch Linux 操作：
 - [ ] 启动或重启 niri + Quickshell Tahoe shell。
 - [ ] 验证窗口 z-order、raise/lower 和窗口切换体验。
 - [ ] 验证任务栏/Dock 状态与窗口状态一致。
-- [ ] 验证可选窗口装饰不会破坏客户端装饰窗口。
-- [ ] 验证红黄绿按钮映射到正确 niri action。
 - [ ] 验证 Dock icon rect 到 niri IPC 的传输结果。
 - [ ] 验证 minimize/restore snapshot 行为。
 - [ ] 验证 Genie-style 动画不阻塞普通 minimize/restore 闭环。
@@ -817,7 +821,6 @@ Windows 到 Hyper-V 同步验证：
 - [ ] 桌面使用方式更接近传统 Windows/macOS stacking WM。
 - [ ] Dock、窗口状态、最小化、恢复之间状态一致。
 - [ ] Genie effect 不阻塞普通 minimize/restore 闭环。
-- [ ] 可选窗口装饰不会破坏现有客户端装饰窗口。
 - [ ] 高级效果可以关闭或降级。
 - [ ] 到此阶段结束前仍以 Hyper-V 验证为主，不要求真机验证通过。
 
@@ -946,6 +949,7 @@ Windows 操作：
 
 - [x] 在 niri fork 中实现 snap assist。
 - [x] 实现 snap preview。
+- [x] 重做 snap preview 为圆角毛玻璃预览。
 - [x] commit 并 push。
 
 Hyper-V Arch Linux 操作：

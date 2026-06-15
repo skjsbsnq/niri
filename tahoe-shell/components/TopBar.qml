@@ -15,6 +15,7 @@ PanelWindow {
     property bool controlCenterOpen: false
     property bool launchpadOpen: false
     property bool appMenuOpen: false
+    property bool spotlightOpen: false
     property date now: new Date()
     readonly property string activeApp: appsService && niriService ? appsService.toplevelLabel(niriService.activeToplevel) : "Desktop"
     // Number of undismissed notifications. Drives the bell badge to the
@@ -28,6 +29,7 @@ PanelWindow {
 
     signal toggleAppMenu()
     signal toggleControlCenter()
+    signal toggleSpotlight()
     signal toggleLaunchpad()
 
     anchors {
@@ -231,6 +233,36 @@ PanelWindow {
                         if (root.notificationsService)
                             root.notificationsService.dismissCurrent();
                     }
+                }
+            }
+
+            Item {
+                id: spotlightButton
+                Layout.preferredWidth: 30
+                Layout.preferredHeight: 24
+                Layout.alignment: Qt.AlignVCenter
+
+                Rectangle {
+                    anchors.fill: parent
+                    radius: 12
+                    color: root.spotlightOpen ? "#38ffffff" : (spotlightMouse.containsMouse ? "#30ffffff" : "#22ffffff")
+                    border.color: "#40ffffff"
+                }
+
+                Text {
+                    anchors.centerIn: parent
+                    text: "\ue8b6"
+                    color: "#202124"
+                    font.family: "Material Icons"
+                    font.pixelSize: 16
+                }
+
+                MouseArea {
+                    id: spotlightMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.toggleSpotlight()
                 }
             }
 

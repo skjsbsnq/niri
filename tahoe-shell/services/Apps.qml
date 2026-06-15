@@ -70,6 +70,69 @@ QtObject {
         return id.length > 0 ? id : "App";
     }
 
+    function appSearchText(app) {
+        if (!app)
+            return "";
+
+        if (app.desktopEntry)
+            app = app.desktopEntry;
+
+        var parts = [
+            appLabel(app),
+            app.id || "",
+            app.genericName || "",
+            app.startupClass || "",
+            app.execString || ""
+        ];
+
+        if (app.categories)
+            parts.push(String(app.categories));
+        if (app.keywords)
+            parts.push(String(app.keywords));
+
+        return parts.join(" ").toLowerCase();
+    }
+
+    function appMatchesQuery(app, query) {
+        var normalized = String(query || "").trim().toLowerCase();
+        if (normalized.length === 0)
+            return true;
+
+        var haystack = appSearchText(app);
+        var terms = normalized.split(/\s+/);
+        for (var i = 0; i < terms.length; i++) {
+            if (terms[i].length > 0 && haystack.indexOf(terms[i]) === -1)
+                return false;
+        }
+
+        return true;
+    }
+
+    function filteredLaunchpadApps(query) {
+        var normalized = String(query || "").trim();
+        if (normalized.length === 0)
+            return launchpadApps;
+
+        return launchpadApps.filter(function(app) {
+            return appMatchesQuery(app, normalized);
+        });
+    }
+
+    function spotlightResults(query, limit) {
+        var normalized = String(query || "").trim();
+        if (normalized.length === 0)
+            return [];
+
+        var max = Math.max(1, limit || 6);
+        var result = [];
+        for (var i = 0; i < realApplications.length && result.length < max; i++) {
+            if (appMatchesQuery(realApplications[i], normalized))
+                result.push(realApplications[i]);
+        }
+
+        return result;
+    }
+
     function iconForAppId(appId) {
         var normalized = String(appId || "").toLowerCase();
 

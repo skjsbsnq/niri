@@ -14,6 +14,7 @@ ShellRoot {
     property bool controlCenterOpen: false
     property bool launchpadOpen: false
     property bool appMenuOpen: false
+    property bool spotlightOpen: false
 
     // Spring animations look great on real GPUs but corrupt Image textures
     // on software/virtual GPUs (VMware, Hyper-V): a SpringAnimation driving
@@ -69,22 +70,32 @@ ShellRoot {
                 niriService: niri
                 notificationsService: notifications
                 appMenuOpen: shell.appMenuOpen
+                spotlightOpen: shell.spotlightOpen
                 controlCenterOpen: shell.controlCenterOpen
                 launchpadOpen: shell.launchpadOpen
                 onToggleAppMenu: {
                     shell.appMenuOpen = !shell.appMenuOpen;
                     shell.controlCenterOpen = false;
                     shell.launchpadOpen = false;
+                    shell.spotlightOpen = false;
                 }
                 onToggleControlCenter: {
                     shell.controlCenterOpen = !shell.controlCenterOpen;
                     shell.appMenuOpen = false;
+                    shell.launchpadOpen = false;
+                    shell.spotlightOpen = false;
+                }
+                onToggleSpotlight: {
+                    shell.spotlightOpen = !shell.spotlightOpen;
+                    shell.appMenuOpen = false;
+                    shell.controlCenterOpen = false;
                     shell.launchpadOpen = false;
                 }
                 onToggleLaunchpad: {
                     shell.launchpadOpen = !shell.launchpadOpen;
                     shell.appMenuOpen = false;
                     shell.controlCenterOpen = false;
+                    shell.spotlightOpen = false;
                 }
             }
 
@@ -105,6 +116,7 @@ ShellRoot {
                     shell.launchpadOpen = !shell.launchpadOpen;
                     shell.appMenuOpen = false;
                     shell.controlCenterOpen = false;
+                    shell.spotlightOpen = false;
                 }
             }
 
@@ -122,6 +134,13 @@ ShellRoot {
                 useSpring: shell.useSpring
                 open: shell.launchpadOpen
                 onCloseRequested: shell.launchpadOpen = false
+            }
+
+            Spotlight {
+                screen: modelData
+                appsService: apps
+                open: shell.spotlightOpen
+                onCloseRequested: shell.spotlightOpen = false
             }
 
             NotificationToast {

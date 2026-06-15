@@ -12,13 +12,26 @@ PanelWindow {
     // See shell.qml useSpring. Spring on the launcher scale corrupts the
     // app-icon Image textures on VMware/software GPUs. Default false.
     property bool useSpring: false
+    property string query: ""
+    readonly property var filteredApps: root.appsService ? root.appsService.filteredLaunchpadApps(root.query) : []
 
     signal closeRequested()
 
     visible: open || backdrop.opacity > 0.01
     aboveWindows: true
     exclusiveZone: 0
+    focusable: open
     color: "transparent"
+
+    onOpenChanged: {
+        if (open) {
+            query = "";
+            Qt.callLater(function() {
+                if (root.open)
+                    searchInput.forceActiveFocus();
+            });
+        }
+    }
 
     anchors {
         left: true
@@ -98,8 +111,79 @@ PanelWindow {
             }
         }
 
+        Item {
+            id: searchBox
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.top: parent.top
+            width: Math.min(parent.width, 380)
+            height: 42
+
+            Rectangle {
+                anchors.fill: parent
+                radius: 21
+                color: "#cdeaf6ff"
+                border.color: "#72ffffff"
+                border.width: 1
+            }
+
+            Rectangle {
+                anchors.fill: parent
+                anchors.margins: 1
+                radius: 20
+                color: "transparent"
+                border.color: "#24ffffff"
+                border.width: 1
+            }
+
+            Text {
+                anchors.left: parent.left
+                anchors.leftMargin: 17
+                anchors.verticalCenter: parent.verticalCenter
+                text: "\ue8b6"
+                color: "#5f6870"
+                font.family: "Material Icons"
+                font.pixelSize: 18
+            }
+
+            Text {
+                anchors.left: searchInput.left
+                anchors.verticalCenter: parent.verticalCenter
+                text: "Search"
+                color: "#6f7780"
+                font.pixelSize: 15
+                visible: searchInput.text.length === 0
+            }
+
+            TextInput {
+                id: searchInput
+                anchors.left: parent.left
+                anchors.leftMargin: 46
+                anchors.right: parent.right
+                anchors.rightMargin: 18
+                anchors.verticalCenter: parent.verticalCenter
+                height: 26
+                text: root.query
+                color: "#202124"
+                selectionColor: "#7ab7ff"
+                selectedTextColor: "#ffffff"
+                font.pixelSize: 15
+                clip: true
+                focus: root.open
+                verticalAlignment: TextInput.AlignVCenter
+                onTextChanged: root.query = text
+                Keys.onEscapePressed: root.closeRequested()
+                Keys.onReturnPressed: {
+                    if (root.filteredApps.length > 0 && root.appsService) {
+                        root.appsService.launchApp(root.filteredApps[0]);
+                        root.closeRequested();
+                    }
+                }
+            }
+        }
+
         Flickable {
             anchors.fill: parent
+            anchors.topMargin: 74
             contentWidth: width
             contentHeight: grid.implicitHeight
             clip: true
@@ -113,7 +197,7 @@ PanelWindow {
 
                 Repeater {
                     model: ScriptModel {
-                        values: root.appsService ? root.appsService.launchpadApps : []
+                        values: root.filteredApps
                     }
 
                     delegate: Item {
@@ -159,6 +243,16 @@ PanelWindow {
                         }
                     }
                 }
+            }
+
+            Text {
+                anchors.horizontalCenter: parent.horizontalCenter
+                y: 92
+                text: "No Results"
+                color: "#4e565e"
+                font.pixelSize: 15
+                font.weight: Font.DemiBold
+                visible: root.query.trim().length > 0 && root.filteredApps.length === 0
             }
         }
     }

@@ -152,6 +152,7 @@ use crate::protocols::gamma_control::GammaControlManagerState;
 use crate::protocols::mutter_x11_interop::MutterX11InteropManagerState;
 use crate::protocols::output_management::OutputManagementManagerState;
 use crate::protocols::screencopy::{Screencopy, ScreencopyBuffer, ScreencopyManagerState};
+use crate::protocols::tahoe_glass::TahoeGlassManagerState;
 use crate::protocols::virtual_pointer::VirtualPointerManagerState;
 use crate::render_helpers::blur::BlurOptions;
 use crate::render_helpers::debug::push_opaque_regions;
@@ -285,6 +286,7 @@ pub struct Niri {
     pub output_management_state: OutputManagementManagerState,
     pub viewporter_state: ViewporterState,
     pub background_effect_state: BackgroundEffectState,
+    pub tahoe_glass_state: TahoeGlassManagerState,
     pub xdg_foreign_state: XdgForeignState,
     pub shm_state: ShmState,
     pub output_manager_state: OutputManagerState,
@@ -2359,6 +2361,8 @@ impl Niri {
             ScreencopyManagerState::new::<State, _>(&display_handle, client_is_unrestricted);
         let viewporter_state = ViewporterState::new::<State>(&display_handle);
         let background_effect_state = BackgroundEffectState::new::<State>(&display_handle);
+        let tahoe_glass_state =
+            TahoeGlassManagerState::new::<State, _>(&display_handle, client_is_unrestricted);
         let xdg_foreign_state = XdgForeignState::new::<State>(&display_handle);
 
         let is_tty = matches!(backend, Backend::Tty(_));
@@ -2544,6 +2548,7 @@ impl Niri {
             screencopy_state,
             viewporter_state,
             background_effect_state,
+            tahoe_glass_state,
             xdg_foreign_state,
             text_input_state,
             input_method_state,

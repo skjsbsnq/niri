@@ -16,8 +16,9 @@ use crate::render_helpers::renderer::NiriRenderer;
 use crate::render_helpers::shadow::ShadowRenderElement;
 use crate::render_helpers::solid_color::{SolidColorBuffer, SolidColorRenderElement};
 use crate::render_helpers::surface::push_elements_from_surface_tree;
+use crate::render_helpers::tahoe_glass::TahoeGlassElement;
 use crate::render_helpers::xray::XrayPos;
-use crate::render_helpers::{background_effect, RenderCtx};
+use crate::render_helpers::{background_effect, tahoe_glass, RenderCtx};
 use crate::utils::{baba_is_float_offset, round_logical_in_physical};
 
 #[derive(Debug)]
@@ -45,6 +46,9 @@ pub struct MappedLayer {
     /// The blur config, passed for background effect rendering.
     blur_config: niri_config::Blur,
 
+    /// Tahoe compositor-owned glass material config.
+    tahoe_glass_config: niri_config::TahoeGlass,
+
     /// The view size for the layer surface's output.
     view_size: Size<f64, Logical>,
 
@@ -61,6 +65,7 @@ niri_render_elements! {
         SolidColor = SolidColorRenderElement,
         Shadow = ShadowRenderElement,
         BackgroundEffect = BackgroundEffectElement,
+        TahoeGlass = TahoeGlassElement,
     }
 }
 
@@ -89,6 +94,7 @@ impl MappedLayer {
             scale,
             shadow: Shadow::new(shadow_config),
             blur_config: config.blur,
+            tahoe_glass_config: config.tahoe_glass.clone(),
             clock,
         }
     }
@@ -101,6 +107,7 @@ impl MappedLayer {
         self.shadow.update_config(shadow_config);
 
         self.blur_config = config.blur;
+        self.tahoe_glass_config = config.tahoe_glass.clone();
     }
 
     pub fn update_shaders(&mut self) {
@@ -230,30 +237,45 @@ impl MappedLayer {
         }
 
         let location = location.to_physical_precise_round(scale).to_logical(scale);
-        self.shadow
-            .render(ctx.renderer, location, &mut |elem| push(elem.into()));
+        let has_tahoe_glass = tahoe_glass::render_for_layer(
+            ctx.as_gles(),
+            ns,
+            surface,
+            self.surface.namespace(),
+            location,
+            self.scale,
+            self.blur_config,
+            &self.tahoe_glass_config,
+            xray_pos,
+            &mut |elem| push(elem.into()),
+        );
 
         let geometry = Rectangle::new(location, self.block_out_buffer.size());
         let surface_off = Point::new(0., 0.); // No geometry on layer surfaces.
         let surface_anim_scale = Scale::from(1.);
         let radius = self.rules.geometry_corner_radius.unwrap_or_default();
-        background_effect::render_for_tile(
-            ctx.as_gles(),
-            ns,
-            geometry,
-            self.scale,
-            false,
-            surface,
-            surface_off,
-            surface_anim_scale,
-            background_effect::ClientBlurRegionGeometry::BoundingBox,
-            self.blur_config,
-            radius,
-            self.rules.background_effect,
-            should_block_out,
-            xray_pos,
-            &mut |elem| push(elem.into()),
-        );
+        if !has_tahoe_glass {
+            self.shadow
+                .render(ctx.renderer, location, &mut |elem| push(elem.into()));
+
+            background_effect::render_for_tile(
+                ctx.as_gles(),
+                ns,
+                geometry,
+                self.scale,
+                false,
+                surface,
+                surface_off,
+                surface_anim_scale,
+                background_effect::ClientBlurRegionGeometry::BoundingBox,
+                self.blur_config,
+                radius,
+                self.rules.background_effect,
+                should_block_out,
+                xray_pos,
+                &mut |elem| push(elem.into()),
+            );
+        }
     }
 
     pub fn render_popups<R: NiriRenderer>(

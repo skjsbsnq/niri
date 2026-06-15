@@ -40,6 +40,7 @@ pub mod layout;
 pub mod misc;
 pub mod output;
 pub mod recent_windows;
+pub mod tahoe_glass;
 pub mod utils;
 pub mod window_rule;
 pub mod workspace;
@@ -57,6 +58,7 @@ pub use crate::misc::*;
 pub use crate::output::{Output, OutputName, Outputs, Position, Vrr};
 use crate::recent_windows::RecentWindowsPart;
 pub use crate::recent_windows::{MruDirection, MruFilter, MruPreviews, MruScope, RecentWindows};
+pub use crate::tahoe_glass::{TahoeGlass, TahoeGlassMaterial, TahoeGlassPart};
 pub use crate::utils::FloatOrInt;
 use crate::utils::{Flag, MergeWith as _};
 pub use crate::window_rule::{
@@ -81,6 +83,7 @@ pub struct Config {
     pub config_notification: ConfigNotification,
     pub animations: Animations,
     pub blur: Blur,
+    pub tahoe_glass: TahoeGlass,
     pub gestures: Gestures,
     pub overview: Overview,
     pub environment: Environment,
@@ -198,6 +201,7 @@ where
                 "config-notification" => m_merge!(config_notification),
                 "animations" => m_merge!(animations),
                 "blur" => m_merge!(blur),
+                "tahoe-glass" => m_merge!(tahoe_glass),
                 "gestures" => m_merge!(gestures),
                 "overview" => m_merge!(overview),
                 "xwayland-satellite" => m_merge!(xwayland_satellite),
@@ -1652,6 +1656,329 @@ mod tests {
                 offset: 3.0,
                 noise: 0.02,
                 saturation: 1.5,
+            },
+            tahoe_glass: TahoeGlass {
+                allow_namespaces: [
+                    RegexEq(
+                        Regex(
+                            "^tahoe-",
+                        ),
+                    ),
+                ],
+                materials: {
+                    "backdrop": TahoeGlassMaterial {
+                        background_effect: BackgroundEffect {
+                            xray: None,
+                            blur: Some(
+                                true,
+                            ),
+                            noise: Some(
+                                0.006,
+                            ),
+                            saturation: Some(
+                                1.16,
+                            ),
+                            tint_color: Some(
+                                Color {
+                                    r: 1.0,
+                                    g: 1.0,
+                                    b: 1.0,
+                                    a: 1.0,
+                                },
+                            ),
+                            tint_amount: Some(
+                                0.02,
+                            ),
+                            edge_highlight: Some(
+                                0.0,
+                            ),
+                            refraction: Some(
+                                0.0,
+                            ),
+                        },
+                        shadow: Shadow {
+                            on: false,
+                            offset: ShadowOffset {
+                                x: FloatOrInt(
+                                    0.0,
+                                ),
+                                y: FloatOrInt(
+                                    8.0,
+                                ),
+                            },
+                            softness: 28.0,
+                            spread: 2.0,
+                            draw_behind_window: false,
+                            color: Color {
+                                r: 0.0,
+                                g: 0.0,
+                                b: 0.0,
+                                a: 0.27,
+                            },
+                            inactive_color: None,
+                        },
+                    },
+                    "dock": TahoeGlassMaterial {
+                        background_effect: BackgroundEffect {
+                            xray: None,
+                            blur: Some(
+                                true,
+                            ),
+                            noise: Some(
+                                0.006,
+                            ),
+                            saturation: Some(
+                                1.16,
+                            ),
+                            tint_color: Some(
+                                Color {
+                                    r: 1.0,
+                                    g: 1.0,
+                                    b: 1.0,
+                                    a: 1.0,
+                                },
+                            ),
+                            tint_amount: Some(
+                                0.04,
+                            ),
+                            edge_highlight: Some(
+                                0.0,
+                            ),
+                            refraction: Some(
+                                0.0,
+                            ),
+                        },
+                        shadow: Shadow {
+                            on: true,
+                            offset: ShadowOffset {
+                                x: FloatOrInt(
+                                    0.0,
+                                ),
+                                y: FloatOrInt(
+                                    8.0,
+                                ),
+                            },
+                            softness: 28.0,
+                            spread: 2.0,
+                            draw_behind_window: false,
+                            color: Color {
+                                r: 0.0,
+                                g: 0.0,
+                                b: 0.0,
+                                a: 0.27,
+                            },
+                            inactive_color: None,
+                        },
+                    },
+                    "menu": TahoeGlassMaterial {
+                        background_effect: BackgroundEffect {
+                            xray: None,
+                            blur: Some(
+                                true,
+                            ),
+                            noise: Some(
+                                0.006,
+                            ),
+                            saturation: Some(
+                                1.16,
+                            ),
+                            tint_color: Some(
+                                Color {
+                                    r: 1.0,
+                                    g: 1.0,
+                                    b: 1.0,
+                                    a: 1.0,
+                                },
+                            ),
+                            tint_amount: Some(
+                                0.04,
+                            ),
+                            edge_highlight: Some(
+                                0.0,
+                            ),
+                            refraction: Some(
+                                0.0,
+                            ),
+                        },
+                        shadow: Shadow {
+                            on: true,
+                            offset: ShadowOffset {
+                                x: FloatOrInt(
+                                    0.0,
+                                ),
+                                y: FloatOrInt(
+                                    8.0,
+                                ),
+                            },
+                            softness: 28.0,
+                            spread: 2.0,
+                            draw_behind_window: false,
+                            color: Color {
+                                r: 0.0,
+                                g: 0.0,
+                                b: 0.0,
+                                a: 0.27,
+                            },
+                            inactive_color: None,
+                        },
+                    },
+                    "panel": TahoeGlassMaterial {
+                        background_effect: BackgroundEffect {
+                            xray: None,
+                            blur: Some(
+                                true,
+                            ),
+                            noise: Some(
+                                0.006,
+                            ),
+                            saturation: Some(
+                                1.16,
+                            ),
+                            tint_color: Some(
+                                Color {
+                                    r: 1.0,
+                                    g: 1.0,
+                                    b: 1.0,
+                                    a: 1.0,
+                                },
+                            ),
+                            tint_amount: Some(
+                                0.04,
+                            ),
+                            edge_highlight: Some(
+                                0.0,
+                            ),
+                            refraction: Some(
+                                0.0,
+                            ),
+                        },
+                        shadow: Shadow {
+                            on: true,
+                            offset: ShadowOffset {
+                                x: FloatOrInt(
+                                    0.0,
+                                ),
+                                y: FloatOrInt(
+                                    8.0,
+                                ),
+                            },
+                            softness: 28.0,
+                            spread: 2.0,
+                            draw_behind_window: false,
+                            color: Color {
+                                r: 0.0,
+                                g: 0.0,
+                                b: 0.0,
+                                a: 0.27,
+                            },
+                            inactive_color: None,
+                        },
+                    },
+                    "pill": TahoeGlassMaterial {
+                        background_effect: BackgroundEffect {
+                            xray: None,
+                            blur: Some(
+                                true,
+                            ),
+                            noise: Some(
+                                0.006,
+                            ),
+                            saturation: Some(
+                                1.16,
+                            ),
+                            tint_color: Some(
+                                Color {
+                                    r: 1.0,
+                                    g: 1.0,
+                                    b: 1.0,
+                                    a: 1.0,
+                                },
+                            ),
+                            tint_amount: Some(
+                                0.04,
+                            ),
+                            edge_highlight: Some(
+                                0.0,
+                            ),
+                            refraction: Some(
+                                0.0,
+                            ),
+                        },
+                        shadow: Shadow {
+                            on: true,
+                            offset: ShadowOffset {
+                                x: FloatOrInt(
+                                    0.0,
+                                ),
+                                y: FloatOrInt(
+                                    8.0,
+                                ),
+                            },
+                            softness: 28.0,
+                            spread: 2.0,
+                            draw_behind_window: false,
+                            color: Color {
+                                r: 0.0,
+                                g: 0.0,
+                                b: 0.0,
+                                a: 0.27,
+                            },
+                            inactive_color: None,
+                        },
+                    },
+                    "toast": TahoeGlassMaterial {
+                        background_effect: BackgroundEffect {
+                            xray: None,
+                            blur: Some(
+                                true,
+                            ),
+                            noise: Some(
+                                0.006,
+                            ),
+                            saturation: Some(
+                                1.16,
+                            ),
+                            tint_color: Some(
+                                Color {
+                                    r: 1.0,
+                                    g: 1.0,
+                                    b: 1.0,
+                                    a: 1.0,
+                                },
+                            ),
+                            tint_amount: Some(
+                                0.04,
+                            ),
+                            edge_highlight: Some(
+                                0.0,
+                            ),
+                            refraction: Some(
+                                0.0,
+                            ),
+                        },
+                        shadow: Shadow {
+                            on: true,
+                            offset: ShadowOffset {
+                                x: FloatOrInt(
+                                    0.0,
+                                ),
+                                y: FloatOrInt(
+                                    8.0,
+                                ),
+                            },
+                            softness: 28.0,
+                            spread: 2.0,
+                            draw_behind_window: false,
+                            color: Color {
+                                r: 0.0,
+                                g: 0.0,
+                                b: 0.0,
+                                a: 0.27,
+                            },
+                            inactive_color: None,
+                        },
+                    },
+                },
             },
             gestures: Gestures {
                 dnd_edge_view_scroll: DndEdgeViewScroll {

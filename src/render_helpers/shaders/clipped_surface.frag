@@ -34,7 +34,11 @@ void main() {
     vec3 coords_geo = input_to_geo * vec3(v_coords, 1.0);
 
     // Sample the texture.
-    vec2 sample_coords = v_coords + niri_refraction_offset(coords_geo.xy);
+    vec2 sample_coords = clamp(
+        v_coords + niri_refraction_offset(coords_geo.xy),
+        vec2(0.001),
+        vec2(0.999)
+    );
     vec4 color = texture2D(tex, sample_coords);
 #if defined(NO_ALPHA)
     color = vec4(color.rgb, 1.0);

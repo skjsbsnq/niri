@@ -206,8 +206,8 @@ layer-rule {
         saturation 1.42
         tint-color "#ffffff"
         tint-amount 0.10
-        edge-highlight 0.42
-        refraction 0.022
+        edge-highlight 0.20
+        refraction 0.006
     }
 }
 

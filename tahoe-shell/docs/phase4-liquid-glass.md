@@ -22,7 +22,7 @@ Current Tahoe defaults:
 - Active windows: `saturation 1.62`, light blue tint, stronger normal-based edge highlight, `refraction 0.032`.
 - Inactive windows: `saturation 1.32`, lower tint/highlight, `refraction 0.014`.
 - Popups: brighter tint/highlight than normal windows, `refraction 0.030`.
-- Quickshell layer-shell panels: framebuffer blur with light tint/highlight, `refraction 0.022`.
+- Quickshell layer-shell panels: framebuffer blur with light tint/highlight, `refraction 0.006`.
 
 2026-06-15 glass redo:
 
@@ -31,6 +31,12 @@ Current Tahoe defaults:
 - Edge highlight now uses that normal with a top-left light vector, specular response, rim light, and a small caustic term instead of fixed top/left bands only.
 - Refraction sampling is clamped in `clipped_surface.frag` so stronger displacement does not sample outside the texture edge.
 - QML panel fills/strokes were reduced slightly because compositor glass now supplies more of the visible highlight.
+
+2026-06-15 VMware large-surface safety pass:
+
+- The shader rim is now pixel-sized instead of a fixed percentage of the glass rectangle. This prevents full-screen Launchpad and half-screen snap previews from showing huge rim bands.
+- Dome/specular detail fades out on large surfaces, so big overlays become stable frosted glass instead of one giant lens.
+- Snap preview glass parameters were reduced to match the safer Quickshell layer values.
 
 Real-machine follow-up items:
 

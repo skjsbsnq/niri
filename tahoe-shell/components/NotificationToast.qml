@@ -95,7 +95,7 @@ PanelWindow {
         implicitHeight: 86
         height: Math.max(86, column.implicitHeight + 28)
         radius: 18
-        color: "#dff7f8fb"
+        color: "#20f7f8fb"
         opacity: root.hasCurrent ? 1 : 0
 
         // NOTE: no `border.width` on the card itself. A centered 1px

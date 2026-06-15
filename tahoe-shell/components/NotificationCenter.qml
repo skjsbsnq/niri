@@ -48,7 +48,7 @@ PanelWindow {
         implicitHeight: content.implicitHeight + 24
         height: implicitHeight
         radius: 28
-        color: "#e8f7f8fb"
+        color: "#20f7f8fb"
         opacity: root.open ? 1 : 0
 
         Rectangle {

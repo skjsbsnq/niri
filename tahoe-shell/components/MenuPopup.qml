@@ -67,7 +67,7 @@ PanelWindow {
         width: parent.width
         height: parent.height
         radius: 18
-        color: "#e6f7f8fb"
+        color: "#20f7f8fb"
         opacity: root.open ? 1 : 0
 
         // NOTE: no `border.width` on the surface itself — a centered 1px

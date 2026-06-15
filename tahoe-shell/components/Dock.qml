@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Wayland
+import "TahoeGlass.js" as TahoeGlass
 
 PanelWindow {
     id: root
@@ -16,10 +17,10 @@ PanelWindow {
     property real dockMouseX: -10000
     property bool dockHovered: false
     readonly property bool hasWindows: niriService && niriService.windowList && niriService.windowList.length > 0
-    readonly property color glassFill: "#38f7fbff"
-    readonly property color glassStroke: "#5cffffff"
-    readonly property color glassInnerStroke: "#24ffffff"
-    readonly property color glassShadowLine: "#14000000"
+    readonly property color glassFill: TahoeGlass.FillDock
+    readonly property color glassStroke: TahoeGlass.StrokeDock
+    readonly property color glassInnerStroke: TahoeGlass.StrokeInner
+    readonly property color glassShadowLine: TahoeGlass.ShadowLine
 
     signal toggleLaunchpad()
 
@@ -70,17 +71,20 @@ PanelWindow {
 
     BackgroundEffect.blurRegion: Region {
         item: dockSurface
-        radius: 24
+        radius: dockSurface.tahoeGlassRadius
     }
 
     Rectangle {
         id: dockSurface
+        readonly property string tahoeGlassMaterial: TahoeGlass.MaterialDock
+        readonly property real tahoeGlassRadius: TahoeGlass.RadiusDock
+
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.bottom: parent.bottom
         anchors.bottomMargin: 10
         width: Math.min(parent.width - 28, dockRow.implicitWidth + 34)
         height: 78
-        radius: 24
+        radius: tahoeGlassRadius
         color: root.glassFill
         // Fade the dock surface out when the Launchpad opens (see the
         // visible binding above). NumberAnimation, not spring — see
@@ -114,7 +118,7 @@ PanelWindow {
             // Top-left light edge (the Tahoe glass highlight).
             anchors.fill: parent
             anchors.margins: 1
-            radius: 23
+            radius: parent.radius - 1
             color: "transparent"
             border.color: root.glassStroke
             border.width: 1
@@ -124,7 +128,7 @@ PanelWindow {
             // Bottom-right shadow edge.
             anchors.fill: parent
             anchors.margins: 1
-            radius: 23
+            radius: parent.radius - 1
             color: "transparent"
             border.color: "#14000000"
             border.width: 1
@@ -135,7 +139,7 @@ PanelWindow {
             // Inner faint stroke (kept from the original double-inset).
             anchors.fill: parent
             anchors.margins: 2
-            radius: 22
+            radius: parent.radius - 2
             color: "transparent"
             border.color: root.glassInnerStroke
             border.width: 1

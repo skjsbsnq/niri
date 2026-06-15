@@ -5,6 +5,7 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
 import Quickshell.Widgets
+import "TahoeGlass.js" as TahoeGlass
 
 PanelWindow {
     id: root
@@ -45,18 +46,20 @@ PanelWindow {
 
     BackgroundEffect.blurRegion: Region {
         item: panel
-        radius: 18
+        radius: panel.tahoeGlassRadius
     }
 
     Rectangle {
         id: panel
+        readonly property string tahoeGlassMaterial: TahoeGlass.MaterialMenu
+        readonly property real tahoeGlassRadius: TahoeGlass.RadiusMenu
 
         y: root.open ? 0 : -8
         width: parent.width
         implicitHeight: content.implicitHeight + 16
         height: implicitHeight
-        radius: 18
-        color: "#20f7f8fb"
+        radius: tahoeGlassRadius
+        color: TahoeGlass.FillPanelBright
         opacity: root.open ? 1 : 0
 
         Rectangle {
@@ -64,7 +67,7 @@ PanelWindow {
             anchors.margins: 1
             radius: parent.radius - 1
             color: "transparent"
-            border.color: "#70ffffff"
+            border.color: TahoeGlass.StrokePanelBright
             border.width: 1
         }
 
@@ -73,7 +76,7 @@ PanelWindow {
             anchors.margins: 1
             radius: parent.radius - 1
             color: "transparent"
-            border.color: "#16000000"
+            border.color: TahoeGlass.ShadowLineSoft
             border.width: 1
             z: -1
         }

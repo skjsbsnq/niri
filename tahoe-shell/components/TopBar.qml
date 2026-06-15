@@ -5,6 +5,7 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Widgets
 import Quickshell.Wayland
+import "TahoeGlass.js" as TahoeGlass
 
 PanelWindow {
     id: root
@@ -26,8 +27,8 @@ PanelWindow {
     readonly property int notificationCount: notificationsService ? notificationsService.historyCount : 0
     readonly property bool dndEnabled: notificationsService ? notificationsService.dndEnabled : false
     readonly property bool batteryAvailable: batteryService && batteryService.available
-    readonly property color glassFill: "#1cffffff"
-    readonly property color glassStroke: "#36ffffff"
+    readonly property color glassFill: TahoeGlass.FillTopBar
+    readonly property color glassStroke: TahoeGlass.StrokeTopBar
     readonly property color glassShadowLine: "#10000000"
 
     signal toggleAppMenu()
@@ -86,17 +87,20 @@ PanelWindow {
         item: barSurface
         // MUST match barSurface.radius or the blur leaks past the rounded
         // corners (project convention — see NotificationToast.qml).
-        radius: barSurface.radius
+        radius: barSurface.tahoeGlassRadius
     }
 
     Rectangle {
         id: barSurface
+        readonly property string tahoeGlassMaterial: TahoeGlass.MaterialPanel
+        readonly property real tahoeGlassRadius: TahoeGlass.RadiusTopBar
+
         anchors.fill: parent
         anchors.leftMargin: 8
         anchors.rightMargin: 8
         anchors.topMargin: 5
         anchors.bottomMargin: 5
-        radius: 18
+        radius: tahoeGlassRadius
         color: root.glassFill
         // Fade the bar surface out when the Launchpad opens (see the
         // visible binding above). NumberAnimation, not spring — see

@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Wayland
+import "TahoeGlass.js" as TahoeGlass
 
 PanelWindow {
     id: root
@@ -43,11 +44,14 @@ PanelWindow {
 
     BackgroundEffect.blurRegion: Region {
         item: backdrop
-        radius: 0
+        radius: backdrop.tahoeGlassRadius
     }
 
     Rectangle {
         id: backdrop
+        readonly property string tahoeGlassMaterial: TahoeGlass.MaterialBackdrop
+        readonly property real tahoeGlassRadius: TahoeGlass.RadiusBackdrop
+
         anchors.fill: parent
         // The scrim is just blur + tint, structurally identical to the
         // control center: the blurRegion above blurs whatever is behind,
@@ -58,7 +62,7 @@ PanelWindow {
         // blur at 22% opacity — that punched through the blur and made the
         // Launchpad read as "a different, lesser blur" than the control
         // center. Removed. See glass-consistency-fix-plan.md §1.
-        color: "#30eef2f7"
+        color: TahoeGlass.FillBackdrop
         opacity: root.open ? 1 : 0
 
         Behavior on opacity {

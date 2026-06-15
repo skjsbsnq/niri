@@ -26,8 +26,9 @@ ShellRoot {
     // the spring runs. NumberAnimation is safe everywhere. This is the global
     // switch — keep false on VMs / software rendering; flip to true on a real
     // GPU to restore the bouncy macOS feel. Components read this to gate
-    // their spring Behaviors (see Dock.qml, WindowButton.qml, Launchpad.qml,
-    // NotificationToast.qml).
+    // their spring Behaviors (see Dock.qml, WindowButton.qml, Launchpad.qml).
+    // Blur/glass region geometry does not use spring; Phase 3 keeps those
+    // x/y/width/height transitions bounded for compositor-owned glass.
     property bool useSpring: false
 
     // Register the Material Icons font once for the whole shell. Used by the

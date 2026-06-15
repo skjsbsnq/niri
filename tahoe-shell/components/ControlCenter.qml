@@ -4,6 +4,7 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
+import "TahoeGlass.js" as TahoeGlass
 
 PanelWindow {
     id: root
@@ -13,10 +14,8 @@ PanelWindow {
     property var controlsService
     property bool controlsExpanded: false
 
-    // Glass palette (kept in sync with the rest of the shell). Each Tahoe
-    // component re-declares its own block rather than sharing a file.
-    readonly property color glassFill: "#20ffffff"
-    readonly property color glassStroke: "#46ffffff"
+    readonly property color glassFill: TahoeGlass.FillPanel
+    readonly property color glassStroke: TahoeGlass.StrokePanel
     readonly property color glassInnerFill: "#14ffffff"
     // Tiles match the web cc-tile rgba(255,255,255,0.5).
     readonly property color tileFill: "#80ffffff"
@@ -55,11 +54,14 @@ PanelWindow {
 
     BackgroundEffect.blurRegion: Region {
         item: panel
-        radius: 28
+        radius: panel.tahoeGlassRadius
     }
 
     Rectangle {
         id: panel
+        readonly property string tahoeGlassMaterial: TahoeGlass.MaterialPanel
+        readonly property real tahoeGlassRadius: TahoeGlass.RadiusPanel
+
         x: 0
         // panel is the BackgroundEffect.blurRegion item. Its geometry MUST
         // stay tame during open/close: niri recomputes the blur region each
@@ -72,7 +74,7 @@ PanelWindow {
         y: root.open ? 0 : -14
         width: parent.width
         implicitHeight: content.implicitHeight + 28
-        radius: 28
+        radius: tahoeGlassRadius
         color: root.glassFill
         opacity: root.open ? 1 : 0
 

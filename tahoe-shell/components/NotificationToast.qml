@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Wayland
+import "TahoeGlass.js" as TahoeGlass
 
 // Real notification toast.
 //
@@ -29,8 +30,8 @@ PanelWindow {
     property var notificationsService
     property var current: notificationsService ? notificationsService.current : null
     property bool hasCurrent: !!current
-    // See shell.qml useSpring. Spring on the card x (slide-in) corrupts the
-    // icon Image texture on VMware/software GPUs. Default false.
+    // Kept for shell.qml compatibility. The card is a glass/blur region item,
+    // so Phase 3 forbids springing its geometry even on real GPUs.
     property bool useSpring: false
     // Resolved icon URL for the current notification. Recomputed whenever
     // `current` changes. Empty string means "no icon" -> show the bell glyph.
@@ -81,22 +82,24 @@ PanelWindow {
     // frost, NOT a geometry cycle.
     BackgroundEffect.blurRegion: Region {
         item: card
-        radius: 18
+        radius: card.tahoeGlassRadius
     }
 
     Rectangle {
         id: card
+        readonly property string tahoeGlassMaterial: TahoeGlass.MaterialToast
+        readonly property real tahoeGlassRadius: TahoeGlass.RadiusToast
 
         // Slide + fade in from the right when a notification arrives.
-        // Spring on x (matches the original placeholder feel), short
-        // OutCubic on opacity so it doesn't fight the spring.
+        // x changes the blur/glass geometry, so it uses a bounded
+        // NumberAnimation. Opacity remains independent of region geometry.
         x: root.hasCurrent ? 0 : root.width + 24
         y: 0
         width: parent.width
         implicitHeight: 86
         height: Math.max(86, column.implicitHeight + 28)
-        radius: 18
-        color: "#20f7f8fb"
+        radius: tahoeGlassRadius
+        color: TahoeGlass.FillPanelBright
         opacity: root.hasCurrent ? 1 : 0
 
         // NOTE: no `border.width` on the card itself. A centered 1px
@@ -126,20 +129,10 @@ PanelWindow {
             z: -1
         }
 
-        // Slide + fade in from the right. Spring gives the settle feel on real
-        // GPUs, but springing x (the card wraps the icon Image) corrupts its
-        // texture on VMware/software GPUs. NumberAnimation is the safe default.
+        // Slide + fade in from the right. This card is the blur-region item,
+        // so geometry must never be driven by SpringAnimation.
         Behavior on x {
-            enabled: !root.useSpring
             NumberAnimation { duration: 260; easing.type: Easing.OutCubic }
-        }
-        Behavior on x {
-            enabled: root.useSpring
-            SpringAnimation {
-                spring: 3.4
-                damping: 0.36
-                epsilon: 0.2
-            }
         }
 
         Behavior on height {

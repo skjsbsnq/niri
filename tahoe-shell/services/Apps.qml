@@ -30,6 +30,28 @@ QtObject {
         return dockIconRoot + fileName;
     }
 
+    function themedIconPath(iconName) {
+        var name = String(iconName || "").trim();
+        if (name.length === 0)
+            return "";
+
+        if (name.charAt(0) === "/")
+            return name;
+
+        var themed = Quickshell.iconPath(name, true);
+        return themed && themed.length > 0 ? themed : "";
+    }
+
+    function desktopEntryIcon(app) {
+        if (!app)
+            return "";
+
+        if (app.desktopEntry)
+            app = app.desktopEntry;
+
+        return themedIconPath(app.icon || "");
+    }
+
     function iconForApp(app) {
         if (!app)
             return defaultWindowIcon;
@@ -37,17 +59,9 @@ QtObject {
         if (app.desktopEntry)
             app = app.desktopEntry;
 
-        if (app.icon) {
-            var iconName = String(app.icon);
-            if (iconName.length > 0) {
-                if (iconName.charAt(0) === "/")
-                    return iconName;
-
-                var themed = Quickshell.iconPath(iconName, true);
-                if (themed && themed.length > 0)
-                    return themed;
-            }
-        }
+        var desktopIcon = desktopEntryIcon(app);
+        if (desktopIcon.length > 0)
+            return desktopIcon;
 
         if (app.iconSet)
             return iconPath(app.iconSet, app.icon || "");
@@ -134,21 +148,29 @@ QtObject {
     }
 
     function iconForAppId(appId) {
-        var normalized = String(appId || "").toLowerCase();
+        var raw = String(appId || "").trim();
+        var normalized = raw.toLowerCase();
+
+        var app = findApplication([
+            raw,
+            normalized,
+            normalizedAppToken(raw)
+        ]);
+        var appIcon = desktopEntryIcon(app);
+        if (appIcon.length > 0)
+            return appIcon;
 
         if (normalized.indexOf("code") !== -1 || normalized.indexOf("vscodium") !== -1)
             return dockIconRoot + "vscode.png";
         if (normalized.indexOf("terminal") !== -1 || normalized.indexOf("alacritty") !== -1 || normalized.indexOf("kitty") !== -1 || normalized.indexOf("foot") !== -1 || normalized.indexOf("wezterm") !== -1)
             return dockIconRoot + "terminal.png";
-        if (normalized.indexOf("firefox") !== -1 || normalized.indexOf("browser") !== -1 || normalized.indexOf("chrom") !== -1 || normalized.indexOf("safari") !== -1)
-            return dockIconRoot + "safari.png";
         if (normalized.indexOf("nautilus") !== -1 || normalized.indexOf("thunar") !== -1 || normalized.indexOf("dolphin") !== -1 || normalized.indexOf("files") !== -1)
             return dockIconRoot + "finder.png";
         if (normalized.indexOf("settings") !== -1 || normalized.indexOf("control") !== -1 || normalized.indexOf("systemsettings") !== -1)
             return dockIconRoot + "preferences.png";
 
-        var themed = Quickshell.iconPath(appId || "", true);
-        if (themed && themed.length > 0)
+        var themed = themedIconPath(raw);
+        if (themed.length > 0)
             return themed;
 
         return defaultWindowIcon;
@@ -322,6 +344,9 @@ QtObject {
 
     function findApplication(candidates) {
         for (var i = 0; i < candidates.length; i++) {
+            if (String(candidates[i] || "").trim().length === 0)
+                continue;
+
             var direct = DesktopEntries.byId(candidates[i]);
             if (isLaunchableApplication(direct))
                 return direct;
@@ -332,7 +357,9 @@ QtObject {
         }
 
         var lowered = candidates.map(function(candidate) {
-            return String(candidate).toLowerCase();
+            return String(candidate || "").trim().toLowerCase();
+        }).filter(function(candidate) {
+            return candidate.length > 0;
         });
 
         for (var j = 0; j < realApplications.length; j++) {

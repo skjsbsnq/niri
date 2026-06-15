@@ -166,7 +166,9 @@ Web 参考（`index.html` 第 205–207 行）：`<hr class="column">` 分隔线
 
 ## 三、玻璃 / Liquid Glass：为什么"做得不好"
 
-代码上**确实做了真 shader**（`postprocess.frag` 加了 tint/edge_highlight/refraction，xray/framebuffer 都传了 uniform），值得肯定。但效果不达标的根因：
+> **更新（2026-06-15）：玻璃参数重做已完成。** `postprocess.frag` 现在用圆顶高度场 + rim falloff + turbulence 计算伪法线，refraction 上限从 `0.05` 放到 `0.12`，edge highlight 改为法线光照 + specular + caustic，`blur` 默认提高到 `passes 5 / offset 7`，QML 面板白色覆盖和描边同步降低。下面列表保留为改造前问题和后续真机复测依据。
+
+代码上**确实做了真 shader**（`postprocess.frag` 加了 tint/edge_highlight/refraction，xray/framebuffer 都传了 uniform），值得肯定。改造前效果不达标的根因：
 
 1. **blur 强度太弱**：`passes 4 / offset 5` 在 1080p 下是"磨砂"不是"液态玻璃"。对比 Web 项目控制中心：`backdrop-filter: blur(20px)` 到 `blur(60px)`（`style.css` 第 249, 605 行），Dock 用 `backdrop-filter: url("#glass-distortion") blur(4px)`（第 723 行，SVG 滤镜位移+高光）。
 2. **refraction 被 clamp 到 ≤0.05**（shader 第 47 行 `clamp(refraction, 0.0, 0.05)`），config 只给 `0.014`，几乎看不见折射。
@@ -176,7 +178,7 @@ Web 参考（`index.html` 第 205–207 行）：`<hr class="column">` 分隔线
 6. **没有 active/inactive 动态玻璃**：config 是两条静态 window-rule，切换窗口时参数不过渡。
 7. **Hyper-V 验收只是"没破图"**，真机 GPU 性能和观感没验过。
 
-简单说：**shader 框架真搭起来了，但参数和算法离 Tahoe 差一个量级，还缺 Web 项目那个 SVG displacement 滤镜的等价实现。**
+简单说：**shader 框架已经从第一版参数试验推进到可见的 turbulence/specular/displacement 等价实现；剩余风险是真机 GPU 上的观感、性能和是否还需要独立 sampled-surface shader。**
 
 ---
 
@@ -317,8 +319,8 @@ Spotlight            script.js 487-499  → 新 Spotlight.qml
 
 1. ~~**控制中心做成真的**~~ ✅ 已完成（2026-06-14，commit `f2887cc`+`666c3c8`+`01d999a`）。抄 Web `index.html` 92–169 行的 cc-grid 布局，接 Pipewire/brightnessctl/Networking/Bluetooth/Mpris，加音量/亮度/Wi-Fi/BT toggle + 正在播放。
 2. ~~**接真通知系统**~~ ✅ 已完成（2026-06-14）。接 Quickshell `NotificationServer`，注册为 `org.freedesktop.Notifications` 守护进程，替掉假 toast。见 §1.3。
-3. ~~**动画 spring 化**~~ ✅ 已完成（2026-06-14）。Dock magnification 改 SpringAnimation 平滑 + 宽度随 magnification 联动（行波效应，抄 `script.js` 358–404 的 margin 联动思路）；Dock/窗口按钮点击 bounce 改欠阻尼 spring（damping 0.32，~1.5 次阻尼弹跳，替代原来的两步 SequentialAnimation）；控制中心从 TopRight 锚点 scale 展开（spring 380/damping 0.78 轻微 overshoot）；菜单从 TopLeft 锚点 scale 展开；Launchpad 修正方向为 1.1→1（原 0.96→1 方向反了，是 zoom-in 不是"从远处飞来"）+ spring。opacity 仍保留 NumberAnimation（fade 不适合 spring，会抖）。下一项最高优先：玻璃参数重做。详见 §二.1。
-4. **玻璃参数重做**——refraction 上限放开、edge highlight 改真法线、blur passes 加大；研究把 Web 的 SVG glass-distortion 滤镜（turbulence+specular+displacement）翻译成 niri shader 或 Qt ShaderEffect。
+3. ~~**动画 spring 化**~~ ✅ 已完成（2026-06-14）。Dock magnification 改 SpringAnimation 平滑 + 宽度随 magnification 联动（行波效应，抄 `script.js` 358–404 的 margin 联动思路）；Dock/窗口按钮点击 bounce 改欠阻尼 spring（damping 0.32，~1.5 次阻尼弹跳，替代原来的两步 SequentialAnimation）；控制中心从 TopRight 锚点 scale 展开（spring 380/damping 0.78 轻微 overshoot）；菜单从 TopLeft 锚点 scale 展开；Launchpad 修正方向为 1.1→1（原 0.96→1 方向反了，是 zoom-in 不是"从远处飞来"）+ spring。opacity 仍保留 NumberAnimation（fade 不适合 spring，会抖）。详见 §二.1。
+4. ~~**玻璃参数重做**~~ ✅ 已完成（2026-06-15）。refraction 上限放开、edge highlight 改为伪法线光照、blur passes 加大；Web 的 SVG glass-distortion 思路已翻译进 niri postprocess shader（turbulence + specular + displacement），后续只保留真机观感/性能调参。
 5. **snap preview 重做**——改成圆角 + 模糊元素（抄 `style.css` 2455–2469 行），不是实心蓝色块。
 6. **加 Spotlight + Launchpad 搜索框**——抄 `index.html` 211–213 + 319–323。
 7. **服务层接 niri IPC socket**——为窗口预览/Stage Manager 做准备。
@@ -329,5 +331,4 @@ Spotlight            script.js 487-499  → 新 Spotlight.qml
 
 ## 八、一句话总结
 
-> 当前项目状态：**niri fork 那一层（minimize/snap/glass shader）是真东西且完成度不错；Quickshell shell 那一层原先是"macOS 的皮 + 没有功能的骨头"，现已完成三项改造（控制中心 + 真通知系统 + 动画 spring 化），但菜单是假的、Spotlight 没有、玻璃缺 SVG displacement 滤镜等价物**。Web 参考项目是一份现成的"功能清单 + 视觉参数表 + 动画曲线表"，应该当成蓝图继续逐项翻译成 QML。下一项：玻璃参数重做。
-
+> 当前项目状态：**niri fork 那一层（minimize/snap/glass shader）是真东西且完成度不错；Quickshell shell 那一层原先是"macOS 的皮 + 没有功能的骨头"，现已完成四项改造（控制中心 + 真通知系统 + 动画 spring 化 + 玻璃参数重做），但菜单是假的、Spotlight 没有、snap preview 仍是实心蓝色块**。Web 参考项目是一份现成的"功能清单 + 视觉参数表 + 动画曲线表"，应该当成蓝图继续逐项翻译成 QML。下一项：snap preview 重做。

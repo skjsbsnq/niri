@@ -15,9 +15,9 @@ PanelWindow {
 
     // Glass palette (kept in sync with the rest of the shell). Each Tahoe
     // component re-declares its own block rather than sharing a file.
-    readonly property color glassFill: "#24ffffff"
-    readonly property color glassStroke: "#52ffffff"
-    readonly property color glassInnerFill: "#18ffffff"
+    readonly property color glassFill: "#20ffffff"
+    readonly property color glassStroke: "#46ffffff"
+    readonly property color glassInnerFill: "#14ffffff"
     // Tiles match the web cc-tile rgba(255,255,255,0.5).
     readonly property color tileFill: "#80ffffff"
     readonly property color tileFillActive: "#88ffffff"
@@ -112,7 +112,7 @@ PanelWindow {
             anchors.topMargin: 1
             height: 1
             radius: 1
-            color: "#5affffff"
+            color: "#44ffffff"
         }
 
         Rectangle {

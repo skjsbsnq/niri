@@ -702,6 +702,7 @@ Windows 本地状态：
 - 已扩展 niri `background-effect` 配置、framebuffer/xray 传参和 `postprocess.frag`，当前无需新增 shader 文件。
 - 已更新 Dock、顶栏和控制中心 QML，让 `BackgroundEffect.blurRegion` 背后的真实模糊更明显。
 - 已记录 Phase 4 参数和真机待测项：`tahoe-shell/docs/phase4-liquid-glass.md`。
+- 2026-06-15 已完成玻璃参数重做：全局 blur 提高到 `passes 5 / offset 7`，`postprocess.frag` 改为伪高度场法线、turbulence、specular/caustic 高光和更强 refraction，QML 面板填充/描边同步降白；真机 GPU 观感和性能仍留到最终验收。
 
 Hyper-V Arch Linux 操作：
 

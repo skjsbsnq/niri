@@ -21,10 +21,10 @@ PanelWindow {
     // left of the clock. Guards against a missing service (e.g. before
     // the property is wired from the shell root).
     readonly property int notificationCount: notificationsService ? notificationsService.activeCount : 0
-    readonly property color glassFill: "#20ffffff"
-    readonly property color glassStroke: "#42ffffff"
-    readonly property color glassHairline: "#4cffffff"
-    readonly property color glassShadowLine: "#12000000"
+    readonly property color glassFill: "#1cffffff"
+    readonly property color glassStroke: "#36ffffff"
+    readonly property color glassHairline: "#3affffff"
+    readonly property color glassShadowLine: "#10000000"
 
     signal toggleAppMenu()
     signal toggleControlCenter()

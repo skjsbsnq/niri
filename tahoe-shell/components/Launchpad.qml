@@ -35,7 +35,7 @@ PanelWindow {
     Rectangle {
         id: backdrop
         anchors.fill: parent
-        color: "#66eef2f7"
+        color: "#5ceef2f7"
         opacity: root.open ? 1 : 0
 
         Behavior on opacity {

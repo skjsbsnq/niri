@@ -2,7 +2,7 @@ use std::sync::{Arc, Mutex};
 
 use niri_config::CornerRadius;
 use smithay::backend::renderer::gles::GlesRenderer;
-use smithay::utils::{Logical, Point, Rectangle, Scale};
+use smithay::utils::{Logical, Point, Rectangle, Scale, Size};
 use smithay::wayland::compositor::{with_states, SurfaceData};
 use wayland_server::protocol::wl_surface::WlSurface;
 
@@ -101,6 +101,15 @@ pub struct RenderParams {
     pub clip: Option<(Rectangle<f64, Logical>, CornerRadius)>,
     /// Scale to use for rounding to physical pixels.
     pub scale: f64,
+}
+
+/// Geometry to use when the client supplied an explicit blur region.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ClientBlurRegionGeometry {
+    /// Keep the historical behavior: render the effect across the whole surface geometry.
+    Surface,
+    /// Use the bounding box of the client blur region as both effect and clip geometry.
+    BoundingBox,
 }
 
 impl RenderParams {
@@ -255,6 +264,7 @@ fn render_params_for_tile(
     clip_to_geometry: bool,
     block_out: bool,
     blur_region: Option<Arc<Vec<Rectangle<i32, Logical>>>>,
+    client_blur_region_geometry: ClientBlurRegionGeometry,
     surface_geo: Rectangle<f64, Logical>,
     surface_anim_scale: Scale<f64>,
 ) -> Option<RenderParams> {
@@ -262,6 +272,7 @@ fn render_params_for_tile(
     let mut clip = true;
 
     let mut effect_geometry = geometry;
+    let mut clip_geometry = geometry;
     let mut subregion = None;
     if let Some(rects) = blur_region {
         if rects.is_empty() {
@@ -280,22 +291,39 @@ fn render_params_for_tile(
                 let mut surface_geo = surface_geo.upscale(surface_anim_scale);
                 surface_geo.loc += geometry.loc;
 
+                if client_blur_region_geometry == ClientBlurRegionGeometry::BoundingBox {
+                    let mut bbox = blur_region_bounding_box(&rects)?
+                        .to_f64()
+                        .upscale(surface_anim_scale);
+                    bbox.loc += surface_geo.loc;
+
+                    // Malformed clients may send rectangles outside their surface. Clamp the
+                    // transition geometry to the actual surface rather than letting an oversized
+                    // region affect the whole output.
+                    let bbox = bbox.intersection(surface_geo)?;
+                    let bbox = bbox.to_physical_precise_round(scale).to_logical(scale);
+
+                    effect_geometry = bbox;
+                    clip_geometry = bbox;
+                    clip = true;
+                } else {
+                    let surface_geo = surface_geo
+                        .to_physical_precise_round(scale)
+                        .to_logical(scale);
+                    effect_geometry = surface_geo;
+                }
+
                 subregion = Some(TransformedRegion {
                     rects,
                     scale: surface_anim_scale,
                     offset: surface_geo.loc,
                 });
-
-                surface_geo = surface_geo
-                    .to_physical_precise_round(scale)
-                    .to_logical(scale);
-                effect_geometry = surface_geo;
             }
         }
     }
 
     // This corner radius is reset to self.corner_radius in render().
-    let clip = clip.then_some((geometry, CornerRadius::default()));
+    let clip = clip.then_some((clip_geometry, CornerRadius::default()));
 
     Some(RenderParams {
         geometry: effect_geometry,
@@ -303,6 +331,48 @@ fn render_params_for_tile(
         clip,
         scale,
     })
+}
+
+fn blur_region_bounding_box(rects: &[Rectangle<i32, Logical>]) -> Option<Rectangle<i32, Logical>> {
+    let mut min_x = i32::MAX;
+    let mut min_y = i32::MAX;
+    let mut max_x = i32::MIN;
+    let mut max_y = i32::MIN;
+    let mut any = false;
+
+    for rect in rects {
+        if rect.is_empty() {
+            continue;
+        }
+
+        let Some(x2) = rect.loc.x.checked_add(rect.size.w) else {
+            continue;
+        };
+        let Some(y2) = rect.loc.y.checked_add(rect.size.h) else {
+            continue;
+        };
+
+        if x2 <= rect.loc.x || y2 <= rect.loc.y {
+            continue;
+        }
+
+        min_x = min_x.min(rect.loc.x);
+        min_y = min_y.min(rect.loc.y);
+        max_x = max_x.max(x2);
+        max_y = max_y.max(y2);
+        any = true;
+    }
+
+    if !any {
+        return None;
+    }
+
+    let width = max_x.checked_sub(min_x)?;
+    let height = max_y.checked_sub(min_y)?;
+    Some(Rectangle::new(
+        Point::new(min_x, min_y),
+        Size::new(width, height),
+    ))
 }
 
 /// Per-surface background effect stored in its data map.
@@ -334,6 +404,7 @@ pub fn render_for_tile(
     surface: &WlSurface,
     surface_off: Point<f64, Logical>,
     surface_anim_scale: Scale<f64>,
+    client_blur_region_geometry: ClientBlurRegionGeometry,
     blur_config: niri_config::Blur,
     radius: CornerRadius,
     effect: niri_config::BackgroundEffect,
@@ -364,6 +435,7 @@ pub fn render_for_tile(
             clip_to_geometry,
             should_block_out,
             blur_region,
+            client_blur_region_geometry,
             surface_geo,
             surface_anim_scale,
         ) else {
@@ -373,4 +445,34 @@ pub fn render_for_tile(
         let xray_pos = xray_pos.offset(params.geometry.loc - geometry.loc);
         background_effect.render(ctx, ns, params, xray_pos, push);
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::blur_region_bounding_box;
+    use smithay::utils::{Logical, Point, Rectangle, Size};
+
+    #[test]
+    fn blur_region_bbox_ignores_empty_and_overflowing_rects() {
+        let rects: Vec<Rectangle<i32, Logical>> = vec![
+            Rectangle::new(Point::new(10, 20), Size::new(30, 40)),
+            Rectangle::new(Point::new(0, 0), Size::new(0, 12)),
+            Rectangle::new(Point::new(i32::MAX - 1, 0), Size::new(8, 8)),
+            Rectangle::new(Point::new(5, 8), Size::new(5, 2)),
+        ];
+
+        let bbox = blur_region_bounding_box(&rects).unwrap();
+        assert_eq!(bbox.loc, Point::new(5, 8));
+        assert_eq!(bbox.size, Size::new(35, 52));
+    }
+
+    #[test]
+    fn blur_region_bbox_returns_none_for_no_valid_area() {
+        let rects: Vec<Rectangle<i32, Logical>> = vec![
+            Rectangle::new(Point::new(0, 0), Size::new(0, 10)),
+            Rectangle::new(Point::new(i32::MAX - 1, 0), Size::new(8, 8)),
+        ];
+
+        assert!(blur_region_bounding_box(&rects).is_none());
+    }
 }

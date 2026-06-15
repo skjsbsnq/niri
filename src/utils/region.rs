@@ -112,8 +112,7 @@ pub fn region_to_non_overlapping_rects(
         .rects
         .iter()
         .filter(|(_, r)| {
-            r.loc.y.checked_add(r.size.h).is_some()
-                && r.loc.x.checked_add(r.size.w).is_some()
+            r.loc.y.checked_add(r.size.h).is_some() && r.loc.x.checked_add(r.size.w).is_some()
         })
         .collect();
 

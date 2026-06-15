@@ -14,7 +14,7 @@ PanelWindow {
 
     signal closeRequested()
 
-    visible: open || spotlightSurface.opacity > 0.01 || resultsSurface.opacity > 0.01
+    visible: open || spotlightPanel.opacity > 0.01
     aboveWindows: true
     exclusiveZone: 0
     focusable: open

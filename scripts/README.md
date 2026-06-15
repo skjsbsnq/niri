@@ -38,6 +38,28 @@ From Phase 2 onward, enable automatic niri fork builds when niri source changes:
 BUILD_NIRI_FORK=auto bash scripts/arch-update.sh
 ```
 
+## Chinese Locale, Fonts, and Input Method
+
+```sh
+bash scripts/arch-zh-setup.sh
+```
+
+Run this inside the Arch VM as the target desktop user, not with `sudo`. The script installs CJK/emoji fonts, enables `zh_CN.UTF-8` and `en_US.UTF-8`, sets system `LANG=zh_CN.UTF-8`, writes a user fontconfig fallback for simplified Chinese, installs fcitx5 with Chinese addons, writes the common fcitx environment variables, creates a default `keyboard-us + pinyin` fcitx5 profile only when one does not already exist, and tries to enable `fcitx5.service` for the current user.
+
+To keep the desktop UI in English while still installing Chinese fonts and input support:
+
+```sh
+SET_SYSTEM_LOCALE=false bash scripts/arch-zh-setup.sh
+```
+
+To install only Chinese fonts and locale support without fcitx5:
+
+```sh
+INSTALL_INPUT_METHOD=false bash scripts/arch-zh-setup.sh
+```
+
+After running it, log out and log back in so locale, fontconfig, and input method environment changes apply to the whole session.
+
 ## Deployed Paths
 
 `arch-update.sh` manages only project-owned Tahoe paths:

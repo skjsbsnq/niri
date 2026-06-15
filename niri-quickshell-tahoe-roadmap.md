@@ -290,6 +290,14 @@ Windows 操作：
 - [x] 实现 `Spotlight.qml`。
 - [x] 顶栏新增 Spotlight 入口。
 - [x] Spotlight 支持应用搜索、结果列表、Enter 启动第一条结果、Escape/外部点击关闭。
+- [x] 实现 `services/Notifications.qml`，接 Quickshell `NotificationServer`。
+- [x] 实现 `NotificationCenter.qml`，支持通知历史、单条移除、清空和 DND。
+- [x] 实现 `services/Power.qml`，封装锁屏、睡眠、注销、重启、关机。
+- [x] Tahoe 菜单接入 Lock、Sleep、Logout、Restart、Shutdown，危险动作进入确认态。
+- [x] 实现 `services/Battery.qml` 和 `BatteryPopup.qml`，接 UPower display device。
+- [x] 顶栏新增电池状态入口，显示百分比、充放电状态、电源来源和健康度。
+- [x] 顶栏系统托盘接 StatusNotifierItem，支持图标、fallback 和 attention 状态。
+- [x] 托盘右键菜单改为 Tahoe QML 菜单，避免原生白菜单并吃到 niri blur。
 - [x] 实现 `services/Apps.qml`，维护固定 app 列表和图标映射。
 - [x] 实现 `services/Niri.qml`，先用 Quickshell 现有 toplevel/workspace 能力。
 - [x] 已评估：不需要用 `Process` 临时执行 `niri msg --json`，现有 `ToplevelManager` 和 `WindowManager.windowsets` 已覆盖 Phase 1。
@@ -324,6 +332,10 @@ Hyper-V 截图验收记录：
 - 2026-06-14 崩溃教训：服务根必须用 `Item` 而不是 `QtObject`（QtObject 无默认 children 槽，会导致 `PwObjectTracker`/`Process`/`Timer` 等子对象 "Cannot assign to non-existent default property" fatal，整个 shell 启动失败）。详见 gap-analysis.md 第 1 项。
 - 2026-06-14 控制中心位置：`margins.top` 从 40 调到 36，面板紧贴 34px 顶栏下方 2px。
 - 2026-06-15 已补 Launchpad 搜索框和 Spotlight 基础应用搜索：`services/Apps.qml` 新增统一搜索匹配，Launchpad 过滤 app grid，`Spotlight.qml` 新增顶层搜索 overlay，`TopBar.qml` 新增 Spotlight 入口；完整全局搜索（文件、设置项、计算等）仍留后续。
+- 2026-06-15 已补电源、电池和通知中心：`Power.qml` 接锁屏/睡眠/注销/重启/关机，Tahoe 菜单危险动作有确认态；`Battery.qml`/`BatteryPopup.qml` 接 UPower display device；通知服务新增历史、Clear、单条移除和 DND。
+- 2026-06-15 已补系统托盘闭环：`Tray.qml` 使用 `IconImage` 渲染 SNI 图标，提供 fallback/attention；右键改为自绘 Tahoe QML 菜单并吃到 blur。FClash SNI 图标已验证可见；Steam 等 legacy XEmbed 托盘应用如果不发布 SNI，需要 `xembedsniproxy` 之类的桥接服务。
+- 2026-06-15 已修 Dock/窗口 badge 图标误判：`Apps.qml` 优先使用真实 `.desktop` themed icon，移除浏览器统一映射到 Safari 的旧 fallback。
+- 2026-06-15 已修控制中心点击区域：Wi-Fi、蓝牙、飞行模式不再互相覆盖；飞行模式作为本地 shell 状态，会关闭并恢复 Wi-Fi/蓝牙，蓝牙不可用时按钮置灰并显示 `No Bluetooth`。
 - 待继续手动确认：真实 compositor blur、多显示器位置和 exclusive zone。
 
 Windows 到 Hyper-V 同步验证：
@@ -339,7 +351,12 @@ Windows 到 Hyper-V 同步验证：
 - [x] Dock 能显示当前窗口列表。
 - [x] 点击窗口项能 activate。
 - [x] 控制中心能打开和关闭。
+- [x] 控制中心 Wi-Fi、蓝牙和飞行模式点击区域互不串线。
 - [x] Launchpad 能打开和关闭。
+- [x] 顶栏通知中心可打开历史列表，支持清空和 DND。
+- [x] 顶栏电池状态和电池 popup 可用。
+- [x] Tahoe 菜单电源/会话动作可用并有确认态。
+- [x] SNI 系统托盘可显示图标或 fallback，右键 Tahoe 菜单可打开。
 - [ ] 面板有 compositor blur。
 - [x] 工作区状态能从 Quickshell 读取。
 - [x] 不修改 Quickshell 核心源码。
@@ -790,7 +807,9 @@ Windows 操作：
 Phase 5 补充已完成项：
 
 - [x] 应用启动器改为读取真实 `.desktop` 应用，并通过 `DesktopEntries` 执行真实启动。
-- [x] 系统托盘改为读取真实 StatusNotifierItem，并支持 activate、secondaryActivate 和 context menu。
+- [x] 系统托盘改为读取真实 StatusNotifierItem，并支持 activate、secondaryActivate 和自绘 Tahoe context menu；SNI 已用 FClash 验证，legacy XEmbed 托盘应用需桥接到 SNI。
+- [x] Dock/窗口 badge 优先使用真实 `.desktop` themed icon，避免 Firefox 等应用被旧浏览器 fallback 映射成错误图标。
+- [x] 控制中心 Wi-Fi、蓝牙、飞行模式点击区域分离；飞行模式可本地关闭/恢复 Wi-Fi 和蓝牙。
 - [x] 移除错误的顶栏红黄绿假控件，避免控件漂在顶栏而非绑定窗口。
 - [x] niri 广告 `WmCapabilities::Minimize`，原生客户端 CSD 最小化按钮不再灰置。
 - [x] niri 处理 xdg toplevel minimize request，客户端原生最小化按钮可真正最小化。

@@ -28,7 +28,6 @@ PanelWindow {
     readonly property bool batteryAvailable: batteryService && batteryService.available
     readonly property color glassFill: "#1cffffff"
     readonly property color glassStroke: "#36ffffff"
-    readonly property color glassHairline: "#3affffff"
     readonly property color glassShadowLine: "#10000000"
 
     signal toggleAppMenu()
@@ -69,17 +68,35 @@ PanelWindow {
         onTriggered: root.now = new Date()
     }
 
+    // Floating, rounded glass bar — mirrors the Dock / ControlCenter form
+    // so the top bar reads as "a piece of glass floating off the screen
+    // edge" instead of a full-width strip glued to the top. The
+    // PanelWindow itself stays transparent and keeps exclusiveZone 34 so
+    // window layout doesn't shift; only the inner barSurface floats with
+    // insets. See glass-consistency-fix-plan.md §2.3.
+    //
+    // The insets are 8px left/right and 5px top/bottom rather than a flat
+    // 8 all around: a flat 8 on implicitHeight 34 would leave barSurface
+    // only 18px tall, which cannot fit the 24px-tall RowLayout children
+    // (they'd be clipped — violating §2.6 acceptance). 5/5 vertically
+    // yields a 24px-tall surface that just fits the content while still
+    // floating off every edge.
     BackgroundEffect.blurRegion: Region {
         item: barSurface
-        radius: 0
+        // MUST match barSurface.radius or the blur leaks past the rounded
+        // corners (project convention — see NotificationToast.qml).
+        radius: barSurface.radius
     }
 
     Rectangle {
         id: barSurface
         anchors.fill: parent
+        anchors.leftMargin: 8
+        anchors.rightMargin: 8
+        anchors.topMargin: 5
+        anchors.bottomMargin: 5
+        radius: 18
         color: root.glassFill
-        border.color: root.glassStroke
-        border.width: 1
         // Fade the bar surface out when the Launchpad opens (see the
         // visible binding above). NumberAnimation, not spring — see
         // shell.qml useSpring.
@@ -89,25 +106,40 @@ PanelWindow {
             NumberAnimation { duration: 170; easing.type: Easing.OutCubic }
         }
 
+        // NOTE: no `border.width` on the surface itself — a centered 1px
+        // border is antialiased against the pixels OUTSIDE the rect and
+        // produces faint near-square corners where the arc is tangent to
+        // the straight edges. Draw the glass edges with inset Rectangles
+        // instead, whose borders sit fully inside the surface and never
+        // overshoot (same convention as Dock.qml / NotificationToast.qml).
         Rectangle {
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.top: parent.top
-            height: 1
-            color: root.glassHairline
+            // Top-left light edge (the Tahoe glass highlight).
+            anchors.fill: parent
+            anchors.margins: 1
+            radius: parent.radius - 1
+            color: "transparent"
+            border.color: root.glassStroke
+            border.width: 1
         }
 
         Rectangle {
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.bottom: parent.bottom
-            height: 1
-            color: root.glassShadowLine
+            // Bottom-right shadow edge.
+            anchors.fill: parent
+            anchors.margins: 1
+            radius: parent.radius - 1
+            color: "transparent"
+            border.color: root.glassShadowLine
+            border.width: 1
+            z: -1
         }
 
         RowLayout {
             anchors.fill: parent
-            anchors.leftMargin: 18
+            // Inset the row inside the floating bar surface so the end
+            // children (status button / tahoe label) clear the rounded
+            // caps. The surface's radius is 18, so anything within ~14px
+            // of the ends would clip under the arc.
+            anchors.leftMargin: 14
             anchors.rightMargin: 14
             spacing: 14
 

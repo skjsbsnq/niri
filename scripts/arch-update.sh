@@ -45,6 +45,32 @@ BUILD_NIRI_FORK="${BUILD_NIRI_FORK:-false}"
 FORCE_NIRI_BUILD="${FORCE_NIRI_BUILD:-false}"
 BUILD_QUICKSHELL_FORK="${BUILD_QUICKSHELL_FORK:-false}"
 FORCE_QUICKSHELL_BUILD="${FORCE_QUICKSHELL_BUILD:-false}"
+INSTALL_QUICKSHELL_BUILD_DEPS="${INSTALL_QUICKSHELL_BUILD_DEPS:-true}"
+
+QUICKSHELL_BUILD_PACKAGES=(
+  base-devel
+  clang
+  cli11
+  cmake
+  jemalloc
+  libdrm
+  libpipewire
+  libxcb
+  networkmanager
+  ninja
+  pam
+  polkit
+  qt6-base
+  qt6-declarative
+  qt6-shadertools
+  qt6-svg
+  qt6-wayland
+  spirv-tools
+  upower
+  vulkan-headers
+  wayland
+  wayland-protocols
+)
 
 before_commit=""
 after_commit=""
@@ -271,8 +297,27 @@ build_niri() {
   niri_built=true
 }
 
+install_quickshell_build_deps() {
+  if [[ "$INSTALL_QUICKSHELL_BUILD_DEPS" != true ]]; then
+    log "skipping Quickshell build dependency install; INSTALL_QUICKSHELL_BUILD_DEPS=$INSTALL_QUICKSHELL_BUILD_DEPS"
+    return
+  fi
+
+  if ! command -v pacman >/dev/null 2>&1; then
+    log "pacman not found; skipping Quickshell build dependency install"
+    return
+  fi
+
+  require_cmd sudo
+  log "installing Quickshell build dependencies"
+  sudo pacman -Syu --needed "${QUICKSHELL_BUILD_PACKAGES[@]}"
+}
+
 build_quickshell() {
   [[ -d "$QUICKSHELL_DIR" ]] || die "Quickshell directory does not exist: $QUICKSHELL_DIR"
+
+  install_quickshell_build_deps
+
   require_cmd cmake
   require_cmd ninja
 

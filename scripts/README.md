@@ -58,6 +58,8 @@ FORCE_QUICKSHELL_BUILD=true bash scripts/arch-update.sh
 
 The Quickshell fork is installed under `~/.local/bin/quickshell` by default, matching the Tahoe session launcher's normal `PATH`-based lookup.
 
+When a Quickshell build is needed on Arch, `arch-update.sh` installs the required build packages first, including `qt6-shadertools`, `spirv-tools`, `qt6-wayland`, and `vulkan-headers`. Set `INSTALL_QUICKSHELL_BUILD_DEPS=false` to skip that package install step.
+
 ## Capture Glass Baseline
 
 ```sh

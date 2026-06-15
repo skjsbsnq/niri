@@ -4,7 +4,7 @@ use std::sync::Mutex;
 use niri_config::{TahoeGlass, TahoeGlassMaterial};
 use smithay::backend::renderer::gles::GlesRenderer;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
-use smithay::utils::{Logical, Point, Rectangle, Scale};
+use smithay::utils::{Logical, Point, Rectangle};
 use smithay::wayland::compositor::{with_states, SurfaceData};
 
 use crate::layout::shadow::Shadow;
@@ -14,7 +14,6 @@ use crate::render_helpers::background_effect::{
     BackgroundEffect, BackgroundEffectElement, RenderParams,
 };
 use crate::render_helpers::damage::ExtraDamage;
-use crate::render_helpers::renderer::NiriRenderer;
 use crate::render_helpers::shadow::ShadowRenderElement;
 use crate::render_helpers::xray::XrayPos;
 use crate::render_helpers::RenderCtx;

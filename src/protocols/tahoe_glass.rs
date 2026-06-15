@@ -292,7 +292,6 @@ where
                 debug!(surface = %surface.id(), "created Tahoe glass surface");
                 data_init.init(id, TahoeGlassSurfaceUserData { surface });
             }
-            _ => unreachable!(),
         }
     }
 }
@@ -393,7 +392,6 @@ where
                 debug!(surface = %data.surface.id(), "cleared Tahoe glass regions");
                 mark_pending_dirty(&data.surface);
             }
-            _ => unreachable!(),
         }
     }
 }

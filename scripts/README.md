@@ -20,7 +20,7 @@ The project niri config is deployed to `~/.config/niri/tahoe/config.kdl`. This a
 bash scripts/arch-update.sh
 ```
 
-This is the only update command expected during Phase 0 and Phase 1 work. It pulls the latest code, deploys `tahoe-shell/` and `config/niri/tahoe-phase0.kdl` when needed, and prints whether niri or Quickshell should be restarted.
+This is the only update command expected during normal Tahoe work. It pulls the latest code, updates submodules, optionally rebuilds the local niri/Quickshell forks, deploys `tahoe-shell/` and `config/niri/tahoe-phase0.kdl` when needed, and prints whether niri or Quickshell should be restarted.
 
 Phase 0 uses the distro `niri` package installed by `pacman`; it does not build the local niri fork by default.
 
@@ -37,6 +37,26 @@ From Phase 2 onward, enable automatic niri fork builds when niri source changes:
 ```sh
 BUILD_NIRI_FORK=auto bash scripts/arch-update.sh
 ```
+
+From Phase 5 onward, enable automatic Quickshell fork builds when the Quickshell submodule changes or when the installed local Quickshell binary is missing/out of date:
+
+```sh
+BUILD_QUICKSHELL_FORK=auto bash scripts/arch-update.sh
+```
+
+To update both compositor and shell protocol sides in one pass:
+
+```sh
+BUILD_NIRI_FORK=auto BUILD_QUICKSHELL_FORK=auto bash scripts/arch-update.sh
+```
+
+To force a Quickshell rebuild even when no Quickshell changes were pulled:
+
+```sh
+FORCE_QUICKSHELL_BUILD=true bash scripts/arch-update.sh
+```
+
+The Quickshell fork is installed under `~/.local/bin/quickshell` by default, matching the Tahoe session launcher's normal `PATH`-based lookup.
 
 ## Capture Glass Baseline
 
@@ -82,6 +102,7 @@ After running it, log out and log back in so locale, fontconfig, and input metho
 `arch-update.sh` manages only project-owned Tahoe paths:
 
 - niri config: `~/.config/niri/tahoe/config.kdl`
+- Quickshell binary: `~/.local/bin/quickshell`
 - Tahoe shell: `~/.config/quickshell/tahoe`
 - session launcher: `~/.local/bin/tahoe-niri-session`
 - system session launcher: `/usr/local/bin/tahoe-niri-session`

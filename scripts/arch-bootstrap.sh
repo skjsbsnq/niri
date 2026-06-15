@@ -18,18 +18,34 @@ PACMAN_PACKAGES=(
   base-devel
   cargo
   clang
+  cli11
   cmake
   git
+  jemalloc
+  libdrm
   libdisplay-info
   libinput
+  libpipewire
+  libxcb
   libxkbcommon
   mesa
+  networkmanager
   niri
   ninja
+  pam
   pipewire
+  polkit
   pkgconf
+  qt6-base
+  qt6-declarative
+  qt6-shadertools
+  qt6-svg
+  qt6-wayland
   rsync
   seatd
+  spirv-tools
+  upower
+  vulkan-headers
   wayland
   wayland-protocols
 )

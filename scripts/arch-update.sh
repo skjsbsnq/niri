@@ -13,12 +13,17 @@ die() {
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="${REPO_DIR:-"$(cd -- "$SCRIPT_DIR/.." && pwd)"}"
 NIRI_DIR="${NIRI_DIR:-"$REPO_DIR/niri"}"
+QUICKSHELL_DIR="${QUICKSHELL_DIR:-"$REPO_DIR/quickshell"}"
 TAHOE_SHELL_DIR="${TAHOE_SHELL_DIR:-"$REPO_DIR/tahoe-shell"}"
 NIRI_CONFIG_SRC="${NIRI_CONFIG_SRC:-"$REPO_DIR/config/niri/tahoe-phase0.kdl"}"
 
 INSTALL_PREFIX="${INSTALL_PREFIX:-"$HOME/.local"}"
 NIRI_BIN_DIR="${NIRI_BIN_DIR:-"$INSTALL_PREFIX/bin"}"
 NIRI_BIN_NAME="${NIRI_BIN_NAME:-niri}"
+QUICKSHELL_BUILD_DIR="${QUICKSHELL_BUILD_DIR:-"$QUICKSHELL_DIR/build-tahoe"}"
+QUICKSHELL_BUILD_STAMP="${QUICKSHELL_BUILD_STAMP:-"$QUICKSHELL_BUILD_DIR/.tahoe-installed-commit"}"
+QUICKSHELL_BIN_DIR="${QUICKSHELL_BIN_DIR:-"$INSTALL_PREFIX/bin"}"
+QUICKSHELL_BIN_NAME="${QUICKSHELL_BIN_NAME:-quickshell}"
 TAHOE_CONFIG_DIR="${TAHOE_CONFIG_DIR:-"$HOME/.config/quickshell/tahoe"}"
 NIRI_CONFIG_DIR="${NIRI_CONFIG_DIR:-"$HOME/.config/niri/tahoe"}"
 NIRI_CONFIG_TARGET="${NIRI_CONFIG_TARGET:-"$NIRI_CONFIG_DIR/config.kdl"}"
@@ -38,17 +43,23 @@ CLEANUP_TAHOE_XSESSION_ENTRY="${CLEANUP_TAHOE_XSESSION_ENTRY:-true}"
 ALLOW_ROOT_ARCH_UPDATE="${ALLOW_ROOT_ARCH_UPDATE:-false}"
 BUILD_NIRI_FORK="${BUILD_NIRI_FORK:-false}"
 FORCE_NIRI_BUILD="${FORCE_NIRI_BUILD:-false}"
+BUILD_QUICKSHELL_FORK="${BUILD_QUICKSHELL_FORK:-false}"
+FORCE_QUICKSHELL_BUILD="${FORCE_QUICKSHELL_BUILD:-false}"
 
 before_commit=""
 after_commit=""
 niri_before_commit=""
 niri_after_commit=""
+quickshell_before_commit=""
+quickshell_after_commit=""
 need_niri_build=false
+need_quickshell_build=false
 need_shell_deploy=false
 need_niri_config_deploy=false
 need_session_deploy=false
 scripts_changed=false
 niri_built=false
+quickshell_built=false
 shell_deployed=false
 niri_config_deployed=false
 session_launcher_deployed=false
@@ -60,6 +71,8 @@ xsession_desktop_removed=false
 root_git=false
 niri_git=false
 niri_root_submodule=false
+quickshell_git=false
+quickshell_root_submodule=false
 
 require_cmd() {
   command -v "$1" >/dev/null 2>&1 || die "missing required command: $1"
@@ -121,6 +134,37 @@ niri_changed_since_pull() {
   fi
 
   changed_since_pull '^niri/'
+}
+
+quickshell_changed_since_pull() {
+  if [[ "$quickshell_root_submodule" == true ]]; then
+    changed_since_pull '^quickshell$'
+    return
+  fi
+
+  if [[ "$quickshell_git" == true ]]; then
+    if [[ -z "$quickshell_before_commit" || "$quickshell_before_commit" == "$quickshell_after_commit" ]]; then
+      return 1
+    fi
+
+    git -C "$QUICKSHELL_DIR" diff --name-only "$quickshell_before_commit" "$quickshell_after_commit" -- \
+      | grep -Eq '.'
+    return
+  fi
+
+  changed_since_pull '^quickshell/'
+}
+
+quickshell_build_is_current() {
+  local expected_commit="$quickshell_after_commit"
+  local installed_commit=""
+
+  [[ -n "$expected_commit" ]] || return 1
+  [[ -x "$QUICKSHELL_BIN_DIR/$QUICKSHELL_BIN_NAME" ]] || return 1
+  [[ -f "$QUICKSHELL_BUILD_STAMP" ]] || return 1
+
+  installed_commit="$(<"$QUICKSHELL_BUILD_STAMP")"
+  [[ "$installed_commit" == "$expected_commit" ]]
 }
 
 dirs_differ() {
@@ -227,6 +271,29 @@ build_niri() {
   niri_built=true
 }
 
+build_quickshell() {
+  [[ -d "$QUICKSHELL_DIR" ]] || die "Quickshell directory does not exist: $QUICKSHELL_DIR"
+  require_cmd cmake
+  require_cmd ninja
+
+  log "building Quickshell fork"
+  cmake -S "$QUICKSHELL_DIR" -B "$QUICKSHELL_BUILD_DIR" -GNinja \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_INSTALL_PREFIX="$INSTALL_PREFIX" \
+    -DINSTALL_QML_PREFIX=lib/qt6/qml \
+    -DDISTRIBUTOR="Tahoe fork" \
+    -DCRASHREPORT_URL="https://github.com/skjsbsnq/quickshell/issues/new/choose"
+  cmake --build "$QUICKSHELL_BUILD_DIR"
+  cmake --install "$QUICKSHELL_BUILD_DIR"
+
+  if [[ ! -x "$QUICKSHELL_BIN_DIR/$QUICKSHELL_BIN_NAME" ]]; then
+    die "Quickshell build finished but binary is missing: $QUICKSHELL_BIN_DIR/$QUICKSHELL_BIN_NAME"
+  fi
+
+  git -C "$QUICKSHELL_DIR" rev-parse HEAD > "$QUICKSHELL_BUILD_STAMP"
+  quickshell_built=true
+}
+
 deploy_tahoe_shell() {
   if [[ ! -d "$TAHOE_SHELL_DIR" ]]; then
     log "skipping Tahoe shell deploy; directory does not exist: $TAHOE_SHELL_DIR"
@@ -318,12 +385,20 @@ main() {
     niri_git=true
   fi
 
+  if is_git_repo "$QUICKSHELL_DIR"; then
+    quickshell_git=true
+  fi
+
   if is_root_submodule_path "$NIRI_DIR"; then
     niri_root_submodule=true
   fi
 
-  if [[ "$root_git" != true && "$niri_git" != true ]]; then
-    die "neither REPO_DIR nor NIRI_DIR is a git repository"
+  if is_root_submodule_path "$QUICKSHELL_DIR"; then
+    quickshell_root_submodule=true
+  fi
+
+  if [[ "$root_git" != true && "$niri_git" != true && "$quickshell_git" != true ]]; then
+    die "none of REPO_DIR, NIRI_DIR, or QUICKSHELL_DIR is a git repository"
   fi
 
   if [[ "$root_git" == true ]]; then
@@ -359,6 +434,10 @@ main() {
     niri_git=true
   fi
 
+  if is_git_repo "$QUICKSHELL_DIR"; then
+    quickshell_git=true
+  fi
+
   if [[ "$niri_git" == true && "$niri_root_submodule" == true ]]; then
     niri_after_commit="$(git -C "$NIRI_DIR" rev-parse HEAD)"
     log "niri submodule commit: $niri_after_commit"
@@ -381,13 +460,49 @@ main() {
     fi
   fi
 
+  if [[ "$quickshell_git" == true && "$quickshell_root_submodule" == true ]]; then
+    quickshell_after_commit="$(git -C "$QUICKSHELL_DIR" rev-parse HEAD)"
+    log "Quickshell submodule commit: $quickshell_after_commit"
+  elif [[ "$quickshell_git" == true ]]; then
+    quickshell_before_commit="$(git -C "$QUICKSHELL_DIR" rev-parse HEAD)"
+    log "Quickshell current commit: $quickshell_before_commit"
+
+    git -C "$QUICKSHELL_DIR" fetch --prune
+    git -C "$QUICKSHELL_DIR" pull --ff-only
+
+    quickshell_after_commit="$(git -C "$QUICKSHELL_DIR" rev-parse HEAD)"
+    log "Quickshell updated commit: $quickshell_after_commit"
+
+    if [[ "$quickshell_before_commit" == "$quickshell_after_commit" ]]; then
+      log "Quickshell has no upstream changes"
+    else
+      log "Quickshell changed files:"
+      git -C "$QUICKSHELL_DIR" diff --name-only "$quickshell_before_commit" "$quickshell_after_commit" \
+        | sed 's/^/[arch-update]   quickshell\//'
+    fi
+  fi
+
   if [[ "$BUILD_NIRI_FORK" == auto ]] && niri_changed_since_pull; then
     need_niri_build=true
+  fi
+
+  if [[ "$BUILD_QUICKSHELL_FORK" == auto ]]; then
+    if quickshell_changed_since_pull; then
+      need_quickshell_build=true
+    elif ! quickshell_build_is_current; then
+      log "Quickshell installed build is missing or not from the current submodule commit"
+      need_quickshell_build=true
+    fi
   fi
 
   if [[ "$FORCE_NIRI_BUILD" == true ]]; then
     log "FORCE_NIRI_BUILD=true"
     need_niri_build=true
+  fi
+
+  if [[ "$FORCE_QUICKSHELL_BUILD" == true ]]; then
+    log "FORCE_QUICKSHELL_BUILD=true"
+    need_quickshell_build=true
   fi
 
   if changed_since_pull '^(tahoe-shell/|macOS-26-Tahoe-for-the-Web-main/(background|icon)/|.*\.qml$)' \
@@ -422,6 +537,12 @@ main() {
     log "niri build not needed"
   fi
 
+  if [[ "$need_quickshell_build" == true ]]; then
+    build_quickshell
+  else
+    log "Quickshell build not needed"
+  fi
+
   if [[ "$need_shell_deploy" == true ]]; then
     deploy_tahoe_shell
   else
@@ -444,6 +565,7 @@ main() {
   log "  repo from: $before_commit"
   log "  repo to:   $after_commit"
   log "  build niri fork mode: $BUILD_NIRI_FORK"
+  log "  build Quickshell fork mode: $BUILD_QUICKSHELL_FORK"
   if [[ "$niri_git" == true && "$niri_root_submodule" == true ]]; then
     log "  niri mode: root submodule"
     log "  niri commit: $niri_after_commit"
@@ -451,7 +573,17 @@ main() {
     log "  niri from: $niri_before_commit"
     log "  niri to:   $niri_after_commit"
   fi
+  if [[ "$quickshell_git" == true && "$quickshell_root_submodule" == true ]]; then
+    log "  Quickshell mode: root submodule"
+    log "  Quickshell commit: $quickshell_after_commit"
+  elif [[ "$quickshell_git" == true ]]; then
+    log "  Quickshell from: $quickshell_before_commit"
+    log "  Quickshell to:   $quickshell_after_commit"
+  fi
   log "  niri built: $niri_built"
+  log "  Quickshell built: $quickshell_built"
+  log "  Quickshell binary: $QUICKSHELL_BIN_DIR/$QUICKSHELL_BIN_NAME"
+  log "  Quickshell build stamp: $QUICKSHELL_BUILD_STAMP"
   log "  Tahoe shell deployed: $shell_deployed"
   log "  niri Tahoe config deployed: $niri_config_deployed"
   log "  niri Tahoe config target: $NIRI_CONFIG_TARGET"
@@ -474,7 +606,7 @@ main() {
     log "restart niri or log out/in to use the updated compositor/config"
   fi
 
-  if [[ "$shell_deployed" == true ]]; then
+  if [[ "$quickshell_built" == true || "$shell_deployed" == true ]]; then
     log "restart Quickshell Tahoe shell to use the deployed QML/assets"
   fi
 

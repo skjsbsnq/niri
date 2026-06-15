@@ -12,16 +12,20 @@ PanelWindow {
     property var appsService
     property var niriService
     property var notificationsService
+    property var batteryService
     property bool controlCenterOpen: false
     property bool launchpadOpen: false
     property bool appMenuOpen: false
     property bool spotlightOpen: false
+    property bool notificationCenterOpen: false
+    property bool batteryPopupOpen: false
     property date now: new Date()
     readonly property string activeApp: appsService && niriService ? appsService.toplevelLabel(niriService.focusedWindow || niriService.activeToplevel) : "Desktop"
-    // Number of undismissed notifications. Drives the bell badge to the
-    // left of the clock. Guards against a missing service (e.g. before
-    // the property is wired from the shell root).
-    readonly property int notificationCount: notificationsService ? notificationsService.activeCount : 0
+    // Number of retained notification history entries. Drives the bell
+    // badge and lets DND-suppressed notifications remain visible.
+    readonly property int notificationCount: notificationsService ? notificationsService.historyCount : 0
+    readonly property bool dndEnabled: notificationsService ? notificationsService.dndEnabled : false
+    readonly property bool batteryAvailable: batteryService && batteryService.available
     readonly property color glassFill: "#1cffffff"
     readonly property color glassStroke: "#36ffffff"
     readonly property color glassHairline: "#3affffff"
@@ -31,6 +35,8 @@ PanelWindow {
     signal toggleControlCenter()
     signal toggleSpotlight()
     signal toggleLaunchpad()
+    signal toggleNotifications()
+    signal toggleBattery()
 
     anchors {
         left: true
@@ -177,30 +183,25 @@ PanelWindow {
                 Layout.alignment: Qt.AlignVCenter
             }
 
-            // Notification bell badge. Hidden when there is nothing
-            // pending so the bar stays clean. Clicking it dismisses the
-            // current toast (same as clicking the toast itself); for a
-            // count > 9 it just shows "9+".
             Item {
                 Layout.preferredWidth: 30
                 Layout.preferredHeight: 24
                 Layout.alignment: Qt.AlignVCenter
-                visible: root.notificationCount > 0
 
                 Rectangle {
                     anchors.fill: parent
                     radius: 12
-                    color: badgeMouse.containsMouse ? "#38ffffff" : "#22ffffff"
+                    color: root.notificationCenterOpen ? "#38ffffff" : (badgeMouse.containsMouse ? "#30ffffff" : "#22ffffff")
                     border.color: "#40ffffff"
                 }
 
                 Text {
                     anchors.centerIn: parent
-                    // Material Icons "notifications" glyph.
-                    text: "\ue7f4"
+                    text: root.dndEnabled ? "\ue7f6" : "\ue7f4"
                     color: "#202124"
                     font.family: "Material Icons"
                     font.pixelSize: 16
+                    opacity: root.notificationCount > 0 || root.dndEnabled ? 1 : 0.68
                 }
 
                 Rectangle {
@@ -213,6 +214,7 @@ PanelWindow {
                     color: "#ccff453a"
                     border.color: "#ffffff"
                     border.width: 1
+                    visible: root.notificationCount > 0
 
                     Text {
                         id: countLabel
@@ -229,10 +231,79 @@ PanelWindow {
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: {
-                        if (root.notificationsService)
-                            root.notificationsService.dismissCurrent();
+                    onClicked: root.toggleNotifications()
+                }
+            }
+
+            Item {
+                Layout.preferredWidth: visible ? 58 : 0
+                Layout.preferredHeight: 24
+                Layout.alignment: Qt.AlignVCenter
+                visible: root.batteryAvailable
+
+                Rectangle {
+                    anchors.fill: parent
+                    radius: 12
+                    color: root.batteryPopupOpen ? "#38ffffff" : (batteryMouse.containsMouse ? "#30ffffff" : "#22ffffff")
+                    border.color: "#40ffffff"
+                }
+
+                Text {
+                    anchors.left: parent.left
+                    anchors.leftMargin: 8
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: root.batteryService ? root.batteryService.roundedPercentage + "%" : ""
+                    color: "#202124"
+                    font.pixelSize: 11
+                    font.weight: Font.DemiBold
+                }
+
+                Item {
+                    width: 20
+                    height: 12
+                    anchors.right: parent.right
+                    anchors.rightMargin: 7
+                    anchors.verticalCenter: parent.verticalCenter
+
+                    Rectangle {
+                        id: batteryOutline
+                        x: 0
+                        y: 2
+                        width: 17
+                        height: 9
+                        radius: 3
+                        color: "transparent"
+                        border.color: "#99202124"
+                        border.width: 1
+
+                        Rectangle {
+                            x: 2
+                            y: 2
+                            width: root.batteryService ? Math.max(2, (parent.width - 4) * root.batteryService.roundedPercentage / 100) : 2
+                            height: parent.height - 4
+                            radius: 2
+                            color: root.batteryService && root.batteryService.roundedPercentage <= 15 && root.batteryService.onBattery
+                                ? "#ff453a"
+                                : "#202124"
+                        }
                     }
+
+                    Rectangle {
+                        x: 18
+                        y: 5
+                        width: 2
+                        height: 3
+                        radius: 1
+                        color: "#99202124"
+                    }
+                }
+
+                MouseArea {
+                    id: batteryMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.toggleBattery()
                 }
             }
 

@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import Quickshell.Services.SystemTray
+import Quickshell.Widgets
 
 Item {
     id: root
@@ -19,6 +20,38 @@ Item {
 
         var point = sourceItem.mapToItem(null, mouseX, mouseY);
         item.display(root.panelWindow, Math.round(point.x), Math.round(point.y));
+    }
+
+    function iconSource(item) {
+        if (!item)
+            return "";
+
+        try {
+            return String(item.icon || "");
+        } catch (e) {
+            return "";
+        }
+    }
+
+    function fallbackLabel(item) {
+        if (!item)
+            return "?";
+
+        try {
+            var title = String(item.tooltipTitle || item.title || item.id || "").trim();
+            if (title.length > 0)
+                return title.charAt(0).toUpperCase();
+        } catch (e) {}
+
+        return "?";
+    }
+
+    function isAttention(item) {
+        try {
+            return Number(item.status) === 2;
+        } catch (e) {
+            return false;
+        }
     }
 
     Row {
@@ -42,17 +75,31 @@ Item {
                     anchors.fill: parent
                     radius: 11
                     color: trayMouse.containsMouse ? "#32ffffff" : "transparent"
-                    border.color: trayMouse.containsMouse ? "#42ffffff" : "transparent"
+                    border.color: root.isAttention(trayItem.modelData)
+                        ? "#ccff453a"
+                        : (trayMouse.containsMouse ? "#42ffffff" : "transparent")
                     border.width: 1
                 }
 
-                Image {
+                IconImage {
+                    id: trayIcon
+
                     anchors.centerIn: parent
                     width: 16
                     height: 16
-                    source: trayItem.modelData ? trayItem.modelData.icon : ""
-                    fillMode: Image.PreserveAspectFit
-                    smooth: true
+                    implicitSize: 16
+                    source: root.iconSource(trayItem.modelData)
+                    mipmap: true
+                    visible: root.iconSource(trayItem.modelData).length > 0 && status !== Image.Error
+                }
+
+                Text {
+                    anchors.centerIn: parent
+                    text: root.fallbackLabel(trayItem.modelData)
+                    color: "#202124"
+                    font.pixelSize: 10
+                    font.weight: Font.DemiBold
+                    visible: !trayIcon.visible
                 }
 
                 MouseArea {

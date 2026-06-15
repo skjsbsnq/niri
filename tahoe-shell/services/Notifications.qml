@@ -72,6 +72,10 @@ Item {
     property var activeModel: []
     readonly property int activeCount: activeModel.length
     readonly property var current: activeModel.length > 0 ? activeModel[0] : null
+    property var historyModel: []
+    property bool dndEnabled: false
+    readonly property int historyCount: historyModel.length
+    readonly property int maxHistory: 60
 
     // Cap auto-expire so a client that sends expireTimeout=-1 (meaning
     // "server default") or a huge value does not leave a toast up
@@ -95,6 +99,16 @@ Item {
         notification.closed.connect(function (reason) {
             root.handleClosed(id);
         });
+
+        root.pushHistory(notification);
+
+        if (root.dndEnabled) {
+            // Keep the snapshot in history but suppress the visual toast.
+            // Expiring the retained object prevents a hidden live object
+            // from staying around indefinitely.
+            notification.expire();
+            return;
+        }
 
         var wasEmpty = root.activeModel.length === 0;
         root.activeModel = root.activeModel.concat([notification]);
@@ -149,6 +163,85 @@ Item {
                 return "image://icon/" + iconName;
         } catch (e) {}
         return "";
+    }
+
+    function iconUrlForHistory(entry) {
+        if (!entry)
+            return "";
+        try {
+            var img = String(entry.image || "").trim();
+            if (img.length > 0)
+                return img;
+            var iconName = String(entry.appIcon || "").trim();
+            if (iconName.length === 0)
+                iconName = String(entry.desktopEntry || "").trim();
+            if (iconName.length > 0)
+                return "image://icon/" + iconName;
+        } catch (e) {}
+        return "";
+    }
+
+    function pushHistory(notification) {
+        var entry = snapshot(notification);
+        if (!entry)
+            return;
+
+        var next = [entry];
+        var list = root.historyModel;
+        for (var i = 0; i < list.length && next.length < root.maxHistory; i++) {
+            if (list[i] && list[i].id !== entry.id)
+                next.push(list[i]);
+        }
+        root.historyModel = next;
+    }
+
+    function snapshot(notification) {
+        if (!notification)
+            return null;
+
+        return {
+            "id": notification.id,
+            "appName": safeString(notification.appName, "Application"),
+            "summary": safeString(notification.summary, "Notification"),
+            "body": safeString(notification.body, ""),
+            "appIcon": safeString(notification.appIcon, ""),
+            "desktopEntry": safeString(notification.desktopEntry, ""),
+            "image": safeString(notification.image, ""),
+            "urgency": Number(notification.urgency) || 0,
+            "time": new Date()
+        };
+    }
+
+    function safeString(value, fallback) {
+        try {
+            var text = String(value || "").trim();
+            return text.length > 0 ? text : fallback;
+        } catch (e) {
+            return fallback;
+        }
+    }
+
+    function removeHistoryItem(id) {
+        var next = [];
+        var list = root.historyModel;
+        for (var i = 0; i < list.length; i++) {
+            if (list[i] && list[i].id !== id)
+                next.push(list[i]);
+        }
+        root.historyModel = next;
+    }
+
+    function toggleDnd() {
+        root.dndEnabled = !root.dndEnabled;
+    }
+
+    function clearHistory() {
+        root.historyModel = [];
+    }
+
+    function clearEverything() {
+        clearHistory();
+        clearAll();
     }
 
     function scheduleExpire(id, expireMs) {

@@ -56,29 +56,34 @@
 - 控制中心已经有真实音量、亮度、Wi-Fi、蓝牙、MPRIS。
 - 通知 toast 已经接 `NotificationServer`。
 - 顶栏已有系统托盘、workspace、通知、Spotlight、时钟、控制中心入口。
+- 2026-06-15 已补：`services/Power.qml` 封装锁屏、睡眠、注销、重启、关机；Tahoe 菜单已接真实动作，危险动作进入确认态。
+- 2026-06-15 已补：`services/Battery.qml` 接 UPower display device；顶栏显示电池百分比，`BatteryPopup.qml` 显示电量、充放电状态、电源来源和健康度。
+- 2026-06-15 已补：通知服务新增 `historyModel` 和 DND；`NotificationCenter.qml` 提供历史列表、单条移除、清空和勿扰开关。
+- 2026-06-15 已补托盘设计结论：原实现只是 `SystemTray.items` 的薄 Repeater，没有被写进功能清单，也没有 fallback/attention/验收标准；现在将其定义为小型 SNI 状态区，使用 Quickshell `IconImage` 渲染 `StatusNotifierItem.icon`，空图标显示字母 fallback，`NeedsAttention` 用红色描边。
 
 ### 功能缺口
 
-- 没有电池状态和电池弹层。
-- 没有电源菜单：锁定、注销、重启、关机、睡眠。
+- ~~没有电池状态和电池弹层。~~ 已接 UPower 和电池 popup；后续只剩真机兼容性验收。
+- ~~没有电源菜单：锁定、注销、重启、关机、睡眠。~~ 已接 Tahoe 菜单和确认态。
 - 没有自有锁屏 UI，目前锁屏即使可用也不是 Tahoe shell 自己的体验。
 - 没有输入法状态和输入法切换入口。
-- 没有 DND / 勿扰模式，通知只有当前 toast，没有通知历史中心。
+- ~~没有 DND / 勿扰模式，通知只有当前 toast，没有通知历史中心。~~ 已补历史中心和 DND；按 appId 分组仍后置。
+- 系统托盘需要在真机会话中验证 Steam、输入法、云同步类 SNI 图标是否能注册并显示；若 `SystemTray.items` 为空，问题在 DBus watcher/host 或应用未走 SNI，而不是顶栏 UI。
 - 没有夜间模式 / 深浅色模式开关。
 - 没有截图、录屏、Quick Look。
 
 ### 为什么优先
 
-这些不是拟真细节，而是桌面日用入口。没有电源、锁屏、电池、输入法和通知历史，用户仍需要回到外部环境或命令行完成常见操作。
+这些不是拟真细节，而是桌面日用入口。电源、电池和通知历史已经补上后，剩下最影响日用闭环的是自有锁屏、输入法状态、夜间模式和截图/录屏这类系统入口。
 
 ### 建议实现顺序
 
-1. 新增 `services/Power.qml`：封装关机、重启、注销、睡眠、锁屏命令；先用 systemd/logind 常规命令，所有危险操作走确认弹窗。
-2. 新增 `PowerMenu.qml`：从顶栏 Tahoe 菜单或控制中心入口打开。
-3. 新增 `services/Battery.qml`：优先接 UPower DBus；不可用时降级为空状态。
-4. 顶栏补电池图标/百分比/充电状态，点击打开电池 popup。
-5. 通知服务补 history model、clear all、按 appId 分组的最低实现。
-6. 增加 DND 状态，至少能阻止 toast 弹出并保留历史。
+1. ~~新增 `services/Power.qml`：封装关机、重启、注销、睡眠、锁屏命令；先用 systemd/logind 常规命令，所有危险操作走确认弹窗。~~ 已完成。
+2. ~~新增 `PowerMenu.qml`：从顶栏 Tahoe 菜单或控制中心入口打开。~~ 已以内联 Tahoe 菜单确认态完成，后续可拆独立组件。
+3. ~~新增 `services/Battery.qml`：优先接 UPower DBus；不可用时降级为空状态。~~ 已完成。
+4. ~~顶栏补电池图标/百分比/充电状态，点击打开电池 popup。~~ 已完成。
+5. ~~通知服务补 history model、clear all、按 appId 分组的最低实现。~~ history/clear 已完成；按 appId 分组后置。
+6. ~~增加 DND 状态，至少能阻止 toast 弹出并保留历史。~~ 已完成。
 7. 输入法状态后置，先调研当前环境是 fcitx5、ibus 还是其他。
 
 ### 完成标准
@@ -87,6 +92,7 @@
 - 有可用电源菜单，关机/重启/注销/睡眠/锁屏至少有安全确认。
 - 通知不再只有单条 toast，能打开历史列表并清空。
 - DND 能阻止 toast 干扰。
+- 系统托盘至少能显示 SNI 图标或 fallback，右键菜单可打开，attention 状态有可见提示。
 - 输入法状态至少有可见指示和后续接入方案。
 
 ---

@@ -152,6 +152,10 @@ Item {
         }
     }
 
+    property bool airplaneMode: false
+    property bool savedWifiEnabled: true
+    property bool savedBluetoothEnabled: false
+
     readonly property var wifiDevice: {
         try {
             var devices = Networking.devices;
@@ -191,10 +195,15 @@ Item {
         return "Connected";
     }
 
-    function toggleWifi() {
+    function setWifiEnabled(enabled) {
         try {
-            Networking.wifiEnabled = !Networking.wifiEnabled;
+            Networking.wifiEnabled = !!enabled;
         } catch (e) {}
+    }
+
+    function toggleWifi() {
+        root.airplaneMode = false;
+        setWifiEnabled(!root.wifiEnabled);
     }
 
     // ------------------------------------------------------------------
@@ -208,6 +217,8 @@ Item {
             return null;
         }
     }
+
+    readonly property bool bluetoothAvailable: !!bluetoothAdapter
 
     readonly property bool bluetoothEnabled: {
         var a = root.bluetoothAdapter;
@@ -223,13 +234,35 @@ Item {
         }
     }
 
-    function toggleBluetooth() {
+    function setBluetoothEnabled(enabled) {
         var a = root.bluetoothAdapter;
         if (!a)
             return;
         try {
-            a.enabled = !a.enabled;
+            a.enabled = !!enabled;
         } catch (e) {}
+    }
+
+    function toggleBluetooth() {
+        if (!root.bluetoothAvailable)
+            return;
+
+        root.airplaneMode = false;
+        setBluetoothEnabled(!root.bluetoothEnabled);
+    }
+
+    function toggleAirplaneMode() {
+        if (!root.airplaneMode) {
+            root.savedWifiEnabled = root.wifiEnabled;
+            root.savedBluetoothEnabled = root.bluetoothEnabled;
+            root.setWifiEnabled(false);
+            root.setBluetoothEnabled(false);
+            root.airplaneMode = true;
+        } else {
+            root.setWifiEnabled(root.savedWifiEnabled);
+            root.setBluetoothEnabled(root.savedBluetoothEnabled);
+            root.airplaneMode = false;
+        }
     }
 
     // ------------------------------------------------------------------

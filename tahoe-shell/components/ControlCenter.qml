@@ -477,6 +477,7 @@ PanelWindow {
                         Layout.preferredHeight: 36
                         active: ct.controls && ct.controls.bluetoothEnabled
                         iconCode: "\ue1a7" // bluetooth
+                        enabled: ct.controls && ct.controls.bluetoothAvailable
                         onClicked: {
                             if (ct.controls)
                                 ct.controls.toggleBluetooth();
@@ -492,17 +493,25 @@ PanelWindow {
                     ToggleCircle {
                         Layout.preferredWidth: 30
                         Layout.preferredHeight: 30
-                        active: false
+                        active: ct.controls && ct.controls.airplaneMode
                         iconCode: "\ue195" // airplanemode_active (airdrop-like)
-                        enabled: false
+                        enabled: !!ct.controls
+                        onClicked: {
+                            if (ct.controls)
+                                ct.controls.toggleAirplaneMode();
+                        }
                     }
 
                     Item { Layout.fillWidth: true }
 
                     Text {
-                        text: ct.controls && ct.controls.bluetoothEnabled
+                        text: ct.controls && ct.controls.airplaneMode
+                              ? "Airplane Mode"
+                              : ct.controls && ct.controls.bluetoothEnabled
                               ? (ct.controls.bluetoothConnectedCount + " device(s)")
-                              : "Bluetooth"
+                              : ct.controls && ct.controls.bluetoothAvailable
+                              ? "Bluetooth"
+                              : "No Bluetooth"
                         color: root.textTertiary
                         font.pixelSize: 10
                         elide: Text.ElideRight

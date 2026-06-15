@@ -4,4 +4,5 @@
 	branch = niri-tahoe-desktop
 [submodule "quickshell"]
 	path = quickshell
-	url = https://github.com/quickshell-mirror/quickshell.git
+	url = https://github.com/skjsbsnq/quickshell.git
+	branch = quickshell-tahoe-desktop

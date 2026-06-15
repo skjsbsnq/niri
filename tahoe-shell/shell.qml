@@ -102,7 +102,7 @@ ShellRoot {
             MenuPopup {
                 screen: modelData
                 open: shell.appMenuOpen
-                activeApp: apps.toplevelLabel(niri.activeToplevel)
+                activeApp: apps.toplevelLabel(niri.focusedWindow || niri.activeToplevel)
                 onCloseRequested: shell.appMenuOpen = false
             }
 

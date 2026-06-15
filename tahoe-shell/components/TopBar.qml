@@ -17,7 +17,7 @@ PanelWindow {
     property bool appMenuOpen: false
     property bool spotlightOpen: false
     property date now: new Date()
-    readonly property string activeApp: appsService && niriService ? appsService.toplevelLabel(niriService.activeToplevel) : "Desktop"
+    readonly property string activeApp: appsService && niriService ? appsService.toplevelLabel(niriService.focusedWindow || niriService.activeToplevel) : "Desktop"
     // Number of undismissed notifications. Drives the bell badge to the
     // left of the clock. Guards against a missing service (e.g. before
     // the property is wired from the shell root).

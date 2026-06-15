@@ -15,7 +15,7 @@ PanelWindow {
     property bool useSpring: false
     property real dockMouseX: -10000
     property bool dockHovered: false
-    readonly property bool hasWindows: niriService && niriService.toplevelList && niriService.toplevelList.length > 0
+    readonly property bool hasWindows: niriService && niriService.windowList && niriService.windowList.length > 0
     readonly property color glassFill: "#1cffffff"
     readonly property color glassStroke: "#42ffffff"
     readonly property color glassInnerStroke: "#14ffffff"
@@ -169,7 +169,7 @@ PanelWindow {
                     readonly property bool running: modelData.shellAction !== "launchpad"
                         && root.appsService
                         && root.niriService
-                        && root.appsService.appHasRunningWindow(modelData, root.niriService.toplevelList)
+                        && root.appsService.appHasRunningWindow(modelData, root.niriService.windowList)
                     readonly property real lift: (magnification - 1.0) * 22 + (hovered ? 3 : 0)
 
                     // Fixed width. NOTE: width must NOT depend on

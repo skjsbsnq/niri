@@ -58,6 +58,33 @@ hotkey-overlay {
     skip-at-startup
 }
 
+recent-windows {
+    on
+    debounce-ms 650
+    open-delay-ms 90
+
+    highlight {
+        padding 22
+        corner-radius 18
+        active-color "#d8f6fbff"
+        urgent-color "#ffff9a9a"
+    }
+
+    previews {
+        max-height 430
+        max-scale 0.44
+    }
+
+    binds {
+        Alt+Tab { next-window; }
+        Alt+Shift+Tab { previous-window; }
+        Alt+grave { next-window filter="app-id"; }
+        Alt+Shift+grave { previous-window filter="app-id"; }
+        Mod+Tab { next-window; }
+        Mod+Shift+Tab { previous-window; }
+    }
+}
+
 spawn-sh-at-startup "if [ \"${TAHOE_SKIP_QUICKSHELL_AUTOSTART:-0}\" != \"1\" ]; then exec \"${TAHOE_QUICKSHELL_BIN:-quickshell}\" -p \"${TAHOE_CONFIG_DIR:-$HOME/.config/quickshell/tahoe}\"; fi"
 
 animations {

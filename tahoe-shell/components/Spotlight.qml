@@ -101,19 +101,8 @@ PanelWindow {
     }
 
     BackgroundEffect.blurRegion: Region {
-        item: screenBackdrop
-        radius: 0
-    }
-
-    Rectangle {
-        id: screenBackdrop
-        anchors.fill: parent
-        color: "#08ffffff"
-        opacity: root.open ? 1 : 0
-
-        Behavior on opacity {
-            NumberAnimation { duration: 150; easing.type: Easing.OutCubic }
-        }
+        item: spotlightPanel
+        radius: 28
     }
 
     MouseArea {
@@ -152,8 +141,8 @@ PanelWindow {
             anchors.top: parent.top
             height: 58
             radius: 29
-            color: "#96f4fbff"
-            border.color: "#42ffffff"
+            color: "#bff4fbff"
+            border.color: "#66ffffff"
             border.width: 1
 
             Rectangle {
@@ -161,7 +150,7 @@ PanelWindow {
                 anchors.margins: 1
                 radius: 28
                 color: "transparent"
-                border.color: "#12ffffff"
+                border.color: "#18ffffff"
                 border.width: 1
             }
 
@@ -269,8 +258,8 @@ PanelWindow {
             anchors.topMargin: 10
             height: resultsColumn.implicitHeight + 12
             radius: 18
-            color: "#aef7f8fb"
-            border.color: "#38ffffff"
+            color: "#c8f7f8fb"
+            border.color: "#4fffffff"
             border.width: 1
             opacity: root.open && root.query.trim().length > 0 ? 1 : 0
             visible: opacity > 0.01

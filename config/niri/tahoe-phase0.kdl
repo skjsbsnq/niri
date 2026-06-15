@@ -202,12 +202,12 @@ layer-rule {
     background-effect {
         xray false
         blur true
-        noise 0.010
-        saturation 1.42
+        noise 0.006
+        saturation 1.16
         tint-color "#ffffff"
-        tint-amount 0.10
-        edge-highlight 0.20
-        refraction 0.006
+        tint-amount 0.04
+        edge-highlight 0.00
+        refraction 0.000
     }
 }
 

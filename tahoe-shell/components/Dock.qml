@@ -16,10 +16,10 @@ PanelWindow {
     property real dockMouseX: -10000
     property bool dockHovered: false
     readonly property bool hasWindows: niriService && niriService.windowList && niriService.windowList.length > 0
-    readonly property color glassFill: "#1cffffff"
-    readonly property color glassStroke: "#42ffffff"
-    readonly property color glassInnerStroke: "#14ffffff"
-    readonly property color glassShadowLine: "#12000000"
+    readonly property color glassFill: "#38f7fbff"
+    readonly property color glassStroke: "#5cffffff"
+    readonly property color glassInnerStroke: "#24ffffff"
+    readonly property color glassShadowLine: "#14000000"
 
     signal toggleLaunchpad()
 

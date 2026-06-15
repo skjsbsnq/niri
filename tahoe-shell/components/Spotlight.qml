@@ -102,7 +102,7 @@ PanelWindow {
 
     BackgroundEffect.blurRegion: Region {
         item: spotlightPanel
-        radius: 28
+        radius: spotlightSurface.radius
     }
 
     MouseArea {
@@ -141,7 +141,7 @@ PanelWindow {
             anchors.top: parent.top
             height: 66
             radius: 33
-            color: "#dceaf7ff"
+            color: "#eef7fbff"
             border.color: "#88ffffff"
             border.width: 1
 

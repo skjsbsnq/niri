@@ -79,6 +79,7 @@ main() {
 
   if [[ -f "$REPO_DIR/.gitmodules" ]]; then
     log "initializing submodules"
+    git -C "$REPO_DIR" submodule sync --recursive
     git -C "$REPO_DIR" submodule update --init --recursive
   fi
 

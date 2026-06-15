@@ -19,6 +19,9 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+# Generated validation reports
+tahoe-shell/docs/visual-baselines/runtime/
+
 # OS/editor noise
 .DS_Store
 Thumbs.db

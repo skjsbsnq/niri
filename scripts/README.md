@@ -38,6 +38,23 @@ From Phase 2 onward, enable automatic niri fork builds when niri source changes:
 BUILD_NIRI_FORK=auto bash scripts/arch-update.sh
 ```
 
+## Capture Glass Baseline
+
+```sh
+bash scripts/capture-glass-baseline.sh
+```
+
+Run this inside the Arch VM before and after Tahoe Glass architecture changes.
+It writes a timestamped report under
+`tahoe-shell/docs/visual-baselines/runtime/` with the root/niri/Quickshell
+commits, Tahoe config hashes, session environment, and `niri msg outputs` data
+when niri IPC is reachable. The static Phase 0 reference screenshots live under
+`tahoe-shell/docs/visual-baselines/2026-06-15-phase0-glass-geometry/`.
+
+This is a baseline/forensics script only. It does not deploy configs, build
+niri, restart Quickshell, or fix the glass artifacts. Use it to bind screenshots
+to the exact code/config/output state that produced them.
+
 ## Chinese Locale, Fonts, and Input Method
 
 ```sh

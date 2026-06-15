@@ -48,26 +48,17 @@ PanelWindow {
     Rectangle {
         id: backdrop
         anchors.fill: parent
-        // ~19% alpha. Down from the old 36% (#5c) so the blur actually
-        // shows through and the scrim reads as control-center glass
-        // instead of an opaque wash. Kept a touch denser than the control
-        // center's 13% (#20) because a full-screen overlay needs more
-        // contrast to make the icons pop. See glass-consistency-fix-
-        // plan.md §1.3 A.
+        // The scrim is just blur + tint, structurally identical to the
+        // control center: the blurRegion above blurs whatever is behind,
+        // and this Rectangle is the only thing drawn on top. Kept a touch
+        // denser than the control center's 13% (#20) because a full-screen
+        // overlay needs more contrast to make the icons pop. Previously
+        // there was also a second, SHARP wallpaper Image painted over the
+        // blur at 22% opacity — that punched through the blur and made the
+        // Launchpad read as "a different, lesser blur" than the control
+        // center. Removed. See glass-consistency-fix-plan.md §1.
         color: "#30eef2f7"
         opacity: root.open ? 1 : 0
-
-        Behavior on opacity {
-            NumberAnimation { duration: 170; easing.type: Easing.OutCubic }
-        }
-    }
-
-    Image {
-        anchors.fill: parent
-        source: root.appsService ? root.appsService.wallpaper : ""
-        fillMode: Image.PreserveAspectCrop
-        opacity: root.open ? 0.22 : 0
-        smooth: true
 
         Behavior on opacity {
             NumberAnimation { duration: 170; easing.type: Easing.OutCubic }

@@ -43,8 +43,9 @@ PanelWindow {
     aboveWindows: true
     exclusiveZone: 0
     implicitWidth: 318
-    implicitHeight: card.implicitHeight + 8
+    implicitHeight: card.height
     color: "transparent"
+    WlrLayershell.namespace: "tahoe-notification-toast"
 
     anchors {
         top: true

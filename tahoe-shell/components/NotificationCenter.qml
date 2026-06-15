@@ -24,6 +24,7 @@ PanelWindow {
     implicitWidth: 360
     implicitHeight: panel.implicitHeight
     color: "transparent"
+    WlrLayershell.namespace: "tahoe-notification-center"
 
     anchors {
         top: true

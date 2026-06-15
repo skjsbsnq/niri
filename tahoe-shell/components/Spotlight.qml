@@ -19,6 +19,7 @@ PanelWindow {
     exclusiveZone: 0
     focusable: open
     color: "transparent"
+    WlrLayershell.namespace: "tahoe-spotlight"
 
     anchors {
         left: true

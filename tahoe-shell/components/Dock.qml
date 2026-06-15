@@ -66,6 +66,7 @@ PanelWindow {
     exclusiveZone: 98
     implicitHeight: 132
     color: "transparent"
+    WlrLayershell.namespace: "tahoe-dock"
 
     BackgroundEffect.blurRegion: Region {
         item: dockSurface

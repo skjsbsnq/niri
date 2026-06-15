@@ -22,6 +22,7 @@ PanelWindow {
     exclusiveZone: 0
     focusable: open
     color: "transparent"
+    WlrLayershell.namespace: "tahoe-launchpad"
 
     onOpenChanged: {
         if (open) {

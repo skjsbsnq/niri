@@ -188,8 +188,67 @@ window-rule {
     }
 }
 
+// Phase 1 glass rules are explicit per Tahoe namespace. Large transparent
+// containers (tahoe-topbar, tahoe-dock, tahoe-spotlight) and the fullscreen
+// backdrop (tahoe-launchpad) intentionally do not get layer-level shadow or
+// geometry-wide glass here; their visual glass is inside the surface.
 layer-rule {
-    match namespace="^quickshell"
+    match namespace="^tahoe-control-center$"
+    match namespace="^tahoe-notification-center$"
+
+    geometry-corner-radius 28
+
+    shadow {
+        on
+        softness 28
+        spread 2
+        offset x=0 y=8
+        color "#0004"
+    }
+
+    background-effect {
+        xray false
+        blur true
+        noise 0.006
+        saturation 1.16
+        tint-color "#ffffff"
+        tint-amount 0.04
+        edge-highlight 0.00
+        refraction 0.000
+    }
+}
+
+layer-rule {
+    match namespace="^tahoe-battery-popup$"
+
+    geometry-corner-radius 24
+
+    shadow {
+        on
+        softness 28
+        spread 2
+        offset x=0 y=8
+        color "#0004"
+    }
+
+    background-effect {
+        xray false
+        blur true
+        noise 0.006
+        saturation 1.16
+        tint-color "#ffffff"
+        tint-amount 0.04
+        edge-highlight 0.00
+        refraction 0.000
+    }
+}
+
+layer-rule {
+    match namespace="^tahoe-menu-popup$"
+    match namespace="^tahoe-tray-menu$"
+    match namespace="^tahoe-notification-toast$"
+
+    geometry-corner-radius 18
 
     shadow {
         on

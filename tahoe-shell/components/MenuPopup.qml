@@ -20,6 +20,7 @@ PanelWindow {
     implicitWidth: 218
     implicitHeight: powerService && powerService.hasPending ? 404 : 338
     color: "transparent"
+    WlrLayershell.namespace: "tahoe-menu-popup"
 
     anchors {
         top: true

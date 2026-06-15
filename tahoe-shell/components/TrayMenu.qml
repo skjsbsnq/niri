@@ -26,6 +26,7 @@ PanelWindow {
     implicitWidth: 238
     implicitHeight: panel.implicitHeight
     color: "transparent"
+    WlrLayershell.namespace: "tahoe-tray-menu"
 
     anchors {
         top: true

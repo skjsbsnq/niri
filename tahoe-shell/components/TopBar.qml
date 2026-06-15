@@ -60,6 +60,7 @@ PanelWindow {
     exclusiveZone: 34
     implicitHeight: 34
     color: "transparent"
+    WlrLayershell.namespace: "tahoe-topbar"
 
     Timer {
         interval: 1000

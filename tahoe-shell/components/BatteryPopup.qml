@@ -23,6 +23,7 @@ PanelWindow {
     implicitWidth: 292
     implicitHeight: panel.implicitHeight
     color: "transparent"
+    WlrLayershell.namespace: "tahoe-battery-popup"
 
     anchors {
         top: true

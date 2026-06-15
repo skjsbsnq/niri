@@ -22,10 +22,10 @@ PanelWindow {
     // left of the clock. Guards against a missing service (e.g. before
     // the property is wired from the shell root).
     readonly property int notificationCount: notificationsService ? notificationsService.activeCount : 0
-    readonly property color glassFill: "#0bffffff"
-    readonly property color glassStroke: "#14ffffff"
-    readonly property color glassHairline: "#10ffffff"
-    readonly property color glassShadowLine: "#05000000"
+    readonly property color glassFill: "transparent"
+    readonly property color glassStroke: "transparent"
+    readonly property color glassHairline: "transparent"
+    readonly property color glassShadowLine: "transparent"
 
     signal toggleAppMenu()
     signal toggleControlCenter()
@@ -47,11 +47,6 @@ PanelWindow {
         running: true
         repeat: true
         onTriggered: root.now = new Date()
-    }
-
-    BackgroundEffect.blurRegion: Region {
-        item: barSurface
-        radius: 0
     }
 
     Rectangle {

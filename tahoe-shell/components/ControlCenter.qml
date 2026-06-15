@@ -408,10 +408,24 @@ PanelWindow {
                 border.width: 1
             }
 
+            // Whole-tile click toggles Wi-Fi, but it must sit below the
+            // row controls so Bluetooth/AirDrop clicks do not fall through
+            // to Wi-Fi.
+            MouseArea {
+                anchors.fill: parent
+                cursorShape: Qt.PointingHandCursor
+                z: 0
+                onClicked: {
+                    if (ct.controls)
+                        ct.controls.toggleWifi();
+                }
+            }
+
             ColumnLayout {
                 anchors.fill: parent
                 anchors.margins: 10
                 spacing: 7
+                z: 1
 
                 RowLayout {
                     Layout.fillWidth: true
@@ -493,16 +507,6 @@ PanelWindow {
                         font.pixelSize: 10
                         elide: Text.ElideRight
                     }
-                }
-            }
-
-            // Whole-tile click toggles Wi-Fi (macOS tile behavior).
-            MouseArea {
-                anchors.fill: parent
-                cursorShape: Qt.PointingHandCursor
-                onClicked: {
-                    if (ct.controls)
-                        ct.controls.toggleWifi();
                 }
             }
         }

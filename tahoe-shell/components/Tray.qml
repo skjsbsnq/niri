@@ -10,16 +10,17 @@ Item {
     property var panelWindow
     readonly property int itemCount: SystemTray.items ? SystemTray.items.values.length : 0
 
+    signal openMenuRequested(var item)
+
     implicitWidth: trayRow.implicitWidth
     implicitHeight: 24
     visible: itemCount > 0
 
     function displayMenu(item, sourceItem, mouseX, mouseY) {
-        if (!item || !item.hasMenu || !root.panelWindow)
+        if (!item || !item.hasMenu)
             return;
 
-        var point = sourceItem.mapToItem(null, mouseX, mouseY);
-        item.display(root.panelWindow, Math.round(point.x), Math.round(point.y));
+        root.openMenuRequested(item);
     }
 
     function iconSource(item) {
@@ -68,26 +69,38 @@ Item {
 
                 required property var modelData
 
-                width: 22
-                height: 22
+                width: 24
+                height: 24
 
                 Rectangle {
                     anchors.fill: parent
-                    radius: 11
-                    color: trayMouse.containsMouse ? "#32ffffff" : "transparent"
+                    radius: 12
+                    color: trayMouse.containsMouse ? "#38ffffff" : "#18ffffff"
                     border.color: root.isAttention(trayItem.modelData)
                         ? "#ccff453a"
-                        : (trayMouse.containsMouse ? "#42ffffff" : "transparent")
+                        : (trayMouse.containsMouse ? "#48ffffff" : "#2affffff")
                     border.width: 1
+                }
+
+                Rectangle {
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.top: parent.top
+                    anchors.leftMargin: 6
+                    anchors.rightMargin: 6
+                    anchors.topMargin: 1
+                    height: 1
+                    radius: 1
+                    color: "#40ffffff"
                 }
 
                 IconImage {
                     id: trayIcon
 
                     anchors.centerIn: parent
-                    width: 16
-                    height: 16
-                    implicitSize: 16
+                    width: 18
+                    height: 18
+                    implicitSize: 18
                     source: root.iconSource(trayItem.modelData)
                     mipmap: true
                     visible: root.iconSource(trayItem.modelData).length > 0 && status !== Image.Error
@@ -97,7 +110,7 @@ Item {
                     anchors.centerIn: parent
                     text: root.fallbackLabel(trayItem.modelData)
                     color: "#202124"
-                    font.pixelSize: 10
+                    font.pixelSize: 11
                     font.weight: Font.DemiBold
                     visible: !trayIcon.visible
                 }

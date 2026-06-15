@@ -17,6 +17,8 @@ ShellRoot {
     property bool spotlightOpen: false
     property bool notificationCenterOpen: false
     property bool batteryPopupOpen: false
+    property bool trayMenuOpen: false
+    property var trayMenuItem: null
 
     // Spring animations look great on real GPUs but corrupt Image textures
     // on software/virtual GPUs (VMware, Hyper-V): a SpringAnimation driving
@@ -93,6 +95,7 @@ ShellRoot {
                     shell.spotlightOpen = false;
                     shell.notificationCenterOpen = false;
                     shell.batteryPopupOpen = false;
+                    shell.trayMenuOpen = false;
                 }
                 onToggleControlCenter: {
                     shell.controlCenterOpen = !shell.controlCenterOpen;
@@ -101,6 +104,7 @@ ShellRoot {
                     shell.spotlightOpen = false;
                     shell.notificationCenterOpen = false;
                     shell.batteryPopupOpen = false;
+                    shell.trayMenuOpen = false;
                 }
                 onToggleSpotlight: {
                     shell.spotlightOpen = !shell.spotlightOpen;
@@ -109,6 +113,7 @@ ShellRoot {
                     shell.launchpadOpen = false;
                     shell.notificationCenterOpen = false;
                     shell.batteryPopupOpen = false;
+                    shell.trayMenuOpen = false;
                 }
                 onToggleLaunchpad: {
                     shell.launchpadOpen = !shell.launchpadOpen;
@@ -117,6 +122,7 @@ ShellRoot {
                     shell.spotlightOpen = false;
                     shell.notificationCenterOpen = false;
                     shell.batteryPopupOpen = false;
+                    shell.trayMenuOpen = false;
                 }
                 onToggleNotifications: {
                     shell.notificationCenterOpen = !shell.notificationCenterOpen;
@@ -125,6 +131,7 @@ ShellRoot {
                     shell.launchpadOpen = false;
                     shell.spotlightOpen = false;
                     shell.batteryPopupOpen = false;
+                    shell.trayMenuOpen = false;
                 }
                 onToggleBattery: {
                     shell.batteryPopupOpen = !shell.batteryPopupOpen;
@@ -133,6 +140,17 @@ ShellRoot {
                     shell.launchpadOpen = false;
                     shell.spotlightOpen = false;
                     shell.notificationCenterOpen = false;
+                    shell.trayMenuOpen = false;
+                }
+                onOpenTrayMenu: function(item) {
+                    shell.trayMenuItem = item;
+                    shell.trayMenuOpen = true;
+                    shell.appMenuOpen = false;
+                    shell.controlCenterOpen = false;
+                    shell.launchpadOpen = false;
+                    shell.spotlightOpen = false;
+                    shell.notificationCenterOpen = false;
+                    shell.batteryPopupOpen = false;
                 }
             }
 
@@ -157,6 +175,7 @@ ShellRoot {
                     shell.spotlightOpen = false;
                     shell.notificationCenterOpen = false;
                     shell.batteryPopupOpen = false;
+                    shell.trayMenuOpen = false;
                 }
             }
 
@@ -195,6 +214,16 @@ ShellRoot {
                 batteryService: battery
                 open: shell.batteryPopupOpen
                 onCloseRequested: shell.batteryPopupOpen = false
+            }
+
+            TrayMenu {
+                screen: modelData
+                trayItem: shell.trayMenuItem
+                open: shell.trayMenuOpen
+                onCloseRequested: {
+                    shell.trayMenuOpen = false;
+                    shell.trayMenuItem = null;
+                }
             }
 
             NotificationToast {

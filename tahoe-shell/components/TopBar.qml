@@ -37,6 +37,7 @@ PanelWindow {
     signal toggleLaunchpad()
     signal toggleNotifications()
     signal toggleBattery()
+    signal openTrayMenu(var item)
 
     anchors {
         left: true
@@ -181,6 +182,9 @@ PanelWindow {
                 Layout.preferredWidth: visible ? implicitWidth : 0
                 Layout.preferredHeight: implicitHeight
                 Layout.alignment: Qt.AlignVCenter
+                onOpenMenuRequested: function(item) {
+                    root.openTrayMenu(item);
+                }
             }
 
             Item {

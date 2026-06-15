@@ -22,10 +22,10 @@ PanelWindow {
     // left of the clock. Guards against a missing service (e.g. before
     // the property is wired from the shell root).
     readonly property int notificationCount: notificationsService ? notificationsService.activeCount : 0
-    readonly property color glassFill: "#1cffffff"
-    readonly property color glassStroke: "#36ffffff"
-    readonly property color glassHairline: "#3affffff"
-    readonly property color glassShadowLine: "#10000000"
+    readonly property color glassFill: "#0bffffff"
+    readonly property color glassStroke: "#14ffffff"
+    readonly property color glassHairline: "#10ffffff"
+    readonly property color glassShadowLine: "#05000000"
 
     signal toggleAppMenu()
     signal toggleControlCenter()
@@ -38,8 +38,8 @@ PanelWindow {
         top: true
     }
 
-    exclusiveZone: 34
-    implicitHeight: 34
+    exclusiveZone: 28
+    implicitHeight: 28
     color: "transparent"
 
     Timer {
@@ -59,7 +59,7 @@ PanelWindow {
         anchors.fill: parent
         color: root.glassFill
         border.color: root.glassStroke
-        border.width: 1
+        border.width: 0
 
         Rectangle {
             anchors.left: parent.left
@@ -79,20 +79,20 @@ PanelWindow {
 
         RowLayout {
             anchors.fill: parent
-            anchors.leftMargin: 18
-            anchors.rightMargin: 14
-            spacing: 14
+            anchors.leftMargin: 16
+            anchors.rightMargin: 12
+            spacing: 12
 
             Item {
                 Layout.preferredWidth: tahoeLabel.implicitWidth + 18
-                Layout.preferredHeight: 24
+                Layout.preferredHeight: 22
                 Layout.alignment: Qt.AlignVCenter
 
                 Rectangle {
                     anchors.fill: parent
                     radius: 12
                     color: root.appMenuOpen ? "#32ffffff" : "transparent"
-                    border.color: root.appMenuOpen ? "#42ffffff" : "transparent"
+                    border.color: root.appMenuOpen ? "#22ffffff" : "transparent"
                 }
 
                 Text {
@@ -100,7 +100,7 @@ PanelWindow {
                     anchors.centerIn: parent
                     text: "Tahoe"
                     color: "#202124"
-                    font.pixelSize: 13
+                    font.pixelSize: 12
                     font.weight: Font.DemiBold
                     verticalAlignment: Text.AlignVCenter
                 }
@@ -115,7 +115,7 @@ PanelWindow {
             Text {
                 text: root.activeApp
                 color: "#2c2d30"
-                font.pixelSize: 13
+                font.pixelSize: 12
                 elide: Text.ElideRight
                 verticalAlignment: Text.AlignVCenter
                 Layout.alignment: Qt.AlignVCenter
@@ -135,14 +135,14 @@ PanelWindow {
                         required property var modelData
                         required property int index
 
-                        width: 28
-                        height: 20
+                        width: 24
+                        height: 18
 
                         Rectangle {
                             anchors.fill: parent
-                            radius: 10
-                            color: modelData.active ? "#32ffffff" : "#18ffffff"
-                            border.color: modelData.urgent ? "#ccff453a" : "#36ffffff"
+                            radius: 9
+                            color: modelData.active ? "#22ffffff" : "transparent"
+                            border.color: modelData.urgent ? "#ccff453a" : (modelData.active ? "#18ffffff" : "transparent")
                             border.width: 1
                         }
 
@@ -150,7 +150,7 @@ PanelWindow {
                             anchors.centerIn: parent
                             text: root.niriService ? root.niriService.workspaceLabel(modelData, index) : String(index + 1)
                             color: "#202124"
-                            font.pixelSize: 11
+                            font.pixelSize: 10
                             font.weight: modelData.active ? Font.DemiBold : Font.Normal
                         }
 
@@ -183,15 +183,15 @@ PanelWindow {
             // count > 9 it just shows "9+".
             Item {
                 Layout.preferredWidth: 30
-                Layout.preferredHeight: 24
+                Layout.preferredHeight: 22
                 Layout.alignment: Qt.AlignVCenter
                 visible: root.notificationCount > 0
 
                 Rectangle {
                     anchors.fill: parent
-                    radius: 12
-                    color: badgeMouse.containsMouse ? "#38ffffff" : "#22ffffff"
-                    border.color: "#40ffffff"
+                    radius: 11
+                    color: badgeMouse.containsMouse ? "#28ffffff" : "transparent"
+                    border.color: badgeMouse.containsMouse ? "#22ffffff" : "transparent"
                 }
 
                 Text {
@@ -200,7 +200,7 @@ PanelWindow {
                     text: "\ue7f4"
                     color: "#202124"
                     font.family: "Material Icons"
-                    font.pixelSize: 16
+                    font.pixelSize: 15
                 }
 
                 Rectangle {
@@ -239,14 +239,14 @@ PanelWindow {
             Item {
                 id: spotlightButton
                 Layout.preferredWidth: 30
-                Layout.preferredHeight: 24
+                Layout.preferredHeight: 22
                 Layout.alignment: Qt.AlignVCenter
 
                 Rectangle {
                     anchors.fill: parent
-                    radius: 12
-                    color: root.spotlightOpen ? "#38ffffff" : (spotlightMouse.containsMouse ? "#30ffffff" : "#22ffffff")
-                    border.color: "#40ffffff"
+                    radius: 11
+                    color: root.spotlightOpen ? "#28ffffff" : (spotlightMouse.containsMouse ? "#20ffffff" : "transparent")
+                    border.color: root.spotlightOpen || spotlightMouse.containsMouse ? "#22ffffff" : "transparent"
                 }
 
                 Text {
@@ -254,7 +254,7 @@ PanelWindow {
                     text: "\ue8b6"
                     color: "#202124"
                     font.family: "Material Icons"
-                    font.pixelSize: 16
+                    font.pixelSize: 15
                 }
 
                 MouseArea {
@@ -269,22 +269,22 @@ PanelWindow {
             Text {
                 text: Qt.formatDateTime(root.now, "ddd HH:mm")
                 color: "#2c2d30"
-                font.pixelSize: 13
+                font.pixelSize: 12
                 verticalAlignment: Text.AlignVCenter
                 Layout.alignment: Qt.AlignVCenter
             }
 
             Item {
                 id: statusButton
-                Layout.preferredWidth: 44
-                Layout.preferredHeight: 24
+                Layout.preferredWidth: 38
+                Layout.preferredHeight: 22
                 Layout.alignment: Qt.AlignVCenter
 
                 Rectangle {
                     anchors.fill: parent
-                    radius: 12
-                    color: root.controlCenterOpen ? "#38ffffff" : "#22ffffff"
-                    border.color: "#40ffffff"
+                    radius: 11
+                    color: root.controlCenterOpen ? "#28ffffff" : "transparent"
+                    border.color: root.controlCenterOpen ? "#22ffffff" : "transparent"
                 }
 
                 Row {
@@ -294,7 +294,7 @@ PanelWindow {
                     Text {
                         text: root.niriService ? root.niriService.activeWorkspaceName : "1"
                         color: "#202124"
-                        font.pixelSize: 12
+                        font.pixelSize: 11
                         anchors.verticalCenter: parent.verticalCenter
                     }
                 }

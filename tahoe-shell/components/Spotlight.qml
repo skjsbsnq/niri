@@ -113,8 +113,8 @@ PanelWindow {
     Item {
         id: spotlightPanel
         anchors.horizontalCenter: parent.horizontalCenter
-        y: Math.max(58, parent.height * 0.18)
-        width: Math.min(parent.width - 28, 690)
+        y: Math.max(64, parent.height * 0.17)
+        width: Math.min(parent.width - 72, 620)
         height: spotlightSurface.height + (resultsSurface.visible ? resultsSurface.height + 10 : 0)
         opacity: root.open ? 1 : 0
         scale: root.open ? 1 : 1.04
@@ -139,39 +139,39 @@ PanelWindow {
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.top: parent.top
-            height: 66
-            radius: 33
-            color: "#dceaf7ff"
-            border.color: "#88ffffff"
+            height: 58
+            radius: 29
+            color: "#bff4fbff"
+            border.color: "#66ffffff"
             border.width: 1
 
             Rectangle {
                 anchors.fill: parent
                 anchors.margins: 1
-                radius: 32
+                radius: 28
                 color: "transparent"
-                border.color: "#24ffffff"
+                border.color: "#18ffffff"
                 border.width: 1
             }
 
             Text {
                 anchors.left: parent.left
-                anchors.leftMargin: 25
+                anchors.leftMargin: 22
                 anchors.verticalCenter: parent.verticalCenter
                 text: "\ue8b6"
                 color: "#4f5963"
                 font.family: "Material Icons"
-                font.pixelSize: 24
+                font.pixelSize: 21
             }
 
             Text {
                 anchors.left: searchInput.left
-                anchors.right: shortcutRow.left
-                anchors.rightMargin: 16
+                anchors.right: parent.right
+                anchors.rightMargin: 24
                 anchors.verticalCenter: parent.verticalCenter
                 text: "Search"
                 color: "#69737d"
-                font.pixelSize: 22
+                font.pixelSize: 20
                 elide: Text.ElideRight
                 visible: searchInput.text.length === 0
             }
@@ -179,16 +179,16 @@ PanelWindow {
             TextInput {
                 id: searchInput
                 anchors.left: parent.left
-                anchors.leftMargin: 64
-                anchors.right: shortcutRow.left
-                anchors.rightMargin: 16
+                anchors.leftMargin: 58
+                anchors.right: parent.right
+                anchors.rightMargin: 24
                 anchors.verticalCenter: parent.verticalCenter
-                height: 36
+                height: 32
                 text: root.query
                 color: "#202124"
                 selectionColor: "#7ab7ff"
                 selectedTextColor: "#ffffff"
-                font.pixelSize: 22
+                font.pixelSize: 20
                 clip: true
                 focus: root.open
                 verticalAlignment: TextInput.AlignVCenter
@@ -199,6 +199,7 @@ PanelWindow {
 
             Row {
                 id: shortcutRow
+                visible: false
                 anchors.right: parent.right
                 anchors.rightMargin: 16
                 anchors.verticalCenter: parent.verticalCenter
@@ -257,8 +258,8 @@ PanelWindow {
             anchors.topMargin: 10
             height: resultsColumn.implicitHeight + 12
             radius: 18
-            color: "#d8f7f8fb"
-            border.color: "#65ffffff"
+            color: "#c8f7f8fb"
+            border.color: "#4fffffff"
             border.width: 1
             opacity: root.open && root.query.trim().length > 0 ? 1 : 0
             visible: opacity > 0.01

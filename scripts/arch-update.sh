@@ -503,25 +503,23 @@ main() {
     log "niri submodule current commit: $niri_before_commit"
 
     log "updating niri submodule to latest upstream"
-    git -C "$NIRI_DIR" fetch --prune
 
-    # Ensure we're on the configured branch and pull from its upstream
+    # Get the configured branch for this submodule
     local niri_branch
     niri_branch="$(git -C "$REPO_DIR" config -f "$REPO_DIR/.gitmodules" "submodule.niri.branch" || echo "main")"
 
+    # Fetch from remote
+    git -C "$NIRI_DIR" fetch --prune origin
+
+    # Ensure we're on a branch, not detached HEAD
     if ! git -C "$NIRI_DIR" symbolic-ref -q HEAD >/dev/null 2>&1; then
       log "niri submodule is in detached HEAD state; checking out branch: $niri_branch"
-      git -C "$NIRI_DIR" checkout "$niri_branch"
+      git -C "$NIRI_DIR" checkout "$niri_branch" || git -C "$NIRI_DIR" checkout -b "$niri_branch" "origin/$niri_branch"
     fi
 
-    # If branches have diverged, reset to remote (submodules should track upstream exactly)
-    if ! git -C "$NIRI_DIR" merge-base --is-ancestor HEAD "origin/$niri_branch" 2>/dev/null && \
-       ! git -C "$NIRI_DIR" merge-base --is-ancestor "origin/$niri_branch" HEAD 2>/dev/null; then
-      log "niri submodule has diverged from upstream; resetting to origin/$niri_branch"
-      git -C "$NIRI_DIR" reset --hard "origin/$niri_branch"
-    else
-      git -C "$NIRI_DIR" pull --ff-only origin "$niri_branch"
-    fi
+    # Always reset to remote to ensure we get latest upstream (submodules should track upstream exactly)
+    log "resetting niri submodule to origin/$niri_branch"
+    git -C "$NIRI_DIR" reset --hard "origin/$niri_branch"
 
     niri_after_commit="$(git -C "$NIRI_DIR" rev-parse HEAD)"
     log "niri submodule updated commit: $niri_after_commit"
@@ -557,25 +555,23 @@ main() {
     log "Quickshell submodule current commit: $quickshell_before_commit"
 
     log "updating Quickshell submodule to latest upstream"
-    git -C "$QUICKSHELL_DIR" fetch --prune
 
-    # Ensure we're on the configured branch and pull from its upstream
+    # Get the configured branch for this submodule
     local quickshell_branch
     quickshell_branch="$(git -C "$REPO_DIR" config -f "$REPO_DIR/.gitmodules" "submodule.quickshell.branch" || echo "master")"
 
+    # Fetch from remote
+    git -C "$QUICKSHELL_DIR" fetch --prune origin
+
+    # Ensure we're on a branch, not detached HEAD
     if ! git -C "$QUICKSHELL_DIR" symbolic-ref -q HEAD >/dev/null 2>&1; then
       log "Quickshell submodule is in detached HEAD state; checking out branch: $quickshell_branch"
-      git -C "$QUICKSHELL_DIR" checkout "$quickshell_branch"
+      git -C "$QUICKSHELL_DIR" checkout "$quickshell_branch" || git -C "$QUICKSHELL_DIR" checkout -b "$quickshell_branch" "origin/$quickshell_branch"
     fi
 
-    # If branches have diverged, reset to remote (submodules should track upstream exactly)
-    if ! git -C "$QUICKSHELL_DIR" merge-base --is-ancestor HEAD "origin/$quickshell_branch" 2>/dev/null && \
-       ! git -C "$QUICKSHELL_DIR" merge-base --is-ancestor "origin/$quickshell_branch" HEAD 2>/dev/null; then
-      log "Quickshell submodule has diverged from upstream; resetting to origin/$quickshell_branch"
-      git -C "$QUICKSHELL_DIR" reset --hard "origin/$quickshell_branch"
-    else
-      git -C "$QUICKSHELL_DIR" pull --ff-only origin "$quickshell_branch"
-    fi
+    # Always reset to remote to ensure we get latest upstream (submodules should track upstream exactly)
+    log "resetting Quickshell submodule to origin/$quickshell_branch"
+    git -C "$QUICKSHELL_DIR" reset --hard "origin/$quickshell_branch"
 
     quickshell_after_commit="$(git -C "$QUICKSHELL_DIR" rev-parse HEAD)"
     log "Quickshell submodule updated commit: $quickshell_after_commit"

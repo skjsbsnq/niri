@@ -167,15 +167,6 @@ PanelWindow {
             border.color: GlassStyle.StrokePill
             border.width: 1
 
-            Rectangle {
-                anchors.fill: parent
-                anchors.margins: 1
-                radius: parent.radius - 1
-                color: "transparent"
-                border.color: GlassStyle.StrokeInner
-                border.width: 1
-            }
-
             Text {
                 anchors.left: parent.left
                 anchors.leftMargin: 25
@@ -282,8 +273,8 @@ PanelWindow {
             anchors.topMargin: 10
             height: resultsColumn.implicitHeight + 12
             radius: tahoeGlassRadius
-            color: "#d8f7f8fb"
-            border.color: "#65ffffff"
+            color: GlassStyle.FillPanelBright
+            border.color: GlassStyle.StrokePanelBright
             border.width: 1
             opacity: root.open && root.query.trim().length > 0 ? 1 : 0
             visible: opacity > 0.01

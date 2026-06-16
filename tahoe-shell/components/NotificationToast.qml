@@ -62,11 +62,11 @@ PanelWindow {
     // edge so it reads as urgent even before the user reads the summary.
     readonly property color accentColor: {
         if (!current)
-            return "#70ffffff";
+            return GlassStyle.StrokeToast;
         try {
-            return Number(current.urgency) === 2 ? "#ccff453a" : "#70ffffff";
+            return Number(current.urgency) === 2 ? "#ccff453a" : GlassStyle.StrokeToast;
         } catch (e) {
-            return "#70ffffff";
+            return GlassStyle.StrokeToast;
         }
     }
 
@@ -113,17 +113,6 @@ PanelWindow {
             color: "transparent"
             border.color: root.accentColor
             border.width: 1
-        }
-
-        Rectangle {
-            // Bottom-right shadow edge.
-            anchors.fill: parent
-            anchors.margins: 1
-            radius: parent.radius - 1
-            color: "transparent"
-            border.color: "#14000000"
-            border.width: 1
-            z: -1
         }
 
         // Slide + fade in from the right. This card is the glass-region item,

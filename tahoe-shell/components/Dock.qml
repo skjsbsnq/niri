@@ -19,8 +19,6 @@ PanelWindow {
     readonly property bool hasWindows: niriService && niriService.windowList && niriService.windowList.length > 0
     readonly property color glassFill: GlassStyle.FillDock
     readonly property color glassStroke: GlassStyle.StrokeDock
-    readonly property color glassInnerStroke: GlassStyle.StrokeInner
-    readonly property color glassShadowLine: GlassStyle.ShadowLine
 
     signal toggleLaunchpad()
 
@@ -129,50 +127,6 @@ PanelWindow {
             color: "transparent"
             border.color: root.glassStroke
             border.width: 1
-        }
-
-        Rectangle {
-            // Bottom-right shadow edge.
-            anchors.fill: parent
-            anchors.margins: 1
-            radius: parent.radius - 1
-            color: "transparent"
-            border.color: "#14000000"
-            border.width: 1
-            z: -1
-        }
-
-        Rectangle {
-            // Inner faint stroke (kept from the original double-inset).
-            anchors.fill: parent
-            anchors.margins: 2
-            radius: parent.radius - 2
-            color: "transparent"
-            border.color: root.glassInnerStroke
-            border.width: 1
-        }
-
-        Rectangle {
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.top: parent.top
-            anchors.leftMargin: 18
-            anchors.rightMargin: 18
-            anchors.topMargin: 1
-            height: 1
-            radius: 1
-            color: "#3affffff"
-        }
-
-        Rectangle {
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.bottom: parent.bottom
-            anchors.leftMargin: 18
-            anchors.rightMargin: 18
-            height: 1
-            radius: 1
-            color: root.glassShadowLine
         }
 
         Row {

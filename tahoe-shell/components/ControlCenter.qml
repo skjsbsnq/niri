@@ -101,41 +101,6 @@ PanelWindow {
             border.width: 1
         }
 
-        Rectangle {
-            // Bottom-right shadow edge.
-            anchors.fill: parent
-            anchors.margins: 1
-            radius: parent.radius - 1
-            color: "transparent"
-            border.color: "#1a000000"
-            border.width: 1
-            z: -1
-        }
-
-        // Top hairline highlight (project convention: anchored 1px accents).
-        Rectangle {
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.top: parent.top
-            anchors.leftMargin: 22
-            anchors.rightMargin: 22
-            anchors.topMargin: 1
-            height: 1
-            radius: 1
-            color: "#44ffffff"
-        }
-
-        Rectangle {
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.bottom: parent.bottom
-            anchors.leftMargin: 22
-            anchors.rightMargin: 22
-            height: 1
-            radius: 1
-            color: "#1a000000"
-        }
-
         Behavior on opacity {
             NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
         }

@@ -21,18 +21,18 @@ var RadiusBackdrop = 0;
 var RadiusTopBar = 18;
 var RadiusPopup = 24;
 
-var FillPanel = "#20ffffff";
-var FillPanelBright = "#20f7f8fb";
-var FillDock = "#38f7fbff";
-var FillTopBar = "#1cffffff";
-var FillPill = "#eef7fbff";
-var FillBackdrop = "#30eef2f7";
+// Phase 3: QML only provides tint/fallback weight. Edge highlight,
+// refraction, shadow, and depth belong to the compositor material.
+var FillPanel = "#14ffffff";
+var FillPanelBright = "#18f7f8fb";
+var FillDock = "#24f7fbff";
+var FillTopBar = "#14ffffff";
+var FillPill = "#80f7fbff";
+var FillBackdrop = "#24eef2f7";
 
-var StrokePanel = "#46ffffff";
-var StrokePanelBright = "#70ffffff";
-var StrokeDock = "#5cffffff";
-var StrokeTopBar = "#36ffffff";
-var StrokePill = "#88ffffff";
-var StrokeInner = "#24ffffff";
-var ShadowLine = "#14000000";
-var ShadowLineSoft = "#16000000";
+var StrokePanel = "#24ffffff";
+var StrokePanelBright = "#34ffffff";
+var StrokeDock = "#30ffffff";
+var StrokeTopBar = "#20ffffff";
+var StrokePill = "#48ffffff";
+var StrokeToast = "#34ffffff";

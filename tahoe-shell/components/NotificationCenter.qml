@@ -71,16 +71,6 @@ PanelWindow {
             border.width: 1
         }
 
-        Rectangle {
-            anchors.fill: parent
-            anchors.margins: 1
-            radius: parent.radius - 1
-            color: "transparent"
-            border.color: GlassStyle.ShadowLineSoft
-            border.width: 1
-            z: -1
-        }
-
         Behavior on opacity {
             NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
         }

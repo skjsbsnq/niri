@@ -29,7 +29,6 @@ PanelWindow {
     readonly property bool batteryAvailable: batteryService && batteryService.available
     readonly property color glassFill: GlassStyle.FillTopBar
     readonly property color glassStroke: GlassStyle.StrokeTopBar
-    readonly property color glassShadowLine: "#10000000"
 
     signal toggleAppMenu()
     signal toggleControlCenter()
@@ -130,17 +129,6 @@ PanelWindow {
             color: "transparent"
             border.color: root.glassStroke
             border.width: 1
-        }
-
-        Rectangle {
-            // Bottom-right shadow edge.
-            anchors.fill: parent
-            anchors.margins: 1
-            radius: parent.radius - 1
-            color: "transparent"
-            border.color: root.glassShadowLine
-            border.width: 1
-            z: -1
         }
 
         RowLayout {

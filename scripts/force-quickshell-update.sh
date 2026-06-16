@@ -3,6 +3,9 @@
 
 set -e  # Exit on error
 
+# Disable git pager to avoid 'less' errors
+export GIT_PAGER=cat
+
 REPO_DIR="${REPO_DIR:-"$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"}"
 QUICKSHELL_DIR="${QUICKSHELL_DIR:-"$REPO_DIR/quickshell"}"
 

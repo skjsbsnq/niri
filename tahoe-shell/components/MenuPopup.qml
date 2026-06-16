@@ -12,25 +12,23 @@ PanelWindow {
     property bool open: false
     property string activeApp: "Desktop"
     property var powerService
+    readonly property int popupWidth: 218
+    readonly property int popupLeftMargin: 12
+    readonly property int popupHeight: powerService && powerService.hasPending ? 404 : 338
 
     signal closeRequested()
 
     visible: open || menuSurface.opacity > 0.01
     aboveWindows: true
     exclusiveZone: 0
-    implicitWidth: 218
-    implicitHeight: powerService && powerService.hasPending ? 404 : 338
     color: "transparent"
     WlrLayershell.namespace: "tahoe-menu-popup"
 
     anchors {
-        top: true
         left: true
-    }
-
-    margins {
-        top: 0
-        left: 12
+        right: true
+        top: true
+        bottom: true
     }
 
     TahoeGlass.regions: [
@@ -61,12 +59,18 @@ PanelWindow {
             root.closeRequested();
     }
 
+    MouseArea {
+        anchors.fill: parent
+        enabled: root.open
+        onClicked: root.closeRequested()
+    }
+
     Rectangle {
         id: menuSurface
         readonly property string tahoeGlassMaterial: GlassStyle.MaterialMenu
         readonly property real tahoeGlassRadius: GlassStyle.RadiusMenu
 
-        x: 0
+        x: Math.min(root.popupLeftMargin, Math.max(0, parent.width - width))
         // menuSurface is the compositor-owned glass region item. Its geometry
         // MUST stay tame during open/close: niri recomputes the blur region
         // each frame, and a SpringAnimation overshoot pushed the region's
@@ -75,8 +79,8 @@ PanelWindow {
         // to the login screen). Geometry transitions on a glass-region item
         // use a bounded NumberAnimation, never a spring.
         y: root.open ? 0 : -8
-        width: parent.width
-        height: parent.height
+        width: Math.min(root.popupWidth, Math.max(0, parent.width - root.popupLeftMargin * 2))
+        height: root.popupHeight
         radius: tahoeGlassRadius
         color: GlassStyle.FillPanelBright
         opacity: root.open ? 1 : 0
@@ -92,6 +96,13 @@ PanelWindow {
             color: "transparent"
             border.color: GlassStyle.StrokePanelBright
             border.width: 1
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            onClicked: function(mouse) {
+                mouse.accepted = true;
+            }
         }
 
         Behavior on opacity {

@@ -11,6 +11,8 @@ PanelWindow {
 
     property bool open: false
     property var batteryService
+    readonly property int popupWidth: 292
+    readonly property int popupRightMargin: 92
 
     readonly property bool available: !!batteryService && batteryService.available
     readonly property int percentage: available ? batteryService.roundedPercentage : 0
@@ -21,19 +23,14 @@ PanelWindow {
     visible: open || panel.opacity > 0.01
     aboveWindows: true
     exclusiveZone: 0
-    implicitWidth: 292
-    implicitHeight: panel.implicitHeight
     color: "transparent"
     WlrLayershell.namespace: "tahoe-battery-popup"
 
     anchors {
-        top: true
+        left: true
         right: true
-    }
-
-    margins {
-        top: 0
-        right: 92
+        top: true
+        bottom: true
     }
 
     TahoeGlass.regions: [
@@ -48,13 +45,20 @@ PanelWindow {
         }
     ]
 
+    MouseArea {
+        anchors.fill: parent
+        enabled: root.open
+        onClicked: root.closeRequested()
+    }
+
     Rectangle {
         id: panel
         readonly property string tahoeGlassMaterial: GlassStyle.MaterialPanel
         readonly property real tahoeGlassRadius: GlassStyle.RadiusPopup
 
+        x: Math.max(12, parent.width - width - root.popupRightMargin)
         y: root.open ? 0 : -12
-        width: parent.width
+        width: Math.min(root.popupWidth, Math.max(0, parent.width - 24))
         implicitHeight: content.implicitHeight + 24
         height: implicitHeight
         radius: tahoeGlassRadius
@@ -68,6 +72,13 @@ PanelWindow {
             color: "transparent"
             border.color: GlassStyle.StrokePanelBright
             border.width: 1
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            onClicked: function(mouse) {
+                mouse.accepted = true;
+            }
         }
 
         Behavior on opacity {

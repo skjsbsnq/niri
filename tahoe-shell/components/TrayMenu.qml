@@ -18,25 +18,22 @@ PanelWindow {
         : "Tray"
     readonly property string iconSource: trayItem ? String(trayItem.icon || "") : ""
     readonly property string iconFont: "Material Icons"
+    readonly property int popupWidth: 238
+    readonly property int popupRightMargin: 40
 
     signal closeRequested()
 
     visible: open || panel.opacity > 0.01
     aboveWindows: true
     exclusiveZone: 0
-    implicitWidth: 238
-    implicitHeight: panel.implicitHeight
     color: "transparent"
     WlrLayershell.namespace: "tahoe-tray-menu"
 
     anchors {
-        top: true
+        left: true
         right: true
-    }
-
-    margins {
-        top: 0
-        right: 40
+        top: true
+        bottom: true
     }
 
     QsMenuOpener {
@@ -56,13 +53,20 @@ PanelWindow {
         }
     ]
 
+    MouseArea {
+        anchors.fill: parent
+        enabled: root.open
+        onClicked: root.closeRequested()
+    }
+
     Rectangle {
         id: panel
         readonly property string tahoeGlassMaterial: GlassStyle.MaterialMenu
         readonly property real tahoeGlassRadius: GlassStyle.RadiusMenu
 
+        x: Math.max(12, parent.width - width - root.popupRightMargin)
         y: root.open ? 0 : -8
-        width: parent.width
+        width: Math.min(root.popupWidth, Math.max(0, parent.width - 24))
         implicitHeight: content.implicitHeight + 16
         height: implicitHeight
         radius: tahoeGlassRadius
@@ -76,6 +80,13 @@ PanelWindow {
             color: "transparent"
             border.color: GlassStyle.StrokePanelBright
             border.width: 1
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            onClicked: function(mouse) {
+                mouse.accepted = true;
+            }
         }
 
         Behavior on opacity {
@@ -171,13 +182,6 @@ PanelWindow {
                 }
             }
         }
-    }
-
-    MouseArea {
-        anchors.fill: parent
-        z: -1
-        enabled: root.open
-        onClicked: root.closeRequested()
     }
 
     component MenuEntry: Item {

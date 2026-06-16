@@ -499,8 +499,23 @@ main() {
   fi
 
   if [[ "$niri_git" == true && "$niri_root_submodule" == true ]]; then
+    niri_before_commit="$(git -C "$NIRI_DIR" rev-parse HEAD)"
+    log "niri submodule current commit: $niri_before_commit"
+
+    log "updating niri submodule to latest upstream"
+    git -C "$NIRI_DIR" fetch --prune
+    git -C "$NIRI_DIR" pull --ff-only
+
     niri_after_commit="$(git -C "$NIRI_DIR" rev-parse HEAD)"
-    log "niri submodule commit: $niri_after_commit"
+    log "niri submodule updated commit: $niri_after_commit"
+
+    if [[ "$niri_before_commit" == "$niri_after_commit" ]]; then
+      log "niri submodule has no upstream changes"
+    else
+      log "niri submodule changed files:"
+      git -C "$NIRI_DIR" diff --name-only "$niri_before_commit" "$niri_after_commit" \
+        | sed 's/^/[arch-update]   niri\//'
+    fi
   elif [[ "$niri_git" == true ]]; then
     niri_before_commit="$(git -C "$NIRI_DIR" rev-parse HEAD)"
     log "niri current commit: $niri_before_commit"
@@ -521,8 +536,23 @@ main() {
   fi
 
   if [[ "$quickshell_git" == true && "$quickshell_root_submodule" == true ]]; then
+    quickshell_before_commit="$(git -C "$QUICKSHELL_DIR" rev-parse HEAD)"
+    log "Quickshell submodule current commit: $quickshell_before_commit"
+
+    log "updating Quickshell submodule to latest upstream"
+    git -C "$QUICKSHELL_DIR" fetch --prune
+    git -C "$QUICKSHELL_DIR" pull --ff-only
+
     quickshell_after_commit="$(git -C "$QUICKSHELL_DIR" rev-parse HEAD)"
-    log "Quickshell submodule commit: $quickshell_after_commit"
+    log "Quickshell submodule updated commit: $quickshell_after_commit"
+
+    if [[ "$quickshell_before_commit" == "$quickshell_after_commit" ]]; then
+      log "Quickshell submodule has no upstream changes"
+    else
+      log "Quickshell submodule changed files:"
+      git -C "$QUICKSHELL_DIR" diff --name-only "$quickshell_before_commit" "$quickshell_after_commit" \
+        | sed 's/^/[arch-update]   quickshell\//'
+    fi
   elif [[ "$quickshell_git" == true ]]; then
     quickshell_before_commit="$(git -C "$QUICKSHELL_DIR" rev-parse HEAD)"
     log "Quickshell current commit: $quickshell_before_commit"

@@ -149,70 +149,12 @@ Expected Phase 6 visible improvements:
 
 `scripts/arch-bootstrap.sh` now runs `git submodule sync --recursive` before submodule update, so existing VM checkouts should pick up the new `niri -> tahoe-desktop` URL after pulling the aggregate repo.
 
-## Bug Fix: Glass Blur Not Updating on Window Move
+## TahoeGlass Coordinate Contract
 
-### Issue Description
+TahoeGlass regions are submitted as surface-local logical coordinates. `buildSurfaceRegion()` must not add `QWindow::position()` or device-pixel scaling before sending a region through `tahoe_glass_v1`.
 
-**Problem**: Frosted glass blur effect does not update in real-time when windows are moved or resized in normal mode, but updates correctly when entering overview mode.
+The compositor is responsible for placing those regions on the output. In niri, layer rendering passes the surface location into TahoeGlass rendering and `render_region()` samples at `surface_location + rect.loc`.
 
-**Environment**: VMware Arch Linux running niri compositor
+`clientSideMargins()` is still applied on the client side because QML item geometry is relative to the window content area, while the protocol region is relative to the `wl_surface`. For Tahoe layer-shell windows this is expected to be zero, but keeping the translation preserves correctness for decorated or margin-bearing Wayland surfaces.
 
-**Symptoms**:
-- Moving windows in normal workspace: blur region stays static, shows incorrect background
-- Entering overview mode: blur updates correctly and shows proper background
-- Window geometry changes (resize) also do not trigger blur updates
-
-### Root Cause
-
-The TahoeGlass implementation in `quickshell/src/wayland/tahoe_glass/qml.cpp` only monitored `QWindow::xChanged` and `QWindow::yChanged` signals for position updates. However:
-
-1. In niri compositor, these Qt signals may not fire reliably during window moves
-2. The blur effect requires screen-absolute coordinates (see `buildSurfaceRegion()` lines 262-265) to sample the correct background area
-3. Without position updates, the blur continues sampling from the old window location
-
-### Solution
-
-Added multiple layers of window geometry monitoring:
-
-**1. Additional Signal Connections** (Line ~397)
-```cpp
-QObject::connect(this->mWindow, &QWindow::widthChanged, this, &TahoeGlass::updateRegions);
-QObject::connect(this->mWindow, &QWindow::heightChanged, this, &TahoeGlass::updateRegions);
-```
-
-**2. Enhanced Event Filter** (Line ~376-395)
-Added event-based monitoring for:
-- `QEvent::Move` - Catches window position changes that don't emit signals
-- `QEvent::Resize` - Catches window size changes
-- `QEvent::UpdateRequest` - Updates during frame requests to maintain sync during animations
-
-```cpp
-else if (event->type() == QEvent::Move || event->type() == QEvent::Resize) {
-    // Catch window geometry changes that don't trigger x/y/width/height signals
-    // This is crucial for niri compositor where window moves may not emit signals
-    this->updateRegions();
-}
-```
-
-### Why Overview Mode Worked
-
-Overview mode likely triggers a full window re-layout or compositor state change that causes Qt to re-query window positions, indirectly triggering the blur update. The fix ensures updates happen continuously during normal window operations.
-
-### Testing
-
-After this fix:
-- ✅ Window moves should update blur in real-time
-- ✅ Window resizes should update blur region
-- ✅ Blur should stay synchronized during drag operations
-- ✅ Overview mode continues to work correctly
-
-### Files Modified
-
-- `quickshell/src/wayland/tahoe_glass/qml.cpp`
-  - `onWindowConnected()`: Added width/height signal connections
-  - `eventFilter()`: Added Move/Resize/UpdateRequest event handling
-
-### Related Notes
-
-This fix is particularly important for Wayland compositors like niri that may have different event emission patterns compared to traditional X11 window managers. The multi-layered monitoring approach ensures compatibility across different compositor implementations.
-
+Window move/resize monitoring can remain useful to schedule repolish work, but it must not change the coordinate space of the committed regions. Moving a window should not require resubmitting screen coordinates; the surface-local rect stays stable and niri updates the output-space sampling location.

@@ -504,7 +504,17 @@ main() {
 
     log "updating niri submodule to latest upstream"
     git -C "$NIRI_DIR" fetch --prune
-    git -C "$NIRI_DIR" pull --ff-only
+
+    # Ensure we're on the configured branch and pull from its upstream
+    local niri_branch
+    niri_branch="$(git -C "$REPO_DIR" config -f "$REPO_DIR/.gitmodules" "submodule.niri.branch" || echo "main")"
+
+    if ! git -C "$NIRI_DIR" symbolic-ref -q HEAD >/dev/null 2>&1; then
+      log "niri submodule is in detached HEAD state; checking out branch: $niri_branch"
+      git -C "$NIRI_DIR" checkout "$niri_branch"
+    fi
+
+    git -C "$NIRI_DIR" pull --ff-only origin "$niri_branch"
 
     niri_after_commit="$(git -C "$NIRI_DIR" rev-parse HEAD)"
     log "niri submodule updated commit: $niri_after_commit"
@@ -541,7 +551,17 @@ main() {
 
     log "updating Quickshell submodule to latest upstream"
     git -C "$QUICKSHELL_DIR" fetch --prune
-    git -C "$QUICKSHELL_DIR" pull --ff-only
+
+    # Ensure we're on the configured branch and pull from its upstream
+    local quickshell_branch
+    quickshell_branch="$(git -C "$REPO_DIR" config -f "$REPO_DIR/.gitmodules" "submodule.quickshell.branch" || echo "master")"
+
+    if ! git -C "$QUICKSHELL_DIR" symbolic-ref -q HEAD >/dev/null 2>&1; then
+      log "Quickshell submodule is in detached HEAD state; checking out branch: $quickshell_branch"
+      git -C "$QUICKSHELL_DIR" checkout "$quickshell_branch"
+    fi
+
+    git -C "$QUICKSHELL_DIR" pull --ff-only origin "$quickshell_branch"
 
     quickshell_after_commit="$(git -C "$QUICKSHELL_DIR" rev-parse HEAD)"
     log "Quickshell submodule updated commit: $quickshell_after_commit"

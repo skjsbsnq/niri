@@ -3,7 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Wayland
-import "TahoeGlass.js" as TahoeGlass
+import "TahoeGlass.js" as GlassStyle
 
 PanelWindow {
     id: root
@@ -102,13 +102,26 @@ PanelWindow {
             launchApp(app);
     }
 
-    BackgroundEffect.blurRegion: Region {
-        // Fallback until tahoe_glass_v1 exists. The future protocol should
-        // send spotlightSurface and resultsSurface as two separate rounded
-        // regions; this bbox only keeps ext-background-effect usable.
-        item: spotlightPanel
-        radius: spotlightPanel.tahoeGlassFallbackRadius
-    }
+    TahoeGlass.regions: [
+        TahoeGlassRegion {
+            item: spotlightSurface
+            material: spotlightSurface.tahoeGlassMaterial
+            radius: spotlightSurface.tahoeGlassRadius
+            blur: true
+            shadow: true
+            clip: true
+            enabled: root.open || spotlightPanel.opacity > 0.01
+        },
+        TahoeGlassRegion {
+            item: resultsSurface
+            material: resultsSurface.tahoeGlassMaterial
+            radius: resultsSurface.tahoeGlassRadius
+            blur: true
+            shadow: true
+            clip: true
+            enabled: (root.open || spotlightPanel.opacity > 0.01) && resultsSurface.visible
+        }
+    ]
 
     MouseArea {
         anchors.fill: parent
@@ -117,10 +130,6 @@ PanelWindow {
 
     Item {
         id: spotlightPanel
-        readonly property string tahoeGlassRole: "fallback-bbox"
-        readonly property real tahoeGlassFallbackRadius: root.query.trim().length > 0
-            ? TahoeGlass.RadiusPanelCompact
-            : TahoeGlass.RadiusPill
 
         anchors.horizontalCenter: parent.horizontalCenter
         y: Math.max(58, parent.height * 0.18)
@@ -146,16 +155,16 @@ PanelWindow {
 
         Rectangle {
             id: spotlightSurface
-            readonly property string tahoeGlassMaterial: TahoeGlass.MaterialPill
-            readonly property real tahoeGlassRadius: TahoeGlass.RadiusPill
+            readonly property string tahoeGlassMaterial: GlassStyle.MaterialPill
+            readonly property real tahoeGlassRadius: GlassStyle.RadiusPill
 
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.top: parent.top
             height: 66
             radius: tahoeGlassRadius
-            color: TahoeGlass.FillPill
-            border.color: TahoeGlass.StrokePill
+            color: GlassStyle.FillPill
+            border.color: GlassStyle.StrokePill
             border.width: 1
 
             Rectangle {
@@ -163,7 +172,7 @@ PanelWindow {
                 anchors.margins: 1
                 radius: parent.radius - 1
                 color: "transparent"
-                border.color: TahoeGlass.StrokeInner
+                border.color: GlassStyle.StrokeInner
                 border.width: 1
             }
 
@@ -264,8 +273,8 @@ PanelWindow {
 
         Rectangle {
             id: resultsSurface
-            readonly property string tahoeGlassMaterial: TahoeGlass.MaterialPanel
-            readonly property real tahoeGlassRadius: TahoeGlass.RadiusPanelCompact
+            readonly property string tahoeGlassMaterial: GlassStyle.MaterialPanel
+            readonly property real tahoeGlassRadius: GlassStyle.RadiusPanelCompact
 
             anchors.left: parent.left
             anchors.right: parent.right

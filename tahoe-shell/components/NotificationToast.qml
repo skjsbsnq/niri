@@ -3,7 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Wayland
-import "TahoeGlass.js" as TahoeGlass
+import "TahoeGlass.js" as GlassStyle
 
 // Real notification toast.
 //
@@ -70,25 +70,22 @@ PanelWindow {
         }
     }
 
-    // Frosted-glass blur behind the card. The blur region's radius MUST
-    // match the card's radius (18) or the blur leaks past the rounded
-    // corners.
-    //
-    // IMPORTANT: this attached type lives under Quickshell.Wayland
-    // (Quickshell.Wayland._BackgroundEffect), so the file MUST import
-    // Quickshell.Wayland. Without that import the engine silently drops
-    // the attached property -> the card renders as a flat translucent
-    // rectangle with no blur. That was the real reason the toast had no
-    // frost, NOT a geometry cycle.
-    BackgroundEffect.blurRegion: Region {
-        item: card
-        radius: card.tahoeGlassRadius
-    }
+    TahoeGlass.regions: [
+        TahoeGlassRegion {
+            item: card
+            material: card.tahoeGlassMaterial
+            radius: card.tahoeGlassRadius
+            blur: true
+            shadow: true
+            clip: true
+            enabled: root.hasCurrent || card.opacity > 0.01
+        }
+    ]
 
     Rectangle {
         id: card
-        readonly property string tahoeGlassMaterial: TahoeGlass.MaterialToast
-        readonly property real tahoeGlassRadius: TahoeGlass.RadiusToast
+        readonly property string tahoeGlassMaterial: GlassStyle.MaterialToast
+        readonly property real tahoeGlassRadius: GlassStyle.RadiusToast
 
         // Slide + fade in from the right when a notification arrives.
         // x changes the blur/glass geometry, so it uses a bounded
@@ -99,7 +96,7 @@ PanelWindow {
         implicitHeight: 86
         height: Math.max(86, column.implicitHeight + 28)
         radius: tahoeGlassRadius
-        color: TahoeGlass.FillPanelBright
+        color: GlassStyle.FillPanelBright
         opacity: root.hasCurrent ? 1 : 0
 
         // NOTE: no `border.width` on the card itself. A centered 1px
@@ -129,7 +126,7 @@ PanelWindow {
             z: -1
         }
 
-        // Slide + fade in from the right. This card is the blur-region item,
+        // Slide + fade in from the right. This card is the glass-region item,
         // so geometry must never be driven by SpringAnimation.
         Behavior on x {
             NumberAnimation { duration: 260; easing.type: Easing.OutCubic }

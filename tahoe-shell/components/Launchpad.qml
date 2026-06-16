@@ -3,7 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Wayland
-import "TahoeGlass.js" as TahoeGlass
+import "TahoeGlass.js" as GlassStyle
 
 PanelWindow {
     id: root
@@ -42,19 +42,26 @@ PanelWindow {
         bottom: true
     }
 
-    BackgroundEffect.blurRegion: Region {
-        item: backdrop
-        radius: backdrop.tahoeGlassRadius
-    }
+    TahoeGlass.regions: [
+        TahoeGlassRegion {
+            item: backdrop
+            material: backdrop.tahoeGlassMaterial
+            radius: backdrop.tahoeGlassRadius
+            blur: true
+            shadow: false
+            clip: true
+            enabled: root.open || backdrop.opacity > 0.01
+        }
+    ]
 
     Rectangle {
         id: backdrop
-        readonly property string tahoeGlassMaterial: TahoeGlass.MaterialBackdrop
-        readonly property real tahoeGlassRadius: TahoeGlass.RadiusBackdrop
+        readonly property string tahoeGlassMaterial: GlassStyle.MaterialBackdrop
+        readonly property real tahoeGlassRadius: GlassStyle.RadiusBackdrop
 
         anchors.fill: parent
         // The scrim is just blur + tint, structurally identical to the
-        // control center: the blurRegion above blurs whatever is behind,
+        // control center: the glass region above blurs whatever is behind,
         // and this Rectangle is the only thing drawn on top. Kept a touch
         // denser than the control center's 13% (#20) because a full-screen
         // overlay needs more contrast to make the icons pop. Previously
@@ -62,7 +69,7 @@ PanelWindow {
         // blur at 22% opacity — that punched through the blur and made the
         // Launchpad read as "a different, lesser blur" than the control
         // center. Removed. See glass-consistency-fix-plan.md §1.
-        color: TahoeGlass.FillBackdrop
+        color: GlassStyle.FillBackdrop
         opacity: root.open ? 1 : 0
 
         Behavior on opacity {

@@ -5,7 +5,7 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Widgets
 import Quickshell.Wayland
-import "TahoeGlass.js" as TahoeGlass
+import "TahoeGlass.js" as GlassStyle
 
 PanelWindow {
     id: root
@@ -27,8 +27,8 @@ PanelWindow {
     readonly property int notificationCount: notificationsService ? notificationsService.historyCount : 0
     readonly property bool dndEnabled: notificationsService ? notificationsService.dndEnabled : false
     readonly property bool batteryAvailable: batteryService && batteryService.available
-    readonly property color glassFill: TahoeGlass.FillTopBar
-    readonly property color glassStroke: TahoeGlass.StrokeTopBar
+    readonly property color glassFill: GlassStyle.FillTopBar
+    readonly property color glassStroke: GlassStyle.StrokeTopBar
     readonly property color glassShadowLine: "#10000000"
 
     signal toggleAppMenu()
@@ -48,7 +48,7 @@ PanelWindow {
     // plan.md §1.2 B / §1.3 B.
     //
     // Visible stays true until the fade-out finishes so the panel is
-    // unmapped (and its blurRegion stops sampling) only once it's gone;
+    // unmapped (and its glass region stops sampling) only once it's gone;
     // during the fade the Launchpad scrim covers any residual blur.
     visible: !launchpadOpen || barSurface.opacity > 0.01
 
@@ -83,17 +83,22 @@ PanelWindow {
     // (they'd be clipped — violating §2.6 acceptance). 5/5 vertically
     // yields a 24px-tall surface that just fits the content while still
     // floating off every edge.
-    BackgroundEffect.blurRegion: Region {
-        item: barSurface
-        // MUST match barSurface.radius or the blur leaks past the rounded
-        // corners (project convention — see NotificationToast.qml).
-        radius: barSurface.tahoeGlassRadius
-    }
+    TahoeGlass.regions: [
+        TahoeGlassRegion {
+            item: barSurface
+            material: barSurface.tahoeGlassMaterial
+            radius: barSurface.tahoeGlassRadius
+            blur: true
+            shadow: true
+            clip: true
+            enabled: !root.launchpadOpen && barSurface.opacity > 0.01
+        }
+    ]
 
     Rectangle {
         id: barSurface
-        readonly property string tahoeGlassMaterial: TahoeGlass.MaterialPanel
-        readonly property real tahoeGlassRadius: TahoeGlass.RadiusTopBar
+        readonly property string tahoeGlassMaterial: GlassStyle.MaterialPanel
+        readonly property real tahoeGlassRadius: GlassStyle.RadiusTopBar
 
         anchors.fill: parent
         anchors.leftMargin: 8

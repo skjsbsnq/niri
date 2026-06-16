@@ -3,7 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Wayland
-import "TahoeGlass.js" as TahoeGlass
+import "TahoeGlass.js" as GlassStyle
 
 PanelWindow {
     id: root
@@ -17,10 +17,10 @@ PanelWindow {
     property real dockMouseX: -10000
     property bool dockHovered: false
     readonly property bool hasWindows: niriService && niriService.windowList && niriService.windowList.length > 0
-    readonly property color glassFill: TahoeGlass.FillDock
-    readonly property color glassStroke: TahoeGlass.StrokeDock
-    readonly property color glassInnerStroke: TahoeGlass.StrokeInner
-    readonly property color glassShadowLine: TahoeGlass.ShadowLine
+    readonly property color glassFill: GlassStyle.FillDock
+    readonly property color glassStroke: GlassStyle.StrokeDock
+    readonly property color glassInnerStroke: GlassStyle.StrokeInner
+    readonly property color glassShadowLine: GlassStyle.ShadowLine
 
     signal toggleLaunchpad()
 
@@ -33,7 +33,7 @@ PanelWindow {
     // plan.md §1.2 B / §1.3 B.
     //
     // Visible stays true until the fade-out finishes so the panel is
-    // unmapped (and its blurRegion stops sampling) only once it's gone;
+    // unmapped (and its glass region stops sampling) only once it's gone;
     // during the fade the Launchpad scrim covers any residual blur.
     visible: !launchpadOpen || dockSurface.opacity > 0.01
 
@@ -69,15 +69,22 @@ PanelWindow {
     color: "transparent"
     WlrLayershell.namespace: "tahoe-dock"
 
-    BackgroundEffect.blurRegion: Region {
-        item: dockSurface
-        radius: dockSurface.tahoeGlassRadius
-    }
+    TahoeGlass.regions: [
+        TahoeGlassRegion {
+            item: dockSurface
+            material: dockSurface.tahoeGlassMaterial
+            radius: dockSurface.tahoeGlassRadius
+            blur: true
+            shadow: true
+            clip: true
+            enabled: !root.launchpadOpen && dockSurface.opacity > 0.01
+        }
+    ]
 
     Rectangle {
         id: dockSurface
-        readonly property string tahoeGlassMaterial: TahoeGlass.MaterialDock
-        readonly property real tahoeGlassRadius: TahoeGlass.RadiusDock
+        readonly property string tahoeGlassMaterial: GlassStyle.MaterialDock
+        readonly property real tahoeGlassRadius: GlassStyle.RadiusDock
 
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.bottom: parent.bottom

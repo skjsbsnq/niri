@@ -4,7 +4,7 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
-import "TahoeGlass.js" as TahoeGlass
+import "TahoeGlass.js" as GlassStyle
 
 PanelWindow {
     id: root
@@ -14,8 +14,8 @@ PanelWindow {
     property var controlsService
     property bool controlsExpanded: false
 
-    readonly property color glassFill: TahoeGlass.FillPanel
-    readonly property color glassStroke: TahoeGlass.StrokePanel
+    readonly property color glassFill: GlassStyle.FillPanel
+    readonly property color glassStroke: GlassStyle.StrokePanel
     readonly property color glassInnerFill: "#14ffffff"
     // Tiles match the web cc-tile rgba(255,255,255,0.5).
     readonly property color tileFill: "#80ffffff"
@@ -52,23 +52,30 @@ PanelWindow {
         right: 12
     }
 
-    BackgroundEffect.blurRegion: Region {
-        item: panel
-        radius: panel.tahoeGlassRadius
-    }
+    TahoeGlass.regions: [
+        TahoeGlassRegion {
+            item: panel
+            material: panel.tahoeGlassMaterial
+            radius: panel.tahoeGlassRadius
+            blur: true
+            shadow: true
+            clip: true
+            enabled: root.open || panel.opacity > 0.01
+        }
+    ]
 
     Rectangle {
         id: panel
-        readonly property string tahoeGlassMaterial: TahoeGlass.MaterialPanel
-        readonly property real tahoeGlassRadius: TahoeGlass.RadiusPanel
+        readonly property string tahoeGlassMaterial: GlassStyle.MaterialPanel
+        readonly property real tahoeGlassRadius: GlassStyle.RadiusPanel
 
         x: 0
-        // panel is the BackgroundEffect.blurRegion item. Its geometry MUST
+        // panel is the compositor-owned glass region item. Its geometry MUST
         // stay tame during open/close: niri recomputes the blur region each
         // frame, and a SpringAnimation overshoot pushed the region's
         // `loc + size` past i32::MAX, panicking niri's
         // region_to_non_overlapping_rects (the crash that returned the VM
-        // to the login screen). So geometry transitions on a blur-region
+        // to the login screen). So geometry transitions on a glass-region
         // item use a bounded NumberAnimation, never a spring. Opacity is
         // safe to animate any way (it doesn't change region geometry).
         y: root.open ? 0 : -14
@@ -247,7 +254,7 @@ PanelWindow {
 
                 Behavior on Layout.preferredHeight {
                     // NumberAnimation, not spring — this height feeds the
-                    // panel's implicitHeight, which is the blur-region
+                    // panel's implicitHeight, which is the glass-region
                     // geometry; a spring overshoot here is the same crash
                     // class as animating panel.y/scale directly.
                     NumberAnimation { duration: 180; easing.type: Easing.OutCubic }

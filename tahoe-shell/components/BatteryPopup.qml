@@ -4,7 +4,7 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
-import "TahoeGlass.js" as TahoeGlass
+import "TahoeGlass.js" as GlassStyle
 
 PanelWindow {
     id: root
@@ -36,22 +36,29 @@ PanelWindow {
         right: 92
     }
 
-    BackgroundEffect.blurRegion: Region {
-        item: panel
-        radius: panel.tahoeGlassRadius
-    }
+    TahoeGlass.regions: [
+        TahoeGlassRegion {
+            item: panel
+            material: panel.tahoeGlassMaterial
+            radius: panel.tahoeGlassRadius
+            blur: true
+            shadow: true
+            clip: true
+            enabled: root.open || panel.opacity > 0.01
+        }
+    ]
 
     Rectangle {
         id: panel
-        readonly property string tahoeGlassMaterial: TahoeGlass.MaterialPanel
-        readonly property real tahoeGlassRadius: TahoeGlass.RadiusPopup
+        readonly property string tahoeGlassMaterial: GlassStyle.MaterialPanel
+        readonly property real tahoeGlassRadius: GlassStyle.RadiusPopup
 
         y: root.open ? 0 : -12
         width: parent.width
         implicitHeight: content.implicitHeight + 24
         height: implicitHeight
         radius: tahoeGlassRadius
-        color: TahoeGlass.FillPanelBright
+        color: GlassStyle.FillPanelBright
         opacity: root.open ? 1 : 0
 
         Rectangle {
@@ -59,7 +66,7 @@ PanelWindow {
             anchors.margins: 1
             radius: parent.radius - 1
             color: "transparent"
-            border.color: TahoeGlass.StrokePanelBright
+            border.color: GlassStyle.StrokePanelBright
             border.width: 1
         }
 
@@ -68,7 +75,7 @@ PanelWindow {
             anchors.margins: 1
             radius: parent.radius - 1
             color: "transparent"
-            border.color: TahoeGlass.ShadowLineSoft
+            border.color: GlassStyle.ShadowLineSoft
             border.width: 1
             z: -1
         }

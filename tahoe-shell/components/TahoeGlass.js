@@ -1,8 +1,8 @@
 .pragma library
 
-// Phase 3 constants for the future compositor-owned TahoeGlassRegion API.
-// QML still uses BackgroundEffect.blurRegion as fallback, but every glass
-// object now has a single material/radius vocabulary to migrate from.
+// Shared material/radius constants for compositor-owned TahoeGlassRegion
+// declarations. TahoeGlass handles the ext-background-effect fallback when
+// the private protocol is not available.
 
 var MaterialPanel = "panel";
 var MaterialPill = "pill";

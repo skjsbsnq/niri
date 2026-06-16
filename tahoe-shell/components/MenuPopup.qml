@@ -4,7 +4,7 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
-import "TahoeGlass.js" as TahoeGlass
+import "TahoeGlass.js" as GlassStyle
 
 PanelWindow {
     id: root
@@ -33,10 +33,17 @@ PanelWindow {
         left: 12
     }
 
-    BackgroundEffect.blurRegion: Region {
-        item: menuSurface
-        radius: menuSurface.tahoeGlassRadius
-    }
+    TahoeGlass.regions: [
+        TahoeGlassRegion {
+            item: menuSurface
+            material: menuSurface.tahoeGlassMaterial
+            radius: menuSurface.tahoeGlassRadius
+            blur: true
+            shadow: true
+            clip: true
+            enabled: root.open || menuSurface.opacity > 0.01
+        }
+    ]
 
     onOpenChanged: {
         if (!open && powerService)
@@ -56,22 +63,22 @@ PanelWindow {
 
     Rectangle {
         id: menuSurface
-        readonly property string tahoeGlassMaterial: TahoeGlass.MaterialMenu
-        readonly property real tahoeGlassRadius: TahoeGlass.RadiusMenu
+        readonly property string tahoeGlassMaterial: GlassStyle.MaterialMenu
+        readonly property real tahoeGlassRadius: GlassStyle.RadiusMenu
 
         x: 0
-        // menuSurface is the BackgroundEffect.blurRegion item. Its geometry
+        // menuSurface is the compositor-owned glass region item. Its geometry
         // MUST stay tame during open/close: niri recomputes the blur region
         // each frame, and a SpringAnimation overshoot pushed the region's
         // `loc + size` past i32::MAX, panicking niri's
         // region_to_non_overlapping_rects (the crash that returned the VM
-        // to the login screen). Geometry transitions on a blur-region item
+        // to the login screen). Geometry transitions on a glass-region item
         // use a bounded NumberAnimation, never a spring.
         y: root.open ? 0 : -8
         width: parent.width
         height: parent.height
         radius: tahoeGlassRadius
-        color: TahoeGlass.FillPanelBright
+        color: GlassStyle.FillPanelBright
         opacity: root.open ? 1 : 0
 
         // NOTE: no `border.width` on the surface itself — a centered 1px
@@ -83,7 +90,7 @@ PanelWindow {
             anchors.margins: 1
             radius: parent.radius - 1
             color: "transparent"
-            border.color: TahoeGlass.StrokePanelBright
+            border.color: GlassStyle.StrokePanelBright
             border.width: 1
         }
 
@@ -92,7 +99,7 @@ PanelWindow {
             anchors.margins: 1
             radius: parent.radius - 1
             color: "transparent"
-            border.color: TahoeGlass.ShadowLine
+            border.color: GlassStyle.ShadowLine
             border.width: 1
             z: -1
         }

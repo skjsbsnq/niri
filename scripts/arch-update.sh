@@ -514,7 +514,14 @@ main() {
       git -C "$NIRI_DIR" checkout "$niri_branch"
     fi
 
-    git -C "$NIRI_DIR" pull --ff-only origin "$niri_branch"
+    # If branches have diverged, reset to remote (submodules should track upstream exactly)
+    if ! git -C "$NIRI_DIR" merge-base --is-ancestor HEAD "origin/$niri_branch" 2>/dev/null && \
+       ! git -C "$NIRI_DIR" merge-base --is-ancestor "origin/$niri_branch" HEAD 2>/dev/null; then
+      log "niri submodule has diverged from upstream; resetting to origin/$niri_branch"
+      git -C "$NIRI_DIR" reset --hard "origin/$niri_branch"
+    else
+      git -C "$NIRI_DIR" pull --ff-only origin "$niri_branch"
+    fi
 
     niri_after_commit="$(git -C "$NIRI_DIR" rev-parse HEAD)"
     log "niri submodule updated commit: $niri_after_commit"
@@ -561,7 +568,14 @@ main() {
       git -C "$QUICKSHELL_DIR" checkout "$quickshell_branch"
     fi
 
-    git -C "$QUICKSHELL_DIR" pull --ff-only origin "$quickshell_branch"
+    # If branches have diverged, reset to remote (submodules should track upstream exactly)
+    if ! git -C "$QUICKSHELL_DIR" merge-base --is-ancestor HEAD "origin/$quickshell_branch" 2>/dev/null && \
+       ! git -C "$QUICKSHELL_DIR" merge-base --is-ancestor "origin/$quickshell_branch" HEAD 2>/dev/null; then
+      log "Quickshell submodule has diverged from upstream; resetting to origin/$quickshell_branch"
+      git -C "$QUICKSHELL_DIR" reset --hard "origin/$quickshell_branch"
+    else
+      git -C "$QUICKSHELL_DIR" pull --ff-only origin "$quickshell_branch"
+    fi
 
     quickshell_after_commit="$(git -C "$QUICKSHELL_DIR" rev-parse HEAD)"
     log "Quickshell submodule updated commit: $quickshell_after_commit"

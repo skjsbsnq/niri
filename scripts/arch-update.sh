@@ -46,6 +46,8 @@ FORCE_NIRI_BUILD="${FORCE_NIRI_BUILD:-false}"
 BUILD_QUICKSHELL_FORK="${BUILD_QUICKSHELL_FORK:-false}"
 FORCE_QUICKSHELL_BUILD="${FORCE_QUICKSHELL_BUILD:-false}"
 INSTALL_QUICKSHELL_BUILD_DEPS="${INSTALL_QUICKSHELL_BUILD_DEPS:-true}"
+RUN_TAHOE_GLASS_GUARDRAILS="${RUN_TAHOE_GLASS_GUARDRAILS:-true}"
+TAHOE_GLASS_GUARDRAILS_SCRIPT="${TAHOE_GLASS_GUARDRAILS_SCRIPT:-"$REPO_DIR/scripts/check-tahoe-glass-guardrails.sh"}"
 
 QUICKSHELL_BUILD_PACKAGES=(
   base-devel
@@ -411,6 +413,19 @@ deploy_tahoe_session_entry() {
   fi
 }
 
+run_tahoe_glass_guardrails() {
+  if [[ "$RUN_TAHOE_GLASS_GUARDRAILS" != true ]]; then
+    log "skipping Tahoe glass guardrails; RUN_TAHOE_GLASS_GUARDRAILS=$RUN_TAHOE_GLASS_GUARDRAILS"
+    return
+  fi
+
+  [[ -f "$TAHOE_GLASS_GUARDRAILS_SCRIPT" ]] \
+    || die "missing Tahoe glass guardrail script: $TAHOE_GLASS_GUARDRAILS_SCRIPT"
+
+  log "running Tahoe glass Phase 7 guardrails"
+  bash "$TAHOE_GLASS_GUARDRAILS_SCRIPT"
+}
+
 main() {
   require_cmd git
   require_cmd grep
@@ -575,6 +590,8 @@ main() {
   if changed_since_pull '^scripts/'; then
     scripts_changed=true
   fi
+
+  run_tahoe_glass_guardrails
 
   if [[ "$need_niri_build" == true ]]; then
     build_niri

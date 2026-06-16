@@ -60,6 +60,20 @@ The Quickshell fork is installed under `~/.local/bin/quickshell` by default, mat
 
 When a Quickshell build is needed on Arch, `arch-update.sh` installs the required build packages first, including `qt6-shadertools`, `spirv-tools`, `qt6-wayland`, and `vulkan-headers`. Set `INSTALL_QUICKSHELL_BUILD_DEPS=false` to skip that package install step.
 
+Before deploying, `arch-update.sh` runs the Phase 7 Tahoe Glass guardrails. The check rejects broad `namespace="^quickshell"` glass rules, direct Tahoe QML `BackgroundEffect.blurRegion` usage, `PanelWindow` files without `tahoe-*` namespaces, and `TahoeGlassRegion` declarations without material/radius.
+
+Run the same check manually with:
+
+```sh
+bash scripts/check-tahoe-glass-guardrails.sh
+```
+
+For a local emergency debug pass only, skip it with:
+
+```sh
+RUN_TAHOE_GLASS_GUARDRAILS=false bash scripts/arch-update.sh
+```
+
 ## Capture Glass Baseline
 
 ```sh

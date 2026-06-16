@@ -38,6 +38,12 @@ After every Windows push:
 bash scripts/arch-update.sh
 ```
 
+`arch-update.sh` also runs the Tahoe Glass Phase 7 guardrails before deploy. To run them directly:
+
+```sh
+bash scripts/check-tahoe-glass-guardrails.sh
+```
+
 Start the Phase 0 session:
 
 ```sh

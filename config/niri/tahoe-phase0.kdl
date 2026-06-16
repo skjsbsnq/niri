@@ -54,6 +54,19 @@ blur {
     saturation 1.6
 }
 
+tahoe-glass {
+    // Tahoe shell glass should sample the real framebuffer behind the panel.
+    // Leaving xray implicit makes it sample only niri's backdrop buffer, so
+    // ordinary window moves do not update the frosted glass until overview or
+    // another backdrop change invalidates that buffer.
+    material "panel" { xray false; }
+    material "pill" { xray false; }
+    material "dock" { xray false; }
+    material "menu" { xray false; }
+    material "toast" { xray false; }
+    material "backdrop" { xray false; }
+}
+
 hotkey-overlay {
     skip-at-startup
 }

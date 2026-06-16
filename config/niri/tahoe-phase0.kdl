@@ -59,12 +59,50 @@ tahoe-glass {
     // Leaving xray implicit makes it sample only niri's backdrop buffer, so
     // ordinary window moves do not update the frosted glass until overview or
     // another backdrop change invalidates that buffer.
-    material "panel" { xray false; }
-    material "pill" { xray false; }
-    material "dock" { xray false; }
-    material "menu" { xray false; }
-    material "toast" { xray false; }
-    material "backdrop" { xray false; }
+    //
+    // Phase 2: enable real liquid material. edge-highlight drives the
+    // shader's rim/specular light (postprocess.frag glass_light_strength,
+    // clamped to 2.0); refraction drives the SDF-normal sample offset
+    // (niri_refraction_offset, clamped to 0.12). These two are what move
+    // the glass from "frosted white card" to "refractive lens with edge
+    // light". Code defaults are 0.0, so without these overrides the
+    // compositor-owned glass renders as plain blur+tint. When a surface
+    // commits TahoeGlass regions, niri renders through these materials and
+    // SKIPS the layer-rule background-effect blocks below, which only serve
+    // the BackgroundEffect.blurRegion fallback path.
+    material "panel" {
+        xray false
+        edge-highlight 0.34
+        refraction 0.04
+    }
+    material "pill" {
+        xray false
+        edge-highlight 0.38
+        refraction 0.045
+    }
+    material "dock" {
+        xray false
+        edge-highlight 0.40
+        refraction 0.05
+    }
+    // menu/toast read clearer: stronger edge light, gentler lens distortion.
+    material "menu" {
+        xray false
+        edge-highlight 0.42
+        refraction 0.02
+    }
+    material "toast" {
+        xray false
+        edge-highlight 0.42
+        refraction 0.02
+    }
+    // backdrop is fullscreen (Launchpad); keep refraction low so the whole
+    // screen does not visibly warp, and keep shadow off (set in code default).
+    material "backdrop" {
+        xray false
+        edge-highlight 0.22
+        refraction 0.02
+    }
 }
 
 hotkey-overlay {
@@ -219,6 +257,8 @@ layer-rule {
         color "#0004"
     }
 
+    // Fallback path (BackgroundEffect.blurRegion). Keep in sync with the
+    // tahoe-glass "panel" material so the protocol and fallback look alike.
     background-effect {
         xray false
         blur true
@@ -226,8 +266,8 @@ layer-rule {
         saturation 1.16
         tint-color "#ffffff"
         tint-amount 0.04
-        edge-highlight 0.00
-        refraction 0.000
+        edge-highlight 0.34
+        refraction 0.04
     }
 }
 
@@ -244,6 +284,7 @@ layer-rule {
         color "#0004"
     }
 
+    // Fallback path. Keep in sync with the tahoe-glass "panel" material.
     background-effect {
         xray false
         blur true
@@ -251,8 +292,8 @@ layer-rule {
         saturation 1.16
         tint-color "#ffffff"
         tint-amount 0.04
-        edge-highlight 0.00
-        refraction 0.000
+        edge-highlight 0.34
+        refraction 0.04
     }
 }
 
@@ -271,6 +312,8 @@ layer-rule {
         color "#0004"
     }
 
+    // Fallback path. Keep in sync with the tahoe-glass "menu"/"toast"
+    // materials: stronger edge light, gentler refraction so text stays crisp.
     background-effect {
         xray false
         blur true
@@ -278,8 +321,8 @@ layer-rule {
         saturation 1.16
         tint-color "#ffffff"
         tint-amount 0.04
-        edge-highlight 0.00
-        refraction 0.000
+        edge-highlight 0.42
+        refraction 0.02
     }
 }
 

@@ -13,8 +13,6 @@ PanelWindow {
     property var niriService
     property var controlsService
     property bool controlsExpanded: false
-    readonly property int popupWidth: 360
-    readonly property int popupRightMargin: 12
 
     readonly property color glassFill: GlassStyle.FillPanel
     readonly property color glassStroke: GlassStyle.StrokePanel
@@ -39,14 +37,19 @@ PanelWindow {
     visible: open || panel.opacity > 0.01
     aboveWindows: true
     exclusiveZone: 0
+    implicitWidth: 360
+    implicitHeight: panel.implicitHeight
     color: "transparent"
     WlrLayershell.namespace: "tahoe-control-center"
 
     anchors {
-        left: true
-        right: true
         top: true
-        bottom: true
+        right: true
+    }
+
+    margins {
+        top: 0
+        right: 12
     }
 
     TahoeGlass.regions: [
@@ -61,18 +64,12 @@ PanelWindow {
         }
     ]
 
-    MouseArea {
-        anchors.fill: parent
-        enabled: root.open
-        onClicked: root.closeRequested()
-    }
-
     Rectangle {
         id: panel
         readonly property string tahoeGlassMaterial: GlassStyle.MaterialPanel
         readonly property real tahoeGlassRadius: GlassStyle.RadiusPanel
 
-        x: Math.max(12, parent.width - width - root.popupRightMargin)
+        x: 0
         // panel is the compositor-owned glass region item. Its geometry MUST
         // stay tame during open/close: niri recomputes the blur region each
         // frame, and a SpringAnimation overshoot pushed the region's
@@ -82,9 +79,8 @@ PanelWindow {
         // item use a bounded NumberAnimation, never a spring. Opacity is
         // safe to animate any way (it doesn't change region geometry).
         y: root.open ? 0 : -14
-        width: Math.min(root.popupWidth, Math.max(0, parent.width - 24))
+        width: parent.width
         implicitHeight: content.implicitHeight + 28
-        height: implicitHeight
         radius: tahoeGlassRadius
         color: root.glassFill
         opacity: root.open ? 1 : 0
@@ -103,13 +99,6 @@ PanelWindow {
             color: "transparent"
             border.color: root.glassStroke
             border.width: 1
-        }
-
-        MouseArea {
-            anchors.fill: parent
-            onClicked: function(mouse) {
-                mouse.accepted = true;
-            }
         }
 
         Behavior on opacity {

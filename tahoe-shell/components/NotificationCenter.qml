@@ -11,8 +11,6 @@ PanelWindow {
 
     property bool open: false
     property var notificationsService
-    readonly property int popupWidth: 360
-    readonly property int popupRightMargin: 56
 
     readonly property var history: notificationsService ? notificationsService.historyModel : []
     readonly property int historyCount: history.length
@@ -24,14 +22,19 @@ PanelWindow {
     visible: open || panel.opacity > 0.01
     aboveWindows: true
     exclusiveZone: 0
+    implicitWidth: 360
+    implicitHeight: panel.implicitHeight
     color: "transparent"
     WlrLayershell.namespace: "tahoe-notification-center"
 
     anchors {
-        left: true
-        right: true
         top: true
-        bottom: true
+        right: true
+    }
+
+    margins {
+        top: 0
+        right: 56
     }
 
     TahoeGlass.regions: [
@@ -46,20 +49,13 @@ PanelWindow {
         }
     ]
 
-    MouseArea {
-        anchors.fill: parent
-        enabled: root.open
-        onClicked: root.closeRequested()
-    }
-
     Rectangle {
         id: panel
         readonly property string tahoeGlassMaterial: GlassStyle.MaterialPanel
         readonly property real tahoeGlassRadius: GlassStyle.RadiusPanel
 
-        x: Math.max(12, parent.width - width - root.popupRightMargin)
         y: root.open ? 0 : -12
-        width: Math.min(root.popupWidth, Math.max(0, parent.width - 24))
+        width: parent.width
         implicitHeight: content.implicitHeight + 24
         height: implicitHeight
         radius: tahoeGlassRadius
@@ -73,13 +69,6 @@ PanelWindow {
             color: "transparent"
             border.color: GlassStyle.StrokePanelBright
             border.width: 1
-        }
-
-        MouseArea {
-            anchors.fill: parent
-            onClicked: function(mouse) {
-                mouse.accepted = true;
-            }
         }
 
         Behavior on opacity {

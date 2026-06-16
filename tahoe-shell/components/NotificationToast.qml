@@ -78,6 +78,9 @@ PanelWindow {
             blur: true
             shadow: true
             clip: true
+            // Ride the compositor material easing along the card's enter/exit
+            // opacity so the glass "grows in" instead of popping on.
+            interaction: card.opacity
             enabled: root.hasCurrent || card.opacity > 0.01
         }
     ]

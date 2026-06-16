@@ -75,6 +75,10 @@ PanelWindow {
             blur: true
             shadow: true
             clip: true
+            // Intensify the dock glass while the pointer is over it; the
+            // compositor eases highlight/refraction/inner-shadow up via this
+            // scalar instead of changing region geometry.
+            interaction: root.dockHovered ? 1.0 : 0.0
             enabled: !root.launchpadOpen && dockSurface.opacity > 0.01
         }
     ]

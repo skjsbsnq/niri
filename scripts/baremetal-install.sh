@@ -49,8 +49,11 @@ GUI_APP_PACKAGES=(
   swaylock
   swaybg
   brightnessctl
+  cliphist
   network-manager-applet
   nm-connection-editor
+  power-profiles-daemon
+  wl-clipboard
   xwayland-satellite
   xdg-desktop-portal
   xdg-desktop-portal-gnome

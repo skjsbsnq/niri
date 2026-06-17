@@ -15,7 +15,7 @@ bash scripts/baremetal-install.sh
 It does only what a minimal install is missing, and otherwise drives the existing scripts:
 
 1. clones the repo to `~/niri` (or `git pull --ff-only` + submodule update if it already exists; refuses to overwrite uncommitted changes),
-2. installs `lightdm` + `lightdm-gtk-greeter` and the GUI apps the config/shell call directly (`alacritty`, `fuzzel`, `swaylock`, `swaybg`, `brightnessctl`, `network-manager-applet`, `xdg-desktop-portal`, `xdg-desktop-portal-gtk`),
+2. installs `lightdm` + `lightdm-gtk-greeter` and the GUI apps/runtime helpers the config/shell call directly (`alacritty`, `fuzzel`, `swaylock`, `swaybg`, `brightnessctl`, `cliphist`, `wl-clipboard`, `network-manager-applet`, `power-profiles-daemon`, `xdg-desktop-portal`, `xdg-desktop-portal-gtk`),
 3. enables `NetworkManager` and `lightdm` (lightdm starts on next boot, not now, so it does not seize a running session),
 4. runs `arch-bootstrap.sh` with `BUILD_NIRI_FORK=auto BUILD_QUICKSHELL_FORK=auto`, so the first deploy pass builds and installs both forks under `~/.local/bin` for full compositor/shell validation,
 5. runs `arch-zh-setup.sh` for CJK locale/fonts/fcitx5,

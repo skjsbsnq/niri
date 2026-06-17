@@ -35,6 +35,7 @@ PACMAN_PACKAGES=(
   pam
   pipewire
   polkit
+  power-profiles-daemon
   pkgconf
   qt6-base
   qt6-declarative
@@ -48,6 +49,8 @@ PACMAN_PACKAGES=(
   vulkan-headers
   wayland
   wayland-protocols
+  wl-clipboard
+  cliphist
 )
 
 require_cmd() {

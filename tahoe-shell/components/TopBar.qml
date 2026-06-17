@@ -15,6 +15,8 @@ PanelWindow {
     property var notificationsService
     property var batteryService
     property var controlsService
+    property var fanService
+    property var clipboardService
     property bool controlCenterOpen: false
     property bool launchpadOpen: false
     property bool appMenuOpen: false
@@ -22,11 +24,14 @@ PanelWindow {
     property bool notificationCenterOpen: false
     property bool batteryPopupOpen: false
     property bool wifiPopupOpen: false
+    property bool fanPopupOpen: false
+    property bool clipboardPopupOpen: false
     property date now: new Date()
     readonly property string activeApp: appsService && niriService ? appsService.toplevelLabel(niriService.focusedWindow || niriService.activeToplevel) : "Desktop"
     // Number of retained notification history entries. Drives the bell
     // badge and lets DND-suppressed notifications remain visible.
     readonly property int notificationCount: notificationsService ? notificationsService.historyCount : 0
+    readonly property int clipboardCount: clipboardService ? clipboardService.historyCount : 0
     readonly property bool dndEnabled: notificationsService ? notificationsService.dndEnabled : false
     readonly property bool batteryAvailable: batteryService && batteryService.available
     readonly property color glassFill: GlassStyle.FillTopBar
@@ -39,6 +44,8 @@ PanelWindow {
     signal toggleNotifications(var anchorRect)
     signal toggleBattery(var anchorRect)
     signal toggleWifi(var anchorRect)
+    signal toggleFan(var anchorRect)
+    signal toggleClipboard(var anchorRect)
     signal openTrayMenu(var item, var anchorRect)
 
     function anchorRectFor(item) {
@@ -308,6 +315,103 @@ PanelWindow {
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
                     onClicked: root.toggleNotifications(root.anchorRectFor(notificationButton))
+                }
+            }
+
+            Item {
+                id: clipboardButton
+
+                Layout.preferredWidth: 30
+                Layout.preferredHeight: 24
+                Layout.alignment: Qt.AlignVCenter
+                visible: !!root.clipboardService
+
+                Rectangle {
+                    anchors.fill: parent
+                    radius: 12
+                    color: root.clipboardPopupOpen ? "#38ffffff" : (clipboardMouse.containsMouse ? "#30ffffff" : "#22ffffff")
+                    border.color: "#40ffffff"
+                }
+
+                Text {
+                    anchors.centerIn: parent
+                    text: "\ue14f"
+                    color: root.clipboardService && root.clipboardService.available ? "#202124" : "#731d1d1f"
+                    font.family: "Material Icons"
+                    font.pixelSize: 16
+                    opacity: root.clipboardService && root.clipboardService.available ? 1 : 0.5
+                }
+
+                Rectangle {
+                    width: countText.implicitWidth + 7
+                    height: 13
+                    radius: 6.5
+                    x: parent.width - width - 2
+                    y: 1
+                    color: "#cc2c9cf2"
+                    border.color: "#ffffff"
+                    border.width: 1
+                    visible: root.clipboardCount > 0
+
+                    Text {
+                        id: countText
+                        anchors.centerIn: parent
+                        text: root.clipboardCount > 9 ? "9+" : root.clipboardCount
+                        color: "#ffffff"
+                        font.pixelSize: 8
+                        font.weight: Font.DemiBold
+                    }
+                }
+
+                MouseArea {
+                    id: clipboardMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.toggleClipboard(root.anchorRectFor(clipboardButton))
+                }
+            }
+
+            Item {
+                id: fanButton
+
+                Layout.preferredWidth: 30
+                Layout.preferredHeight: 24
+                Layout.alignment: Qt.AlignVCenter
+                visible: !!root.fanService
+
+                Rectangle {
+                    anchors.fill: parent
+                    radius: 12
+                    color: root.fanPopupOpen ? "#38ffffff" : (fanMouse.containsMouse ? "#30ffffff" : "#22ffffff")
+                    border.color: "#40ffffff"
+                }
+
+                Text {
+                    anchors.centerIn: parent
+                    text: "\ue332"
+                    color: root.fanService && root.fanService.available && !root.fanService.autoMode ? "#0b6bd3" : "#202124"
+                    font.family: "Material Icons"
+                    font.pixelSize: 16
+                    opacity: root.fanService && root.fanService.available ? 1 : 0.5
+                }
+
+                Rectangle {
+                    width: 5
+                    height: 5
+                    radius: 2.5
+                    x: parent.width - width - 5
+                    y: parent.height - height - 4
+                    color: "#2c9cf2"
+                    visible: root.fanService && root.fanService.available && !root.fanService.autoMode
+                }
+
+                MouseArea {
+                    id: fanMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.toggleFan(root.anchorRectFor(fanButton))
                 }
             }
 

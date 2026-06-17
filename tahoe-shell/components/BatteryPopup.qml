@@ -12,10 +12,12 @@ PanelWindow {
 
     property bool open: false
     property var batteryService
+    property var powerProfileService
     property var anchorRect: null
 
     readonly property bool available: !!batteryService && batteryService.available
     readonly property int percentage: available ? batteryService.roundedPercentage : 0
+    readonly property bool profileAvailable: !!powerProfileService && powerProfileService.available
     readonly property string iconFont: "Material Icons"
     readonly property int edgePadding: 8
     readonly property int fallbackRight: 92
@@ -220,6 +222,68 @@ PanelWindow {
                     ? root.batteryService.healthText
                     : "Not Reported"
             }
+
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.preferredHeight: 1
+                color: "#22000000"
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+
+                Text {
+                    text: "性能配置"
+                    color: "#991d1d1f"
+                    font.pixelSize: 12
+                    Layout.fillWidth: true
+                }
+
+                Text {
+                    text: root.profileAvailable
+                        ? root.powerProfileService.labelFor(root.powerProfileService.profile)
+                        : "不可用"
+                    color: "#1d1d1f"
+                    font.pixelSize: 12
+                    font.weight: Font.DemiBold
+                    elide: Text.ElideRight
+                    horizontalAlignment: Text.AlignRight
+                    Layout.maximumWidth: 150
+                }
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 7
+
+                Repeater {
+                    model: root.powerProfileService ? root.powerProfileService.profiles : []
+
+                    delegate: ProfileButton {
+                        required property var modelData
+
+                        Layout.fillWidth: true
+                        profile: modelData
+                        active: root.powerProfileService && root.powerProfileService.profile === modelData.id
+                        supported: root.powerProfileService && root.powerProfileService.supports(modelData.id)
+                        onActivated: {
+                            if (root.powerProfileService)
+                                root.powerProfileService.setProfile(modelData.id);
+                        }
+                    }
+                }
+            }
+
+            Text {
+                Layout.fillWidth: true
+                text: root.powerProfileService ? root.powerProfileService.errorText : "需要 power-profiles-daemon"
+                color: "#ccff453a"
+                font.pixelSize: 11
+                font.weight: Font.DemiBold
+                wrapMode: Text.WordWrap
+                visible: text.length > 0
+            }
         }
     }
 
@@ -247,6 +311,58 @@ PanelWindow {
             elide: Text.ElideRight
             horizontalAlignment: Text.AlignRight
             Layout.maximumWidth: 150
+        }
+    }
+
+    component ProfileButton: Item {
+        id: btn
+
+        property var profile
+        property bool active: false
+        property bool supported: true
+        signal activated()
+
+        Layout.preferredHeight: 44
+
+        Rectangle {
+            anchors.fill: parent
+            radius: 14
+            color: btn.active ? "#5ad7f0ff" : (buttonMouse.containsMouse ? "#54ffffff" : "#34ffffff")
+            border.color: btn.active ? "#882c9cf2" : "#44ffffff"
+            border.width: 1
+            opacity: btn.supported ? 1 : 0.45
+        }
+
+        ColumnLayout {
+            anchors.centerIn: parent
+            spacing: 1
+
+            Text {
+                Layout.alignment: Qt.AlignHCenter
+                text: btn.profile ? btn.profile.icon : ""
+                color: btn.active ? "#0b6bd3" : "#731d1d1f"
+                font.family: root.iconFont
+                font.pixelSize: 16
+            }
+
+            Text {
+                Layout.alignment: Qt.AlignHCenter
+                text: btn.profile ? btn.profile.label : ""
+                color: "#1d1d1f"
+                font.pixelSize: 11
+                font.weight: btn.active ? Font.DemiBold : Font.Normal
+            }
+        }
+
+        MouseArea {
+            id: buttonMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: btn.supported ? Qt.PointingHandCursor : Qt.ArrowCursor
+            onClicked: {
+                if (btn.supported)
+                    btn.activated();
+            }
         }
     }
 }

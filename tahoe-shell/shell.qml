@@ -18,6 +18,8 @@ ShellRoot {
     property bool notificationCenterOpen: false
     property bool batteryPopupOpen: false
     property bool wifiPopupOpen: false
+    property bool fanPopupOpen: false
+    property bool clipboardPopupOpen: false
     property bool trayMenuOpen: false
     property var trayMenuItem: null
     property var topBarPopupAnchorRect: null
@@ -58,6 +60,10 @@ ShellRoot {
             batteryPopupOpen = false;
         if (except !== "wifi")
             wifiPopupOpen = false;
+        if (except !== "fan")
+            fanPopupOpen = false;
+        if (except !== "clipboard")
+            clipboardPopupOpen = false;
         if (except !== "trayMenu") {
             trayMenuOpen = false;
             trayMenuItem = null;
@@ -71,6 +77,8 @@ ShellRoot {
         spotlightOpen = false;
         notificationCenterOpen = false;
         batteryPopupOpen = false;
+        fanPopupOpen = false;
+        clipboardPopupOpen = false;
         trayMenuOpen = false;
     }
 
@@ -101,6 +109,18 @@ ShellRoot {
         id: battery
     }
 
+    PowerProfiles {
+        id: powerProfiles
+    }
+
+    FanControl {
+        id: fanControl
+    }
+
+    ClipboardHistory {
+        id: clipboardHistory
+    }
+
     // Owns the org.freedesktop.Notifications daemon for the session. Any
     // app using libnotify / notify-send (or the spec directly) is routed
     // here. Declared once at the shell root so there is exactly one
@@ -127,6 +147,8 @@ ShellRoot {
                 notificationsService: notifications
                 batteryService: battery
                 controlsService: controls
+                fanService: fanControl
+                clipboardService: clipboardHistory
                 appMenuOpen: shell.topBarPopupOpenFor(shell.appMenuOpen, modelData)
                 spotlightOpen: shell.spotlightOpen
                 controlCenterOpen: shell.topBarPopupOpenFor(shell.controlCenterOpen, modelData)
@@ -134,6 +156,8 @@ ShellRoot {
                 notificationCenterOpen: shell.topBarPopupOpenFor(shell.notificationCenterOpen, modelData)
                 batteryPopupOpen: shell.topBarPopupOpenFor(shell.batteryPopupOpen, modelData)
                 wifiPopupOpen: shell.topBarPopupOpenFor(shell.wifiPopupOpen, modelData)
+                fanPopupOpen: shell.topBarPopupOpenFor(shell.fanPopupOpen, modelData)
+                clipboardPopupOpen: shell.topBarPopupOpenFor(shell.clipboardPopupOpen, modelData)
                 onToggleAppMenu: function(anchorRect) {
                     var wasOpenHere = shell.topBarPopupOpenFor(shell.appMenuOpen, modelData);
                     shell.prepareTopBarPopup(modelData, anchorRect);
@@ -181,6 +205,22 @@ ShellRoot {
                     shell.prepareTopBarPopup(modelData, anchorRect);
                     shell.closeTopBarPopups("wifi");
                     shell.wifiPopupOpen = !wasOpenHere;
+                    shell.launchpadOpen = false;
+                    shell.spotlightOpen = false;
+                }
+                onToggleFan: function(anchorRect) {
+                    var wasOpenHere = shell.topBarPopupOpenFor(shell.fanPopupOpen, modelData);
+                    shell.prepareTopBarPopup(modelData, anchorRect);
+                    shell.closeTopBarPopups("fan");
+                    shell.fanPopupOpen = !wasOpenHere;
+                    shell.launchpadOpen = false;
+                    shell.spotlightOpen = false;
+                }
+                onToggleClipboard: function(anchorRect) {
+                    var wasOpenHere = shell.topBarPopupOpenFor(shell.clipboardPopupOpen, modelData);
+                    shell.prepareTopBarPopup(modelData, anchorRect);
+                    shell.closeTopBarPopups("clipboard");
+                    shell.clipboardPopupOpen = !wasOpenHere;
                     shell.launchpadOpen = false;
                     shell.spotlightOpen = false;
                 }
@@ -251,6 +291,7 @@ ShellRoot {
             BatteryPopup {
                 screen: modelData
                 batteryService: battery
+                powerProfileService: powerProfiles
                 anchorRect: shell.topBarPopupAnchorRect
                 open: shell.topBarPopupOpenFor(shell.batteryPopupOpen, modelData)
                 onCloseRequested: shell.batteryPopupOpen = false
@@ -262,6 +303,22 @@ ShellRoot {
                 anchorRect: shell.topBarPopupAnchorRect
                 open: shell.topBarPopupOpenFor(shell.wifiPopupOpen, modelData)
                 onCloseRequested: shell.wifiPopupOpen = false
+            }
+
+            FanPopup {
+                screen: modelData
+                fanService: fanControl
+                anchorRect: shell.topBarPopupAnchorRect
+                open: shell.topBarPopupOpenFor(shell.fanPopupOpen, modelData)
+                onCloseRequested: shell.fanPopupOpen = false
+            }
+
+            ClipboardPopup {
+                screen: modelData
+                clipboardService: clipboardHistory
+                anchorRect: shell.topBarPopupAnchorRect
+                open: shell.topBarPopupOpenFor(shell.clipboardPopupOpen, modelData)
+                onCloseRequested: shell.clipboardPopupOpen = false
             }
 
             TrayMenu {

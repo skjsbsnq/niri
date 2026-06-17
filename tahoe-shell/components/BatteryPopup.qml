@@ -19,8 +19,8 @@ PanelWindow {
     readonly property string iconFont: "Material Icons"
     readonly property int edgePadding: 8
     readonly property int fallbackRight: 92
-    readonly property int fallbackTop: 29
-    readonly property int popupGap: 0
+    readonly property int fallbackTop: 28
+    readonly property int popupGap: -1
     readonly property int screenWidth: PopupGeometry.screenWidth(root.screen, root.width)
     readonly property int popupLeftMargin: PopupGeometry.popupLeft(anchorRect, root.implicitWidth, screenWidth, edgePadding, fallbackRight)
     readonly property int popupTopMargin: PopupGeometry.popupTop(anchorRect, fallbackTop, popupGap)

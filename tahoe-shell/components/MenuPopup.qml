@@ -15,8 +15,8 @@ PanelWindow {
     property var powerService
     property var anchorRect: null
     readonly property int edgePadding: 8
-    readonly property int fallbackTop: 29
-    readonly property int popupGap: 0
+    readonly property int fallbackTop: 28
+    readonly property int popupGap: -1
     readonly property int screenWidth: PopupGeometry.screenWidth(root.screen, root.width)
     readonly property int popupLeftMargin: anchorRect
         ? PopupGeometry.popupLeft(anchorRect, root.implicitWidth, screenWidth, edgePadding, 12)

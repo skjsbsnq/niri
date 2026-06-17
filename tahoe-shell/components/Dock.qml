@@ -91,7 +91,7 @@ PanelWindow {
 
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.bottom: parent.bottom
-        anchors.bottomMargin: 10
+        anchors.bottomMargin: 0
         width: Math.min(parent.width - 28, dockRow.implicitWidth + 34)
         height: 78
         radius: tahoeGlassRadius

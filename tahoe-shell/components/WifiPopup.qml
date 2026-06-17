@@ -29,7 +29,7 @@ PanelWindow {
     visible: open || panel.opacity > 0.01
     aboveWindows: true
     focusable: open
-    exclusiveZone: 0
+    exclusionMode: ExclusionMode.Ignore
     implicitWidth: 328
     implicitHeight: panel.implicitHeight
     color: "transparent"

@@ -30,7 +30,7 @@ PanelWindow {
 
     visible: open || menuSurface.opacity > 0.01
     aboveWindows: true
-    exclusiveZone: 0
+    exclusionMode: ExclusionMode.Ignore
     implicitWidth: 218
     implicitHeight: powerService && powerService.hasPending ? 404 : 338
     color: "transparent"

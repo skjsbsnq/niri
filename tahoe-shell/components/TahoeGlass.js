@@ -28,7 +28,7 @@ var FillPanelBright = "#18f7f8fb";
 var FillDock = "#24f7fbff";
 var FillTopBar = "#14ffffff";
 var FillPill = "#80f7fbff";
-var FillBackdrop = "#24eef2f7";
+var FillBackdrop = "#12eef2f7";
 
 var StrokePanel = "#24ffffff";
 var StrokePanelBright = "#34ffffff";

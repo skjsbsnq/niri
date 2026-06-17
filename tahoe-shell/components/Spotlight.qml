@@ -104,21 +104,33 @@ PanelWindow {
 
     TahoeGlass.regions: [
         TahoeGlassRegion {
-            item: spotlightSurface
+            // Keep the glass region bounds independent from spotlightPanel's
+            // content-layer scale animation.
+            x: spotlightPanel.x + spotlightSurface.x
+            y: spotlightPanel.y + spotlightSurface.y
+            width: spotlightSurface.width
+            height: spotlightSurface.height
             material: spotlightSurface.tahoeGlassMaterial
             radius: spotlightSurface.tahoeGlassRadius
             blur: true
             shadow: true
             clip: true
+            interaction: spotlightPanel.opacity
+            materialAlpha: spotlightPanel.opacity
             enabled: root.open || spotlightPanel.opacity > 0.01
         },
         TahoeGlassRegion {
-            item: resultsSurface
+            x: spotlightPanel.x + resultsSurface.x
+            y: spotlightPanel.y + resultsSurface.y
+            width: resultsSurface.width
+            height: resultsSurface.height
             material: resultsSurface.tahoeGlassMaterial
             radius: resultsSurface.tahoeGlassRadius
             blur: true
             shadow: true
             clip: true
+            interaction: resultsSurface.opacity
+            materialAlpha: resultsSurface.opacity
             enabled: (root.open || spotlightPanel.opacity > 0.01) && resultsSurface.visible
         }
     ]

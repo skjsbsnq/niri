@@ -54,12 +54,17 @@ PanelWindow {
 
     TahoeGlass.regions: [
         TahoeGlassRegion {
-            item: panel
+            x: panel.x
+            y: panel.y
+            width: panel.width
+            height: panel.height
             material: panel.tahoeGlassMaterial
             radius: panel.tahoeGlassRadius
             blur: true
             shadow: true
             clip: true
+            interaction: panel.opacity
+            materialAlpha: panel.opacity
             enabled: root.open || panel.opacity > 0.01
         }
     ]
@@ -68,22 +73,27 @@ PanelWindow {
         id: panel
         readonly property string tahoeGlassMaterial: GlassStyle.MaterialPanel
         readonly property real tahoeGlassRadius: GlassStyle.RadiusPanel
+        property real contentScale: root.open ? 1 : 0.98
 
         x: 0
-        // panel is the compositor-owned glass region item. Its geometry MUST
-        // stay tame during open/close: niri recomputes the blur region each
-        // frame, and a SpringAnimation overshoot pushed the region's
-        // `loc + size` past i32::MAX, panicking niri's
-        // region_to_non_overlapping_rects (the crash that returned the VM
-        // to the login screen). So geometry transitions on a glass-region
-        // item use a bounded NumberAnimation, never a spring. Opacity is
-        // safe to animate any way (it doesn't change region geometry).
-        y: root.open ? 0 : -14
+        // panel is the compositor-owned glass region item. Its region geometry
+        // stays fixed during open/close; only content-layer opacity/scale and
+        // compositor material alpha ease. This keeps niri's blur bounds stable
+        // and avoids the old spring/overshoot crash class.
+        y: 0
         width: parent.width
         implicitHeight: content.implicitHeight + 28
+        height: implicitHeight
         radius: tahoeGlassRadius
         color: root.glassFill
         opacity: root.open ? 1 : 0
+
+        transform: Scale {
+            origin.x: panel.width
+            origin.y: 0
+            xScale: panel.contentScale
+            yScale: panel.contentScale
+        }
 
         // NOTE: no `border.width` on the panel itself. A centered 1px
         // border on a large-radius Rectangle is antialiased against the
@@ -105,9 +115,8 @@ PanelWindow {
             NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
         }
 
-        // Bounded tween (NOT spring) — see the geometry comment above.
-        Behavior on y {
-            NumberAnimation { duration: 220; easing.type: Easing.OutCubic }
+        Behavior on contentScale {
+            NumberAnimation { duration: 180; easing.type: Easing.OutCubic }
         }
 
         ColumnLayout {

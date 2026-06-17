@@ -93,20 +93,22 @@ check_region_blocks_have_material_and_radius() {
         start = FNR
         material = 0
         radius = 0
+        material_alpha = 0
         next
       }
       inside && /material[[:space:]]*:/ { material = 1 }
       inside && /radius[[:space:]]*:/ { radius = 1 }
+      inside && /materialAlpha[[:space:]]*:/ { material_alpha = 1 }
       inside && /}/ {
-        if (!material || !radius) {
-          printf "%s:%d missing%s%s\n", FILENAME, start, material ? "" : " material", radius ? "" : " radius"
+        if (!material || !radius || !material_alpha) {
+          printf "%s:%d missing%s%s%s\n", FILENAME, start, material ? "" : " material", radius ? "" : " radius", material_alpha ? "" : " materialAlpha"
           bad = 1
         }
         inside = 0
       }
       END { exit bad ? 1 : 0 }
     ' "$file"; then
-      fail "$rel has TahoeGlassRegion blocks without material/radius"
+      fail "$rel has TahoeGlassRegion blocks without material/radius/materialAlpha"
     fi
   done < <(find "$TAHOE_SHELL_DIR" -name '*.qml' -print0)
 
@@ -137,12 +139,36 @@ check_glass_files_declare_material_constants() {
   log "checked $glass_file_count TahoeGlass.regions files for material/radius item properties"
 }
 
+check_phase5_popup_region_geometry_static() {
+  local rel
+  local file
+  local popups=(
+    components/ControlCenter.qml
+    components/MenuPopup.qml
+    components/BatteryPopup.qml
+    components/NotificationCenter.qml
+    components/TrayMenu.qml
+  )
+
+  for rel in "${popups[@]}"; do
+    file="$TAHOE_SHELL_DIR/$rel"
+    [[ -f "$file" ]] || continue
+
+    if grep -nE '^[[:space:]]*y:[[:space:]]*root[.]open[[:space:]]*[?]|^[[:space:]]*Behavior[[:space:]]+on[[:space:]]+y[[:space:]]*\{' "$file"; then
+      fail "tahoe-shell/$rel animates popup glass-region y; Phase 5 keeps popup region bounds stable"
+    fi
+  done
+
+  log "checked Phase 5 popup glass-region geometry animations"
+}
+
 main() {
   check_no_broad_quickshell_rule
   check_no_tahoe_background_effect_calls
   check_panel_namespaces
   check_region_blocks_have_material_and_radius
   check_glass_files_declare_material_constants
+  check_phase5_popup_region_geometry_static
 
   if [[ "$failures" -gt 0 ]]; then
     fail "Phase 7 guardrails found $failures issue(s)"

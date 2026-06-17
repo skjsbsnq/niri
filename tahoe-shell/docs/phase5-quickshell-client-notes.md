@@ -34,7 +34,7 @@ Quickshell now has a `tahoe_glass_v1` client implementation:
 - `TahoeGlassRegion` QML object
 - multiple regions per surface
 - item-to-surface coordinate mapping
-- material name, per-corner radius, and blur/shadow/clip flags
+- material name, per-corner radius, blur/shadow/clip flags, interaction, and material alpha
 - fallback to `BackgroundEffect.blurRegion` when the protocol is unavailable
 
 This phase only adds the client-side capability. It does not fully migrate existing Tahoe QML components yet; that is Phase 6.
@@ -80,6 +80,8 @@ Check:
   - corner radii
   - material
   - flags
+  - `interaction`
+  - `materialAlpha`
 - multiple regions on one surface work, especially for Spotlight-style layouts.
 - protocol fallback does not crash when `tahoe_glass_v1` is unavailable.
 

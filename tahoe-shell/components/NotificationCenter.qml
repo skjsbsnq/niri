@@ -39,12 +39,17 @@ PanelWindow {
 
     TahoeGlass.regions: [
         TahoeGlassRegion {
-            item: panel
+            x: panel.x
+            y: panel.y
+            width: panel.width
+            height: panel.height
             material: panel.tahoeGlassMaterial
             radius: panel.tahoeGlassRadius
             blur: true
             shadow: true
             clip: true
+            interaction: panel.opacity
+            materialAlpha: panel.opacity
             enabled: root.open || panel.opacity > 0.01
         }
     ]
@@ -53,14 +58,24 @@ PanelWindow {
         id: panel
         readonly property string tahoeGlassMaterial: GlassStyle.MaterialPanel
         readonly property real tahoeGlassRadius: GlassStyle.RadiusPanel
+        property real contentScale: root.open ? 1 : 0.98
 
-        y: root.open ? 0 : -12
+        // Keep the compositor glass region anchored; popup motion is content
+        // scale/opacity plus material alpha, not region translation.
+        y: 0
         width: parent.width
         implicitHeight: content.implicitHeight + 24
         height: implicitHeight
         radius: tahoeGlassRadius
         color: GlassStyle.FillPanelBright
         opacity: root.open ? 1 : 0
+
+        transform: Scale {
+            origin.x: panel.width
+            origin.y: 0
+            xScale: panel.contentScale
+            yScale: panel.contentScale
+        }
 
         Rectangle {
             anchors.fill: parent
@@ -75,7 +90,7 @@ PanelWindow {
             NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
         }
 
-        Behavior on y {
+        Behavior on contentScale {
             NumberAnimation { duration: 150; easing.type: Easing.OutCubic }
         }
 

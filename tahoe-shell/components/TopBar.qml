@@ -90,6 +90,7 @@ PanelWindow {
             blur: true
             shadow: true
             clip: true
+            materialAlpha: barSurface.opacity
             enabled: !root.launchpadOpen && barSurface.opacity > 0.01
         }
     ]

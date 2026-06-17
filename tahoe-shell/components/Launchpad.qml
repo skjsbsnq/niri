@@ -44,12 +44,17 @@ PanelWindow {
 
     TahoeGlass.regions: [
         TahoeGlassRegion {
-            item: backdrop
+            x: backdrop.x
+            y: backdrop.y
+            width: backdrop.width
+            height: backdrop.height
             material: backdrop.tahoeGlassMaterial
             radius: backdrop.tahoeGlassRadius
             blur: true
             shadow: false
             clip: true
+            interaction: backdrop.opacity
+            materialAlpha: backdrop.opacity
             enabled: root.open || backdrop.opacity > 0.01
         }
     ]

@@ -35,12 +35,17 @@ PanelWindow {
 
     TahoeGlass.regions: [
         TahoeGlassRegion {
-            item: menuSurface
+            x: menuSurface.x
+            y: menuSurface.y
+            width: menuSurface.width
+            height: menuSurface.height
             material: menuSurface.tahoeGlassMaterial
             radius: menuSurface.tahoeGlassRadius
             blur: true
             shadow: true
             clip: true
+            interaction: menuSurface.opacity
+            materialAlpha: menuSurface.opacity
             enabled: root.open || menuSurface.opacity > 0.01
         }
     ]
@@ -65,21 +70,25 @@ PanelWindow {
         id: menuSurface
         readonly property string tahoeGlassMaterial: GlassStyle.MaterialMenu
         readonly property real tahoeGlassRadius: GlassStyle.RadiusMenu
+        property real contentScale: root.open ? 1 : 0.98
 
         x: 0
-        // menuSurface is the compositor-owned glass region item. Its geometry
-        // MUST stay tame during open/close: niri recomputes the blur region
-        // each frame, and a SpringAnimation overshoot pushed the region's
-        // `loc + size` past i32::MAX, panicking niri's
-        // region_to_non_overlapping_rects (the crash that returned the VM
-        // to the login screen). Geometry transitions on a glass-region item
-        // use a bounded NumberAnimation, never a spring.
-        y: root.open ? 0 : -8
+        // menuSurface is the compositor-owned glass region item. Open/close
+        // keeps its region bounds fixed; opacity/scale and compositor material
+        // alpha carry the animation without moving blur geometry.
+        y: 0
         width: parent.width
         height: parent.height
         radius: tahoeGlassRadius
         color: GlassStyle.FillPanelBright
         opacity: root.open ? 1 : 0
+
+        transform: Scale {
+            origin.x: 0
+            origin.y: 0
+            xScale: menuSurface.contentScale
+            yScale: menuSurface.contentScale
+        }
 
         // NOTE: no `border.width` on the surface itself — a centered 1px
         // border antialiased against the outside pixels produces faint
@@ -98,8 +107,7 @@ PanelWindow {
             NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
         }
 
-        // Bounded tween (NOT spring) — see the geometry comment above.
-        Behavior on y {
+        Behavior on contentScale {
             NumberAnimation { duration: 150; easing.type: Easing.OutCubic }
         }
 

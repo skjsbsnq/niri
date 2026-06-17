@@ -79,6 +79,7 @@ PanelWindow {
             // compositor eases highlight/refraction/inner-shadow up via this
             // scalar instead of changing region geometry.
             interaction: root.dockHovered ? 1.0 : 0.0
+            materialAlpha: dockSurface.opacity
             enabled: !root.launchpadOpen && dockSurface.opacity > 0.01
         }
     ]

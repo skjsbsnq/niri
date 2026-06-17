@@ -14,35 +14,36 @@ PanelWindow {
     property string activeApp: "Desktop"
     property var powerService
     property var anchorRect: null
-    readonly property int panelWidth: 218
     readonly property int edgePadding: 8
     readonly property int fallbackTop: 29
     readonly property int popupGap: 0
     readonly property int screenWidth: PopupGeometry.screenWidth(root.screen, root.width)
     readonly property int popupLeftMargin: anchorRect
-        ? PopupGeometry.popupLeft(anchorRect, panelWidth, screenWidth, edgePadding, 12)
+        ? PopupGeometry.popupLeft(anchorRect, root.implicitWidth, screenWidth, edgePadding, 12)
         : 12
     readonly property int popupTopMargin: PopupGeometry.popupTop(anchorRect, fallbackTop, popupGap)
     readonly property real popupOriginX: anchorRect
-        ? PopupGeometry.originX(anchorRect, popupLeftMargin, panelWidth, screenWidth, 12)
+        ? PopupGeometry.originX(anchorRect, popupLeftMargin, root.implicitWidth, screenWidth, 12)
         : 0
 
     signal closeRequested()
 
     visible: open || menuSurface.opacity > 0.01
     aboveWindows: true
-    focusable: open
     exclusiveZone: 0
-    implicitWidth: 1
-    implicitHeight: 1
+    implicitWidth: 218
+    implicitHeight: powerService && powerService.hasPending ? 404 : 338
     color: "transparent"
     WlrLayershell.namespace: "tahoe-menu-popup"
 
     anchors {
         top: true
         left: true
-        right: true
-        bottom: true
+    }
+
+    margins {
+        top: root.popupTopMargin
+        left: root.popupLeftMargin
     }
 
     TahoeGlass.regions: [
@@ -78,29 +79,19 @@ PanelWindow {
             root.closeRequested();
     }
 
-    MouseArea {
-        anchors.fill: parent
-        enabled: root.open
-        acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
-        onPressed: function(mouse) {
-            root.closeRequested();
-            mouse.accepted = true;
-        }
-    }
-
     Rectangle {
         id: menuSurface
         readonly property string tahoeGlassMaterial: GlassStyle.MaterialMenu
         readonly property real tahoeGlassRadius: GlassStyle.RadiusMenu
         property real contentScale: root.open ? 1 : 0.98
 
-        x: root.popupLeftMargin
+        x: 0
         // menuSurface is the compositor-owned glass region item. Open/close
         // keeps its region bounds fixed; opacity/scale and compositor material
         // alpha carry the animation without moving blur geometry.
-        y: root.popupTopMargin
-        width: root.panelWidth
-        height: root.powerService && root.powerService.hasPending ? 404 : 338
+        y: 0
+        width: parent.width
+        height: parent.height
         radius: tahoeGlassRadius
         color: GlassStyle.FillPanelBright
         opacity: root.open ? 1 : 0
@@ -110,14 +101,6 @@ PanelWindow {
             origin.y: 0
             xScale: menuSurface.contentScale
             yScale: menuSurface.contentScale
-        }
-
-        MouseArea {
-            anchors.fill: parent
-            acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
-            onPressed: function(mouse) {
-                mouse.accepted = true;
-            }
         }
 
         // NOTE: no `border.width` on the surface itself — a centered 1px

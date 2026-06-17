@@ -17,32 +17,33 @@ PanelWindow {
     readonly property bool available: !!batteryService && batteryService.available
     readonly property int percentage: available ? batteryService.roundedPercentage : 0
     readonly property string iconFont: "Material Icons"
-    readonly property int panelWidth: 292
     readonly property int edgePadding: 8
     readonly property int fallbackRight: 92
     readonly property int fallbackTop: 29
     readonly property int popupGap: 0
     readonly property int screenWidth: PopupGeometry.screenWidth(root.screen, root.width)
-    readonly property int popupLeftMargin: PopupGeometry.popupLeft(anchorRect, panelWidth, screenWidth, edgePadding, fallbackRight)
+    readonly property int popupLeftMargin: PopupGeometry.popupLeft(anchorRect, root.implicitWidth, screenWidth, edgePadding, fallbackRight)
     readonly property int popupTopMargin: PopupGeometry.popupTop(anchorRect, fallbackTop, popupGap)
-    readonly property real popupOriginX: PopupGeometry.originX(anchorRect, popupLeftMargin, panelWidth, screenWidth, fallbackRight)
+    readonly property real popupOriginX: PopupGeometry.originX(anchorRect, popupLeftMargin, root.implicitWidth, screenWidth, fallbackRight)
 
     signal closeRequested()
 
     visible: open || panel.opacity > 0.01
     aboveWindows: true
-    focusable: open
     exclusiveZone: 0
-    implicitWidth: 1
-    implicitHeight: 1
+    implicitWidth: 292
+    implicitHeight: panel.implicitHeight
     color: "transparent"
     WlrLayershell.namespace: "tahoe-battery-popup"
 
     anchors {
         top: true
         left: true
-        right: true
-        bottom: true
+    }
+
+    margins {
+        top: root.popupTopMargin
+        left: root.popupLeftMargin
     }
 
     TahoeGlass.regions: [
@@ -62,16 +63,6 @@ PanelWindow {
         }
     ]
 
-    MouseArea {
-        anchors.fill: parent
-        enabled: root.open
-        acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
-        onPressed: function(mouse) {
-            root.closeRequested();
-            mouse.accepted = true;
-        }
-    }
-
     Rectangle {
         id: panel
         readonly property string tahoeGlassMaterial: GlassStyle.MaterialPanel
@@ -80,9 +71,8 @@ PanelWindow {
 
         // Keep the compositor glass region anchored; popup motion is content
         // scale/opacity plus material alpha, not region translation.
-        x: root.popupLeftMargin
-        y: root.popupTopMargin
-        width: root.panelWidth
+        y: 0
+        width: parent.width
         implicitHeight: content.implicitHeight + 24
         height: implicitHeight
         radius: tahoeGlassRadius
@@ -94,14 +84,6 @@ PanelWindow {
             origin.y: 0
             xScale: panel.contentScale
             yScale: panel.contentScale
-        }
-
-        MouseArea {
-            anchors.fill: parent
-            acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
-            onPressed: function(mouse) {
-                mouse.accepted = true;
-            }
         }
 
         Rectangle {

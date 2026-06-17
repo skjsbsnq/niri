@@ -22,7 +22,6 @@ ShellRoot {
     property var trayMenuItem: null
     property var topBarPopupAnchorRect: null
     property string topBarPopupScreenName: ""
-    property string topBarPopupFocusKey: ""
 
     // Spring animations look great on real GPUs but corrupt Image textures
     // on software/virtual GPUs (VMware, Hyper-V): a SpringAnimation driving
@@ -42,28 +41,10 @@ ShellRoot {
     function prepareTopBarPopup(screen, anchorRect) {
         topBarPopupScreenName = screenName(screen);
         topBarPopupAnchorRect = anchorRect || null;
-        topBarPopupFocusKey = focusedWindowKey(niri.focusedWindow);
     }
 
     function topBarPopupOpenFor(open, screen) {
         return open && topBarPopupScreenName === screenName(screen);
-    }
-
-    function focusedWindowKey(window) {
-        if (!window)
-            return "";
-        if (window.id !== undefined && window.id !== null)
-            return "id:" + window.id;
-        return String(window.appId || "") + "\n" + String(window.title || "");
-    }
-
-    function anyTopBarPopupOpen() {
-        return appMenuOpen
-            || controlCenterOpen
-            || notificationCenterOpen
-            || batteryPopupOpen
-            || wifiPopupOpen
-            || trayMenuOpen;
     }
 
     function closeTopBarPopups(except) {
@@ -106,16 +87,6 @@ ShellRoot {
 
     Niri {
         id: niri
-    }
-
-    Connections {
-        target: niri
-
-        function onFocusedWindowChanged() {
-            if (shell.anyTopBarPopupOpen()
-                    && shell.focusedWindowKey(niri.focusedWindow) !== shell.topBarPopupFocusKey)
-                shell.closeTopBarPopups("");
-        }
     }
 
     Controls {

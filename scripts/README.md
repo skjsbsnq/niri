@@ -4,6 +4,37 @@ These scripts are intended to be run inside the Hyper-V Arch Linux VM.
 
 If the repository was cloned without `--recurse-submodules`, both `arch-bootstrap.sh` and `arch-update.sh` initialize the registered submodules before they deploy configs or build niri.
 
+## Bare-Metal One-Shot Install
+
+```sh
+bash scripts/baremetal-install.sh
+```
+
+`baremetal-install.sh` is the one-shot installer for a real Arch Linux machine set up with `archinstall`'s minimal profile (no GUI, no display manager). Run it once on a TTY as a normal user with `sudo` rights and an internet connection. It is safe to re-run.
+
+It does only what a minimal install is missing, and otherwise drives the existing scripts:
+
+1. clones the repo to `~/niri` (or `git pull --ff-only` + submodule update if it already exists; refuses to overwrite uncommitted changes),
+2. installs `lightdm` + `lightdm-gtk-greeter` and the GUI apps the config/shell call directly (`alacritty`, `fuzzel`, `swaylock`, `swaybg`, `brightnessctl`, `network-manager-applet`, `xdg-desktop-portal`, `xdg-desktop-portal-gtk`),
+3. enables `NetworkManager` and `lightdm` (lightdm starts on next boot, not now, so it does not seize a running session),
+4. runs `arch-bootstrap.sh` with `BUILD_NIRI_FORK=auto BUILD_QUICKSHELL_FORK=auto`, so the first deploy pass builds and installs both forks under `~/.local/bin` for full compositor/shell validation,
+5. runs `arch-zh-setup.sh` for CJK locale/fonts/fcitx5,
+6. prints a summary and, if run from a real TTY as a non-root user, asks whether to launch the Tahoe session immediately.
+
+It intentionally does not install GPU vendor drivers, an AUR helper, or modify `/etc/lightdm/lightdm.conf` — install your GPU driver (NVIDIA/AMD proprietary, etc.) yourself before running it.
+
+Environment overrides:
+
+```sh
+INSTALL_DIR=~/tahoe-desktop bash scripts/baremetal-install.sh   # clone target (default ~/niri)
+SKIP_SYSTEM_PACKAGES=true bash scripts/baremetal-install.sh     # skip the pacman step
+SKIP_ZH_SETUP=true bash scripts/baremetal-install.sh            # skip CJK/locale/fcitx5
+AUTO_LAUNCH_SESSION=true bash scripts/baremetal-install.sh      # launch session without prompting (TTY only)
+AUTO_LAUNCH_SESSION=false bash scripts/baremetal-install.sh     # never launch, just print the summary
+```
+
+After it finishes, reboot (or `sudo systemctl start lightdm` from a TTY) and pick `Tahoe Niri` in the greeter, or launch directly with `bash scripts/run-tahoe-session.sh`.
+
 ## First Setup
 
 ```sh
@@ -153,6 +184,18 @@ bash scripts/run-tahoe-session.sh
 ```
 
 `run-tahoe-session.sh` defaults to `NIRI_MODE=auto`: it starts nested niri when it sees an existing `WAYLAND_DISPLAY` or `DISPLAY`, and starts a full session when run from a real TTY.
+
+Before manual Phase 0 window-behavior validation, check that the deployed Tahoe config still matches the intended baseline:
+
+```sh
+bash scripts/check-phase0-window-ops.sh
+```
+
+That baseline is intentionally narrow:
+
+- new windows still default to floating;
+- the Scheme A Phase 0 repro is a mixed-layout case created manually by opening two windows and pressing `Mod+V` on one window, producing one tiled plus one floating window;
+- maximize stays on stock niri behavior for now, so `Mod+F` remains `maximize-column` and `Mod+M` remains `maximize-window-to-edges`; Phase 0 does not replace this with floating-native maximize or add default `open-maximized` / `open-maximized-to-edges` rules.
 
 The script also defaults to `TAHOE_SHELL_LAUNCH_MODE=auto`:
 

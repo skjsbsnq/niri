@@ -18,33 +18,32 @@ PanelWindow {
     readonly property int historyCount: history.length
     readonly property bool dndEnabled: notificationsService ? notificationsService.dndEnabled : false
     readonly property string iconFont: "Material Icons"
+    readonly property int panelWidth: 360
     readonly property int edgePadding: 8
     readonly property int fallbackRight: 56
-    readonly property int fallbackTop: 34
-    readonly property int popupGap: 5
+    readonly property int fallbackTop: 29
+    readonly property int popupGap: 0
     readonly property int screenWidth: PopupGeometry.screenWidth(root.screen, root.width)
-    readonly property int popupLeftMargin: PopupGeometry.popupLeft(anchorRect, root.implicitWidth, screenWidth, edgePadding, fallbackRight)
+    readonly property int popupLeftMargin: PopupGeometry.popupLeft(anchorRect, panelWidth, screenWidth, edgePadding, fallbackRight)
     readonly property int popupTopMargin: PopupGeometry.popupTop(anchorRect, fallbackTop, popupGap)
-    readonly property real popupOriginX: PopupGeometry.originX(anchorRect, popupLeftMargin, root.implicitWidth, screenWidth, fallbackRight)
+    readonly property real popupOriginX: PopupGeometry.originX(anchorRect, popupLeftMargin, panelWidth, screenWidth, fallbackRight)
 
     signal closeRequested()
 
     visible: open || panel.opacity > 0.01
     aboveWindows: true
+    focusable: open
     exclusiveZone: 0
-    implicitWidth: 360
-    implicitHeight: panel.implicitHeight
+    implicitWidth: 1
+    implicitHeight: 1
     color: "transparent"
     WlrLayershell.namespace: "tahoe-notification-center"
 
     anchors {
         top: true
         left: true
-    }
-
-    margins {
-        top: root.popupTopMargin
-        left: root.popupLeftMargin
+        right: true
+        bottom: true
     }
 
     TahoeGlass.regions: [
@@ -64,6 +63,16 @@ PanelWindow {
         }
     ]
 
+    MouseArea {
+        anchors.fill: parent
+        enabled: root.open
+        acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
+        onPressed: function(mouse) {
+            root.closeRequested();
+            mouse.accepted = true;
+        }
+    }
+
     Rectangle {
         id: panel
         readonly property string tahoeGlassMaterial: GlassStyle.MaterialPanel
@@ -72,8 +81,9 @@ PanelWindow {
 
         // Keep the compositor glass region anchored; popup motion is content
         // scale/opacity plus material alpha, not region translation.
-        y: 0
-        width: parent.width
+        x: root.popupLeftMargin
+        y: root.popupTopMargin
+        width: root.panelWidth
         implicitHeight: content.implicitHeight + 24
         height: implicitHeight
         radius: tahoeGlassRadius
@@ -85,6 +95,14 @@ PanelWindow {
             origin.y: 0
             xScale: panel.contentScale
             yScale: panel.contentScale
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
+            onPressed: function(mouse) {
+                mouse.accepted = true;
+            }
         }
 
         Rectangle {

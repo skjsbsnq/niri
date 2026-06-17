@@ -16,14 +16,15 @@ PanelWindow {
     property var anchorRect: null
     property bool controlsExpanded: false
 
+    readonly property int panelWidth: 360
     readonly property int edgePadding: 8
     readonly property int fallbackRight: 12
-    readonly property int fallbackTop: 34
-    readonly property int popupGap: 5
+    readonly property int fallbackTop: 29
+    readonly property int popupGap: 0
     readonly property int screenWidth: PopupGeometry.screenWidth(root.screen, root.width)
-    readonly property int popupLeftMargin: PopupGeometry.popupLeft(anchorRect, root.implicitWidth, screenWidth, edgePadding, fallbackRight)
+    readonly property int popupLeftMargin: PopupGeometry.popupLeft(anchorRect, panelWidth, screenWidth, edgePadding, fallbackRight)
     readonly property int popupTopMargin: PopupGeometry.popupTop(anchorRect, fallbackTop, popupGap)
-    readonly property real popupOriginX: PopupGeometry.originX(anchorRect, popupLeftMargin, root.implicitWidth, screenWidth, fallbackRight)
+    readonly property real popupOriginX: PopupGeometry.originX(anchorRect, popupLeftMargin, panelWidth, screenWidth, fallbackRight)
     readonly property color glassFill: GlassStyle.FillPanel
     readonly property color glassStroke: GlassStyle.StrokePanel
     readonly property color glassInnerFill: "#14ffffff"
@@ -46,20 +47,18 @@ PanelWindow {
 
     visible: open || panel.opacity > 0.01
     aboveWindows: true
+    focusable: open
     exclusiveZone: 0
-    implicitWidth: 360
-    implicitHeight: panel.implicitHeight
+    implicitWidth: 1
+    implicitHeight: 1
     color: "transparent"
     WlrLayershell.namespace: "tahoe-control-center"
 
     anchors {
         top: true
         left: true
-    }
-
-    margins {
-        top: root.popupTopMargin
-        left: root.popupLeftMargin
+        right: true
+        bottom: true
     }
 
     TahoeGlass.regions: [
@@ -79,19 +78,29 @@ PanelWindow {
         }
     ]
 
+    MouseArea {
+        anchors.fill: parent
+        enabled: root.open
+        acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
+        onPressed: function(mouse) {
+            root.closeRequested();
+            mouse.accepted = true;
+        }
+    }
+
     Rectangle {
         id: panel
         readonly property string tahoeGlassMaterial: GlassStyle.MaterialPanel
         readonly property real tahoeGlassRadius: GlassStyle.RadiusPanel
         property real contentScale: root.open ? 1 : 0.98
 
-        x: 0
+        x: root.popupLeftMargin
         // panel is the compositor-owned glass region item. Its region geometry
         // stays fixed during open/close; only content-layer opacity/scale and
         // compositor material alpha ease. This keeps niri's blur bounds stable
         // and avoids the old spring/overshoot crash class.
-        y: 0
-        width: parent.width
+        y: root.popupTopMargin
+        width: root.panelWidth
         implicitHeight: content.implicitHeight + 28
         height: implicitHeight
         radius: tahoeGlassRadius
@@ -103,6 +112,14 @@ PanelWindow {
             origin.y: 0
             xScale: panel.contentScale
             yScale: panel.contentScale
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
+            onPressed: function(mouse) {
+                mouse.accepted = true;
+            }
         }
 
         // NOTE: no `border.width` on the panel itself. A centered 1px

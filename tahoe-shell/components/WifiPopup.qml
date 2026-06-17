@@ -15,14 +15,15 @@ PanelWindow {
     property var anchorRect: null
     readonly property var networks: controlsService ? controlsService.wifiNetworks : []
     readonly property string iconFont: "Material Icons"
+    readonly property int panelWidth: 328
     readonly property int edgePadding: 8
     readonly property int fallbackRight: 132
-    readonly property int fallbackTop: 34
-    readonly property int popupGap: 5
+    readonly property int fallbackTop: 29
+    readonly property int popupGap: 0
     readonly property int screenWidth: PopupGeometry.screenWidth(root.screen, root.width)
-    readonly property int popupLeftMargin: PopupGeometry.popupLeft(anchorRect, root.implicitWidth, screenWidth, edgePadding, fallbackRight)
+    readonly property int popupLeftMargin: PopupGeometry.popupLeft(anchorRect, panelWidth, screenWidth, edgePadding, fallbackRight)
     readonly property int popupTopMargin: PopupGeometry.popupTop(anchorRect, fallbackTop, popupGap)
-    readonly property real popupOriginX: PopupGeometry.originX(anchorRect, popupLeftMargin, root.implicitWidth, screenWidth, fallbackRight)
+    readonly property real popupOriginX: PopupGeometry.originX(anchorRect, popupLeftMargin, panelWidth, screenWidth, fallbackRight)
 
     signal closeRequested()
 
@@ -30,19 +31,16 @@ PanelWindow {
     aboveWindows: true
     focusable: open
     exclusiveZone: 0
-    implicitWidth: 328
-    implicitHeight: panel.implicitHeight
+    implicitWidth: 1
+    implicitHeight: 1
     color: "transparent"
     WlrLayershell.namespace: "tahoe-wifi-popup"
 
     anchors {
         top: true
         left: true
-    }
-
-    margins {
-        top: root.popupTopMargin
-        left: root.popupLeftMargin
+        right: true
+        bottom: true
     }
 
     TahoeGlass.regions: [
@@ -62,14 +60,25 @@ PanelWindow {
         }
     ]
 
+    MouseArea {
+        anchors.fill: parent
+        enabled: root.open
+        acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
+        onPressed: function(mouse) {
+            root.closeRequested();
+            mouse.accepted = true;
+        }
+    }
+
     Rectangle {
         id: panel
         readonly property string tahoeGlassMaterial: GlassStyle.MaterialPanel
         readonly property real tahoeGlassRadius: GlassStyle.RadiusPopup
         property real contentScale: root.open ? 1 : 0.98
 
-        y: 0
-        width: parent.width
+        x: root.popupLeftMargin
+        y: root.popupTopMargin
+        width: root.panelWidth
         implicitHeight: content.implicitHeight + 24
         height: implicitHeight
         radius: tahoeGlassRadius
@@ -81,6 +90,14 @@ PanelWindow {
             origin.y: 0
             xScale: panel.contentScale
             yScale: panel.contentScale
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
+            onPressed: function(mouse) {
+                mouse.accepted = true;
+            }
         }
 
         Rectangle {

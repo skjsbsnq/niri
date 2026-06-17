@@ -150,6 +150,9 @@ recent-windows {
     }
 }
 
+// Fallback for direct niri launches: xdg-desktop-portal 1.22+ requires this target.
+spawn-sh-at-startup "command -v systemd-run >/dev/null 2>&1 && systemd-run --user --unit=tahoe-gsession-activate.service --service-type=oneshot --remain-after-exit --property=Wants=graphical-session.target true >/dev/null 2>&1 || true; command -v systemctl >/dev/null 2>&1 && systemctl --user import-environment WAYLAND_DISPLAY DISPLAY XAUTHORITY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE XDG_SESSION_DESKTOP >/dev/null 2>&1 || true"
+
 spawn-sh-at-startup "if [ \"${TAHOE_SKIP_QUICKSHELL_AUTOSTART:-0}\" != \"1\" ]; then exec \"${TAHOE_QUICKSHELL_BIN:-quickshell}\" -p \"${TAHOE_CONFIG_DIR:-$HOME/.config/quickshell/tahoe}\"; fi"
 
 spawn-at-startup "fcitx5" "-d" "--replace"
@@ -298,6 +301,7 @@ layer-rule {
 
 layer-rule {
     match namespace="^tahoe-battery-popup$"
+    match namespace="^tahoe-wifi-popup$"
 
     geometry-corner-radius 24
 

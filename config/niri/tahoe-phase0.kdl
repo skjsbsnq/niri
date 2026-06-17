@@ -16,6 +16,14 @@ input {
     }
 }
 
+output "eDP-2" {
+    mode "2560x1600@239.998"
+    scale 1.25
+    transform "normal"
+    position x=0 y=0
+    variable-refresh-rate
+}
+
 layout {
     gaps 16
     center-focused-column "never"

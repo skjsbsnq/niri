@@ -64,8 +64,10 @@ Item {
     // ------------------------------------------------------------------
     // Brightness (brightnessctl via Process — no Quickshell module exists)
     // ------------------------------------------------------------------
-    // brightnessctl prints "<device> <brightness> <max>" with `-m`, e.g.
-    //   "intel_backlight 45000 75000". We parse the percentage as value/max.
+    // brightnessctl -m prints CSV, e.g.:
+    //   "nvidia_0,backlight,100,100%,100"
+    // We read the numeric current/max fields and fall back to any trailing
+    // numbers so the slider still works across backend variants.
     // On systems without a backlight (VMs), the command exits non-zero and we
     // mark the slider unavailable but keep the UI visible.
 
@@ -95,17 +97,27 @@ Item {
         stdout: StdioCollector {
             id: brightnessOut
             onStreamFinished: {
-                // Expected: "intel_backlight 45000 75000\n"
                 var text = String(brightnessOut.text || "").trim();
                 var parts = text.split(/[,;\s]+/).filter(function (s) { return s.length > 0; });
-                if (parts.length >= 3) {
-                    var value = parseFloat(parts[1]);
-                    var max = parseFloat(parts[2]);
-                    if (isFinite(value) && isFinite(max) && max > 0) {
-                        root.brightness = Math.max(0, Math.min(1, value / max));
-                        root.brightnessAvailable = true;
-                        return;
-                    }
+                var numbers = [];
+                for (var i = 0; i < parts.length; i++) {
+                    var token = parts[i].replace(/%$/, "");
+                    var value = parseFloat(token);
+                    if (isFinite(value))
+                        numbers.push(value);
+                }
+
+                var current = NaN;
+                var max = NaN;
+                if (numbers.length >= 2) {
+                    current = numbers[numbers.length - 2];
+                    max = numbers[numbers.length - 1];
+                }
+
+                if (isFinite(current) && isFinite(max) && max > 0) {
+                    root.brightness = Math.max(0, Math.min(1, current / max));
+                    root.brightnessAvailable = true;
+                    return;
                 }
                 root.brightnessAvailable = false;
             }

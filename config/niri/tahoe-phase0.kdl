@@ -152,6 +152,8 @@ recent-windows {
 
 spawn-sh-at-startup "if [ \"${TAHOE_SKIP_QUICKSHELL_AUTOSTART:-0}\" != \"1\" ]; then exec \"${TAHOE_QUICKSHELL_BIN:-quickshell}\" -p \"${TAHOE_CONFIG_DIR:-$HOME/.config/quickshell/tahoe}\"; fi"
 
+spawn-at-startup "fcitx5" "-d" "--replace"
+
 animations {
     workspace-switch {
         spring damping-ratio=1.0 stiffness=780 epsilon=0.0001

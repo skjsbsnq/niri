@@ -50,7 +50,10 @@ GUI_APP_PACKAGES=(
   swaybg
   brightnessctl
   network-manager-applet
+  nm-connection-editor
+  xwayland-satellite
   xdg-desktop-portal
+  xdg-desktop-portal-gnome
   xdg-desktop-portal-gtk
 )
 
@@ -129,6 +132,18 @@ install_system_packages() {
 enable_services() {
   log "enabling NetworkManager"
   sudo systemctl enable --now NetworkManager
+
+  log "starting xdg desktop portal user services"
+  systemctl --user daemon-reload || true
+  for unit in \
+    xdg-desktop-portal.service \
+    xdg-desktop-portal-gnome.service \
+    xdg-desktop-portal-gtk.service; do
+    systemctl --user enable "$unit" >/dev/null 2>&1 \
+      || log "$unit is static or has no [Install] section; it will be DBus/graphical-session activated"
+    systemctl --user start "$unit" >/dev/null 2>&1 \
+      || log "could not start $unit now; it should start after login when graphical-session.target is active"
+  done
 
   # Do not --now lightdm: if the user is already in a graphical session, starting
   # lightdm mid-session would seize the seat. enable is enough; it starts on the

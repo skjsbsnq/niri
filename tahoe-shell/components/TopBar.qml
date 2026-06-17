@@ -14,12 +14,14 @@ PanelWindow {
     property var niriService
     property var notificationsService
     property var batteryService
+    property var controlsService
     property bool controlCenterOpen: false
     property bool launchpadOpen: false
     property bool appMenuOpen: false
     property bool spotlightOpen: false
     property bool notificationCenterOpen: false
     property bool batteryPopupOpen: false
+    property bool wifiPopupOpen: false
     property date now: new Date()
     readonly property string activeApp: appsService && niriService ? appsService.toplevelLabel(niriService.focusedWindow || niriService.activeToplevel) : "Desktop"
     // Number of retained notification history entries. Drives the bell
@@ -30,13 +32,27 @@ PanelWindow {
     readonly property color glassFill: GlassStyle.FillTopBar
     readonly property color glassStroke: GlassStyle.StrokeTopBar
 
-    signal toggleAppMenu()
-    signal toggleControlCenter()
+    signal toggleAppMenu(var anchorRect)
+    signal toggleControlCenter(var anchorRect)
     signal toggleSpotlight()
     signal toggleLaunchpad()
-    signal toggleNotifications()
-    signal toggleBattery()
-    signal openTrayMenu(var item)
+    signal toggleNotifications(var anchorRect)
+    signal toggleBattery(var anchorRect)
+    signal toggleWifi(var anchorRect)
+    signal openTrayMenu(var item, var anchorRect)
+
+    function anchorRectFor(item) {
+        if (!item)
+            return null;
+
+        var rect = root.itemRect(item);
+        return {
+            "x": Math.round(rect.x),
+            "y": Math.round(rect.y),
+            "width": Math.round(rect.width),
+            "height": Math.round(rect.height)
+        };
+    }
 
     // When the Launchpad opens, the TopBar must disappear so the Launchpad
     // scrim truly covers everything. Otherwise the TopBar is a sibling
@@ -143,6 +159,8 @@ PanelWindow {
             spacing: 14
 
             Item {
+                id: tahoeButton
+
                 Layout.preferredWidth: tahoeLabel.implicitWidth + 18
                 Layout.preferredHeight: 24
                 Layout.alignment: Qt.AlignVCenter
@@ -167,7 +185,7 @@ PanelWindow {
                 MouseArea {
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: root.toggleAppMenu()
+                    onClicked: root.toggleAppMenu(root.anchorRectFor(tahoeButton))
                 }
             }
 
@@ -234,12 +252,14 @@ PanelWindow {
                 Layout.preferredWidth: visible ? implicitWidth : 0
                 Layout.preferredHeight: implicitHeight
                 Layout.alignment: Qt.AlignVCenter
-                onOpenMenuRequested: function(item) {
-                    root.openTrayMenu(item);
+                onOpenMenuRequested: function(item, anchorRect) {
+                    root.openTrayMenu(item, anchorRect);
                 }
             }
 
             Item {
+                id: notificationButton
+
                 Layout.preferredWidth: 30
                 Layout.preferredHeight: 24
                 Layout.alignment: Qt.AlignVCenter
@@ -287,11 +307,13 @@ PanelWindow {
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: root.toggleNotifications()
+                    onClicked: root.toggleNotifications(root.anchorRectFor(notificationButton))
                 }
             }
 
             Item {
+                id: batteryButton
+
                 Layout.preferredWidth: visible ? 58 : 0
                 Layout.preferredHeight: 24
                 Layout.alignment: Qt.AlignVCenter
@@ -359,7 +381,50 @@ PanelWindow {
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: root.toggleBattery()
+                    onClicked: root.toggleBattery(root.anchorRectFor(batteryButton))
+                }
+            }
+
+            Item {
+                id: wifiButton
+
+                Layout.preferredWidth: 30
+                Layout.preferredHeight: 24
+                Layout.alignment: Qt.AlignVCenter
+                visible: !!root.controlsService
+
+                Rectangle {
+                    anchors.fill: parent
+                    radius: 12
+                    color: root.wifiPopupOpen ? "#38ffffff" : (wifiMouse.containsMouse ? "#30ffffff" : "#22ffffff")
+                    border.color: "#40ffffff"
+                }
+
+                Text {
+                    anchors.centerIn: parent
+                    text: "\ue63e"
+                    color: root.controlsService && root.controlsService.wifiConnected ? "#0b6bd3" : "#202124"
+                    font.family: "Material Icons"
+                    font.pixelSize: 16
+                    opacity: root.controlsService && root.controlsService.wifiEnabled ? 1 : 0.45
+                }
+
+                Rectangle {
+                    width: 5
+                    height: 5
+                    radius: 2.5
+                    x: parent.width - width - 5
+                    y: parent.height - height - 4
+                    color: "#2c9cf2"
+                    visible: root.controlsService && root.controlsService.wifiConnected
+                }
+
+                MouseArea {
+                    id: wifiMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.toggleWifi(root.anchorRectFor(wifiButton))
                 }
             }
 
@@ -429,7 +494,7 @@ PanelWindow {
                 MouseArea {
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: root.toggleControlCenter()
+                    onClicked: root.toggleControlCenter(root.anchorRectFor(statusButton))
                 }
             }
         }

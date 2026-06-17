@@ -17,8 +17,11 @@ ShellRoot {
     property bool spotlightOpen: false
     property bool notificationCenterOpen: false
     property bool batteryPopupOpen: false
+    property bool wifiPopupOpen: false
     property bool trayMenuOpen: false
     property var trayMenuItem: null
+    property var topBarPopupAnchorRect: null
+    property string topBarPopupScreenName: ""
 
     // Spring animations look great on real GPUs but corrupt Image textures
     // on software/virtual GPUs (VMware, Hyper-V): a SpringAnimation driving
@@ -30,6 +33,46 @@ ShellRoot {
     // Blur/glass region geometry does not use spring; Phase 3 keeps those
     // x/y/width/height transitions bounded for compositor-owned glass.
     property bool useSpring: false
+
+    function screenName(screen) {
+        return screen ? String(screen.name || "") : "";
+    }
+
+    function prepareTopBarPopup(screen, anchorRect) {
+        topBarPopupScreenName = screenName(screen);
+        topBarPopupAnchorRect = anchorRect || null;
+    }
+
+    function topBarPopupOpenFor(open, screen) {
+        return open && topBarPopupScreenName === screenName(screen);
+    }
+
+    function closeTopBarPopups(except) {
+        if (except !== "appMenu")
+            appMenuOpen = false;
+        if (except !== "controlCenter")
+            controlCenterOpen = false;
+        if (except !== "notificationCenter")
+            notificationCenterOpen = false;
+        if (except !== "battery")
+            batteryPopupOpen = false;
+        if (except !== "wifi")
+            wifiPopupOpen = false;
+        if (except !== "trayMenu") {
+            trayMenuOpen = false;
+            trayMenuItem = null;
+        }
+    }
+
+    onWifiPopupOpenChanged: if (wifiPopupOpen) {
+        appMenuOpen = false;
+        controlCenterOpen = false;
+        launchpadOpen = false;
+        spotlightOpen = false;
+        notificationCenterOpen = false;
+        batteryPopupOpen = false;
+        trayMenuOpen = false;
+    }
 
     // Register the Material Icons font once for the whole shell. Used by the
     // Control Center (Text { font.family: "Material Icons" }). The font ships
@@ -83,81 +126,78 @@ ShellRoot {
                 niriService: niri
                 notificationsService: notifications
                 batteryService: battery
-                appMenuOpen: shell.appMenuOpen
+                controlsService: controls
+                appMenuOpen: shell.topBarPopupOpenFor(shell.appMenuOpen, modelData)
                 spotlightOpen: shell.spotlightOpen
-                controlCenterOpen: shell.controlCenterOpen
+                controlCenterOpen: shell.topBarPopupOpenFor(shell.controlCenterOpen, modelData)
                 launchpadOpen: shell.launchpadOpen
-                notificationCenterOpen: shell.notificationCenterOpen
-                batteryPopupOpen: shell.batteryPopupOpen
-                onToggleAppMenu: {
-                    shell.appMenuOpen = !shell.appMenuOpen;
-                    shell.controlCenterOpen = false;
+                notificationCenterOpen: shell.topBarPopupOpenFor(shell.notificationCenterOpen, modelData)
+                batteryPopupOpen: shell.topBarPopupOpenFor(shell.batteryPopupOpen, modelData)
+                wifiPopupOpen: shell.topBarPopupOpenFor(shell.wifiPopupOpen, modelData)
+                onToggleAppMenu: function(anchorRect) {
+                    var wasOpenHere = shell.topBarPopupOpenFor(shell.appMenuOpen, modelData);
+                    shell.prepareTopBarPopup(modelData, anchorRect);
+                    shell.closeTopBarPopups("appMenu");
+                    shell.appMenuOpen = !wasOpenHere;
                     shell.launchpadOpen = false;
                     shell.spotlightOpen = false;
-                    shell.notificationCenterOpen = false;
-                    shell.batteryPopupOpen = false;
-                    shell.trayMenuOpen = false;
                 }
-                onToggleControlCenter: {
-                    shell.controlCenterOpen = !shell.controlCenterOpen;
-                    shell.appMenuOpen = false;
+                onToggleControlCenter: function(anchorRect) {
+                    var wasOpenHere = shell.topBarPopupOpenFor(shell.controlCenterOpen, modelData);
+                    shell.prepareTopBarPopup(modelData, anchorRect);
+                    shell.closeTopBarPopups("controlCenter");
+                    shell.controlCenterOpen = !wasOpenHere;
                     shell.launchpadOpen = false;
                     shell.spotlightOpen = false;
-                    shell.notificationCenterOpen = false;
-                    shell.batteryPopupOpen = false;
-                    shell.trayMenuOpen = false;
                 }
                 onToggleSpotlight: {
                     shell.spotlightOpen = !shell.spotlightOpen;
-                    shell.appMenuOpen = false;
-                    shell.controlCenterOpen = false;
+                    shell.closeTopBarPopups("");
                     shell.launchpadOpen = false;
-                    shell.notificationCenterOpen = false;
-                    shell.batteryPopupOpen = false;
-                    shell.trayMenuOpen = false;
                 }
                 onToggleLaunchpad: {
                     shell.launchpadOpen = !shell.launchpadOpen;
-                    shell.appMenuOpen = false;
-                    shell.controlCenterOpen = false;
+                    shell.closeTopBarPopups("");
                     shell.spotlightOpen = false;
-                    shell.notificationCenterOpen = false;
-                    shell.batteryPopupOpen = false;
-                    shell.trayMenuOpen = false;
                 }
-                onToggleNotifications: {
-                    shell.notificationCenterOpen = !shell.notificationCenterOpen;
-                    shell.appMenuOpen = false;
-                    shell.controlCenterOpen = false;
+                onToggleNotifications: function(anchorRect) {
+                    var wasOpenHere = shell.topBarPopupOpenFor(shell.notificationCenterOpen, modelData);
+                    shell.prepareTopBarPopup(modelData, anchorRect);
+                    shell.closeTopBarPopups("notificationCenter");
+                    shell.notificationCenterOpen = !wasOpenHere;
                     shell.launchpadOpen = false;
                     shell.spotlightOpen = false;
-                    shell.batteryPopupOpen = false;
-                    shell.trayMenuOpen = false;
                 }
-                onToggleBattery: {
-                    shell.batteryPopupOpen = !shell.batteryPopupOpen;
-                    shell.appMenuOpen = false;
-                    shell.controlCenterOpen = false;
+                onToggleBattery: function(anchorRect) {
+                    var wasOpenHere = shell.topBarPopupOpenFor(shell.batteryPopupOpen, modelData);
+                    shell.prepareTopBarPopup(modelData, anchorRect);
+                    shell.closeTopBarPopups("battery");
+                    shell.batteryPopupOpen = !wasOpenHere;
                     shell.launchpadOpen = false;
                     shell.spotlightOpen = false;
-                    shell.notificationCenterOpen = false;
-                    shell.trayMenuOpen = false;
                 }
-                onOpenTrayMenu: function(item) {
+                onToggleWifi: function(anchorRect) {
+                    var wasOpenHere = shell.topBarPopupOpenFor(shell.wifiPopupOpen, modelData);
+                    shell.prepareTopBarPopup(modelData, anchorRect);
+                    shell.closeTopBarPopups("wifi");
+                    shell.wifiPopupOpen = !wasOpenHere;
+                    shell.launchpadOpen = false;
+                    shell.spotlightOpen = false;
+                }
+                onOpenTrayMenu: function(item, anchorRect) {
+                    shell.prepareTopBarPopup(modelData, anchorRect);
+                    shell.closeTopBarPopups("trayMenu");
                     shell.trayMenuItem = item;
                     shell.trayMenuOpen = true;
-                    shell.appMenuOpen = false;
-                    shell.controlCenterOpen = false;
                     shell.launchpadOpen = false;
                     shell.spotlightOpen = false;
-                    shell.notificationCenterOpen = false;
-                    shell.batteryPopupOpen = false;
                 }
             }
 
             MenuPopup {
                 screen: modelData
-                open: shell.appMenuOpen
+                anchorRect: shell.topBarPopupAnchorRect
+                open: shell.topBarPopupOpenFor(shell.appMenuOpen, modelData)
                 activeApp: apps.toplevelLabel(niri.focusedWindow || niri.activeToplevel)
                 powerService: power
                 onCloseRequested: shell.appMenuOpen = false
@@ -171,12 +211,8 @@ ShellRoot {
                 launchpadOpen: shell.launchpadOpen
                 onToggleLaunchpad: {
                     shell.launchpadOpen = !shell.launchpadOpen;
-                    shell.appMenuOpen = false;
-                    shell.controlCenterOpen = false;
+                    shell.closeTopBarPopups("");
                     shell.spotlightOpen = false;
-                    shell.notificationCenterOpen = false;
-                    shell.batteryPopupOpen = false;
-                    shell.trayMenuOpen = false;
                 }
             }
 
@@ -184,7 +220,8 @@ ShellRoot {
                 screen: modelData
                 niriService: niri
                 controlsService: controls
-                open: shell.controlCenterOpen
+                anchorRect: shell.topBarPopupAnchorRect
+                open: shell.topBarPopupOpenFor(shell.controlCenterOpen, modelData)
                 onCloseRequested: shell.controlCenterOpen = false
             }
 
@@ -206,21 +243,32 @@ ShellRoot {
             NotificationCenter {
                 screen: modelData
                 notificationsService: notifications
-                open: shell.notificationCenterOpen
+                anchorRect: shell.topBarPopupAnchorRect
+                open: shell.topBarPopupOpenFor(shell.notificationCenterOpen, modelData)
                 onCloseRequested: shell.notificationCenterOpen = false
             }
 
             BatteryPopup {
                 screen: modelData
                 batteryService: battery
-                open: shell.batteryPopupOpen
+                anchorRect: shell.topBarPopupAnchorRect
+                open: shell.topBarPopupOpenFor(shell.batteryPopupOpen, modelData)
                 onCloseRequested: shell.batteryPopupOpen = false
+            }
+
+            WifiPopup {
+                screen: modelData
+                controlsService: controls
+                anchorRect: shell.topBarPopupAnchorRect
+                open: shell.topBarPopupOpenFor(shell.wifiPopupOpen, modelData)
+                onCloseRequested: shell.wifiPopupOpen = false
             }
 
             TrayMenu {
                 screen: modelData
                 trayItem: shell.trayMenuItem
-                open: shell.trayMenuOpen
+                anchorRect: shell.topBarPopupAnchorRect
+                open: shell.topBarPopupOpenFor(shell.trayMenuOpen, modelData)
                 onCloseRequested: {
                     shell.trayMenuOpen = false;
                     shell.trayMenuItem = null;

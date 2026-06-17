@@ -5,6 +5,7 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
 import "TahoeGlass.js" as GlassStyle
+import "PopupGeometry.js" as PopupGeometry
 
 PanelWindow {
     id: root
@@ -12,6 +13,18 @@ PanelWindow {
     property bool open: false
     property string activeApp: "Desktop"
     property var powerService
+    property var anchorRect: null
+    readonly property int edgePadding: 8
+    readonly property int fallbackTop: 34
+    readonly property int popupGap: 5
+    readonly property int screenWidth: PopupGeometry.screenWidth(root.screen, root.width)
+    readonly property int popupLeftMargin: anchorRect
+        ? PopupGeometry.popupLeft(anchorRect, root.implicitWidth, screenWidth, edgePadding, 12)
+        : 12
+    readonly property int popupTopMargin: PopupGeometry.popupTop(anchorRect, fallbackTop, popupGap)
+    readonly property real popupOriginX: anchorRect
+        ? PopupGeometry.originX(anchorRect, popupLeftMargin, root.implicitWidth, screenWidth, 12)
+        : 0
 
     signal closeRequested()
 
@@ -29,8 +42,8 @@ PanelWindow {
     }
 
     margins {
-        top: 0
-        left: 12
+        top: root.popupTopMargin
+        left: root.popupLeftMargin
     }
 
     TahoeGlass.regions: [
@@ -84,7 +97,7 @@ PanelWindow {
         opacity: root.open ? 1 : 0
 
         transform: Scale {
-            origin.x: 0
+            origin.x: root.popupOriginX
             origin.y: 0
             xScale: menuSurface.contentScale
             yScale: menuSurface.contentScale

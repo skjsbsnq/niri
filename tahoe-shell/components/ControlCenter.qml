@@ -5,6 +5,7 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
 import "TahoeGlass.js" as GlassStyle
+import "PopupGeometry.js" as PopupGeometry
 
 PanelWindow {
     id: root
@@ -12,8 +13,17 @@ PanelWindow {
     property bool open: false
     property var niriService
     property var controlsService
+    property var anchorRect: null
     property bool controlsExpanded: false
 
+    readonly property int edgePadding: 8
+    readonly property int fallbackRight: 12
+    readonly property int fallbackTop: 34
+    readonly property int popupGap: 5
+    readonly property int screenWidth: PopupGeometry.screenWidth(root.screen, root.width)
+    readonly property int popupLeftMargin: PopupGeometry.popupLeft(anchorRect, root.implicitWidth, screenWidth, edgePadding, fallbackRight)
+    readonly property int popupTopMargin: PopupGeometry.popupTop(anchorRect, fallbackTop, popupGap)
+    readonly property real popupOriginX: PopupGeometry.originX(anchorRect, popupLeftMargin, root.implicitWidth, screenWidth, fallbackRight)
     readonly property color glassFill: GlassStyle.FillPanel
     readonly property color glassStroke: GlassStyle.StrokePanel
     readonly property color glassInnerFill: "#14ffffff"
@@ -44,12 +54,12 @@ PanelWindow {
 
     anchors {
         top: true
-        right: true
+        left: true
     }
 
     margins {
-        top: 0
-        right: 12
+        top: root.popupTopMargin
+        left: root.popupLeftMargin
     }
 
     TahoeGlass.regions: [
@@ -89,7 +99,7 @@ PanelWindow {
         opacity: root.open ? 1 : 0
 
         transform: Scale {
-            origin.x: panel.width
+            origin.x: root.popupOriginX
             origin.y: 0
             xScale: panel.contentScale
             yScale: panel.contentScale
@@ -447,7 +457,13 @@ PanelWindow {
 
                         Text {
                             Layout.fillWidth: true
-                            text: ct.controls ? ct.controls.wifiName : "Off"
+                            text: {
+                                if (!ct.controls || !ct.controls.wifiEnabled)
+                                    return "已关闭";
+                                if (ct.controls.wifiConnected)
+                                    return ct.controls.wifiName;
+                                return "已开启";
+                            }
                             color: root.textTertiary
                             font.pixelSize: 11
                             elide: Text.ElideRight

@@ -10,7 +10,20 @@ Item {
     property var panelWindow
     readonly property int itemCount: SystemTray.items ? SystemTray.items.values.length : 0
 
-    signal openMenuRequested(var item)
+    signal openMenuRequested(var item, var anchorRect)
+
+    function anchorRectFor(sourceItem) {
+        if (!sourceItem || !root.panelWindow)
+            return null;
+
+        var rect = root.panelWindow.itemRect(sourceItem);
+        return {
+            "x": Math.round(rect.x),
+            "y": Math.round(rect.y),
+            "width": Math.round(rect.width),
+            "height": Math.round(rect.height)
+        };
+    }
 
     implicitWidth: trayRow.implicitWidth
     implicitHeight: 24
@@ -20,7 +33,7 @@ Item {
         if (!item || !item.hasMenu)
             return;
 
-        root.openMenuRequested(item);
+        root.openMenuRequested(item, root.anchorRectFor(sourceItem));
     }
 
     function iconSource(item) {

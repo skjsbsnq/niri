@@ -5,16 +5,26 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
 import "TahoeGlass.js" as GlassStyle
+import "PopupGeometry.js" as PopupGeometry
 
 PanelWindow {
     id: root
 
     property bool open: false
     property var batteryService
+    property var anchorRect: null
 
     readonly property bool available: !!batteryService && batteryService.available
     readonly property int percentage: available ? batteryService.roundedPercentage : 0
     readonly property string iconFont: "Material Icons"
+    readonly property int edgePadding: 8
+    readonly property int fallbackRight: 92
+    readonly property int fallbackTop: 34
+    readonly property int popupGap: 5
+    readonly property int screenWidth: PopupGeometry.screenWidth(root.screen, root.width)
+    readonly property int popupLeftMargin: PopupGeometry.popupLeft(anchorRect, root.implicitWidth, screenWidth, edgePadding, fallbackRight)
+    readonly property int popupTopMargin: PopupGeometry.popupTop(anchorRect, fallbackTop, popupGap)
+    readonly property real popupOriginX: PopupGeometry.originX(anchorRect, popupLeftMargin, root.implicitWidth, screenWidth, fallbackRight)
 
     signal closeRequested()
 
@@ -28,12 +38,12 @@ PanelWindow {
 
     anchors {
         top: true
-        right: true
+        left: true
     }
 
     margins {
-        top: 0
-        right: 92
+        top: root.popupTopMargin
+        left: root.popupLeftMargin
     }
 
     TahoeGlass.regions: [
@@ -70,7 +80,7 @@ PanelWindow {
         opacity: root.open ? 1 : 0
 
         transform: Scale {
-            origin.x: panel.width
+            origin.x: root.popupOriginX
             origin.y: 0
             xScale: panel.contentScale
             yScale: panel.contentScale

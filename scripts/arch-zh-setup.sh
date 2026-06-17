@@ -17,6 +17,7 @@ INSTALL_INPUT_METHOD="${INSTALL_INPUT_METHOD:-true}"
 CONFIGURE_FONTCONFIG="${CONFIGURE_FONTCONFIG:-true}"
 CONFIGURE_INPUT_METHOD_ENV="${CONFIGURE_INPUT_METHOD_ENV:-true}"
 CONFIGURE_FCITX_PROFILE="${CONFIGURE_FCITX_PROFILE:-true}"
+CONFIGURE_NIRI_FCITX_AUTOSTART="${CONFIGURE_NIRI_FCITX_AUTOSTART:-true}"
 OVERWRITE_FCITX_PROFILE="${OVERWRITE_FCITX_PROFILE:-false}"
 ENABLE_FCITX_SERVICE="${ENABLE_FCITX_SERVICE:-true}"
 ALLOW_ROOT_ZH_SETUP="${ALLOW_ROOT_ZH_SETUP:-false}"
@@ -24,6 +25,7 @@ ALLOW_ROOT_ZH_SETUP="${ALLOW_ROOT_ZH_SETUP:-false}"
 FONTCONFIG_TARGET="${FONTCONFIG_TARGET:-"$HOME/.config/fontconfig/conf.d/64-arch-zh-cjk.conf"}"
 USER_ENV_TARGET="${USER_ENV_TARGET:-"$HOME/.config/environment.d/90-arch-zh-input-method.conf"}"
 FCITX_PROFILE_TARGET="${FCITX_PROFILE_TARGET:-"$HOME/.config/fcitx5/profile"}"
+NIRI_CONFIG_TARGET="${NIRI_CONFIG_TARGET:-"$HOME/.config/niri/tahoe/config.kdl"}"
 
 FONT_PACKAGES=(
   noto-fonts
@@ -214,6 +216,7 @@ GTK_IM_MODULE=fcitx
 QT_IM_MODULE=fcitx
 SDL_IM_MODULE=fcitx
 XMODIFIERS=@im=fcitx
+INPUT_METHOD=fcitx
 EOF
 }
 
@@ -247,6 +250,53 @@ Layout=
 [GroupOrder]
 0=Default
 EOF
+}
+
+configure_niri_fcitx_autostart() {
+  local line='spawn-at-startup "fcitx5" "-d" "--replace"'
+  local tmp
+
+  [[ "$INSTALL_INPUT_METHOD" == true ]] || return
+  [[ "$CONFIGURE_NIRI_FCITX_AUTOSTART" == true ]] || {
+    log "skipping niri fcitx5 autostart because CONFIGURE_NIRI_FCITX_AUTOSTART=$CONFIGURE_NIRI_FCITX_AUTOSTART"
+    return
+  }
+
+  if [[ ! -f "$NIRI_CONFIG_TARGET" ]]; then
+    log "niri config not found; skipping fcitx5 niri autostart patch: $NIRI_CONFIG_TARGET"
+    return
+  fi
+
+  if grep -Fxq "$line" "$NIRI_CONFIG_TARGET"; then
+    log "fcitx5 niri autostart already present: $NIRI_CONFIG_TARGET"
+    return
+  fi
+
+  require_cmd awk
+  require_cmd mktemp
+  require_cmd install
+
+  tmp="$(mktemp)"
+  awk -v line="$line" '
+    {
+      print
+      if (!done && $0 ~ /^spawn-sh-at-startup /) {
+        print ""
+        print line
+        done = 1
+      }
+    }
+    END {
+      if (!done) {
+        print ""
+        print line
+      }
+    }
+  ' "$NIRI_CONFIG_TARGET" > "$tmp"
+
+  install -m644 "$tmp" "$NIRI_CONFIG_TARGET"
+  rm -f "$tmp"
+  log "enabled fcitx5 niri autostart in $NIRI_CONFIG_TARGET"
 }
 
 enable_fcitx_service() {
@@ -286,6 +336,7 @@ main() {
   configure_fontconfig
   configure_input_method_env
   configure_fcitx_profile
+  configure_niri_fcitx_autostart
   enable_fcitx_service
 
   log "done"

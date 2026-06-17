@@ -82,6 +82,33 @@ resolve_niri_bin() {
   die "niri binary not found; run scripts/arch-update.sh first"
 }
 
+activate_graphical_session_target() {
+  # xdg-desktop-portal*.service declare `Requisite=graphical-session.target`.
+  # That target has RefuseManualStart, so it can't be started by hand, but it
+  # CAN be activated indirectly as a dependency. When niri is launched directly
+  # (the fork-binary path below), nothing binds graphical-session.target —
+  # unlike `niri-session`/`niri.service`, which does — so portals fail with
+  # "Dependency failed for Portal service". Start a transient oneshot that
+  # Wants the target; systemd activates it as a dependency (allowed despite
+  # RefuseManualStart), satisfying the portals' Requisite for the session.
+  command -v systemd-run >/dev/null 2>&1 || return 0
+
+  systemd-run --user \
+    --unit=tahoe-gsession-activate.service \
+    --service-type=oneshot \
+    --remain-after-exit \
+    --property=Wants=graphical-session.target \
+    true >/dev/null 2>&1 \
+    || log "could not activate graphical-session.target; portals may fail to start"
+
+  # Surface the Wayland display + session vars to user services launched by
+  # systemd (portals, fcitx5, xdg autostart). The shell env already has them;
+  # the systemd user manager may not.
+  systemctl --user import-environment \
+    WAYLAND_DISPLAY DISPLAY XAUTHORITY \
+    XDG_CURRENT_DESKTOP XDG_SESSION_TYPE XDG_SESSION_DESKTOP 2>/dev/null || true
+}
+
 main() {
   local niri_bin
   local niri_session_bin=""
@@ -135,6 +162,7 @@ main() {
   niri_bin="$(resolve_niri_bin)"
   log "niri: $niri_bin"
   log "niri session wrapper: disabled"
+  activate_graphical_session_target
   exec "$niri_bin" --session --config "$NIRI_CONFIG"
 }
 

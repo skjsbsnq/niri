@@ -138,7 +138,10 @@ Item {
         }
     }
 
-    Component.onCompleted: root.refreshBrightness()
+    Component.onCompleted: {
+        root.refreshBrightness();
+        root.rescanWifi();
+    }
 
     // ------------------------------------------------------------------
     // Wi-Fi
@@ -163,7 +166,7 @@ Item {
                 return null;
             for (var i = 0; i < devices.values.length; i++) {
                 var d = devices.values[i];
-                if (d && String(d.type || "") === "wifi")
+                if (d && (d.type === DeviceType.Wifi || String(d.type || "").toLowerCase() === "wifi"))
                     return d;
             }
         } catch (e) {}
@@ -178,7 +181,7 @@ Item {
     readonly property string wifiName: {
         var d = root.wifiDevice;
         if (!d || !d.connected)
-            return root.wifiEnabled ? "Not Connected" : "Off";
+            return root.wifiEnabled ? "未连接" : "已关闭";
         try {
             var nets = d.networks;
             if (nets && nets.values) {
@@ -192,18 +195,188 @@ Item {
                 }
             }
         } catch (e) {}
-        return "Connected";
+        return "已连接";
+    }
+
+    readonly property int wifiSignalPercent: {
+        var active = root.activeWifiNetwork;
+        return active ? root.signalPercent(active.signalStrength) : 0;
+    }
+
+    readonly property var activeWifiNetwork: {
+        var d = root.wifiDevice;
+        if (!d)
+            return null;
+        try {
+            var nets = d.networks;
+            if (!nets || !nets.values)
+                return null;
+            for (var i = 0; i < nets.values.length; i++) {
+                var n = nets.values[i];
+                if (n && n.connected)
+                    return n;
+            }
+        } catch (e) {}
+        return null;
+    }
+
+    readonly property var wifiNetworks: {
+        var d = root.wifiDevice;
+        if (!d)
+            return [];
+
+        try {
+            var nets = d.networks;
+            if (!nets || !nets.values)
+                return [];
+
+            var byName = {};
+            for (var i = 0; i < nets.values.length; i++) {
+                var n = nets.values[i];
+                if (!n)
+                    continue;
+
+                var name = String(n.name || "").trim();
+                if (name.length === 0)
+                    continue;
+
+                var signal = root.signalPercent(n.signalStrength);
+                var existing = byName[name];
+                if (!existing || n.connected || signal > existing.signalPercent) {
+                    byName[name] = {
+                        network: n,
+                        name: name,
+                        signalPercent: signal,
+                        security: n.security,
+                        secured: root.wifiNeedsPassword(n),
+                        pskSupported: root.wifiSupportsPsk(n),
+                        known: !!n.known,
+                        connected: !!n.connected,
+                        stateChanging: !!n.stateChanging
+                    };
+                }
+            }
+
+            var out = [];
+            for (var key in byName)
+                out.push(byName[key]);
+
+            out.sort(function(a, b) {
+                if (a.connected !== b.connected)
+                    return a.connected ? -1 : 1;
+                if (a.known !== b.known)
+                    return a.known ? -1 : 1;
+                return b.signalPercent - a.signalPercent;
+            });
+
+            return out;
+        } catch (e) {
+            console.warn("[Controls] failed to read wifi networks:", e);
+            return [];
+        }
     }
 
     function setWifiEnabled(enabled) {
         try {
             Networking.wifiEnabled = !!enabled;
         } catch (e) {}
+        if (enabled)
+            Qt.callLater(function() { root.rescanWifi(); });
     }
 
     function toggleWifi() {
         root.airplaneMode = false;
         setWifiEnabled(!root.wifiEnabled);
+    }
+
+    function signalPercent(value) {
+        var n = Number(value);
+        if (!isFinite(n) || n <= 0)
+            return 0;
+        if (n <= 1)
+            return Math.round(n * 100);
+        return Math.round(Math.min(100, n));
+    }
+
+    function wifiNeedsPassword(network) {
+        if (!network)
+            return false;
+        try {
+            return network.security !== WifiSecurityType.Open
+                && network.security !== WifiSecurityType.Owe;
+        } catch (e) {
+            return true;
+        }
+    }
+
+    function wifiSupportsPsk(network) {
+        if (!network)
+            return false;
+        try {
+            return network.security === WifiSecurityType.WpaPsk
+                || network.security === WifiSecurityType.Wpa2Psk
+                || network.security === WifiSecurityType.Sae;
+        } catch (e) {
+            return true;
+        }
+    }
+
+    function connectWifi(entry, psk) {
+        var network = entry && entry.network ? entry.network : entry;
+        if (!network)
+            return;
+
+        try {
+            if (psk && psk.length > 0 && network.connectWithPsk && (!entry || entry.pskSupported !== false)) {
+                network.connectWithPsk(psk);
+                return;
+            }
+            if ((!psk || psk.length === 0) && network.connect) {
+                network.connect();
+                return;
+            }
+        } catch (e) {
+            console.warn("[Controls] wifi connect failed, falling back to nmcli:", e);
+        }
+
+        var ssid = entry && entry.name ? entry.name : String(network.name || "");
+        if (ssid.length === 0)
+            return;
+
+        var command = ["nmcli", "device", "wifi", "connect", ssid];
+        if (psk && psk.length > 0)
+            command.push("password", psk);
+        Quickshell.execDetached({ command: command });
+    }
+
+    function disconnectWifi() {
+        var d = root.wifiDevice;
+        if (d && d.disconnect) {
+            try { d.disconnect(); } catch (e) {}
+        }
+    }
+
+    function rescanWifi() {
+        var d = root.wifiDevice;
+        if (!d || !root.wifiEnabled)
+            return;
+
+        try {
+            d.scannerEnabled = false;
+        } catch (e) {}
+        Qt.callLater(function() {
+            try {
+                if (root.wifiDevice && root.wifiEnabled)
+                    root.wifiDevice.scannerEnabled = true;
+            } catch (e) {}
+        });
+    }
+
+    Timer {
+        interval: 30000
+        running: true
+        repeat: true
+        onTriggered: root.rescanWifi()
     }
 
     // ------------------------------------------------------------------

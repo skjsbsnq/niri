@@ -528,16 +528,25 @@ Item {
         if (!window)
             return;
 
+        var appId = String(window.appId || window.app_id || "").trim();
+        if (appId.length === 0 && window.toplevel)
+            appId = String(window.toplevel.appId || window.toplevel.app_id || "").trim();
+        var title = String(window.title || "").trim();
+        if (title.length === 0 && window.toplevel)
+            title = String(window.toplevel.title || "").trim();
+
         var app = findApplication([
-            window.appId || "",
-            window.title || ""
+            appId,
+            normalizedAppToken(appId),
+            appId + ".desktop",
+            title
         ]);
         if (app) {
             pinApp(app);
             return;
         }
 
-        pinAppId(window.appId || "");
+        pinAppId(appId);
     }
 
     function movePinnedApp(fromIndex, toIndex) {

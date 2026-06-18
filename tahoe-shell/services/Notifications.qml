@@ -101,10 +101,7 @@ Item {
     onDndEnabledChanged: {
         if (soundService)
             soundService.setEventSoundsMuted(dndEnabled);
-        if (notificationState.dndEnabled !== dndEnabled) {
-            notificationState.dndEnabled = dndEnabled;
-            root.saveState();
-        }
+        root.saveState();
     }
 
     function restoreState() {
@@ -113,8 +110,8 @@ Item {
     }
 
     function saveState() {
-        if (root.stateLoaded)
-            notificationStateFile.writeAdapter();
+        notificationState.dndEnabled = root.dndEnabled;
+        notificationStateFile.writeAdapter();
     }
 
     // Cap auto-expire so a client that sends expireTimeout=-1 (meaning

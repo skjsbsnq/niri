@@ -47,26 +47,22 @@ Item {
 
         JsonAdapter {
             id: controlsState
-            property bool wifiEnabledKnown: false
-            property bool wifiEnabled: true
+            property bool wifiRadioEnabled: true
             property string preferredWifiSsid: ""
         }
     }
 
     function saveControlsState() {
-        if (root.controlsStateLoaded)
-            controlsStateFile.writeAdapter();
+        controlsStateFile.writeAdapter();
     }
 
     function restoreControlsState() {
         root.controlsStateLoaded = true;
 
-        if (controlsState.wifiEnabledKnown)
-            root.setWifiEnabled(controlsState.wifiEnabled, true);
-
         if (root.wifiConnected)
             root.rememberCurrentWifi();
 
+        root.saveControlsState();
         root.schedulePreferredWifiRestore(2800, true);
     }
 
@@ -360,8 +356,7 @@ Item {
             Networking.wifiEnabled = !!enabled;
         } catch (e) {}
 
-        controlsState.wifiEnabledKnown = true;
-        controlsState.wifiEnabled = !!enabled;
+        controlsState.wifiRadioEnabled = !!enabled;
         root.saveControlsState();
 
         if (enabled) {
@@ -408,11 +403,14 @@ Item {
 
     function rememberPreferredWifiSsid(ssid) {
         var text = String(ssid || "").trim();
-        if (!root.validWifiSsid(text) || controlsState.preferredWifiSsid === text)
+        if (!root.validWifiSsid(text))
             return;
 
-        controlsState.preferredWifiSsid = text;
-        root.saveControlsState();
+        if (controlsState.preferredWifiSsid !== text) {
+            controlsState.preferredWifiSsid = text;
+            root.saveControlsState();
+        }
+        root.ensureWifiAutoconnect(text);
     }
 
     function rememberCurrentWifi() {
@@ -427,11 +425,14 @@ Item {
     }
 
     function restorePreferredWifi() {
-        if (root.preferredWifiRestoreSuppressed || !root.wifiEnabled || root.wifiConnected)
+        if (root.preferredWifiRestoreSuppressed || root.wifiConnected)
             return;
 
         var ssid = String(controlsState.preferredWifiSsid || "").trim();
         if (!root.validWifiSsid(ssid))
+            return;
+
+        if (!controlsState.wifiRadioEnabled)
             return;
 
         if (!root.wifiDevice) {
@@ -452,7 +453,9 @@ Item {
                     "ssid=\"$1\"",
                     "[ -n \"$ssid\" ] || exit 0",
                     "command -v nmcli >/dev/null 2>&1 || exit 0",
-                    "nmcli --wait 12 connection up id \"$ssid\" >/dev/null 2>&1",
+                    "nmcli radio wifi on >/dev/null 2>&1 || true",
+                    "nmcli connection modify \"$ssid\" connection.autoconnect yes >/dev/null 2>&1 || true",
+                    "nmcli --wait 20 connection up id \"$ssid\" >/dev/null 2>&1",
                     "  || nmcli --wait 20 device wifi connect \"$ssid\" >/dev/null 2>&1",
                     "  || true"
                 ].join("\n"),
@@ -470,6 +473,27 @@ Item {
         interval: 2500
         repeat: false
         onTriggered: root.restorePreferredWifi()
+    }
+
+    function ensureWifiAutoconnect(ssid) {
+        var name = String(ssid || "").trim();
+        if (!root.validWifiSsid(name))
+            return;
+
+        Quickshell.execDetached({
+            command: [
+                "sh",
+                "-lc",
+                [
+                    "ssid=\"$1\"",
+                    "[ -n \"$ssid\" ] || exit 0",
+                    "command -v nmcli >/dev/null 2>&1 || exit 0",
+                    "nmcli connection modify \"$ssid\" connection.autoconnect yes >/dev/null 2>&1 || true"
+                ].join("\n"),
+                "sh",
+                name
+            ]
+        });
     }
 
     function wifiNeedsPassword(network) {
@@ -503,14 +527,17 @@ Item {
         var ssid = entry && entry.name ? String(entry.name || "").trim() : String(network.name || "").trim();
         root.rememberPreferredWifiSsid(ssid);
         root.preferredWifiRestoreSuppressed = false;
+        root.ensureWifiAutoconnect(ssid);
 
         try {
             if (psk && psk.length > 0 && network.connectWithPsk && (!entry || entry.pskSupported !== false)) {
                 network.connectWithPsk(psk);
+                root.schedulePreferredWifiRestore(6500, true);
                 return;
             }
             if ((!psk || psk.length === 0) && network.connect) {
                 network.connect();
+                root.schedulePreferredWifiRestore(6500, true);
                 return;
             }
         } catch (e) {
@@ -524,6 +551,7 @@ Item {
         if (psk && psk.length > 0)
             command.push("password", psk);
         Quickshell.execDetached({ command: command });
+        root.schedulePreferredWifiRestore(6500, true);
     }
 
     function disconnectWifi() {

@@ -57,34 +57,9 @@ PanelWindow {
         return 1.0 + influence * 0.5;
     }
 
-    function updateDockWaveSpacing() {
-        if (!dockRow)
-            return;
-
-        var target = dockRow.baseSpacing;
-        if (!pointerDragActive && dockHovered) {
-            var maxScale = 1.0;
-            var items = dockRow.children;
-            for (var i = 0; i < items.length; i++) {
-                var item = items[i];
-                if (!item || item.visible === false || item.magnification === undefined)
-                    continue;
-
-                var scale = root.proximityScale(item);
-                if (scale > maxScale)
-                    maxScale = scale;
-            }
-
-            target = dockRow.baseSpacing + Math.max(0, maxScale - 1.0) * 18;
-        }
-
-        dockRow.waveSpacing = target;
-    }
-
     function markDockHovered() {
         hoverExitTimer.stop();
         root.dockHovered = true;
-        root.updateDockWaveSpacing();
     }
 
     function updateDockHover(x) {
@@ -92,7 +67,6 @@ PanelWindow {
         root.dockMouseX = x;
         root.dockHovered = true;
         root.pointerDragActive = false;
-        root.updateDockWaveSpacing();
     }
 
     function updateDockHoverFromButtons(x, buttons) {
@@ -118,7 +92,6 @@ PanelWindow {
         hoverExitTimer.stop();
         root.dockHovered = false;
         root.dockMouseX = -10000;
-        root.updateDockWaveSpacing();
     }
 
     onLaunchpadOpenChanged: if (launchpadOpen) resetDockHover()
@@ -208,22 +181,7 @@ PanelWindow {
         Row {
             id: dockRow
             anchors.centerIn: parent
-            property real baseSpacing: 8
-            property real waveSpacing: baseSpacing
-            spacing: waveSpacing
-
-            Behavior on waveSpacing {
-                enabled: !root.useSpring
-                NumberAnimation { duration: 130; easing.type: Easing.OutCubic }
-            }
-            Behavior on waveSpacing {
-                enabled: root.useSpring
-                SpringAnimation {
-                    spring: 220
-                    damping: 1.0
-                    epsilon: 0.01
-                }
-            }
+            spacing: 8
 
             Repeater {
                 model: ScriptModel {

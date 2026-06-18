@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import Quickshell
+import Quickshell.Io
 import Quickshell.Services.Notifications
 
 // Real desktop notification service.
@@ -77,10 +78,43 @@ Item {
     property var soundService: null
     readonly property int historyCount: historyModel.length
     readonly property int maxHistory: 60
+    property bool stateLoaded: false
+
+    FileView {
+        id: notificationStateFile
+        path: Quickshell.stateDir + "/notifications.json"
+        blockLoading: true
+        blockWrites: true
+        printErrors: false
+        onLoaded: root.restoreState()
+        onLoadFailed: {
+            root.stateLoaded = true;
+            root.saveState();
+        }
+
+        JsonAdapter {
+            id: notificationState
+            property bool dndEnabled: false
+        }
+    }
 
     onDndEnabledChanged: {
         if (soundService)
             soundService.setEventSoundsMuted(dndEnabled);
+        if (notificationState.dndEnabled !== dndEnabled) {
+            notificationState.dndEnabled = dndEnabled;
+            root.saveState();
+        }
+    }
+
+    function restoreState() {
+        root.stateLoaded = true;
+        root.dndEnabled = notificationState.dndEnabled;
+    }
+
+    function saveState() {
+        if (root.stateLoaded)
+            notificationStateFile.writeAdapter();
     }
 
     // Cap auto-expire so a client that sends expireTimeout=-1 (meaning

@@ -15,8 +15,11 @@ Item {
     readonly property string symbolIconRoot: assetRoot + "/icons/symbols/"
     readonly property string defaultWindowIcon: dockIconRoot + "finder.png"
     readonly property string wallpaper: backgroundRoot + "iridescence.jpg"
-    readonly property string pinnedConfigPath: configHome() + "/quickshell/tahoe/pinned-apps.json"
-    readonly property string legacyPinnedPath: Quickshell.stateDir + "/pinned-apps.json"
+    readonly property string pinnedConfigPath: Quickshell.stateDir + "/pinned-apps.json"
+    // Older builds wrote user pins into the deployed QML directory. That path
+    // can be wiped by rsync --delete during updates, so it is only a migration
+    // source now.
+    readonly property string legacyPinnedPath: configHome() + "/quickshell/tahoe/pinned-apps.json"
 
     readonly property var realApplications: [...DesktopEntries.applications.values].filter(isLaunchableApplication).sort(compareApplications)
     readonly property var pinnedApps: buildPinnedApps()
@@ -42,6 +45,7 @@ Item {
         JsonAdapter {
             id: pinnedAdapter
             property bool initialized: false
+            property bool migratedLegacyConfig: false
             property var pinned: []
         }
     }
@@ -325,6 +329,30 @@ Item {
         return result;
     }
 
+    function mergePinnedIds(baseValues, extraValues) {
+        var result = [];
+        var seen = {};
+
+        function add(value) {
+            var id = String(value || "").trim();
+            var key = normalizedAppToken(id);
+            if (id.length === 0 || key.length === 0 || seen[key])
+                return;
+
+            seen[key] = true;
+            result.push(id);
+        }
+
+        var base = sanitizedPinnedIds(baseValues);
+        var extra = sanitizedPinnedIds(extraValues);
+        for (var i = 0; i < base.length; i++)
+            add(base[i]);
+        for (var j = 0; j < extra.length; j++)
+            add(extra[j]);
+
+        return result;
+    }
+
     function defaultPinnedIds() {
         var ids = [];
         var seen = {};
@@ -394,6 +422,7 @@ Item {
 
     function setPinnedIds(ids) {
         pinnedAdapter.initialized = true;
+        pinnedAdapter.migratedLegacyConfig = true;
         pinnedAdapter.pinned = sanitizedPinnedIds(ids);
         pinnedFile.writeAdapter();
     }
@@ -412,6 +441,20 @@ Item {
     }
 
     function ensurePinnedDefaults() {
+        if (!pinnedAdapter.migratedLegacyConfig) {
+            var current = sanitizedPinnedIds(pinnedAdapter.pinned);
+            var legacyIds = legacyPinnedIds();
+            if (legacyIds.length > 0) {
+                pinnedAdapter.initialized = true;
+                pinnedAdapter.migratedLegacyConfig = true;
+                pinnedAdapter.pinned = mergePinnedIds(current, legacyIds);
+                pinnedFile.writeAdapter();
+                return;
+            }
+
+            pinnedAdapter.migratedLegacyConfig = true;
+        }
+
         if (!pinnedAdapter.initialized) {
             var existing = sanitizedPinnedIds(pinnedAdapter.pinned);
             if (existing.length > 0) {

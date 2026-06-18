@@ -270,6 +270,28 @@ sync_dir() {
   fi
 }
 
+quickshell_tahoe_state_dir() {
+  local state_home="${XDG_STATE_HOME:-"$HOME/.local/state"}"
+  printf '%s\n' "$state_home/quickshell/by-shell/tahoe"
+}
+
+migrate_legacy_tahoe_shell_state() {
+  local legacy_pins="$TAHOE_CONFIG_DIR/pinned-apps.json"
+  local state_dir
+  local state_pins
+
+  state_dir="$(quickshell_tahoe_state_dir)"
+  state_pins="$state_dir/pinned-apps.json"
+
+  if [[ -f "$legacy_pins" ]]; then
+    if [[ ! -f "$state_pins" || "$legacy_pins" -nt "$state_pins" ]]; then
+      log "migrating Tahoe Dock pins to $state_pins"
+      mkdir -p "$state_dir"
+      install -m600 "$legacy_pins" "$state_pins"
+    fi
+  fi
+}
+
 deploy_niri_config() {
   if [[ ! -f "$NIRI_CONFIG_SRC" ]]; then
     log "skipping niri config deploy; source file does not exist: $NIRI_CONFIG_SRC"
@@ -348,6 +370,7 @@ deploy_tahoe_shell() {
   fi
 
   log "deploying Tahoe shell to $TAHOE_CONFIG_DIR"
+  migrate_legacy_tahoe_shell_state
   sync_dir "$TAHOE_SHELL_DIR" "$TAHOE_CONFIG_DIR"
   shell_deployed=true
 }

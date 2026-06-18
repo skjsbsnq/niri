@@ -10,9 +10,9 @@ PanelWindow {
 
     property bool open: false
     property var appsService
-    property var screenshotService
+    property var searchService
     property string query: ""
-    readonly property var results: root.buildResults()
+    readonly property var results: root.searchService ? root.searchService.resultsForQuery(root.query, 6) : []
 
     signal closeRequested()
 
@@ -40,98 +40,45 @@ PanelWindow {
         }
     }
 
-    function launchApp(app) {
-        if (!app)
+    function activateResult(result) {
+        if (!result)
             return;
 
-        if (app.resultType === "screenshot") {
-            if (root.screenshotService)
-                root.screenshotService.activateResult(app);
-        } else if (root.appsService) {
-            root.appsService.launchApp(app);
-        }
+        if (root.searchService)
+            root.searchService.activateResult(result);
+        else if (typeof result.activate === "function")
+            result.activate();
         root.closeRequested();
     }
 
-    function buildResults() {
-        var out = [];
-        if (root.screenshotService && root.screenshotService.matchesQuery(root.query))
-            out.push(root.screenshotService.spotlightResult());
-
-        if (root.appsService) {
-            var apps = root.appsService.spotlightResults(root.query, Math.max(1, 6 - out.length));
-            for (var i = 0; i < apps.length && out.length < 6; i++)
-                out.push(apps[i]);
-        }
-
-        return out;
+    function resultLabel(result) {
+        if (root.searchService)
+            return root.searchService.resultTitle(result);
+        return String(result && result.title || result && result.name || "");
     }
 
-    function resultLabel(result) {
-        if (result && result.resultType === "screenshot")
-            return result.name;
-        return root.appsService ? root.appsService.appLabel(result) : "";
+    function resultSubtitle(result) {
+        if (root.searchService)
+            return root.searchService.resultSubtitle(result);
+        return String(result && result.subtitle || result && result.genericName || "");
     }
 
     function resultIcon(result) {
-        if (result && result.resultType === "screenshot")
-            return root.appsService ? root.appsService.iconPath("dock", result.icon) : "";
-        return root.appsService ? root.appsService.iconForApp(result) : "";
+        if (root.searchService)
+            return root.searchService.resultIcon(result);
+        return String(result && result.icon || "");
     }
 
     function launchFirstResult() {
         if (root.results.length > 0)
-            launchApp(root.results[0]);
+            activateResult(root.results[0]);
     }
 
     function launchShortcut(kind) {
-        if (!root.appsService)
-            return;
-
-        if (kind === "copy") {
-            var text = String(root.query || "");
-            if (text.trim().length === 0)
-                return;
-
-            Quickshell.execDetached({
-                command: ["sh", "-c", "printf %s \"$1\" | wl-copy", "sh", text],
-                workingDirectory: ""
-            });
+        if (root.searchService && root.searchService.activateShortcut(kind, root.query)) {
             root.closeRequested();
             return;
         }
-
-        var candidates = [];
-        if (kind === "store") {
-            candidates = [
-                "org.gnome.Software",
-                "gnome-software",
-                "org.kde.discover",
-                "plasma-discover",
-                "software"
-            ];
-        } else if (kind === "files") {
-            candidates = [
-                "org.gnome.Nautilus",
-                "nautilus",
-                "org.kde.dolphin",
-                "dolphin",
-                "thunar",
-                "files"
-            ];
-        } else if (kind === "shortcuts") {
-            candidates = [
-                "shortcuts",
-                "org.gnome.Settings",
-                "gnome-control-center",
-                "systemsettings",
-                "settings"
-            ];
-        }
-
-        var app = root.appsService.findApplication(candidates);
-        if (app)
-            launchApp(app);
     }
 
     TahoeGlass.regions: [
@@ -346,7 +293,7 @@ PanelWindow {
                         required property var modelData
 
                         width: resultsColumn.width
-                        height: 48
+                        height: 54
 
                         Rectangle {
                             anchors.fill: parent
@@ -367,16 +314,36 @@ PanelWindow {
                         }
 
                         Text {
+                            id: resultTitle
                             anchors.left: resultIcon.right
                             anchors.leftMargin: 12
                             anchors.right: parent.right
                             anchors.rightMargin: 12
-                            anchors.verticalCenter: parent.verticalCenter
+                            anchors.top: parent.top
+                            anchors.topMargin: resultButton.subtitleText.length > 0 ? 9 : 0
                             text: root.resultLabel(resultButton.modelData)
                             color: "#202124"
                             font.pixelSize: 14
+                            font.weight: Font.DemiBold
                             elide: Text.ElideRight
                             maximumLineCount: 1
+                            verticalAlignment: Text.AlignVCenter
+                            height: resultButton.subtitleText.length > 0 ? 18 : parent.height
+                        }
+
+                        readonly property string subtitleText: root.resultSubtitle(resultButton.modelData)
+
+                        Text {
+                            anchors.left: resultTitle.left
+                            anchors.right: resultTitle.right
+                            anchors.top: resultTitle.bottom
+                            anchors.topMargin: 1
+                            text: resultButton.subtitleText
+                            color: "#5f6870"
+                            font.pixelSize: 11
+                            elide: Text.ElideRight
+                            maximumLineCount: 1
+                            visible: resultButton.subtitleText.length > 0
                         }
 
                         MouseArea {
@@ -384,7 +351,7 @@ PanelWindow {
                             anchors.fill: parent
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: root.launchApp(resultButton.modelData)
+                            onClicked: root.activateResult(resultButton.modelData)
                         }
                     }
                 }

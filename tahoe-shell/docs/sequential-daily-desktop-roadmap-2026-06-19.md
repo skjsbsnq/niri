@@ -42,6 +42,8 @@
 
 ## 阶段 0：基线与验收框架
 
+阶段 0 验收记录：`phase0-baseline-acceptance-2026-06-19.md`。结果：已完成；本阶段没有功能代码改动，只有记录与计划文档。
+
 目标：在做任何功能实现前，固定当前源码事实、复现用户两个 Dock 问题，并建立本轮最小回归检查。
 
 工作范围：
@@ -95,6 +97,8 @@
 
 ## 阶段 2：Dock 数量过多不出屏
 
+阶段 2 验收记录：`phase2-dock-overflow-acceptance-2026-06-19.md`。结果：已完成；实现 Dock 内部宽度预算、运行窗口 icon-only 降级、 pinned/window 水平受限滚动，并修复验收中发现的滚动容器导致的垂直位置偏移。
+
 目标：无论固定项和窗口数量多少，Dock 内容都不能挤出屏幕，也不能遮挡到不可点击。
 
 当前源码事实：
@@ -132,6 +136,8 @@
 
 ## 阶段 3：Dock 与窗口上下文菜单
 
+阶段 3 验收记录：`phase3-dock-window-menu-acceptance-2026-06-19.md`。结果：已完成；实现运行窗口右键菜单、目标窗口 by-id 关闭、固定/取消固定、最小化/恢复、工作区移动入口和禁用态，并已部署到当前 Tahoe Quickshell 配置。
+
 目标：把 Dock 从“只能启动/激活/最小化”补到日用窗口管理入口。
 
 当前源码事实：
@@ -158,6 +164,8 @@
 
 ## 阶段 4：窗口总览与任务切换
 
+阶段 4 验收记录：`phase4-window-navigation-acceptance-2026-06-19.md`。结果：已完成；实现基于 `recentWindowList` 的 Tahoe 任务切换器、基于 `windowList`/`workspaceList` 的窗口总览、Quickshell IPC 入口和 Tahoe niri 快捷键，同时保留 niri 原生 overview。
+
 目标：补齐对标 macOS Mission Control / App Expose 和 Windows Task View 的窗口导航能力。
 
 当前源码事实：
@@ -183,6 +191,8 @@
 
 ## 阶段 5：Spotlight/Search Provider 架构
 
+阶段 5 验收记录：`phase5-search-provider-acceptance-2026-06-19.md`。结果：已完成；新增统一 `Search.qml` provider 服务，迁移应用搜索和截图动作，并增加计算器、命令前缀和设置项入口。文件搜索按本阶段建议保留为后续评估项，未在本阶段接入同步文件扫描。
+
 目标：把 Spotlight 从应用启动器扩展成日用搜索入口。
 
 当前源码事实：
@@ -206,6 +216,8 @@
 退出门槛：阶段 5 全部验收通过后，才允许进入阶段 6。
 
 ## 阶段 6：Settings / About / 系统健康页
+
+阶段 6 验收记录：`phase6-settings-health-about-acceptance-2026-06-19.md`。结果：已完成；新增 Tahoe Settings/About/系统健康 overlay、真实依赖探测服务、持久化桌面偏好，并已部署到当前 Tahoe Quickshell 配置。
 
 目标：把分散的系统能力收束成可检查、可配置、可诊断的桌面设置入口。
 
@@ -231,6 +243,8 @@
 退出门槛：阶段 6 全部验收通过后，才允许进入阶段 7。
 
 ## 阶段 7：应用兼容性与原生菜单
+
+阶段 7 验收记录：`phase7-app-compat-native-menu-acceptance-2026-06-19.md`。结果：已完成；实现 AppMenu registrar / focused app DBusMenu 探测、真实菜单项渲染与触发、AppMenu/legacy tray 健康诊断，并建立常用应用兼容矩阵。
 
 目标：减少“系统能开但常用应用体验不像桌面”的落差。
 

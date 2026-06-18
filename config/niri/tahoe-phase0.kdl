@@ -21,7 +21,7 @@ output "eDP-2" {
     scale 1.25
     transform "normal"
     position x=0 y=0
-    variable-refresh-rate
+    // variable-refresh-rate
 }
 
 layout {
@@ -411,6 +411,15 @@ binds {
     XF86MonBrightnessDown allow-when-locked=true { spawn "brightnessctl" "--class=backlight" "set" "10%-"; }
 
     Mod+O repeat=false { toggle-overview; }
+    Mod+Ctrl+Tab repeat=false hotkey-overlay-title="Tahoe Window Switcher" {
+        spawn-sh "qs_bin=\"${TAHOE_QUICKSHELL_BIN:-$HOME/.local/bin/quickshell}\"; cfg=\"${TAHOE_CONFIG_DIR:-$HOME/.config/quickshell/tahoe}\"; [ -x \"$qs_bin\" ] || qs_bin=quickshell; \"$qs_bin\" ipc -p \"$cfg\" call tahoe cycleTaskSwitcher 1 >/dev/null 2>&1 || true";
+    }
+    Mod+Ctrl+Shift+Tab repeat=false hotkey-overlay-title="Tahoe Window Switcher Previous" {
+        spawn-sh "qs_bin=\"${TAHOE_QUICKSHELL_BIN:-$HOME/.local/bin/quickshell}\"; cfg=\"${TAHOE_CONFIG_DIR:-$HOME/.config/quickshell/tahoe}\"; [ -x \"$qs_bin\" ] || qs_bin=quickshell; \"$qs_bin\" ipc -p \"$cfg\" call tahoe cycleTaskSwitcher -1 >/dev/null 2>&1 || true";
+    }
+    Mod+Shift+O repeat=false hotkey-overlay-title="Tahoe Window Overview" {
+        spawn-sh "qs_bin=\"${TAHOE_QUICKSHELL_BIN:-$HOME/.local/bin/quickshell}\"; cfg=\"${TAHOE_CONFIG_DIR:-$HOME/.config/quickshell/tahoe}\"; [ -x \"$qs_bin\" ] || qs_bin=quickshell; \"$qs_bin\" ipc -p \"$cfg\" call tahoe toggleWindowOverview >/dev/null 2>&1 || true";
+    }
 
     Mod+Q repeat=false { close-window; }
 

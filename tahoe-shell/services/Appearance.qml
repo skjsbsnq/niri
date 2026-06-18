@@ -40,6 +40,16 @@ Item {
         setNightMode(!nightMode);
     }
 
+    function setColorTemperature(value) {
+        var next = Math.max(2500, Math.min(6500, Math.round(Number(value) || 4500)));
+        if (appearanceAdapter.colorTemperature === next)
+            return;
+
+        appearanceAdapter.colorTemperature = next;
+        appearanceFile.writeAdapter();
+        applyNightMode();
+    }
+
     function applyDarkMode() {
         var scheme = darkMode ? "prefer-dark" : "prefer-light";
         var gtkTheme = darkMode ? "Adwaita-dark" : "Adwaita";

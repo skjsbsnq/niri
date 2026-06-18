@@ -17,6 +17,9 @@ PanelWindow {
     readonly property int fallbackTop: 28
     readonly property int popupGap: -1
     readonly property int screenWidth: PopupGeometry.screenWidth(root.screen, root.width)
+    readonly property int screenHeight: Math.max(1, PopupGeometry.numberOr(root.screen && root.screen.height, root.height))
+    readonly property int maxPanelHeight: Math.max(180, screenHeight - popupTopMargin - edgePadding)
+    readonly property bool nativeMenuAvailable: root.appMenuService && root.appMenuService.nativeMenuAvailable
     readonly property int popupLeftMargin: anchorRect
         ? PopupGeometry.popupLeft(anchorRect, root.implicitWidth, screenWidth, edgePadding, 96)
         : 96
@@ -30,10 +33,15 @@ PanelWindow {
     visible: open || panel.opacity > 0.01
     aboveWindows: true
     exclusionMode: ExclusionMode.Ignore
-    implicitWidth: 236
-    implicitHeight: panel.implicitHeight
+    implicitWidth: 286
+    implicitHeight: panel.height
     color: "transparent"
     WlrLayershell.namespace: "tahoe-application-menu"
+
+    onOpenChanged: {
+        if (open && appMenuService)
+            appMenuService.refresh();
+    }
 
     anchors {
         top: true
@@ -69,7 +77,7 @@ PanelWindow {
         property real contentScale: root.open ? 1 : 0.98
 
         width: parent.width
-        implicitHeight: content.implicitHeight + 16
+        implicitHeight: Math.min(root.maxPanelHeight, content.implicitHeight + 16)
         height: implicitHeight
         radius: tahoeGlassRadius
         color: GlassStyle.FillPanelBright
@@ -99,88 +107,129 @@ PanelWindow {
             NumberAnimation { duration: 130; easing.type: Easing.OutCubic }
         }
 
-        ColumnLayout {
-            id: content
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.top: parent.top
+        Flickable {
+            anchors.fill: parent
             anchors.margins: 8
-            spacing: 3
+            contentWidth: width
+            contentHeight: content.implicitHeight
+            clip: true
+            boundsBehavior: Flickable.StopAtBounds
 
-            RowLayout {
-                Layout.fillWidth: true
-                Layout.preferredHeight: 34
-                spacing: 8
+            ColumnLayout {
+                id: content
+                width: parent.width
+                spacing: 3
 
-                Rectangle {
-                    Layout.preferredWidth: 24
-                    Layout.preferredHeight: 24
-                    radius: 8
-                    color: "#48ffffff"
-                    border.color: "#40ffffff"
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 34
+                    spacing: 8
 
-                    Text {
-                        anchors.centerIn: parent
-                        text: "\ue8a0"
-                        color: "#202124"
-                        font.family: "Material Icons"
-                        font.pixelSize: 16
+                    Rectangle {
+                        Layout.preferredWidth: 24
+                        Layout.preferredHeight: 24
+                        radius: 8
+                        color: "#48ffffff"
+                        border.color: "#40ffffff"
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: root.nativeMenuAvailable ? "\ue86c" : "\ue8a0"
+                            color: "#202124"
+                            font.family: "Material Icons"
+                            font.pixelSize: 16
+                        }
+                    }
+
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        Layout.alignment: Qt.AlignVCenter
+                        spacing: 1
+
+                        Text {
+                            Layout.fillWidth: true
+                            text: root.appMenuService ? root.appMenuService.activeTitle : "桌面"
+                            color: "#1d1d1f"
+                            font.pixelSize: 12
+                            font.weight: Font.DemiBold
+                            elide: Text.ElideRight
+                            verticalAlignment: Text.AlignVCenter
+                        }
+
+                        Text {
+                            Layout.fillWidth: true
+                            text: root.appMenuService ? root.appMenuService.menuStatusText : ""
+                            color: "#721d1d1f"
+                            font.pixelSize: 10
+                            elide: Text.ElideRight
+                            maximumLineCount: 1
+                            visible: text.length > 0
+                        }
                     }
                 }
 
-                Text {
+                Rectangle {
                     Layout.fillWidth: true
-                    text: root.appMenuService ? root.appMenuService.activeTitle : "桌面"
-                    color: "#1d1d1f"
-                    font.pixelSize: 12
-                    font.weight: Font.DemiBold
-                    elide: Text.ElideRight
-                    verticalAlignment: Text.AlignVCenter
+                    Layout.preferredHeight: 1
+                    color: "#22000000"
                 }
-            }
 
-            Rectangle {
-                Layout.fillWidth: true
-                Layout.preferredHeight: 1
-                color: "#22000000"
-            }
+                Repeater {
+                    model: root.nativeMenuAvailable && root.appMenuService ? root.appMenuService.nativeMenuItems : []
 
-            MenuRow {
-                text: root.appMenuService && root.appMenuService.registrarAvailable ? "原生菜单" : "应用菜单"
-                icon: root.appMenuService && root.appMenuService.registrarAvailable ? "\ue86c" : "\ue88f"
-                enabledRow: false
-            }
+                    delegate: NativeMenuRow {
+                        required property var modelData
 
-            MenuRow {
-                text: "固定到 Dock"
-                icon: "\ue866"
-                enabledRow: root.appMenuService && root.appMenuService.hasFocusedWindow
-                onActivated: {
-                    if (root.appMenuService)
-                        root.appMenuService.pinFocusedApp();
-                    root.closeRequested();
+                        Layout.fillWidth: true
+                        item: modelData
+                    }
                 }
-            }
 
-            MenuRow {
-                text: "显示窗口"
-                icon: "\ue8d0"
-                enabledRow: root.appMenuService && root.appMenuService.hasFocusedWindow
-                onActivated: {
-                    if (root.appMenuService)
-                        root.appMenuService.activateFocusedWindow();
-                    root.closeRequested();
+                MenuRow {
+                    text: root.appMenuService ? root.appMenuService.nativeMenuStatus : "应用菜单不可用"
+                    icon: root.appMenuService && root.appMenuService.registrarAvailable ? "\ue86c" : "\ue88f"
+                    enabledRow: false
+                    visible: !root.nativeMenuAvailable
                 }
-            }
 
-            MenuRow {
-                text: "最小化"
-                icon: "\ue15b"
-                enabledRow: root.appMenuService && root.appMenuService.hasFocusedWindow
-                onActivated: {
-                    if (root.appMenuService)
-                        root.appMenuService.minimizeFocusedWindow();
-                    root.closeRequested();
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 1
+                    color: "#22000000"
+                    visible: root.nativeMenuAvailable
+                }
+
+                MenuRow {
+                    text: "固定到 Dock"
+                    icon: "\ue866"
+                    enabledRow: root.appMenuService && root.appMenuService.hasFocusedWindow
+                    onActivated: {
+                        if (root.appMenuService)
+                            root.appMenuService.pinFocusedApp();
+                        root.closeRequested();
+                    }
+                }
+
+                MenuRow {
+                    text: "显示窗口"
+                    icon: "\ue8d0"
+                    enabledRow: root.appMenuService && root.appMenuService.hasFocusedWindow
+                    onActivated: {
+                        if (root.appMenuService)
+                            root.appMenuService.activateFocusedWindow();
+                        root.closeRequested();
+                    }
+                }
+
+                MenuRow {
+                    text: "最小化"
+                    icon: "\ue15b"
+                    enabledRow: root.appMenuService && root.appMenuService.hasFocusedWindow
+                    onActivated: {
+                        if (root.appMenuService)
+                            root.appMenuService.minimizeFocusedWindow();
+                        root.closeRequested();
+                    }
                 }
             }
         }
@@ -242,6 +291,90 @@ PanelWindow {
             onClicked: {
                 if (row.enabledRow)
                     row.activated();
+            }
+        }
+    }
+
+    component NativeMenuRow: Item {
+        id: row
+
+        property var item
+        readonly property string kind: item ? String(item.kind || "item") : "item"
+        readonly property bool separator: kind === "separator"
+        readonly property bool header: kind === "header"
+        readonly property bool enabledRow: !!item && !!item.enabled && !separator && !header
+        readonly property int indent: item ? Math.max(0, Number(item.indent || 0)) : 0
+        readonly property bool checked: !!item && !!item.checked
+        readonly property bool hasChildren: !!item && !!item.hasChildren
+
+        Layout.preferredHeight: separator ? 7 : 28
+        opacity: enabledRow || header ? 1 : 0.48
+
+        Rectangle {
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            height: 1
+            color: "#22000000"
+            visible: row.separator
+        }
+
+        Rectangle {
+            anchors.fill: parent
+            radius: 8
+            color: rowMouse.containsMouse && row.enabledRow ? "#70ffffff" : "transparent"
+            visible: !row.separator
+        }
+
+        Text {
+            anchors.left: parent.left
+            anchors.leftMargin: 8 + row.indent * 14
+            anchors.verticalCenter: parent.verticalCenter
+            text: row.checked ? "\ue5ca" : ""
+            color: row.header ? "#541d1d1f" : "#1d1d1f"
+            font.family: "Material Icons"
+            font.pixelSize: 15
+            visible: !row.separator
+            opacity: row.checked ? 1 : 0
+        }
+
+        Text {
+            anchors.left: parent.left
+            anchors.leftMargin: 30 + row.indent * 14
+            anchors.right: submenuGlyph.left
+            anchors.rightMargin: 8
+            anchors.verticalCenter: parent.verticalCenter
+            text: row.item ? row.item.text : ""
+            color: row.header ? "#721d1d1f" : "#1d1d1f"
+            font.pixelSize: row.header ? 11 : 12
+            font.weight: row.header ? Font.DemiBold : Font.Normal
+            elide: Text.ElideRight
+            visible: !row.separator
+        }
+
+        Text {
+            id: submenuGlyph
+            anchors.right: parent.right
+            anchors.rightMargin: 8
+            anchors.verticalCenter: parent.verticalCenter
+            text: "\ue5cc"
+            color: "#661d1d1f"
+            font.family: "Material Icons"
+            font.pixelSize: 15
+            visible: !row.separator && row.hasChildren && !row.header
+        }
+
+        MouseArea {
+            id: rowMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: row.enabledRow ? Qt.PointingHandCursor : Qt.ArrowCursor
+            enabled: row.enabledRow
+            onClicked: {
+                if (!root.appMenuService)
+                    return;
+                root.appMenuService.activateNativeItem(row.item);
+                root.closeRequested();
             }
         }
     }

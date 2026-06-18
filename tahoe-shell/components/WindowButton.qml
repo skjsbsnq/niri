@@ -21,12 +21,15 @@ Item {
     property real bounceOffset: 0
     property var dockWindow
     property var dockSurfaceItem
+    readonly property bool hovered: windowMouse.containsMouse
     readonly property bool active: windowModel ? !!windowModel.isFocused : !!(toplevel && toplevel.activated)
     readonly property bool minimized: windowModel ? !!windowModel.isMinimized : !!(toplevel && toplevel.minimized)
     readonly property string label: appsService ? appsService.toplevelLabel(windowModel || toplevel) : String((windowModel || toplevel) ? (windowModel || toplevel).title || (windowModel || toplevel).appId || "窗口" : "窗口")
+    readonly property bool showHoverLabel: !showTitle && hovered && label.length > 0
     readonly property real lift: (magnification - 1.0) * 20
 
     signal activateRequested(var toplevel)
+    signal contextMenuRequested(var window)
     signal dockPointerMoved(real x, int buttons)
     signal dockPointerEntered()
     signal dockPointerExited()
@@ -145,7 +148,43 @@ Item {
         opacity: (root.windowModel || root.toplevel) ? 1 : 0
     }
 
+    Rectangle {
+        id: hoverLabel
+
+        anchors.horizontalCenter: icon.horizontalCenter
+        z: 10
+        y: root.showHoverLabel ? -30 : -20
+        width: Math.max(hoverLabelText.implicitWidth + 18, 48)
+        height: 24
+        radius: 7
+        color: "#d9f7f8fb"
+        border.color: "#70ffffff"
+        opacity: root.showHoverLabel ? 1 : 0
+        visible: opacity > 0.01
+
+        Text {
+            id: hoverLabelText
+
+            anchors.centerIn: parent
+            text: root.label
+            color: "#202124"
+            font.pixelSize: 11
+            elide: Text.ElideRight
+            maximumLineCount: 1
+        }
+
+        Behavior on opacity {
+            NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
+        }
+
+        Behavior on y {
+            NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
+        }
+    }
+
     MouseArea {
+        id: windowMouse
+
         anchors.fill: parent
         hoverEnabled: true
         acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
@@ -161,8 +200,7 @@ Item {
         onClicked: function(mouse) {
             root.bounce();
             if (mouse.button === Qt.RightButton) {
-                if (root.appsService)
-                    root.appsService.pinWindow(root.windowModel || root.toplevel);
+                root.contextMenuRequested(root.windowModel || root.toplevel);
             } else if (mouse.button === Qt.MiddleButton) {
                 root.minimize();
             } else {

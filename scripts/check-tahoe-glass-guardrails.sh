@@ -20,6 +20,19 @@ panel_count=0
 glass_file_count=0
 region_count=0
 
+check_niri_vrr_disabled() {
+  if [[ ! -f "$NIRI_CONFIG_SRC" ]]; then
+    fail "missing niri config: $NIRI_CONFIG_SRC"
+    return
+  fi
+
+  if grep -nE '^[[:space:]]*variable-refresh-rate([[:space:]]|$)' "$NIRI_CONFIG_SRC"; then
+    fail "niri Tahoe config must not enable variable-refresh-rate by default"
+  else
+    log "niri config keeps variable-refresh-rate disabled"
+  fi
+}
+
 check_no_broad_quickshell_rule() {
   if [[ ! -f "$NIRI_CONFIG_SRC" ]]; then
     fail "missing niri config: $NIRI_CONFIG_SRC"
@@ -163,6 +176,7 @@ check_phase5_popup_region_geometry_static() {
 }
 
 main() {
+  check_niri_vrr_disabled
   check_no_broad_quickshell_rule
   check_no_tahoe_background_effect_calls
   check_panel_namespaces

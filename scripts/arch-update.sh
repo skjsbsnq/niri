@@ -62,6 +62,7 @@ XWAYLAND_SATELLITE_GLAMOR_WRAPPER="${XWAYLAND_SATELLITE_GLAMOR_WRAPPER:-"$XWAYLA
 XWAYLAND_SATELLITE_BUILD_STAMP="${XWAYLAND_SATELLITE_BUILD_STAMP:-"$TAHOE_STATE_DIR/xwayland-satellite-minimize.stamp"}"
 RUN_TAHOE_GLASS_GUARDRAILS="${RUN_TAHOE_GLASS_GUARDRAILS:-true}"
 TAHOE_GLASS_GUARDRAILS_SCRIPT="${TAHOE_GLASS_GUARDRAILS_SCRIPT:-"$REPO_DIR/scripts/check-tahoe-glass-guardrails.sh"}"
+ALLOW_NIRI_VRR="${ALLOW_NIRI_VRR:-false}"
 
 QUICKSHELL_BUILD_PACKAGES=(
   base-devel
@@ -425,6 +426,17 @@ files_differ() {
   fi
 }
 
+assert_niri_config_vrr_policy() {
+  local config="$1"
+
+  [[ -f "$config" ]] || return
+  [[ "$ALLOW_NIRI_VRR" == true ]] && return
+
+  if grep -nE '^[[:space:]]*variable-refresh-rate([[:space:]]|$)' "$config"; then
+    die "niri config enables variable-refresh-rate: $config; keep it commented out or set ALLOW_NIRI_VRR=true to override"
+  fi
+}
+
 desktop_needs_update() {
   local target="$1"
   local exec_path="$2"
@@ -499,6 +511,8 @@ deploy_niri_config() {
     log "skipping niri config deploy; source file does not exist: $NIRI_CONFIG_SRC"
     return
   fi
+
+  assert_niri_config_vrr_policy "$NIRI_CONFIG_SRC"
 
   log "deploying niri Tahoe config to $NIRI_CONFIG_TARGET"
   mkdir -p "$NIRI_CONFIG_DIR"
@@ -930,6 +944,7 @@ main() {
     scripts_changed=true
   fi
 
+  assert_niri_config_vrr_policy "$NIRI_CONFIG_SRC"
   run_tahoe_glass_guardrails
 
   if [[ "$need_niri_build" == true ]]; then

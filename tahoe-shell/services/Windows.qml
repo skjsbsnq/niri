@@ -40,6 +40,7 @@ Item {
     property var ipcWindows: []
     property var ipcWindowsById: ({})
     property var eventWindowOrder: []
+    property var ipcWorkspaces: []
     property var workspacesById: ({})
 
     readonly property bool ipcAvailable: available
@@ -47,6 +48,7 @@ Item {
     readonly property var windowList: mergeWindowModels(toplevelList, ipcWindows)
     readonly property var recentWindowList: sortedRecentWindows(windowList)
     readonly property var focusedWindow: findFocusedWindow(windowList)
+    readonly property var workspaceList: sortedWorkspaceList(ipcWorkspaces)
 
     function setValue(name, value) {
         if (root[name] !== value)
@@ -77,6 +79,11 @@ Item {
         }
 
         return null;
+    }
+
+    function hasWindowId(idOrWindow) {
+        var window = windowFromIdOrObject(idOrWindow);
+        return !!window && window.id !== undefined && window.id !== null;
     }
 
     function activate(idOrWindow) {
@@ -126,6 +133,36 @@ Item {
 
         if (window.id !== undefined && window.id !== null)
             action(["restore-window", "--id", String(window.id)]);
+    }
+
+    function closeWindow(idOrWindow) {
+        var window = windowFromIdOrObject(idOrWindow);
+        if (!hasWindowId(window))
+            return;
+
+        action(["close-window", "--id", String(window.id)]);
+    }
+
+    function moveWindowToWorkspace(idOrWindow, workspaceOrReference, focus) {
+        var window = windowFromIdOrObject(idOrWindow);
+        if (!hasWindowId(window))
+            return;
+
+        var reference = typeof workspaceOrReference === "object"
+            ? workspaceActionReference(workspaceOrReference, 0)
+            : String(workspaceOrReference || "").trim();
+        if (reference.length === 0)
+            return;
+
+        var shouldFocus = focus === undefined ? false : !!focus;
+        action([
+            "move-window-to-workspace",
+            "--window-id",
+            String(window.id),
+            "--focus",
+            shouldFocus ? "true" : "false",
+            reference
+        ]);
     }
 
     function setRectangle(idOrWindow, sourceWindow, x, y, width, height) {
@@ -241,7 +278,7 @@ Item {
         applyWindowsFromMap();
     }
 
-    function closeWindow(id) {
+    function removeClosedWindow(id) {
         var key = String(id);
         if (!root.ipcWindowsById[key])
             return;
@@ -288,14 +325,17 @@ Item {
 
     function loadWorkspaces(rawWorkspaces) {
         var byId = {};
+        var normalized = [];
         var workspaces = Array.isArray(rawWorkspaces) ? rawWorkspaces : [];
         for (var i = 0; i < workspaces.length; i++) {
-            var workspace = workspaces[i];
+            var workspace = normalizeWorkspace(workspaces[i]);
             if (!workspace || workspace.id === undefined || workspace.id === null)
                 continue;
 
             byId[String(workspace.id)] = workspace;
+            normalized.push(workspace);
         }
+        root.ipcWorkspaces = normalized;
         root.workspacesById = byId;
         applyWindowsFromMap();
     }
@@ -312,7 +352,7 @@ Item {
             } else if (event.WindowOpenedOrChanged) {
                 upsertWindow(event.WindowOpenedOrChanged.window);
             } else if (event.WindowClosed) {
-                closeWindow(event.WindowClosed.id);
+                removeClosedWindow(event.WindowClosed.id);
             } else if (event.WindowFocusChanged) {
                 setEventFocus(event.WindowFocusChanged.id);
                 applyWindowsFromMap();
@@ -367,6 +407,26 @@ Item {
             result.push(buildWindowModel(null, list[j]));
         }
 
+        return result;
+    }
+
+    function sortedWorkspaceList(workspaces) {
+        var result = (workspaces || []).slice();
+        result.sort(function(left, right) {
+            var leftOutput = String(left && left.output ? left.output : "");
+            var rightOutput = String(right && right.output ? right.output : "");
+            if (leftOutput < rightOutput)
+                return -1;
+            if (leftOutput > rightOutput)
+                return 1;
+
+            var leftIndex = workspaceSortIndex(left, 0);
+            var rightIndex = workspaceSortIndex(right, 0);
+            if (leftIndex !== rightIndex)
+                return leftIndex - rightIndex;
+
+            return Number(left && left.id || 0) - Number(right && right.id || 0);
+        });
         return result;
     }
 
@@ -538,6 +598,70 @@ Item {
         return String((fallbackIndex || 0) + 1);
     }
 
+    function workspaceDisplayLabel(workspace, fallbackIndex) {
+        if (!workspace)
+            return "工作区";
+
+        var name = String(workspace.name || "").trim();
+        if (name.length > 0)
+            return name;
+
+        var index = workspaceSortIndex(workspace, fallbackIndex);
+        if (index > 0)
+            return "工作区 " + String(index);
+
+        var id = String(workspace.id || "").trim();
+        return id.length > 0 ? "工作区 " + id : "工作区";
+    }
+
+    function workspaceActionReference(workspace, fallbackIndex) {
+        if (!workspace)
+            return "";
+
+        var name = String(workspace.name || "").trim();
+        if (name.length > 0)
+            return name;
+
+        var index = workspaceSortIndex(workspace, fallbackIndex);
+        if (index > 0)
+            return String(index);
+
+        var id = String(workspace.id || "").trim();
+        return id;
+    }
+
+    function workspaceSortIndex(workspace, fallbackIndex) {
+        if (!workspace)
+            return (fallbackIndex || 0) + 1;
+
+        var idx = Number(workspace.idx);
+        if (isFinite(idx) && idx > 0)
+            return idx;
+
+        if (workspace.coordinates && workspace.coordinates.length > 0) {
+            var coordinate = Number(workspace.coordinates[0]);
+            if (isFinite(coordinate))
+                return coordinate + 1;
+        }
+
+        var id = Number(workspace.id);
+        if (isFinite(id) && id > 0)
+            return id;
+
+        return (fallbackIndex || 0) + 1;
+    }
+
+    function isWindowOnWorkspace(window, workspace) {
+        window = windowFromIdOrObject(window);
+        if (!window || !workspace)
+            return false;
+        if (window.workspaceId === undefined || window.workspaceId === null)
+            return false;
+        if (workspace.id === undefined || workspace.id === null)
+            return false;
+        return String(window.workspaceId) === String(workspace.id);
+    }
+
     function displayableWindowsets(windowsets) {
         var result = [];
         if (!windowsets)
@@ -628,6 +752,27 @@ Item {
 
         var number = Number(value);
         return isFinite(number) ? number : null;
+    }
+
+    function normalizeWorkspace(raw) {
+        if (!raw)
+            return null;
+
+        var id = asOptionalNumber(raw.id);
+        if (id === null)
+            return null;
+
+        return {
+            "id": id,
+            "idx": asOptionalNumber(raw.idx),
+            "name": textOrEmpty(raw.name),
+            "output": textOrEmpty(raw.output),
+            "isActive": !!(raw.is_active !== undefined ? raw.is_active : raw.isActive),
+            "isFocused": !!(raw.is_focused !== undefined ? raw.is_focused : raw.isFocused),
+            "isUrgent": !!(raw.is_urgent !== undefined ? raw.is_urgent : raw.isUrgent),
+            "activeWindowId": asOptionalNumber(raw.active_window_id !== undefined ? raw.active_window_id : raw.activeWindowId),
+            "coordinates": raw.coordinates || null
+        };
     }
 
     Timer {

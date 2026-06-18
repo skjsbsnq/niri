@@ -561,8 +561,8 @@ Item {
         pinAppId(id);
     }
 
-    function unpinApp(app) {
-        var id = appStableId(app);
+    function unpinAppId(id) {
+        id = String(id || "").trim();
         if (id.length === 0)
             return;
 
@@ -576,6 +576,10 @@ Item {
         setPinnedIds(next);
     }
 
+    function unpinApp(app) {
+        unpinAppId(appStableId(app));
+    }
+
     function togglePinnedApp(app) {
         if (isPinnedApp(app))
             unpinApp(app);
@@ -583,29 +587,77 @@ Item {
             pinApp(app);
     }
 
-    function pinWindow(window) {
+    function windowAppId(window) {
         if (!window)
-            return;
+            return "";
 
         var appId = String(window.appId || window.app_id || "").trim();
         if (appId.length === 0 && window.toplevel)
             appId = String(window.toplevel.appId || window.toplevel.app_id || "").trim();
+        return appId;
+    }
+
+    function windowTitle(window) {
+        if (!window)
+            return "";
+
         var title = String(window.title || "").trim();
         if (title.length === 0 && window.toplevel)
             title = String(window.toplevel.title || "").trim();
+        return title;
+    }
 
-        var app = findApplication([
+    function appForWindow(window) {
+        var appId = windowAppId(window);
+        var title = windowTitle(window);
+        return findApplication([
             appId,
             normalizedAppToken(appId),
             appId + ".desktop",
             title
         ]);
+    }
+
+    function isWindowPinned(window) {
+        if (!window)
+            return false;
+
+        var appId = windowAppId(window);
+        var app = appForWindow(window);
+        return (app && isPinnedApp(app)) || isPinnedId(appId);
+    }
+
+    function pinWindow(window) {
+        if (!window)
+            return;
+
+        var appId = windowAppId(window);
+        var app = appForWindow(window);
         if (app) {
             pinApp(app);
             return;
         }
 
         pinAppId(appId);
+    }
+
+    function unpinWindow(window) {
+        if (!window)
+            return;
+
+        var appId = windowAppId(window);
+        var app = appForWindow(window);
+        if (app)
+            unpinApp(app);
+        if (appId.length > 0)
+            unpinAppId(appId);
+    }
+
+    function togglePinnedWindow(window) {
+        if (isWindowPinned(window))
+            unpinWindow(window);
+        else
+            pinWindow(window);
     }
 
     function movePinnedApp(fromIndex, toIndex) {

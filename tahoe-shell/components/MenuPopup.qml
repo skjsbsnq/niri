@@ -27,6 +27,7 @@ PanelWindow {
         : 0
 
     signal closeRequested()
+    signal openSettingsRequested(string page)
 
     visible: open || menuSurface.opacity > 0.01
     aboveWindows: true
@@ -133,7 +134,10 @@ PanelWindow {
                 text: "关于 niri"
                 icon: "\ue88e"
                 bold: true
-                onActivated: root.closeRequested()
+                onActivated: {
+                    root.openSettingsRequested("about");
+                    root.closeRequested();
+                }
             }
 
             Rectangle {
@@ -157,7 +161,10 @@ PanelWindow {
             MenuRow {
                 text: "设置"
                 icon: "\ue8b8"
-                onActivated: root.closeRequested()
+                onActivated: {
+                    root.openSettingsRequested("settings");
+                    root.closeRequested();
+                }
             }
 
             Rectangle {

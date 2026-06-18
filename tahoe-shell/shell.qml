@@ -5,6 +5,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import Quickshell
+import Quickshell.Io
 import "components"
 import "services"
 
@@ -25,6 +26,21 @@ ShellRoot {
     property var trayMenuItem: null
     property var topBarPopupAnchorRect: null
     property string topBarPopupScreenName: ""
+    property bool dockAppMenuOpen: false
+    property var dockAppMenuApp: null
+    property var dockAppMenuAnchorRect: null
+    property string dockAppMenuScreenName: ""
+    property bool dockWindowMenuOpen: false
+    property var dockWindowMenuWindow: null
+    property var dockWindowMenuAnchorRect: null
+    property string dockWindowMenuScreenName: ""
+    property bool taskSwitcherOpen: false
+    property string taskSwitcherScreenName: ""
+    property bool windowOverviewOpen: false
+    property string windowOverviewScreenName: ""
+    property bool settingsPanelOpen: false
+    property string settingsPanelScreenName: ""
+    property string settingsPanelPage: "settings"
     // Global default font. Noto Sans CJK SC covers Chinese and Latin; the
     // fontconfig fallback installed by arch-zh-setup handles emoji/edge cases.
     property string baseFontFamily: "Noto Sans CJK SC"
@@ -37,8 +53,26 @@ ShellRoot {
     // Blur/glass region geometry stays on bounded NumberAnimation paths.
     property bool useSpring: true
 
+    signal taskSwitcherCycleRequested(int direction)
+    signal taskSwitcherConfirmRequested()
+
     function screenName(screen) {
         return screen ? String(screen.name || "") : "";
+    }
+
+    function navigationScreenName() {
+        var focused = niri ? niri.focusedWindow : null;
+        var output = focused ? String(focused.output || "").trim() : "";
+        if (output.length > 0)
+            return output;
+
+        var screens = [...Quickshell.screens];
+        return screens.length > 0 ? screenName(screens[0]) : "";
+    }
+
+    function navigationOpenFor(open, targetScreenName, screen) {
+        var target = String(targetScreenName || "");
+        return open && (target.length === 0 || target === screenName(screen));
     }
 
     function prepareTopBarPopup(screen, anchorRect) {
@@ -48,6 +82,117 @@ ShellRoot {
 
     function topBarPopupOpenFor(open, screen) {
         return open && topBarPopupScreenName === screenName(screen);
+    }
+
+    function prepareDockAppMenu(screen, app, anchorRect) {
+        dockAppMenuScreenName = screenName(screen);
+        dockAppMenuApp = app || null;
+        dockAppMenuAnchorRect = anchorRect || null;
+    }
+
+    function dockAppMenuOpenFor(screen) {
+        return dockAppMenuOpen && dockAppMenuScreenName === screenName(screen);
+    }
+
+    function closeDockAppMenu() {
+        dockAppMenuOpen = false;
+    }
+
+    function prepareDockWindowMenu(screen, window, anchorRect) {
+        dockWindowMenuScreenName = screenName(screen);
+        dockWindowMenuWindow = window || null;
+        dockWindowMenuAnchorRect = anchorRect || null;
+    }
+
+    function dockWindowMenuOpenFor(screen) {
+        return dockWindowMenuOpen && dockWindowMenuScreenName === screenName(screen);
+    }
+
+    function closeDockWindowMenu() {
+        dockWindowMenuOpen = false;
+    }
+
+    function closeDockMenus() {
+        closeDockAppMenu();
+        closeDockWindowMenu();
+    }
+
+    function closeTaskSwitcher() {
+        taskSwitcherOpen = false;
+    }
+
+    function closeWindowOverview() {
+        windowOverviewOpen = false;
+    }
+
+    function closeSettingsPanel() {
+        settingsPanelOpen = false;
+    }
+
+    function closeWindowNavigation(except) {
+        if (except !== "taskSwitcher")
+            closeTaskSwitcher();
+        if (except !== "windowOverview")
+            closeWindowOverview();
+    }
+
+    function prepareWindowNavigation() {
+        var target = navigationScreenName();
+        taskSwitcherScreenName = target;
+        windowOverviewScreenName = target;
+    }
+
+    function cycleTaskSwitcher(direction) {
+        if (!niri || !niri.recentWindowList || niri.recentWindowList.length === 0)
+            return;
+
+        prepareWindowNavigation();
+        closeTopBarPopups("taskSwitcher");
+        closeWindowNavigation("taskSwitcher");
+        launchpadOpen = false;
+        spotlightOpen = false;
+        taskSwitcherOpen = true;
+        taskSwitcherCycleRequested(direction);
+    }
+
+    function showTaskSwitcher() {
+        cycleTaskSwitcher(0);
+    }
+
+    function confirmTaskSwitcher() {
+        if (taskSwitcherOpen)
+            taskSwitcherConfirmRequested();
+    }
+
+    function openWindowOverview() {
+        prepareWindowNavigation();
+        closeTopBarPopups("windowOverview");
+        closeWindowNavigation("windowOverview");
+        launchpadOpen = false;
+        spotlightOpen = false;
+        windowOverviewOpen = true;
+    }
+
+    function toggleWindowOverview() {
+        if (windowOverviewOpen) {
+            closeWindowOverview();
+        } else {
+            openWindowOverview();
+        }
+    }
+
+    function openSettingsPanel(page) {
+        var targetPage = String(page || "settings");
+        if (targetPage.length === 0)
+            targetPage = "settings";
+
+        settingsPanelPage = targetPage;
+        settingsPanelScreenName = navigationScreenName();
+        closeTopBarPopups("settings");
+        closeWindowNavigation("");
+        launchpadOpen = false;
+        spotlightOpen = false;
+        settingsPanelOpen = true;
     }
 
     function closeTopBarPopups(except) {
@@ -71,6 +216,13 @@ ShellRoot {
             trayMenuOpen = false;
             trayMenuItem = null;
         }
+        if (except !== "dockAppMenu")
+            closeDockAppMenu();
+        if (except !== "dockWindowMenu")
+            closeDockWindowMenu();
+        if (except !== "settings")
+            closeSettingsPanel();
+        closeWindowNavigation(except);
     }
 
     onWifiPopupOpenChanged: if (wifiPopupOpen) {
@@ -84,6 +236,9 @@ ShellRoot {
         fanPopupOpen = false;
         clipboardPopupOpen = false;
         trayMenuOpen = false;
+        closeDockMenus();
+        closeWindowNavigation("");
+        closeSettingsPanel();
     }
 
     // Register the Material Icons font once for the whole shell. Used by the
@@ -108,6 +263,23 @@ ShellRoot {
         id: niri
     }
 
+    IpcHandler {
+        target: "tahoe"
+
+        function openTaskSwitcher(): void { shell.cycleTaskSwitcher(1); }
+        function showTaskSwitcher(): void { shell.showTaskSwitcher(); }
+        function cycleTaskSwitcher(direction: int): void { shell.cycleTaskSwitcher(direction); }
+        function confirmTaskSwitcher(): void { shell.confirmTaskSwitcher(); }
+        function closeTaskSwitcher(): void { shell.closeTaskSwitcher(); }
+        function openWindowOverview(): void { shell.openWindowOverview(); }
+        function toggleWindowOverview(): void { shell.toggleWindowOverview(); }
+        function closeWindowOverview(): void { shell.closeWindowOverview(); }
+        function openSettings(): void { shell.openSettingsPanel("settings"); }
+        function openAbout(): void { shell.openSettingsPanel("about"); }
+        function openSystemHealth(): void { shell.openSettingsPanel("health"); }
+        function closeSettings(): void { shell.closeSettingsPanel(); }
+    }
+
     AppMenu {
         id: appMenu
         windowsService: niri
@@ -116,6 +288,14 @@ ShellRoot {
 
     Controls {
         id: controls
+    }
+
+    DesktopSettings {
+        id: desktopSettings
+    }
+
+    SystemStatus {
+        id: systemStatus
     }
 
     Appearance {
@@ -153,6 +333,16 @@ ShellRoot {
 
     Screenshot {
         id: screenshotService
+        settingsService: desktopSettings
+    }
+
+    Search {
+        id: search
+        appsService: apps
+        screenshotService: screenshotService
+        onOpenSettingsRequested: function(page) {
+            shell.openSettingsPanel(page);
+        }
     }
 
     // Owns the org.freedesktop.Notifications daemon for the session. Any
@@ -300,6 +490,9 @@ ShellRoot {
                 activeApp: apps.toplevelLabel(niri.focusedWindow || niri.activeToplevel)
                 powerService: power
                 onCloseRequested: shell.appMenuOpen = false
+                onOpenSettingsRequested: function(page) {
+                    shell.openSettingsPanel(page);
+                }
             }
 
             AppMenuPopup {
@@ -314,6 +507,7 @@ ShellRoot {
                 screen: modelData
                 appsService: apps
                 niriService: niri
+                settingsService: desktopSettings
                 useSpring: shell.useSpring
                 darkMode: shell.darkMode
                 launchpadOpen: shell.launchpadOpen
@@ -322,6 +516,48 @@ ShellRoot {
                     shell.closeTopBarPopups("");
                     shell.spotlightOpen = false;
                 }
+                onOpenPinnedAppMenu: function(app, anchorRect) {
+                    var wasOpenHere = shell.dockAppMenuOpenFor(modelData);
+                    var wasSameApp = wasOpenHere && shell.dockAppMenuApp === app;
+                    shell.prepareDockAppMenu(modelData, app, anchorRect);
+                    shell.closeTopBarPopups("dockAppMenu");
+                    shell.dockAppMenuOpen = !wasSameApp;
+                    shell.launchpadOpen = false;
+                    shell.spotlightOpen = false;
+                }
+                onOpenWindowMenu: function(window, anchorRect) {
+                    var wasOpenHere = shell.dockWindowMenuOpenFor(modelData);
+                    var currentId = window && window.id !== undefined && window.id !== null ? String(window.id) : "";
+                    var previous = shell.dockWindowMenuWindow;
+                    var previousId = previous && previous.id !== undefined && previous.id !== null ? String(previous.id) : "";
+                    var wasSameWindow = wasOpenHere
+                        && ((currentId.length > 0 && currentId === previousId)
+                            || (currentId.length === 0 && previous === window));
+                    shell.prepareDockWindowMenu(modelData, window, anchorRect);
+                    shell.closeTopBarPopups("dockWindowMenu");
+                    shell.dockWindowMenuOpen = !wasSameWindow;
+                    shell.launchpadOpen = false;
+                    shell.spotlightOpen = false;
+                }
+            }
+
+            DockAppMenu {
+                screen: modelData
+                appsService: apps
+                app: shell.dockAppMenuApp
+                anchorRect: shell.dockAppMenuAnchorRect
+                open: shell.dockAppMenuOpenFor(modelData)
+                onCloseRequested: shell.closeDockAppMenu()
+            }
+
+            DockWindowMenu {
+                screen: modelData
+                windowsService: niri
+                appsService: apps
+                window: shell.dockWindowMenuWindow
+                anchorRect: shell.dockWindowMenuAnchorRect
+                open: shell.dockWindowMenuOpenFor(modelData)
+                onCloseRequested: shell.closeDockWindowMenu()
             }
 
             ControlCenter {
@@ -345,9 +581,60 @@ ShellRoot {
             Spotlight {
                 screen: modelData
                 appsService: apps
-                screenshotService: screenshotService
+                searchService: search
                 open: shell.spotlightOpen
                 onCloseRequested: shell.spotlightOpen = false
+            }
+
+            TaskSwitcher {
+                id: taskSwitcher
+
+                screen: modelData
+                windowsService: niri
+                appsService: apps
+                open: shell.navigationOpenFor(shell.taskSwitcherOpen, shell.taskSwitcherScreenName, modelData)
+                onCloseRequested: shell.closeTaskSwitcher()
+            }
+
+            Connections {
+                target: shell
+
+                function onTaskSwitcherCycleRequested(direction) {
+                    if (shell.navigationOpenFor(shell.taskSwitcherOpen, shell.taskSwitcherScreenName, modelData))
+                        taskSwitcher.cycleFromKeyboard(direction);
+                }
+
+                function onTaskSwitcherConfirmRequested() {
+                    if (shell.navigationOpenFor(shell.taskSwitcherOpen, shell.taskSwitcherScreenName, modelData))
+                        taskSwitcher.confirm();
+                }
+            }
+
+            WindowOverview {
+                screen: modelData
+                windowsService: niri
+                appsService: apps
+                open: shell.navigationOpenFor(shell.windowOverviewOpen, shell.windowOverviewScreenName, modelData)
+                onCloseRequested: shell.closeWindowOverview()
+            }
+
+            SettingsPanel {
+                screen: modelData
+                page: shell.settingsPanelPage
+                settingsService: desktopSettings
+                systemStatusService: systemStatus
+                appearanceService: appearance
+                notificationsService: notifications
+                inputMethodService: inputMethod
+                screenshotService: screenshotService
+                controlsService: controls
+                clipboardService: clipboardHistory
+                batteryService: battery
+                powerProfileService: powerProfiles
+                fanService: fanControl
+                windowsService: niri
+                open: shell.navigationOpenFor(shell.settingsPanelOpen, shell.settingsPanelScreenName, modelData)
+                onCloseRequested: shell.closeSettingsPanel()
             }
 
             NotificationCenter {

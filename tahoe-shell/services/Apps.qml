@@ -22,7 +22,12 @@ Item {
     readonly property string legacyPinnedPath: configHome() + "/quickshell/tahoe/pinned-apps.json"
 
     readonly property var realApplications: [...DesktopEntries.applications.values].filter(isLaunchableApplication).sort(compareApplications)
-    readonly property var pinnedApps: buildPinnedApps()
+    property bool pinnedInitialized: false
+    property bool migratedLegacyConfig: false
+    property bool loadingPinnedState: false
+    property var pinnedIds: []
+    property int pinnedRevision: 0
+    readonly property var pinnedApps: buildPinnedApps(pinnedRevision)
     readonly property var launchpadApps: realApplications
 
     FileView {
@@ -35,20 +40,21 @@ Item {
     FileView {
         id: pinnedFile
         path: root.pinnedConfigPath
+        preload: false
         blockLoading: true
+        blockAllReads: true
         blockWrites: true
         watchChanges: true
-        onFileChanged: reload()
-        onLoaded: root.ensurePinnedDefaults()
-        onLoadFailed: root.ensurePinnedDefaults()
-
-        JsonAdapter {
-            id: pinnedAdapter
-            property bool initialized: false
-            property bool migratedLegacyConfig: false
-            property var pinned: []
+        onFileChanged: {
+            reload();
+            waitForJob();
+            root.loadPinnedState();
         }
+        onLoaded: root.loadPinnedState()
+        onLoadFailed: root.loadPinnedState()
     }
+
+    Component.onCompleted: loadPinnedState()
 
     function envString(name) {
         var value = Quickshell.env(name);
@@ -409,8 +415,8 @@ Item {
     }
 
     function configuredPinnedIds() {
-        var ids = sanitizedPinnedIds(pinnedAdapter.pinned);
-        if (pinnedAdapter.initialized)
+        var ids = sanitizedPinnedIds(pinnedIds);
+        if (pinnedInitialized)
             return ids;
 
         if (ids.length > 0)
@@ -421,10 +427,64 @@ Item {
     }
 
     function setPinnedIds(ids) {
-        pinnedAdapter.initialized = true;
-        pinnedAdapter.migratedLegacyConfig = true;
-        pinnedAdapter.pinned = sanitizedPinnedIds(ids);
-        pinnedFile.writeAdapter();
+        pinnedInitialized = true;
+        migratedLegacyConfig = true;
+        pinnedIds = sanitizedPinnedIds(ids);
+        writePinnedState();
+        bumpPinnedRevision();
+    }
+
+    function bumpPinnedRevision() {
+        pinnedRevision += 1;
+    }
+
+    function readPinnedState() {
+        try {
+            var text = pinnedFile.text();
+            if (!text || String(text).trim().length === 0)
+                return null;
+
+            var parsed = JSON.parse(String(text));
+            return {
+                "initialized": !!(parsed && parsed.initialized),
+                "migratedLegacyConfig": !!(parsed && parsed.migratedLegacyConfig),
+                "pinned": sanitizedPinnedIds(parsed && parsed.pinned ? parsed.pinned : [])
+            };
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function loadPinnedState() {
+        if (loadingPinnedState)
+            return;
+
+        loadingPinnedState = true;
+        try {
+            var state = readPinnedState();
+            if (state) {
+                pinnedInitialized = state.initialized || state.pinned.length > 0;
+                migratedLegacyConfig = state.migratedLegacyConfig;
+                pinnedIds = state.pinned;
+            } else {
+                pinnedInitialized = false;
+                migratedLegacyConfig = false;
+                pinnedIds = [];
+            }
+
+            ensurePinnedDefaults();
+            bumpPinnedRevision();
+        } finally {
+            loadingPinnedState = false;
+        }
+    }
+
+    function writePinnedState() {
+        pinnedFile.setText(JSON.stringify({
+            "initialized": pinnedInitialized,
+            "migratedLegacyConfig": migratedLegacyConfig,
+            "pinned": sanitizedPinnedIds(pinnedIds)
+        }, null, 4) + "\n");
     }
 
     function legacyPinnedIds() {
@@ -441,22 +501,19 @@ Item {
     }
 
     function ensurePinnedDefaults() {
-        if (!pinnedAdapter.migratedLegacyConfig) {
-            var current = sanitizedPinnedIds(pinnedAdapter.pinned);
+        if (!migratedLegacyConfig) {
+            var current = sanitizedPinnedIds(pinnedIds);
             var legacyIds = legacyPinnedIds();
             if (legacyIds.length > 0) {
-                pinnedAdapter.initialized = true;
-                pinnedAdapter.migratedLegacyConfig = true;
-                pinnedAdapter.pinned = mergePinnedIds(current, legacyIds);
-                pinnedFile.writeAdapter();
+                setPinnedIds(mergePinnedIds(current, legacyIds));
                 return;
             }
 
-            pinnedAdapter.migratedLegacyConfig = true;
+            migratedLegacyConfig = true;
         }
 
-        if (!pinnedAdapter.initialized) {
-            var existing = sanitizedPinnedIds(pinnedAdapter.pinned);
+        if (!pinnedInitialized) {
+            var existing = sanitizedPinnedIds(pinnedIds);
             if (existing.length > 0) {
                 setPinnedIds(existing);
                 return;
@@ -464,6 +521,8 @@ Item {
 
             var legacy = legacyPinnedIds();
             setPinnedIds(legacy.length > 0 ? legacy : defaultPinnedIds());
+        } else {
+            writePinnedState();
         }
     }
 
@@ -799,7 +858,7 @@ Item {
             appendFallbackPinnedApplication(target, seen, id);
     }
 
-    function buildPinnedApps() {
+    function buildPinnedApps(revision) {
         var result = [
             { "id": "launchpad", "name": "启动台", "iconSet": "dock", "icon": "launchpad.png", "shellAction": "launchpad" }
         ];

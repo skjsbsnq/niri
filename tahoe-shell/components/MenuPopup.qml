@@ -11,7 +11,7 @@ PanelWindow {
     id: root
 
     property bool open: false
-    property string activeApp: "Desktop"
+    property string activeApp: "桌面"
     property var powerService
     property var anchorRect: null
     readonly property int edgePadding: 8
@@ -130,7 +130,7 @@ PanelWindow {
             spacing: 3
 
             MenuRow {
-                text: "About Tahoe"
+                text: "关于 Tahoe"
                 icon: "\ue88e"
                 bold: true
                 onActivated: root.closeRequested()
@@ -149,13 +149,13 @@ PanelWindow {
             }
 
             MenuRow {
-                text: "Window"
+                text: "窗口"
                 icon: "\ue8a7"
                 onActivated: root.closeRequested()
             }
 
             MenuRow {
-                text: "Settings"
+                text: "设置"
                 icon: "\ue8b8"
                 onActivated: root.closeRequested()
             }
@@ -167,19 +167,19 @@ PanelWindow {
             }
 
             MenuRow {
-                text: "Lock Screen"
+                text: "锁定屏幕"
                 icon: "\ue897"
                 onActivated: root.triggerPower("lock")
             }
 
             MenuRow {
-                text: "Sleep"
+                text: "睡眠"
                 icon: "\ue51c"
                 onActivated: root.triggerPower("sleep")
             }
 
             MenuRow {
-                text: "Log Out"
+                text: "退出登录"
                 icon: "\ue9ba"
                 onActivated: root.triggerPower("logout")
             }
@@ -191,14 +191,14 @@ PanelWindow {
             }
 
             MenuRow {
-                text: "Restart"
+                text: "重新启动"
                 icon: "\ue5d5"
                 destructive: true
                 onActivated: root.triggerPower("restart")
             }
 
             MenuRow {
-                text: "Shut Down"
+                text: "关机"
                 icon: "\ue8ac"
                 destructive: true
                 onActivated: root.triggerPower("shutdown")
@@ -238,7 +238,7 @@ PanelWindow {
                         spacing: 8
 
                         ConfirmButton {
-                            text: "Cancel"
+                            text: "取消"
                             onActivated: {
                                 if (root.powerService)
                                     root.powerService.cancelPending();
@@ -246,7 +246,7 @@ PanelWindow {
                         }
 
                         ConfirmButton {
-                            text: root.powerService ? root.powerService.pendingTitle : "Confirm"
+                            text: root.powerService ? root.powerService.pendingTitle : "确认"
                             primary: true
                             onActivated: {
                                 if (root.powerService)

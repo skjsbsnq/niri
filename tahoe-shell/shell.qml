@@ -24,17 +24,16 @@ ShellRoot {
     property var trayMenuItem: null
     property var topBarPopupAnchorRect: null
     property string topBarPopupScreenName: ""
+    // Global default font. Noto Sans CJK SC covers Chinese and Latin; the
+    // fontconfig fallback installed by arch-zh-setup handles emoji/edge cases.
+    property string baseFontFamily: "Noto Sans CJK SC"
+    property string monoFontFamily: "Noto Sans Mono CJK SC"
 
-    // Spring animations look great on real GPUs but corrupt Image textures
-    // on software/virtual GPUs (VMware, Hyper-V): a SpringAnimation driving
-    // an Image's geometry (x/y/scale) makes the icon turn transparent while
-    // the spring runs. NumberAnimation is safe everywhere. This is the global
-    // switch — keep false on VMs / software rendering; flip to true on a real
-    // GPU to restore the bouncy macOS feel. Components read this to gate
-    // their spring Behaviors (see Dock.qml, WindowButton.qml, Launchpad.qml).
-    // Blur/glass region geometry does not use spring; Phase 3 keeps those
-    // x/y/width/height transitions bounded for compositor-owned glass.
-    property bool useSpring: false
+    // Real hardware default: spring gives the dock and panel animations their
+    // bouncy settle. If Image textures vanish on a VM/software renderer, flip
+    // this back to false; components gate their spring Behaviors through it.
+    // Blur/glass region geometry stays on bounded NumberAnimation paths.
+    property bool useSpring: true
 
     function screenName(screen) {
         return screen ? String(screen.name || "") : "";
@@ -89,6 +88,13 @@ ShellRoot {
         source: Quickshell.shellPath("assets/fonts/MaterialIconsRound.ttf")
     }
 
+    Component.onCompleted: {
+        Qt.application.font = Qt.font({
+            family: shell.baseFontFamily,
+            pixelSize: 13
+        });
+    }
+
     Apps {
         id: apps
     }
@@ -117,6 +123,10 @@ ShellRoot {
         id: fanControl
     }
 
+    Sound {
+        id: sound
+    }
+
     ClipboardHistory {
         id: clipboardHistory
     }
@@ -127,6 +137,7 @@ ShellRoot {
     // server instance across all screens.
     Notifications {
         id: notifications
+        soundService: sound
     }
 
     Variants {

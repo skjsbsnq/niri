@@ -74,8 +74,14 @@ Item {
     readonly property var current: activeModel.length > 0 ? activeModel[0] : null
     property var historyModel: []
     property bool dndEnabled: false
+    property var soundService: null
     readonly property int historyCount: historyModel.length
     readonly property int maxHistory: 60
+
+    onDndEnabledChanged: {
+        if (soundService)
+            soundService.setEventSoundsMuted(dndEnabled);
+    }
 
     // Cap auto-expire so a client that sends expireTimeout=-1 (meaning
     // "server default") or a huge value does not leave a toast up
@@ -103,9 +109,12 @@ Item {
         root.pushHistory(notification);
 
         if (root.dndEnabled) {
-            // Keep the snapshot in history but suppress the visual toast.
-            // Expiring the retained object prevents a hidden live object
-            // from staying around indefinitely.
+            // Keep the snapshot in history, suppress the visual toast, and
+            // ask clients that honor notification hints not to play a sound.
+            try {
+                if (notification.hints)
+                    notification.hints["suppress-sound"] = true;
+            } catch (e) {}
             notification.expire();
             return;
         }
@@ -201,8 +210,8 @@ Item {
 
         return {
             "id": notification.id,
-            "appName": safeString(notification.appName, "Application"),
-            "summary": safeString(notification.summary, "Notification"),
+            "appName": safeString(notification.appName, "应用"),
+            "summary": safeString(notification.summary, "通知"),
             "body": safeString(notification.body, ""),
             "appIcon": safeString(notification.appIcon, ""),
             "desktopEntry": safeString(notification.desktopEntry, ""),

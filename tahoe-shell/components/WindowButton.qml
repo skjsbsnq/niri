@@ -21,7 +21,7 @@ Item {
     property var dockSurfaceItem
     readonly property bool active: !!toplevel && toplevel.activated
     readonly property bool minimized: !!toplevel && toplevel.minimized
-    readonly property string label: appsService ? appsService.toplevelLabel(toplevel) : String(toplevel ? toplevel.title || toplevel.appId || "Window" : "Window")
+    readonly property string label: appsService ? appsService.toplevelLabel(toplevel) : String(toplevel ? toplevel.title || toplevel.appId || "窗口" : "窗口")
     readonly property real lift: (magnification - 1.0) * 20
 
     signal activateRequested(var toplevel)

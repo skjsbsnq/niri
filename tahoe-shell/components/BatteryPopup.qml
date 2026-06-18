@@ -119,7 +119,7 @@ PanelWindow {
                 spacing: 8
 
                 Text {
-                    text: "Battery"
+                    text: "电池"
                     color: "#1d1d1f"
                     font.pixelSize: 15
                     font.weight: Font.DemiBold
@@ -180,14 +180,14 @@ PanelWindow {
                     spacing: 3
 
                     Text {
-                        text: root.available ? root.percentage + "%" : "Unavailable"
+                        text: root.available ? root.percentage + "%" : "不可用"
                         color: "#1d1d1f"
                         font.pixelSize: 28
                         font.weight: Font.DemiBold
                     }
 
                     Text {
-                        text: root.available ? root.batteryService.stateText : "No battery reported"
+                        text: root.available ? root.batteryService.stateText : "未检测到电池"
                         color: "#991d1d1f"
                         font.pixelSize: 12
                         elide: Text.ElideRight
@@ -212,15 +212,15 @@ PanelWindow {
             }
 
             InfoRow {
-                label: "Power Source"
-                value: root.batteryService ? root.batteryService.powerSourceText : "Unavailable"
+                label: "电源"
+                value: root.batteryService ? root.batteryService.powerSourceText : "不可用"
             }
 
             InfoRow {
-                label: "Battery Health"
+                label: "电池健康"
                 value: root.batteryService && root.batteryService.healthText.length > 0
                     ? root.batteryService.healthText
-                    : "Not Reported"
+                    : "未报告"
             }
 
             Rectangle {

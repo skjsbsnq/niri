@@ -71,17 +71,26 @@ QtObject {
 
     function appLabel(app) {
         if (!app)
-            return "App";
+            return "应用";
 
         if (app.desktopEntry)
             app = app.desktopEntry;
 
-        var name = String(app.name || "").trim();
-        if (name.length > 0)
-            return name;
+        function hasCJK(text) {
+            return /[\u4e00-\u9fff]/.test(String(text || ""));
+        }
+
+        var primary = String(app.name || "").trim();
+        var generic = String(app.genericName || "").trim();
+        if (hasCJK(generic) && !hasCJK(primary))
+            return generic;
+        if (primary.length > 0)
+            return primary;
+        if (generic.length > 0)
+            return generic;
 
         var id = String(app.id || "").trim();
-        return id.length > 0 ? id : "App";
+        return id.length > 0 ? id : "应用";
     }
 
     function appSearchText(app) {
@@ -185,14 +194,14 @@ QtObject {
 
     function toplevelLabel(toplevel) {
         if (!toplevel)
-            return "Desktop";
+            return "桌面";
 
         var title = String(toplevel.title || "").trim();
         if (title.length > 0)
             return title;
 
         var appId = String(toplevel.appId || "").trim();
-        return appId.length > 0 ? appId : "Window";
+        return appId.length > 0 ? appId : "窗口";
     }
 
     function launchApp(app) {
@@ -395,7 +404,7 @@ QtObject {
 
     function buildPinnedApps() {
         var result = [
-            { "id": "launchpad", "name": "Launchpad", "iconSet": "dock", "icon": "launchpad.png", "shellAction": "launchpad" }
+            { "id": "launchpad", "name": "启动台", "iconSet": "dock", "icon": "launchpad.png", "shellAction": "launchpad" }
         ];
         var seen = {};
 

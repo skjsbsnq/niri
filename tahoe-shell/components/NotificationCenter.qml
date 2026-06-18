@@ -118,7 +118,7 @@ PanelWindow {
                 spacing: 8
 
                 Text {
-                    text: "Notifications"
+                    text: "通知"
                     color: "#1d1d1f"
                     font.pixelSize: 15
                     font.weight: Font.DemiBold
@@ -140,7 +140,7 @@ PanelWindow {
                     Text {
                         id: clearLabel
                         anchors.centerIn: parent
-                        text: "Clear"
+                        text: "清空"
                         color: "#1d1d1f"
                         font.pixelSize: 12
                         font.weight: Font.DemiBold
@@ -190,7 +190,7 @@ PanelWindow {
                         spacing: 1
 
                         Text {
-                            text: "Do Not Disturb"
+                            text: "勿扰模式"
                             color: "#1d1d1f"
                             font.pixelSize: 12
                             font.weight: Font.DemiBold
@@ -198,7 +198,7 @@ PanelWindow {
                         }
 
                         Text {
-                            text: root.dndEnabled ? "Toasts are muted" : "Toasts are allowed"
+                            text: root.dndEnabled ? "横幅和提示音已静音" : "通知正常显示"
                             color: "#881d1d1f"
                             font.pixelSize: 11
                             Layout.fillWidth: true
@@ -250,7 +250,7 @@ PanelWindow {
 
                 Text {
                     anchors.centerIn: parent
-                    text: "No Notifications"
+                    text: "暂无通知"
                     color: "#8a1d1d1f"
                     font.pixelSize: 13
                     font.weight: Font.DemiBold

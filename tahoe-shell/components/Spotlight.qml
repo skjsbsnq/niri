@@ -194,7 +194,7 @@ PanelWindow {
                 anchors.right: shortcutRow.left
                 anchors.rightMargin: 16
                 anchors.verticalCenter: parent.verticalCenter
-                text: "Search"
+                text: "搜索"
                 color: "#69737d"
                 font.pixelSize: 22
                 elide: Text.ElideRight
@@ -360,7 +360,7 @@ PanelWindow {
                 Text {
                     width: parent.width
                     height: 42
-                    text: "No Results"
+                    text: "无结果"
                     color: "#5a6570"
                     font.pixelSize: 14
                     font.weight: Font.DemiBold

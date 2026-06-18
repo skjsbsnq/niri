@@ -16,8 +16,8 @@ PanelWindow {
     property var anchorRect: null
     readonly property var menuHandle: trayItem && trayItem.hasMenu ? trayItem.menu : null
     readonly property string title: trayItem
-        ? String(trayItem.tooltipTitle || trayItem.title || trayItem.id || "Tray")
-        : "Tray"
+        ? String(trayItem.tooltipTitle || trayItem.title || trayItem.id || "托盘")
+        : "托盘"
     readonly property string iconSource: trayItem ? String(trayItem.icon || "") : ""
     readonly property string iconFont: "Material Icons"
     readonly property int edgePadding: 8
@@ -189,7 +189,7 @@ PanelWindow {
 
                 Text {
                     anchors.centerIn: parent
-                    text: "No Actions"
+                    text: "无可用操作"
                     color: "#8a1d1d1f"
                     font.pixelSize: 12
                     font.weight: Font.DemiBold

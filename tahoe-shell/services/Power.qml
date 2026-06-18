@@ -21,27 +21,27 @@ Item {
 
     function titleFor(action) {
         if (action === "lock")
-            return "Lock Screen";
+            return "锁定屏幕";
         if (action === "sleep")
-            return "Sleep";
+            return "睡眠";
         if (action === "logout")
-            return "Log Out";
+            return "退出登录";
         if (action === "restart")
-            return "Restart";
+            return "重新启动";
         if (action === "shutdown")
-            return "Shut Down";
+            return "关机";
         return "";
     }
 
     function messageFor(action) {
         if (action === "sleep")
-            return "Put this computer to sleep?";
+            return "让这台电脑进入睡眠？";
         if (action === "logout")
-            return "Log out of this niri session?";
+            return "退出当前 niri 会话？";
         if (action === "restart")
-            return "Restart this computer now?";
+            return "现在重新启动这台电脑？";
         if (action === "shutdown")
-            return "Shut down this computer now?";
+            return "现在关闭这台电脑？";
         return "";
     }
 

@@ -78,7 +78,7 @@ PanelWindow {
         opacity: root.open ? 1 : 0
 
         Behavior on opacity {
-            NumberAnimation { duration: 170; easing.type: Easing.OutCubic }
+            NumberAnimation { duration: 240; easing.type: Easing.OutCubic }
         }
     }
 
@@ -93,12 +93,14 @@ PanelWindow {
         width: Math.min(parent.width - 72, 820)
         height: Math.min(parent.height - 96, 590)
         opacity: root.open ? 1 : 0
-        // Open: scale 1.1 -> 1, "flying in from afar" (the web Launchpad
-        // keyframe is 1.2->1; we use 1.1 for a touch less travel).
-        scale: root.open ? 1 : 1.1
+        // Open: scale 1.2 -> 1, matching the web Launchpad reference. Keep
+        // the layer cache only while the launcher is visibly animating.
+        scale: root.open ? 1 : 1.2
+        layer.enabled: opacity > 0.01 && (scale !== 1 || opacity !== 1)
+        layer.smooth: true
 
         Behavior on opacity {
-            NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
+            NumberAnimation { duration: 240; easing.type: Easing.OutCubic }
         }
 
         // Scale settle. Spring gives the Tahoe ease-out feel on real GPUs,
@@ -107,7 +109,7 @@ PanelWindow {
         // the safe default; useSpring flips back to spring.
         Behavior on scale {
             enabled: !root.useSpring
-            NumberAnimation { duration: 220; easing.type: Easing.OutCubic }
+            NumberAnimation { duration: 240; easing.type: Easing.OutCubic }
         }
         Behavior on scale {
             enabled: root.useSpring
@@ -162,7 +164,7 @@ PanelWindow {
             Text {
                 anchors.left: searchInput.left
                 anchors.verticalCenter: parent.verticalCenter
-                text: "Search"
+                text: "搜索"
                 color: "#6f7780"
                 font.pixelSize: 15
                 visible: searchInput.text.length === 0
@@ -262,7 +264,7 @@ PanelWindow {
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
                 y: 92
-                text: "No Results"
+                text: "无结果"
                 color: "#4e565e"
                 font.pixelSize: 15
                 font.weight: Font.DemiBold

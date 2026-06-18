@@ -142,7 +142,7 @@ PanelWindow {
                 spacing: 8
 
                 Text {
-                    text: "Control Center"
+                    text: "控制中心"
                     color: root.textPrimary
                     font.pixelSize: 14
                     font.weight: Font.DemiBold
@@ -206,7 +206,7 @@ PanelWindow {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 64
                 iconCode: root.controlsService && root.controlsService.brightnessAvailable ? "\ue518" : "\ue1ad" // light_mode / brightness_low
-                label: "Display"
+                label: "显示"
                 value: root.controlsService ? root.controlsService.brightness : 0
                 enabled: root.controlsService && root.controlsService.brightnessAvailable
                 onUserSet: function(v) {
@@ -219,7 +219,7 @@ PanelWindow {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 64
                 iconCode: root.controlsService && root.controlsService.muted ? "\ue04f" : "\ue050" // volume_off / volume_up
-                label: "Sound"
+                label: "声音"
                 value: root.controlsService && !root.controlsService.muted ? root.controlsService.volume : 0
                 enabled: root.controlsService && root.controlsService.audioReady
                 onUserSet: function(v) {
@@ -251,14 +251,14 @@ PanelWindow {
                     UtilityButton {
                         Layout.fillWidth: true
                         iconCode: "\ue51c" // dark_mode
-                        label: "Dark"
+                        label: "深色"
                         enabled: false
                     }
 
                     UtilityButton {
                         Layout.fillWidth: true
                         iconCode: "\uea5f" // calculate
-                        label: "Calc"
+                        label: "计算器"
                         enabled: true
                         onClicked: root.launchFallbackApp("org.gnome.Calculator", "gnome-calculator", "calc")
                     }
@@ -266,7 +266,7 @@ PanelWindow {
                     UtilityButton {
                         Layout.fillWidth: true
                         iconCode: "\ue425" // timer
-                        label: "Timer"
+                        label: "计时器"
                         enabled: true
                         onClicked: root.launchFallbackApp("org.gnome.Clock", "gnome-clocks", "clock")
                     }
@@ -274,7 +274,7 @@ PanelWindow {
                     UtilityButton {
                         Layout.fillWidth: true
                         iconCode: "\ue3b0" // camera_alt
-                        label: "Camera"
+                        label: "相机"
                         enabled: true
                         onClicked: root.launchFallbackApp("cheese", "cheese", "camera")
                     }
@@ -291,7 +291,7 @@ PanelWindow {
 
                 Text {
                     anchors.centerIn: parent
-                    text: root.controlsExpanded ? "Show Less" : "Edit Controls"
+                    text: root.controlsExpanded ? "收起" : "编辑控制项"
                     color: root.textPrimary
                     font.pixelSize: 11
                     font.weight: Font.DemiBold
@@ -506,12 +506,12 @@ PanelWindow {
 
                     Text {
                         text: ct.controls && ct.controls.airplaneMode
-                              ? "Airplane Mode"
+                              ? "飞行模式"
                               : ct.controls && ct.controls.bluetoothEnabled
-                              ? (ct.controls.bluetoothConnectedCount + " device(s)")
+                              ? (ct.controls.bluetoothConnectedCount + " 台设备")
                               : ct.controls && ct.controls.bluetoothAvailable
-                              ? "Bluetooth"
-                              : "No Bluetooth"
+                              ? "蓝牙"
+                              : "无蓝牙"
                         color: root.textTertiary
                         font.pixelSize: 10
                         elide: Text.ElideRight
@@ -585,7 +585,7 @@ PanelWindow {
 
                         Text {
                             Layout.fillWidth: true
-                            text: mt.controls && mt.controls.hasMedia ? mt.controls.trackTitle : "Not Playing"
+                            text: mt.controls && mt.controls.hasMedia ? mt.controls.trackTitle : "未播放"
                             color: root.textPrimary
                             font.pixelSize: 12
                             font.weight: Font.DemiBold
@@ -595,7 +595,7 @@ PanelWindow {
 
                         Text {
                             Layout.fillWidth: true
-                            text: mt.controls && mt.controls.hasMedia ? mt.controls.trackArtist : "Media"
+                            text: mt.controls && mt.controls.hasMedia ? mt.controls.trackArtist : "媒体"
                             color: root.textTertiary
                             font.pixelSize: 10
                             elide: Text.ElideRight

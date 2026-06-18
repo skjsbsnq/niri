@@ -18,6 +18,7 @@ PanelWindow {
     property real dockMouseX: -10000
     property bool dockHovered: false
     property bool pointerDragActive: false
+    property int dragTargetVisualIndex: -1
     readonly property bool hasWindows: niriService && niriService.windowList && niriService.windowList.length > 0
     readonly property color glassFill: darkMode ? "#d01d1f24" : GlassStyle.FillDock
     readonly property color glassStroke: darkMode ? "#38ffffff" : GlassStyle.StrokeDock
@@ -94,6 +95,36 @@ PanelWindow {
         hoverExitTimer.stop();
         root.dockHovered = false;
         root.dockMouseX = -10000;
+    }
+
+    function pinnedVisualIndexForRowX(rowX) {
+        var count = root.appsService && root.appsService.pinnedApps ? root.appsService.pinnedApps.length : 0;
+        if (count <= 1)
+            return -1;
+
+        var itemWidth = 62;
+        var step = itemWidth + dockRow.spacing;
+        for (var i = 1; i < count; i++) {
+            var center = i * step + itemWidth / 2;
+            if (rowX < center)
+                return i;
+        }
+
+        return count - 1;
+    }
+
+    function updatePinnedDragTarget(item, mouseX, mouseY) {
+        var point = item.mapToItem(dockRow, mouseX, mouseY);
+        root.dragTargetVisualIndex = pinnedVisualIndexForRowX(point.x);
+    }
+
+    function finishPinnedReorder(item) {
+        if (root.appsService && root.dragTargetVisualIndex >= 1)
+            root.appsService.movePinnedApp(item.pinnedIndex, root.dragTargetVisualIndex);
+
+        root.dragTargetVisualIndex = -1;
+        root.pointerDragActive = false;
+        root.resetDockHover();
     }
 
     function openDownloads() {
@@ -227,6 +258,7 @@ PanelWindow {
                     id: pinnedButton
 
                     required property var modelData
+                    required property int index
                     // Magnification tracks the pointer position via
                     // proximityScale(); the SpringAnimation Behavior below
                     // eases it toward that target every frame, so neighbors
@@ -236,7 +268,7 @@ PanelWindow {
                     // Kept writable (not readonly) so the Behavior reliably
                     // intercepts binding updates.
                     property real magnification: root.proximityScale(pinnedButton)
-                    readonly property int pinnedIndex: index
+                    readonly property int pinnedIndex: pinnedButton.index
                     property real bounceOffset: 0
                     property bool suppressNextClick: false
                     readonly property bool hovered: !root.pointerDragActive && iconMouse.containsMouse
@@ -257,26 +289,10 @@ PanelWindow {
                     width: 62
                     height: 70
 
-                    Drag.active: reorderDrag.active
-                    Drag.source: pinnedButton
-                    Drag.keys: ["application/x-tahoe-pinned-app"]
-                    Drag.hotSpot.x: width / 2
-                    Drag.hotSpot.y: height / 2
-
-                    DragHandler {
-                        id: reorderDrag
-                        target: null
-                        enabled: modelData.shellAction !== "launchpad"
-                        onActiveChanged: {
-                            root.pointerDragActive = active;
-                            if (active) {
-                                pinnedButton.suppressNextClick = true;
-                            } else {
-                                root.resetDockHover();
-                                suppressClickReset.restart();
-                            }
-                        }
-                    }
+                    property bool reorderPressed: false
+                    property bool reorderActive: false
+                    property real reorderPressX: 0
+                    property real reorderPressY: 0
 
                     Timer {
                         id: suppressClickReset
@@ -290,12 +306,6 @@ PanelWindow {
                         onDropped: function(drop) {
                             if (!root.appsService)
                                 return;
-
-                            if (drop.source && drop.source.pinnedIndex !== undefined) {
-                                root.appsService.movePinnedApp(drop.source.pinnedIndex, pinnedButton.pinnedIndex);
-                                try { drop.acceptProposedAction(); } catch (e) {}
-                                return;
-                            }
 
                             try {
                                 if (drop.urls && drop.urls.length > 0) {
@@ -315,6 +325,15 @@ PanelWindow {
                         color: root.launchpadOpen && modelData.id === "launchpad" ? "#70ffffff" : "transparent"
                     }
 
+                    Rectangle {
+                        anchors.fill: parent
+                        anchors.margins: 2
+                        radius: 16
+                        color: "transparent"
+                        border.color: root.dragTargetVisualIndex === pinnedButton.pinnedIndex && root.pointerDragActive ? "#8dffffff" : "transparent"
+                        border.width: 2
+                    }
+
                     Image {
                         id: appIcon
                         anchors.horizontalCenter: parent.horizontalCenter
@@ -322,9 +341,14 @@ PanelWindow {
                         width: 48
                         height: 48
                         scale: pinnedButton.magnification
+                        opacity: pinnedButton.reorderActive ? 0.58 : 1
                         source: root.appsService ? root.appsService.iconForApp(modelData) : ""
                         fillMode: Image.PreserveAspectFit
                         smooth: true
+                        mipmap: true
+                        sourceSize.width: 96
+                        sourceSize.height: 96
+                        asynchronous: true
                         transformOrigin: Item.Center
                     }
 
@@ -376,11 +400,51 @@ PanelWindow {
                         acceptedButtons: Qt.LeftButton | Qt.RightButton
                         cursorShape: Qt.PointingHandCursor
                         onPositionChanged: function(mouse) {
+                            if (pinnedButton.reorderPressed && modelData.shellAction !== "launchpad" && (mouse.buttons & Qt.LeftButton)) {
+                                var dx = mouse.x - pinnedButton.reorderPressX;
+                                var dy = mouse.y - pinnedButton.reorderPressY;
+                                if (!pinnedButton.reorderActive && Math.sqrt(dx * dx + dy * dy) > 8) {
+                                    pinnedButton.reorderActive = true;
+                                    pinnedButton.suppressNextClick = true;
+                                    root.pointerDragActive = true;
+                                    root.resetDockHover();
+                                }
+
+                                if (pinnedButton.reorderActive)
+                                    root.updatePinnedDragTarget(pinnedButton, mouse.x, mouse.y);
+
+                                return;
+                            }
+
                             var point = pinnedButton.mapToItem(dockSurface, mouse.x, mouse.y);
                             root.updateDockHoverFromMouse(point.x, mouse);
                         }
                         onEntered: root.markDockHovered()
                         onExited: root.scheduleDockHoverReset()
+                        onPressed: function(mouse) {
+                            if (mouse.button === Qt.LeftButton && modelData.shellAction !== "launchpad") {
+                                pinnedButton.reorderPressed = true;
+                                pinnedButton.reorderPressX = mouse.x;
+                                pinnedButton.reorderPressY = mouse.y;
+                            }
+                        }
+                        onReleased: function(mouse) {
+                            if (pinnedButton.reorderActive) {
+                                root.finishPinnedReorder(pinnedButton);
+                                suppressClickReset.restart();
+                            }
+
+                            pinnedButton.reorderPressed = false;
+                            pinnedButton.reorderActive = false;
+                        }
+                        onCanceled: {
+                            pinnedButton.reorderPressed = false;
+                            pinnedButton.reorderActive = false;
+                            root.dragTargetVisualIndex = -1;
+                            root.pointerDragActive = false;
+                            root.resetDockHover();
+                            suppressClickReset.restart();
+                        }
                         onClicked: function(mouse) {
                             if (pinnedButton.suppressNextClick)
                                 return;

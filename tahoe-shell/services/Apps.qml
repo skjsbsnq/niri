@@ -15,15 +15,25 @@ Item {
     readonly property string symbolIconRoot: assetRoot + "/icons/symbols/"
     readonly property string defaultWindowIcon: dockIconRoot + "finder.png"
     readonly property string wallpaper: backgroundRoot + "iridescence.jpg"
+    readonly property string pinnedConfigPath: configHome() + "/quickshell/tahoe/pinned-apps.json"
+    readonly property string legacyPinnedPath: Quickshell.stateDir + "/pinned-apps.json"
 
     readonly property var realApplications: [...DesktopEntries.applications.values].filter(isLaunchableApplication).sort(compareApplications)
     readonly property var pinnedApps: buildPinnedApps()
     readonly property var launchpadApps: realApplications
 
     FileView {
-        id: pinnedFile
-        path: Quickshell.stateDir + "/pinned-apps.json"
+        id: legacyPinnedFile
+        path: root.legacyPinnedPath
         blockLoading: true
+        printErrors: false
+    }
+
+    FileView {
+        id: pinnedFile
+        path: root.pinnedConfigPath
+        blockLoading: true
+        blockWrites: true
         watchChanges: true
         onFileChanged: reload()
         onLoaded: root.ensurePinnedDefaults()
@@ -34,6 +44,20 @@ Item {
             property bool initialized: false
             property var pinned: []
         }
+    }
+
+    function envString(name) {
+        var value = Quickshell.env(name);
+        return value === undefined || value === null ? "" : String(value);
+    }
+
+    function configHome() {
+        var xdg = envString("XDG_CONFIG_HOME").trim();
+        if (xdg.length > 0)
+            return xdg;
+
+        var home = envString("HOME").trim();
+        return home.length > 0 ? home + "/.config" : Quickshell.stateDir;
     }
 
     function iconPath(iconSet, fileName) {
@@ -149,13 +173,41 @@ Item {
         return true;
     }
 
-    function filteredLaunchpadApps(query) {
-        var normalized = String(query || "").trim();
-        if (normalized.length === 0)
-            return launchpadApps;
+    function appInCategory(app, category) {
+        var normalized = String(category || "all").trim().toLowerCase();
+        if (normalized.length === 0 || normalized === "all")
+            return true;
 
+        if (!app)
+            return false;
+        if (app.desktopEntry)
+            app = app.desktopEntry;
+
+        var categories = String(app.categories || "").toLowerCase();
+        if (normalized === "development")
+            return categories.indexOf("development") !== -1;
+        if (normalized === "internet")
+            return categories.indexOf("network") !== -1;
+        if (normalized === "media")
+            return categories.indexOf("audio") !== -1
+                || categories.indexOf("video") !== -1
+                || categories.indexOf("graphics") !== -1;
+        if (normalized === "office")
+            return categories.indexOf("office") !== -1;
+        if (normalized === "games")
+            return categories.indexOf("game") !== -1;
+        if (normalized === "system")
+            return categories.indexOf("system") !== -1
+                || categories.indexOf("settings") !== -1
+                || categories.indexOf("utility") !== -1;
+
+        return true;
+    }
+
+    function filteredLaunchpadApps(query, category) {
+        var normalized = String(query || "").trim();
         return launchpadApps.filter(function(app) {
-            return appMatchesQuery(app, normalized);
+            return appMatchesQuery(app, normalized) && appInCategory(app, category);
         });
     }
 
@@ -330,7 +382,14 @@ Item {
 
     function configuredPinnedIds() {
         var ids = sanitizedPinnedIds(pinnedAdapter.pinned);
-        return pinnedAdapter.initialized ? ids : (ids.length > 0 ? ids : defaultPinnedIds());
+        if (pinnedAdapter.initialized)
+            return ids;
+
+        if (ids.length > 0)
+            return ids;
+
+        var legacy = legacyPinnedIds();
+        return legacy.length > 0 ? legacy : defaultPinnedIds();
     }
 
     function setPinnedIds(ids) {
@@ -339,15 +398,34 @@ Item {
         pinnedFile.writeAdapter();
     }
 
-    function ensurePinnedDefaults() {
-        if (!pinnedAdapter.initialized) {
-            var existing = sanitizedPinnedIds(pinnedAdapter.pinned);
-            setPinnedIds(existing.length > 0 ? existing : defaultPinnedIds());
+    function legacyPinnedIds() {
+        try {
+            var text = legacyPinnedFile.text();
+            if (!text || String(text).trim().length === 0)
+                return [];
+
+            var parsed = JSON.parse(String(text));
+            return sanitizedPinnedIds(parsed && parsed.pinned ? parsed.pinned : []);
+        } catch (e) {
+            return [];
         }
     }
 
-    function isPinnedApp(app) {
-        var id = appStableId(app);
+    function ensurePinnedDefaults() {
+        if (!pinnedAdapter.initialized) {
+            var existing = sanitizedPinnedIds(pinnedAdapter.pinned);
+            if (existing.length > 0) {
+                setPinnedIds(existing);
+                return;
+            }
+
+            var legacy = legacyPinnedIds();
+            setPinnedIds(legacy.length > 0 ? legacy : defaultPinnedIds());
+        }
+    }
+
+    function isPinnedId(id) {
+        id = String(id || "").trim();
         if (id.length === 0)
             return false;
 
@@ -359,17 +437,26 @@ Item {
         return false;
     }
 
-    function pinApp(app) {
-        if (!isLaunchableApplication(app))
-            return;
+    function isPinnedApp(app) {
+        return isPinnedId(appStableId(app));
+    }
 
-        var id = appStableId(app);
-        if (id.length === 0 || isPinnedApp(app))
+    function pinAppId(id) {
+        id = String(id || "").trim();
+        if (id.length === 0 || isPinnedId(id))
             return;
 
         var ids = configuredPinnedIds().slice();
         ids.push(id);
         setPinnedIds(ids);
+    }
+
+    function pinApp(app) {
+        if (!isLaunchableApplication(app))
+            return;
+
+        var id = appStableId(app);
+        pinAppId(id);
     }
 
     function unpinApp(app) {
@@ -402,8 +489,12 @@ Item {
             window.appId || "",
             window.title || ""
         ]);
-        if (app)
+        if (app) {
             pinApp(app);
+            return;
+        }
+
+        pinAppId(window.appId || "");
     }
 
     function movePinnedApp(fromIndex, toIndex) {
@@ -624,12 +715,36 @@ Item {
         if (!isLaunchableApplication(app))
             return;
 
-        var key = String(app.id || app.name || "");
-        if (seen[key])
+        var key = normalizedAppToken(appStableId(app));
+        if (key.length === 0 || seen[key])
             return;
 
         seen[key] = true;
         target.push(app);
+    }
+
+    function appendFallbackPinnedApplication(target, seen, id) {
+        id = String(id || "").trim();
+        var key = normalizedAppToken(id);
+        if (key.length === 0 || seen[key])
+            return;
+
+        seen[key] = true;
+        target.push({
+            "id": id,
+            "name": id,
+            "startupClass": id,
+            "icon": id,
+            "command": [id]
+        });
+    }
+
+    function appendPinnedId(target, seen, id) {
+        var app = findApplication([id]);
+        if (app)
+            appendApplication(target, seen, app);
+        else
+            appendFallbackPinnedApplication(target, seen, id);
     }
 
     function buildPinnedApps() {
@@ -640,7 +755,7 @@ Item {
 
         var ids = configuredPinnedIds();
         for (var i = 0; i < ids.length; i++)
-            appendApplication(result, seen, findApplication([ids[i]]));
+            appendPinnedId(result, seen, ids[i]);
 
         return result;
     }

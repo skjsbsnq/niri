@@ -162,7 +162,7 @@ PanelWindow {
         RowLayout {
             anchors.fill: parent
             // Inset the row inside the floating bar surface so the end
-            // children (status button / tahoe label) clear the rounded
+            // children (status/control buttons and niri menu) clear the rounded
             // caps. The surface's radius is 18, so anything within ~14px
             // of the ends would clip under the arc.
             anchors.leftMargin: 14
@@ -170,9 +170,9 @@ PanelWindow {
             spacing: 14
 
             Item {
-                id: tahoeButton
+                id: niriMenuButton
 
-                Layout.preferredWidth: tahoeLabel.implicitWidth + 18
+                Layout.preferredWidth: 30
                 Layout.preferredHeight: 24
                 Layout.alignment: Qt.AlignVCenter
 
@@ -183,20 +183,20 @@ PanelWindow {
                     border.color: root.appMenuOpen ? "#42ffffff" : "transparent"
                 }
 
-                Text {
-                    id: tahoeLabel
+                Image {
                     anchors.centerIn: parent
-                    text: "Tahoe"
-                    color: root.topText
-                    font.pixelSize: 13
-                    font.weight: Font.DemiBold
-                    verticalAlignment: Text.AlignVCenter
+                    width: 18
+                    height: 18
+                    source: Quickshell.shellPath("assets/icons/niri-icon-smol.png")
+                    fillMode: Image.PreserveAspectFit
+                    smooth: true
+                    mipmap: true
                 }
 
                 MouseArea {
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: root.toggleAppMenu(root.anchorRectFor(tahoeButton))
+                    onClicked: root.toggleAppMenu(root.anchorRectFor(niriMenuButton))
                 }
             }
 
@@ -665,17 +665,9 @@ PanelWindow {
                 }
             }
 
-            Text {
-                text: Qt.formatDateTime(root.now, "ddd HH:mm")
-                color: root.topTextSecondary
-                font.pixelSize: 13
-                verticalAlignment: Text.AlignVCenter
-                Layout.alignment: Qt.AlignVCenter
-            }
-
             Item {
                 id: statusButton
-                Layout.preferredWidth: 44
+                Layout.preferredWidth: 30
                 Layout.preferredHeight: 24
                 Layout.alignment: Qt.AlignVCenter
 
@@ -686,15 +678,47 @@ PanelWindow {
                     border.color: root.buttonBorder
                 }
 
-                Row {
+                Item {
                     anchors.centerIn: parent
-                    spacing: 0
+                    width: 18
+                    height: 14
 
-                    Text {
-                        text: root.niriService ? root.niriService.activeWorkspaceName : "1"
+                    Rectangle {
+                        x: 0
+                        y: 3
+                        width: 18
+                        height: 2
+                        radius: 1
                         color: root.topText
-                        font.pixelSize: 12
-                        anchors.verticalCenter: parent.verticalCenter
+                        opacity: 0.86
+                    }
+
+                    Rectangle {
+                        x: 3
+                        y: 0
+                        width: 6
+                        height: 8
+                        radius: 3
+                        color: root.topText
+                    }
+
+                    Rectangle {
+                        x: 0
+                        y: 10
+                        width: 18
+                        height: 2
+                        radius: 1
+                        color: root.topText
+                        opacity: 0.86
+                    }
+
+                    Rectangle {
+                        x: 10
+                        y: 7
+                        width: 6
+                        height: 8
+                        radius: 3
+                        color: root.topText
                     }
                 }
 
@@ -704,6 +728,15 @@ PanelWindow {
                     onClicked: root.toggleControlCenter(root.anchorRectFor(statusButton))
                 }
             }
+        }
+
+        Text {
+            anchors.centerIn: parent
+            text: Qt.formatDateTime(root.now, "ddd HH:mm")
+            color: root.topTextSecondary
+            font.pixelSize: 13
+            verticalAlignment: Text.AlignVCenter
+            z: 2
         }
     }
 }

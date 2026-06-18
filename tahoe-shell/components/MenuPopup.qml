@@ -130,7 +130,7 @@ PanelWindow {
             spacing: 3
 
             MenuRow {
-                text: "关于 Tahoe"
+                text: "关于 niri"
                 icon: "\ue88e"
                 bold: true
                 onActivated: root.closeRequested()

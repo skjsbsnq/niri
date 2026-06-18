@@ -46,7 +46,7 @@ Item {
                 [
                     "set -u",
                     "if ! command -v grim >/dev/null 2>&1 || ! command -v slurp >/dev/null 2>&1; then",
-                    "  command -v notify-send >/dev/null 2>&1 && notify-send -a Tahoe '截图不可用' '请安装 grim slurp swappy'",
+                    "  command -v notify-send >/dev/null 2>&1 && notify-send -a niri '截图不可用' '请安装 grim slurp swappy'",
                     "  exit 1",
                     "fi",
                     "pictures=\"$HOME/Pictures\"",
@@ -63,14 +63,14 @@ Item {
                     "command -v wl-copy >/dev/null 2>&1 && wl-copy --type image/png < \"$file\" || true",
                     "if command -v notify-send >/dev/null 2>&1; then",
                     "  if notify-send --help 2>&1 | grep -q -- '--action'; then",
-                    "    action=\"$(notify-send -a Tahoe --icon=\"$file\" --action=annotate=标注 --action=open=打开 --action=copy=复制 --wait '截图已保存' \"$file\" 2>/dev/null || true)\"",
+                    "    action=\"$(notify-send -a niri --icon=\"$file\" --action=annotate=标注 --action=open=打开 --action=copy=复制 --wait '截图已保存' \"$file\" 2>/dev/null || true)\"",
                     "    case \"$action\" in",
                     "      annotate) command -v swappy >/dev/null 2>&1 && swappy -f \"$file\" ;;",
                     "      open) command -v xdg-open >/dev/null 2>&1 && xdg-open \"$file\" ;;",
                     "      copy) command -v wl-copy >/dev/null 2>&1 && wl-copy --type image/png < \"$file\" ;;",
                     "    esac",
                     "  else",
-                    "    notify-send -a Tahoe '截图已保存' \"$file\"",
+                    "    notify-send -a niri '截图已保存' \"$file\"",
                     "  fi",
                     "fi"
                 ].join("\n")

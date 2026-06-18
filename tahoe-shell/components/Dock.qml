@@ -367,14 +367,18 @@ PanelWindow {
             }
 
             Repeater {
-                model: root.niriService ? root.niriService.toplevels : null
+                model: ScriptModel {
+                    values: root.niriService ? root.niriService.windowList : []
+                }
 
                 delegate: WindowButton {
                     id: windowButton
 
                     required property var modelData
 
-                    toplevel: modelData
+                    windowModel: modelData
+                    toplevel: modelData ? modelData.toplevel : null
+                    windowsService: root.niriService
                     appsService: root.appsService
                     useSpring: root.useSpring
                     showTitle: true

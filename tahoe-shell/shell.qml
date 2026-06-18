@@ -99,7 +99,7 @@ ShellRoot {
         id: apps
     }
 
-    Niri {
+    Windows {
         id: niri
     }
 

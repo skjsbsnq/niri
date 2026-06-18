@@ -5,7 +5,9 @@ import QtQuick
 Item {
     id: root
 
-    required property var toplevel
+    property var windowModel: null
+    property var toplevel: windowModel ? windowModel.toplevel : null
+    property var windowsService
     property var appsService
     property bool showTitle: true
     property int iconSize: 38
@@ -19,9 +21,9 @@ Item {
     property real bounceOffset: 0
     property var dockWindow
     property var dockSurfaceItem
-    readonly property bool active: !!toplevel && toplevel.activated
-    readonly property bool minimized: !!toplevel && toplevel.minimized
-    readonly property string label: appsService ? appsService.toplevelLabel(toplevel) : String(toplevel ? toplevel.title || toplevel.appId || "窗口" : "窗口")
+    readonly property bool active: windowModel ? !!windowModel.isFocused : !!(toplevel && toplevel.activated)
+    readonly property bool minimized: windowModel ? !!windowModel.isMinimized : !!(toplevel && toplevel.minimized)
+    readonly property string label: appsService ? appsService.toplevelLabel(windowModel || toplevel) : String((windowModel || toplevel) ? (windowModel || toplevel).title || (windowModel || toplevel).appId || "窗口" : "窗口")
     readonly property real lift: (magnification - 1.0) * 20
 
     signal activateRequested(var toplevel)
@@ -38,20 +40,39 @@ Item {
     height: 58
 
     function updateDockRectangle(mouseX, mouseY) {
-        if (!root.toplevel || !root.toplevel.setRectangle || !root.dockWindow)
+        if (!root.dockWindow)
             return;
 
         var point = root.mapToItem(null, 0, 0);
-        root.toplevel.setRectangle(root.dockWindow, Qt.rect(Math.round(point.x), Math.round(point.y), Math.round(root.width), Math.round(root.height)));
+        if (root.windowsService && root.windowModel) {
+            root.windowsService.setRectangle(
+                root.windowModel,
+                root.dockWindow,
+                Math.round(point.x),
+                Math.round(point.y),
+                Math.round(root.width),
+                Math.round(root.height)
+            );
+        } else if (root.toplevel && root.toplevel.setRectangle) {
+            root.toplevel.setRectangle(root.dockWindow, Qt.rect(Math.round(point.x), Math.round(point.y), Math.round(root.width), Math.round(root.height)));
+        }
     }
 
     function restoreOrActivate() {
-        if (!root.toplevel)
+        if (!root.windowModel && !root.toplevel)
             return;
 
         updateDockRectangle(0, 0);
 
-        if (root.toplevel.minimized) {
+        if (root.windowsService && root.windowModel) {
+            if (root.windowModel.isMinimized) {
+                root.windowsService.restore(root.windowModel);
+            } else if (root.windowModel.isFocused) {
+                root.windowsService.minimize(root.windowModel);
+            } else {
+                root.windowsService.activate(root.windowModel);
+            }
+        } else if (root.toplevel.minimized) {
             root.toplevel.minimized = false;
             if (root.toplevel.activate)
                 root.toplevel.activate();
@@ -61,16 +82,19 @@ Item {
             root.toplevel.activate();
         }
 
-        root.activateRequested(root.toplevel);
+        root.activateRequested(root.windowModel || root.toplevel);
     }
 
     function minimize() {
-        if (!root.toplevel)
+        if (!root.windowModel && !root.toplevel)
             return;
 
         updateDockRectangle(0, 0);
-        root.toplevel.minimized = true;
-        root.activateRequested(root.toplevel);
+        if (root.windowsService && root.windowModel)
+            root.windowsService.minimize(root.windowModel);
+        else
+            root.toplevel.minimized = true;
+        root.activateRequested(root.windowModel || root.toplevel);
     }
 
     Rectangle {
@@ -89,7 +113,7 @@ Item {
         width: root.iconSize
         height: root.iconSize
         scale: root.magnification
-        source: root.appsService ? root.appsService.iconForToplevel(root.toplevel) : ""
+        source: root.appsService ? root.appsService.iconForToplevel(root.windowModel || root.toplevel) : ""
         fillMode: Image.PreserveAspectFit
         smooth: true
         opacity: root.minimized ? 0.58 : 1.0
@@ -118,7 +142,7 @@ Item {
         height: 4
         radius: 2
         color: root.active ? "#202124" : root.minimized ? "#7b818a" : "#99000000"
-        opacity: root.toplevel ? 1 : 0
+        opacity: (root.windowModel || root.toplevel) ? 1 : 0
     }
 
     MouseArea {

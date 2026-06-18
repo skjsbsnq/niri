@@ -33,6 +33,8 @@ init_logging() {
   log "path: $PATH"
   log "display: DISPLAY=${DISPLAY:-} WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-}"
   log "session: XDG_SESSION_TYPE=${XDG_SESSION_TYPE:-} XDG_CURRENT_DESKTOP=${XDG_CURRENT_DESKTOP:-} DESKTOP_SESSION=${DESKTOP_SESSION:-}"
+  log "electron: ELECTRON_OZONE_PLATFORM_HINT=${ELECTRON_OZONE_PLATFORM_HINT:-}"
+  log "glx: __GLX_VENDOR_LIBRARY_NAME=${__GLX_VENDOR_LIBRARY_NAME:-}"
   log "runtime: XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-} XDG_SEAT=${XDG_SEAT:-} XDG_VTNR=${XDG_VTNR:-}"
 }
 
@@ -106,7 +108,8 @@ activate_graphical_session_target() {
   # the systemd user manager may not.
   systemctl --user import-environment \
     WAYLAND_DISPLAY DISPLAY XAUTHORITY \
-    XDG_CURRENT_DESKTOP XDG_SESSION_TYPE XDG_SESSION_DESKTOP 2>/dev/null || true
+    XDG_CURRENT_DESKTOP XDG_SESSION_TYPE XDG_SESSION_DESKTOP \
+    ELECTRON_OZONE_PLATFORM_HINT __GLX_VENDOR_LIBRARY_NAME 2>/dev/null || true
 }
 
 main() {
@@ -114,6 +117,14 @@ main() {
   local niri_session_bin=""
   local quickshell_bin
   local use_wrapper=false
+
+  # Prefer native Wayland for Electron apps such as Linux QQ. X11/Electron
+  # through xwayland-satellite currently lacks minimize and has fragile
+  # _NET_WM_MOVERESIZE forwarding for client-side titlebars.
+  export ELECTRON_OZONE_PLATFORM_HINT="${ELECTRON_OZONE_PLATFORM_HINT:-auto}"
+  # Keep Xwayland GLX clients on the NVIDIA vendor path. Without this, GLVND can
+  # select Mesa llvmpipe for Proton launchers even when Xwayland glamor is on.
+  export __GLX_VENDOR_LIBRARY_NAME="${__GLX_VENDOR_LIBRARY_NAME:-nvidia}"
 
   init_logging
 

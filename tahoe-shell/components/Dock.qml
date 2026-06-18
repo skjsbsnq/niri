@@ -435,9 +435,8 @@ PanelWindow {
                                 return;
 
                             pinnedButton.bounce();
-                            if (mouse.button === Qt.RightButton && modelData.shellAction !== "launchpad") {
-                                if (root.appsService)
-                                    root.appsService.unpinApp(modelData);
+                            if (mouse.button === Qt.RightButton) {
+                                return;
                             } else if (modelData.shellAction === "launchpad") {
                                 root.toggleLaunchpad();
                             } else if (root.appsService) {

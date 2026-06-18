@@ -18,6 +18,8 @@ TAHOE_SHELL_DIR="${TAHOE_SHELL_DIR:-"$REPO_DIR/tahoe-shell"}"
 NIRI_CONFIG_SRC="${NIRI_CONFIG_SRC:-"$REPO_DIR/config/niri/tahoe-phase0.kdl"}"
 
 INSTALL_PREFIX="${INSTALL_PREFIX:-"$HOME/.local"}"
+TAHOE_CACHE_DIR="${TAHOE_CACHE_DIR:-"${XDG_CACHE_HOME:-"$HOME/.cache"}/tahoe-niri"}"
+TAHOE_STATE_DIR="${TAHOE_STATE_DIR:-"${XDG_STATE_HOME:-"$HOME/.local/state"}/tahoe-niri"}"
 NIRI_BIN_DIR="${NIRI_BIN_DIR:-"$INSTALL_PREFIX/bin"}"
 NIRI_BIN_NAME="${NIRI_BIN_NAME:-niri}"
 QUICKSHELL_BUILD_DIR="${QUICKSHELL_BUILD_DIR:-"$QUICKSHELL_DIR/build-tahoe"}"
@@ -46,6 +48,18 @@ FORCE_NIRI_BUILD="${FORCE_NIRI_BUILD:-false}"
 BUILD_QUICKSHELL_FORK="${BUILD_QUICKSHELL_FORK:-false}"
 FORCE_QUICKSHELL_BUILD="${FORCE_QUICKSHELL_BUILD:-false}"
 INSTALL_QUICKSHELL_BUILD_DEPS="${INSTALL_QUICKSHELL_BUILD_DEPS:-true}"
+BUILD_XWAYLAND_SATELLITE="${BUILD_XWAYLAND_SATELLITE:-auto}"
+FORCE_XWAYLAND_SATELLITE_BUILD="${FORCE_XWAYLAND_SATELLITE_BUILD:-false}"
+INSTALL_XWAYLAND_SATELLITE_BUILD_DEPS="${INSTALL_XWAYLAND_SATELLITE_BUILD_DEPS:-true}"
+XWAYLAND_SATELLITE_REPO_URL="${XWAYLAND_SATELLITE_REPO_URL:-https://github.com/Supreeeme/xwayland-satellite.git}"
+XWAYLAND_SATELLITE_REF="${XWAYLAND_SATELLITE_REF:-v0.8.1}"
+XWAYLAND_SATELLITE_PATCH="${XWAYLAND_SATELLITE_PATCH:-"$REPO_DIR/patches/xwayland-satellite-minimize.patch"}"
+XWAYLAND_SATELLITE_UPSTREAM_DIR="${XWAYLAND_SATELLITE_UPSTREAM_DIR:-"$TAHOE_CACHE_DIR/xwayland-satellite/upstream"}"
+XWAYLAND_SATELLITE_WORK_DIR="${XWAYLAND_SATELLITE_WORK_DIR:-"$TAHOE_CACHE_DIR/xwayland-satellite/work"}"
+XWAYLAND_SATELLITE_TARGET_DIR="${XWAYLAND_SATELLITE_TARGET_DIR:-"$TAHOE_CACHE_DIR/xwayland-satellite/target"}"
+XWAYLAND_SATELLITE_BIN="${XWAYLAND_SATELLITE_BIN:-"$HOME/.local/lib/niri/xwayland-satellite-minimize"}"
+XWAYLAND_SATELLITE_GLAMOR_WRAPPER="${XWAYLAND_SATELLITE_GLAMOR_WRAPPER:-"$XWAYLAND_SATELLITE_BIN-glamor"}"
+XWAYLAND_SATELLITE_BUILD_STAMP="${XWAYLAND_SATELLITE_BUILD_STAMP:-"$TAHOE_STATE_DIR/xwayland-satellite-minimize.stamp"}"
 RUN_TAHOE_GLASS_GUARDRAILS="${RUN_TAHOE_GLASS_GUARDRAILS:-true}"
 TAHOE_GLASS_GUARDRAILS_SCRIPT="${TAHOE_GLASS_GUARDRAILS_SCRIPT:-"$REPO_DIR/scripts/check-tahoe-glass-guardrails.sh"}"
 
@@ -74,20 +88,38 @@ QUICKSHELL_BUILD_PACKAGES=(
   wayland-protocols
 )
 
+XWAYLAND_SATELLITE_BUILD_PACKAGES=(
+  base-devel
+  cargo
+  clang
+  git
+  libxcb
+  pkgconf
+  xcb-util-cursor
+  xorg-xwayland
+)
+
 before_commit=""
 after_commit=""
 niri_before_commit=""
 niri_after_commit=""
 quickshell_before_commit=""
 quickshell_after_commit=""
+xwayland_satellite_before_commit=""
+xwayland_satellite_after_commit=""
+xwayland_satellite_patch_sha=""
+xwayland_satellite_patch_applied="not-rebuilt"
+xwayland_satellite_wrapper_deployed=false
 need_niri_build=false
 need_quickshell_build=false
+need_xwayland_satellite_build=false
 need_shell_deploy=false
 need_niri_config_deploy=false
 need_session_deploy=false
 scripts_changed=false
 niri_built=false
 quickshell_built=false
+xwayland_satellite_built=false
 shell_deployed=false
 niri_config_deployed=false
 session_launcher_deployed=false
@@ -193,6 +225,176 @@ quickshell_build_is_current() {
 
   installed_commit="$(<"$QUICKSHELL_BUILD_STAMP")"
   [[ "$installed_commit" == "$expected_commit" ]]
+}
+
+xwayland_satellite_enabled() {
+  [[ "$BUILD_XWAYLAND_SATELLITE" != false || "$FORCE_XWAYLAND_SATELLITE_BUILD" == true ]]
+}
+
+sha256_file() {
+  local path="$1"
+
+  require_cmd sha256sum
+  sha256sum "$path" | sed 's/[[:space:]].*$//'
+}
+
+resolve_xwayland_satellite_ref() {
+  local ref="$1"
+  local commit=""
+
+  if commit="$(git -C "$XWAYLAND_SATELLITE_UPSTREAM_DIR" rev-parse --verify -q "origin/$ref^{commit}")"; then
+    printf '%s\n' "$commit"
+    return
+  fi
+
+  if commit="$(git -C "$XWAYLAND_SATELLITE_UPSTREAM_DIR" rev-parse --verify -q "$ref^{commit}")"; then
+    printf '%s\n' "$commit"
+    return
+  fi
+
+  die "could not resolve xwayland-satellite ref: $ref"
+}
+
+prepare_xwayland_satellite_upstream() {
+  local current_url=""
+
+  [[ -f "$XWAYLAND_SATELLITE_PATCH" ]] \
+    || die "xwayland-satellite patch does not exist: $XWAYLAND_SATELLITE_PATCH"
+
+  require_cmd git
+  xwayland_satellite_patch_sha="$(sha256_file "$XWAYLAND_SATELLITE_PATCH")"
+
+  if [[ -d "$XWAYLAND_SATELLITE_UPSTREAM_DIR/.git" ]]; then
+    current_url="$(git -C "$XWAYLAND_SATELLITE_UPSTREAM_DIR" remote get-url origin 2>/dev/null || true)"
+    if [[ "$current_url" != "$XWAYLAND_SATELLITE_REPO_URL" ]]; then
+      log "updating xwayland-satellite origin URL"
+      git -C "$XWAYLAND_SATELLITE_UPSTREAM_DIR" remote set-url origin "$XWAYLAND_SATELLITE_REPO_URL"
+    fi
+
+    xwayland_satellite_before_commit="$(git -C "$XWAYLAND_SATELLITE_UPSTREAM_DIR" rev-parse HEAD 2>/dev/null || true)"
+    log "fetching xwayland-satellite upstream"
+    git -C "$XWAYLAND_SATELLITE_UPSTREAM_DIR" fetch --prune --tags origin
+  else
+    if [[ -e "$XWAYLAND_SATELLITE_UPSTREAM_DIR" ]]; then
+      die "xwayland-satellite upstream path exists but is not a git repository: $XWAYLAND_SATELLITE_UPSTREAM_DIR"
+    fi
+
+    log "cloning xwayland-satellite upstream cache"
+    mkdir -p "$(dirname -- "$XWAYLAND_SATELLITE_UPSTREAM_DIR")"
+    git clone "$XWAYLAND_SATELLITE_REPO_URL" "$XWAYLAND_SATELLITE_UPSTREAM_DIR"
+    xwayland_satellite_before_commit=""
+  fi
+
+  xwayland_satellite_after_commit="$(resolve_xwayland_satellite_ref "$XWAYLAND_SATELLITE_REF")"
+  log "xwayland-satellite ref $XWAYLAND_SATELLITE_REF resolves to $xwayland_satellite_after_commit"
+}
+
+xwayland_satellite_build_is_current() {
+  [[ -n "$xwayland_satellite_after_commit" ]] || return 1
+  [[ -n "$xwayland_satellite_patch_sha" ]] || return 1
+  [[ -x "$XWAYLAND_SATELLITE_BIN" ]] || return 1
+  [[ -f "$XWAYLAND_SATELLITE_BUILD_STAMP" ]] || return 1
+
+  grep -Fxq "repo=$XWAYLAND_SATELLITE_REPO_URL" "$XWAYLAND_SATELLITE_BUILD_STAMP" || return 1
+  grep -Fxq "ref=$XWAYLAND_SATELLITE_REF" "$XWAYLAND_SATELLITE_BUILD_STAMP" || return 1
+  grep -Fxq "commit=$xwayland_satellite_after_commit" "$XWAYLAND_SATELLITE_BUILD_STAMP" || return 1
+  grep -Fxq "patch_sha256=$xwayland_satellite_patch_sha" "$XWAYLAND_SATELLITE_BUILD_STAMP" || return 1
+
+  return 0
+}
+
+remove_xwayland_satellite_worktree() {
+  [[ -e "$XWAYLAND_SATELLITE_WORK_DIR" ]] || return
+
+  if [[ -f "$XWAYLAND_SATELLITE_WORK_DIR/.git" || -d "$XWAYLAND_SATELLITE_WORK_DIR/.git" ]]; then
+    git -C "$XWAYLAND_SATELLITE_UPSTREAM_DIR" worktree remove --force "$XWAYLAND_SATELLITE_WORK_DIR" >/dev/null 2>&1 \
+      || rm -rf "$XWAYLAND_SATELLITE_WORK_DIR"
+  else
+    rm -rf "$XWAYLAND_SATELLITE_WORK_DIR"
+  fi
+}
+
+prepare_xwayland_satellite_worktree() {
+  remove_xwayland_satellite_worktree
+  git -C "$XWAYLAND_SATELLITE_UPSTREAM_DIR" worktree prune
+  mkdir -p "$(dirname -- "$XWAYLAND_SATELLITE_WORK_DIR")"
+  git -C "$XWAYLAND_SATELLITE_UPSTREAM_DIR" worktree add --detach "$XWAYLAND_SATELLITE_WORK_DIR" "$xwayland_satellite_after_commit"
+
+  xwayland_satellite_patch_applied=false
+  if git -C "$XWAYLAND_SATELLITE_WORK_DIR" apply --check "$XWAYLAND_SATELLITE_PATCH"; then
+    git -C "$XWAYLAND_SATELLITE_WORK_DIR" apply "$XWAYLAND_SATELLITE_PATCH"
+    xwayland_satellite_patch_applied=true
+    return
+  fi
+
+  if grep -Rqs 'set_minimized' "$XWAYLAND_SATELLITE_WORK_DIR/src" \
+    && grep -Rqs 'WM_CHANGE_STATE' "$XWAYLAND_SATELLITE_WORK_DIR/src"; then
+    log "xwayland-satellite patch no longer applies, but upstream appears to include minimize support; building without local patch"
+    return
+  fi
+
+  die "xwayland-satellite minimize patch does not apply to $xwayland_satellite_after_commit; update $XWAYLAND_SATELLITE_PATCH or run with BUILD_XWAYLAND_SATELLITE=false"
+}
+
+install_xwayland_satellite_build_deps() {
+  if [[ "$INSTALL_XWAYLAND_SATELLITE_BUILD_DEPS" != true ]]; then
+    log "skipping xwayland-satellite build dependency install; INSTALL_XWAYLAND_SATELLITE_BUILD_DEPS=$INSTALL_XWAYLAND_SATELLITE_BUILD_DEPS"
+    return
+  fi
+
+  if ! command -v pacman >/dev/null 2>&1; then
+    log "pacman not found; skipping xwayland-satellite build dependency install"
+    return
+  fi
+
+  require_cmd sudo
+  log "installing xwayland-satellite build dependencies"
+  sudo pacman -Syu --needed "${XWAYLAND_SATELLITE_BUILD_PACKAGES[@]}"
+}
+
+write_xwayland_satellite_build_stamp() {
+  mkdir -p "$(dirname -- "$XWAYLAND_SATELLITE_BUILD_STAMP")"
+  {
+    printf 'repo=%s\n' "$XWAYLAND_SATELLITE_REPO_URL"
+    printf 'ref=%s\n' "$XWAYLAND_SATELLITE_REF"
+    printf 'commit=%s\n' "$xwayland_satellite_after_commit"
+    printf 'patch=%s\n' "$XWAYLAND_SATELLITE_PATCH"
+    printf 'patch_sha256=%s\n' "$xwayland_satellite_patch_sha"
+    printf 'patch_applied=%s\n' "$xwayland_satellite_patch_applied"
+    printf 'binary=%s\n' "$XWAYLAND_SATELLITE_BIN"
+    printf 'glamor_wrapper=%s\n' "$XWAYLAND_SATELLITE_GLAMOR_WRAPPER"
+  } > "$XWAYLAND_SATELLITE_BUILD_STAMP"
+}
+
+deploy_xwayland_satellite_glamor_wrapper() {
+  local tmp
+
+  mkdir -p "$(dirname -- "$XWAYLAND_SATELLITE_GLAMOR_WRAPPER")"
+  tmp="$(mktemp "${XWAYLAND_SATELLITE_GLAMOR_WRAPPER}.tmp.XXXXXX")"
+
+  cat > "$tmp" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+
+satellite="$XWAYLAND_SATELLITE_BIN"
+
+if [[ ! -x "\$satellite" ]]; then
+    printf 'xwayland-satellite target is missing or not executable: %s\\n' "\$satellite" >&2
+    exit 127
+fi
+
+if [[ \$# -gt 0 && "\$1" == :* ]]; then
+    display="\$1"
+    shift
+    exec "\$satellite" "\$display" -glamor gl "\$@"
+fi
+
+exec "\$satellite" -glamor gl "\$@"
+EOF
+
+  chmod 755 "$tmp"
+  mv "$tmp" "$XWAYLAND_SATELLITE_GLAMOR_WRAPPER"
+  xwayland_satellite_wrapper_deployed=true
 }
 
 dirs_differ() {
@@ -363,6 +565,32 @@ build_quickshell() {
   quickshell_built=true
 }
 
+build_xwayland_satellite() {
+  [[ -n "$xwayland_satellite_after_commit" ]] \
+    || die "xwayland-satellite source was not prepared"
+
+  install_xwayland_satellite_build_deps
+
+  require_cmd cargo
+
+  prepare_xwayland_satellite_worktree
+
+  log "building patched xwayland-satellite"
+  (
+    cd "$XWAYLAND_SATELLITE_WORK_DIR"
+    CARGO_TARGET_DIR="$XWAYLAND_SATELLITE_TARGET_DIR" cargo build --release --locked
+  )
+
+  install -Dm755 "$XWAYLAND_SATELLITE_TARGET_DIR/release/xwayland-satellite" "$XWAYLAND_SATELLITE_BIN"
+
+  if ! "$XWAYLAND_SATELLITE_BIN" ":0" --test-listenfd-support >/dev/null 2>&1; then
+    die "patched xwayland-satellite failed --test-listenfd-support after install: $XWAYLAND_SATELLITE_BIN"
+  fi
+
+  write_xwayland_satellite_build_stamp
+  xwayland_satellite_built=true
+}
+
 deploy_tahoe_shell() {
   if [[ ! -d "$TAHOE_SHELL_DIR" ]]; then
     log "skipping Tahoe shell deploy; directory does not exist: $TAHOE_SHELL_DIR"
@@ -455,6 +683,11 @@ main() {
   require_cmd install
   require_cmd find
   require_cmd sed
+
+  case "$BUILD_XWAYLAND_SATELLITE" in
+    auto | true | false) ;;
+    *) die "BUILD_XWAYLAND_SATELLITE must be auto, true, or false; got: $BUILD_XWAYLAND_SATELLITE" ;;
+  esac
 
   if [[ "${EUID:-$(id -u)}" -eq 0 && "$ALLOW_ROOT_ARCH_UPDATE" != true ]]; then
     die "do not run this whole script with sudo; run bash scripts/arch-update.sh as the target user. The script will call sudo only for system session files."
@@ -638,6 +871,24 @@ main() {
     fi
   fi
 
+  if xwayland_satellite_enabled; then
+    prepare_xwayland_satellite_upstream
+  fi
+
+  case "$BUILD_XWAYLAND_SATELLITE" in
+    auto)
+      if ! xwayland_satellite_build_is_current; then
+        log "patched xwayland-satellite build is missing or out of date"
+        need_xwayland_satellite_build=true
+      fi
+      ;;
+    true)
+      need_xwayland_satellite_build=true
+      ;;
+    false)
+      ;;
+  esac
+
   if [[ "$FORCE_NIRI_BUILD" == true ]]; then
     log "FORCE_NIRI_BUILD=true"
     need_niri_build=true
@@ -646,6 +897,11 @@ main() {
   if [[ "$FORCE_QUICKSHELL_BUILD" == true ]]; then
     log "FORCE_QUICKSHELL_BUILD=true"
     need_quickshell_build=true
+  fi
+
+  if [[ "$FORCE_XWAYLAND_SATELLITE_BUILD" == true ]]; then
+    log "FORCE_XWAYLAND_SATELLITE_BUILD=true"
+    need_xwayland_satellite_build=true
   fi
 
   if changed_since_pull '^(tahoe-shell/|macOS-26-Tahoe-for-the-Web-main/(background|icon)/|.*\.qml$)' \
@@ -688,6 +944,16 @@ main() {
     log "Quickshell build not needed"
   fi
 
+  if [[ "$need_xwayland_satellite_build" == true ]]; then
+    build_xwayland_satellite
+  else
+    log "patched xwayland-satellite build not needed"
+  fi
+
+  if xwayland_satellite_enabled; then
+    deploy_xwayland_satellite_glamor_wrapper
+  fi
+
   if [[ "$need_shell_deploy" == true ]]; then
     deploy_tahoe_shell
   else
@@ -711,6 +977,7 @@ main() {
   log "  repo to:   $after_commit"
   log "  build niri fork mode: $BUILD_NIRI_FORK"
   log "  build Quickshell fork mode: $BUILD_QUICKSHELL_FORK"
+  log "  build xwayland-satellite mode: $BUILD_XWAYLAND_SATELLITE"
   if [[ "$niri_git" == true && "$niri_root_submodule" == true ]]; then
     log "  niri mode: root submodule"
     log "  niri commit: $niri_after_commit"
@@ -729,6 +996,16 @@ main() {
   log "  Quickshell built: $quickshell_built"
   log "  Quickshell binary: $QUICKSHELL_BIN_DIR/$QUICKSHELL_BIN_NAME"
   log "  Quickshell build stamp: $QUICKSHELL_BUILD_STAMP"
+  log "  patched xwayland-satellite built: $xwayland_satellite_built"
+  log "  patched xwayland-satellite binary: $XWAYLAND_SATELLITE_BIN"
+  log "  patched xwayland-satellite glamor wrapper: $XWAYLAND_SATELLITE_GLAMOR_WRAPPER"
+  log "  patched xwayland-satellite glamor wrapper deployed: $xwayland_satellite_wrapper_deployed"
+  log "  patched xwayland-satellite build stamp: $XWAYLAND_SATELLITE_BUILD_STAMP"
+  if [[ -n "$xwayland_satellite_after_commit" ]]; then
+    log "  xwayland-satellite ref: $XWAYLAND_SATELLITE_REF"
+    log "  xwayland-satellite commit: $xwayland_satellite_after_commit"
+    log "  xwayland-satellite patch applied: $xwayland_satellite_patch_applied"
+  fi
   log "  Tahoe shell deployed: $shell_deployed"
   log "  niri Tahoe config deployed: $niri_config_deployed"
   log "  niri Tahoe config target: $NIRI_CONFIG_TARGET"
@@ -749,6 +1026,10 @@ main() {
 
   if [[ "$niri_built" == true || "$niri_config_deployed" == true ]]; then
     log "restart niri or log out/in to use the updated compositor/config"
+  fi
+
+  if [[ "$xwayland_satellite_built" == true || "$xwayland_satellite_wrapper_deployed" == true ]]; then
+    log "log out/in or restart niri to make new X11 windows use the patched xwayland-satellite"
   fi
 
   if [[ "$quickshell_built" == true || "$shell_deployed" == true ]]; then

@@ -98,11 +98,14 @@ main() {
 
   shell_args=("$QUICKSHELL_BIN" "-p" "$TAHOE_CONFIG_DIR")
 
+  export __GLX_VENDOR_LIBRARY_NAME="${__GLX_VENDOR_LIBRARY_NAME:-nvidia}"
+
   log "repo: $REPO_DIR"
   log "niri: $niri_bin"
   log "mode: $resolved_mode"
   log "shell launch: $shell_launch_mode"
   log "Tahoe shell: $TAHOE_CONFIG_DIR"
+  log "glx vendor: ${__GLX_VENDOR_LIBRARY_NAME:-}"
 
   if [[ "$shell_launch_mode" != none ]]; then
     export TAHOE_QUICKSHELL_BIN="$QUICKSHELL_BIN"

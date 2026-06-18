@@ -13,8 +13,10 @@ PanelWindow {
     property bool open: false
     property var niriService
     property var controlsService
+    property var appearanceService
     property var anchorRect: null
     property bool controlsExpanded: false
+    readonly property bool darkMode: appearanceService && appearanceService.darkMode
 
     readonly property int edgePadding: 8
     readonly property int fallbackRight: 12
@@ -24,20 +26,20 @@ PanelWindow {
     readonly property int popupLeftMargin: PopupGeometry.popupLeft(anchorRect, root.implicitWidth, screenWidth, edgePadding, fallbackRight)
     readonly property int popupTopMargin: PopupGeometry.popupTop(anchorRect, fallbackTop, popupGap)
     readonly property real popupOriginX: PopupGeometry.originX(anchorRect, popupLeftMargin, root.implicitWidth, screenWidth, fallbackRight)
-    readonly property color glassFill: GlassStyle.FillPanel
-    readonly property color glassStroke: GlassStyle.StrokePanel
-    readonly property color glassInnerFill: "#14ffffff"
+    readonly property color glassFill: darkMode ? "#d01d1f24" : GlassStyle.FillPanel
+    readonly property color glassStroke: darkMode ? "#38ffffff" : GlassStyle.StrokePanel
+    readonly property color glassInnerFill: darkMode ? "#1cffffff" : "#14ffffff"
     // Tiles match the web cc-tile rgba(255,255,255,0.5).
-    readonly property color tileFill: "#80ffffff"
-    readonly property color tileFillActive: "#88ffffff"
-    readonly property color tileStroke: "#5affffff" // inner top-left light
+    readonly property color tileFill: darkMode ? "#2c343dcc" : "#80ffffff"
+    readonly property color tileFillActive: darkMode ? "#37424dcc" : "#88ffffff"
+    readonly property color tileStroke: darkMode ? "#34ffffff" : "#5affffff" // inner top-left light
     readonly property color tileShadowLine: "#1a000000" // inner bottom-right shadow
     // macOS accent blue used when a toggle is on.
     readonly property color accentActive: "#2c9cf2"
-    readonly property color textPrimary: "#1d1d1f"
-    readonly property color textSecondary: "#991d1d1f"
-    readonly property color textTertiary: "#731d1d1f"
-    readonly property color sliderFill: "#f2ffffff" // ~0.95 white
+    readonly property color textPrimary: darkMode ? "#f5f7fb" : "#1d1d1f"
+    readonly property color textSecondary: darkMode ? "#c8d0d8" : "#991d1d1f"
+    readonly property color textTertiary: darkMode ? "#9da7b1" : "#731d1d1f"
+    readonly property color sliderFill: darkMode ? "#d8e4f0" : "#f2ffffff" // ~0.95 white
 
     // Material Icons font name registered once in shell.qml via FontLoader.
     readonly property string iconFont: "Material Icons"
@@ -252,7 +254,24 @@ PanelWindow {
                         Layout.fillWidth: true
                         iconCode: "\ue51c" // dark_mode
                         label: "深色"
-                        enabled: false
+                        enabled: !!root.appearanceService
+                        active: root.appearanceService && root.appearanceService.darkMode
+                        onClicked: {
+                            if (root.appearanceService)
+                                root.appearanceService.toggleDarkMode();
+                        }
+                    }
+
+                    UtilityButton {
+                        Layout.fillWidth: true
+                        iconCode: "\ue3a9" // nightlight
+                        label: "夜览"
+                        enabled: !!root.appearanceService
+                        active: root.appearanceService && root.appearanceService.nightMode
+                        onClicked: {
+                            if (root.appearanceService)
+                                root.appearanceService.toggleNightMode();
+                        }
                     }
 
                     UtilityButton {
@@ -787,6 +806,7 @@ PanelWindow {
         property string iconCode: ""
         property string label: ""
         property bool enabled: true
+        property bool active: false
         signal clicked()
 
         implicitWidth: 48
@@ -795,7 +815,7 @@ PanelWindow {
         Rectangle {
             anchors.fill: parent
             radius: width / 2
-            color: ubMouse.containsMouse ? "#66ffffff" : "#59ffffff"
+            color: ub.active ? root.accentActive : (ubMouse.containsMouse ? "#66ffffff" : "#59ffffff")
             border.color: "#30ffffff"
             border.width: 1
             opacity: ub.enabled ? 1 : 0.4
@@ -804,7 +824,7 @@ PanelWindow {
         Text {
             anchors.centerIn: parent
             text: ub.iconCode
-            color: root.textPrimary
+            color: ub.active ? "#ffffff" : root.textPrimary
             font.family: root.iconFont
             font.pixelSize: 20
             opacity: ub.enabled ? 1 : 0.4

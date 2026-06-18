@@ -46,13 +46,19 @@ DISPLAY_MANAGER_PACKAGES=(
 GUI_APP_PACKAGES=(
   alacritty
   fuzzel
+  gammastep
+  grim
+  kvantum
   swaylock
   swaybg
+  slurp
+  swappy
   brightnessctl
   cliphist
   network-manager-applet
   nm-connection-editor
   power-profiles-daemon
+  qt6ct
   wl-clipboard
   xwayland-satellite
   xdg-desktop-portal

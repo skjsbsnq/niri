@@ -11,21 +11,26 @@ PanelWindow {
     id: root
 
     property var appsService
+    property var appMenuService
     property var niriService
     property var notificationsService
     property var batteryService
     property var controlsService
     property var fanService
     property var clipboardService
+    property var screenshotService
+    property var inputMethodService
     property bool controlCenterOpen: false
     property bool launchpadOpen: false
     property bool appMenuOpen: false
+    property bool applicationMenuOpen: false
     property bool spotlightOpen: false
     property bool notificationCenterOpen: false
     property bool batteryPopupOpen: false
     property bool wifiPopupOpen: false
     property bool fanPopupOpen: false
     property bool clipboardPopupOpen: false
+    property bool darkMode: false
     property date now: new Date()
     readonly property string activeApp: appsService && niriService ? appsService.toplevelLabel(niriService.focusedWindow || niriService.activeToplevel) : "桌面"
     // Number of retained notification history entries. Drives the bell
@@ -34,10 +39,17 @@ PanelWindow {
     readonly property int clipboardCount: clipboardService ? clipboardService.historyCount : 0
     readonly property bool dndEnabled: notificationsService ? notificationsService.dndEnabled : false
     readonly property bool batteryAvailable: batteryService && batteryService.available
-    readonly property color glassFill: GlassStyle.FillTopBar
-    readonly property color glassStroke: GlassStyle.StrokeTopBar
+    readonly property color glassFill: darkMode ? "#d01d1f24" : GlassStyle.FillTopBar
+    readonly property color glassStroke: darkMode ? "#38ffffff" : GlassStyle.StrokeTopBar
+    readonly property color topText: darkMode ? "#f5f7fb" : "#202124"
+    readonly property color topTextSecondary: darkMode ? "#d6dde5" : "#2c2d30"
+    readonly property color buttonFill: darkMode ? "#24ffffff" : "#22ffffff"
+    readonly property color buttonHover: darkMode ? "#36ffffff" : "#30ffffff"
+    readonly property color buttonOpen: darkMode ? "#42ffffff" : "#38ffffff"
+    readonly property color buttonBorder: darkMode ? "#52ffffff" : "#40ffffff"
 
     signal toggleAppMenu(var anchorRect)
+    signal toggleApplicationMenu(var anchorRect)
     signal toggleControlCenter(var anchorRect)
     signal toggleSpotlight()
     signal toggleLaunchpad()
@@ -46,6 +58,8 @@ PanelWindow {
     signal toggleWifi(var anchorRect)
     signal toggleFan(var anchorRect)
     signal toggleClipboard(var anchorRect)
+    signal triggerScreenshot()
+    signal toggleInputMethod()
     signal openTrayMenu(var item, var anchorRect)
 
     function anchorRectFor(item) {
@@ -187,7 +201,7 @@ PanelWindow {
                     id: tahoeLabel
                     anchors.centerIn: parent
                     text: "Tahoe"
-                    color: "#202124"
+                    color: root.topText
                     font.pixelSize: 13
                     font.weight: Font.DemiBold
                     verticalAlignment: Text.AlignVCenter
@@ -202,12 +216,46 @@ PanelWindow {
 
             Text {
                 text: root.activeApp
-                color: "#2c2d30"
+                color: root.topTextSecondary
                 font.pixelSize: 13
                 elide: Text.ElideRight
                 verticalAlignment: Text.AlignVCenter
                 Layout.alignment: Qt.AlignVCenter
                 Layout.maximumWidth: 220
+            }
+
+            Item {
+                id: applicationMenuButton
+                Layout.preferredWidth: visible ? applicationMenuLabel.implicitWidth + 18 : 0
+                Layout.preferredHeight: 24
+                Layout.alignment: Qt.AlignVCenter
+                visible: !!root.appMenuService
+
+                Rectangle {
+                    anchors.fill: parent
+                    radius: 12
+                    color: root.applicationMenuOpen ? "#32ffffff" : (applicationMenuMouse.containsMouse ? "#24ffffff" : "transparent")
+                    border.color: root.applicationMenuOpen ? "#42ffffff" : "transparent"
+                }
+
+                Text {
+                    id: applicationMenuLabel
+                    anchors.centerIn: parent
+                    text: root.appMenuService ? root.appMenuService.menuTitle : "应用菜单"
+                    color: root.topText
+                    font.pixelSize: 12
+                    font.weight: Font.DemiBold
+                    elide: Text.ElideRight
+                    maximumLineCount: 1
+                }
+
+                MouseArea {
+                    id: applicationMenuMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.toggleApplicationMenu(root.anchorRectFor(applicationMenuButton))
+                }
             }
 
             Row {
@@ -237,7 +285,7 @@ PanelWindow {
                         Text {
                             anchors.centerIn: parent
                             text: root.niriService ? root.niriService.workspaceLabel(modelData, index) : String(index + 1)
-                            color: "#202124"
+                            color: root.topText
                             font.pixelSize: 11
                             font.weight: modelData.active ? Font.DemiBold : Font.Normal
                         }
@@ -278,14 +326,14 @@ PanelWindow {
                 Rectangle {
                     anchors.fill: parent
                     radius: 12
-                    color: root.notificationCenterOpen ? "#38ffffff" : (badgeMouse.containsMouse ? "#30ffffff" : "#22ffffff")
-                    border.color: "#40ffffff"
+                    color: root.notificationCenterOpen ? root.buttonOpen : (badgeMouse.containsMouse ? root.buttonHover : root.buttonFill)
+                    border.color: root.buttonBorder
                 }
 
                 Text {
                     anchors.centerIn: parent
                     text: root.dndEnabled ? "\ue7f6" : "\ue7f4"
-                    color: "#202124"
+                    color: root.topText
                     font.family: "Material Icons"
                     font.pixelSize: 16
                     opacity: root.notificationCount > 0 || root.dndEnabled ? 1 : 0.68
@@ -333,14 +381,14 @@ PanelWindow {
                 Rectangle {
                     anchors.fill: parent
                     radius: 12
-                    color: root.clipboardPopupOpen ? "#38ffffff" : (clipboardMouse.containsMouse ? "#30ffffff" : "#22ffffff")
-                    border.color: "#40ffffff"
+                    color: root.clipboardPopupOpen ? root.buttonOpen : (clipboardMouse.containsMouse ? root.buttonHover : root.buttonFill)
+                    border.color: root.buttonBorder
                 }
 
                 Text {
                     anchors.centerIn: parent
                     text: "\ue14f"
-                    color: root.clipboardService && root.clipboardService.available ? "#202124" : "#731d1d1f"
+                    color: root.clipboardService && root.clipboardService.available ? root.topText : "#731d1d1f"
                     font.family: "Material Icons"
                     font.pixelSize: 16
                     opacity: root.clipboardService && root.clipboardService.available ? 1 : 0.5
@@ -387,14 +435,14 @@ PanelWindow {
                 Rectangle {
                     anchors.fill: parent
                     radius: 12
-                    color: root.fanPopupOpen ? "#38ffffff" : (fanMouse.containsMouse ? "#30ffffff" : "#22ffffff")
-                    border.color: "#40ffffff"
+                    color: root.fanPopupOpen ? root.buttonOpen : (fanMouse.containsMouse ? root.buttonHover : root.buttonFill)
+                    border.color: root.buttonBorder
                 }
 
                 Text {
                     anchors.centerIn: parent
                     text: "\ue332"
-                    color: root.fanService && root.fanService.available && !root.fanService.autoMode ? "#0b6bd3" : "#202124"
+                    color: root.fanService && root.fanService.available && !root.fanService.autoMode ? "#0b6bd3" : root.topText
                     font.family: "Material Icons"
                     font.pixelSize: 16
                     opacity: root.fanService && root.fanService.available ? 1 : 0.5
@@ -430,8 +478,8 @@ PanelWindow {
                 Rectangle {
                     anchors.fill: parent
                     radius: 12
-                    color: root.batteryPopupOpen ? "#38ffffff" : (batteryMouse.containsMouse ? "#30ffffff" : "#22ffffff")
-                    border.color: "#40ffffff"
+                    color: root.batteryPopupOpen ? root.buttonOpen : (batteryMouse.containsMouse ? root.buttonHover : root.buttonFill)
+                    border.color: root.buttonBorder
                 }
 
                 Text {
@@ -439,7 +487,7 @@ PanelWindow {
                     anchors.leftMargin: 8
                     anchors.verticalCenter: parent.verticalCenter
                     text: root.batteryService ? root.batteryService.roundedPercentage + "%" : ""
-                    color: "#202124"
+                    color: root.topText
                     font.pixelSize: 11
                     font.weight: Font.DemiBold
                 }
@@ -470,7 +518,7 @@ PanelWindow {
                             radius: 2
                             color: root.batteryService && root.batteryService.roundedPercentage <= 15 && root.batteryService.onBattery
                                 ? "#ff453a"
-                                : "#202124"
+                                : root.topText
                         }
                     }
 
@@ -504,14 +552,14 @@ PanelWindow {
                 Rectangle {
                     anchors.fill: parent
                     radius: 12
-                    color: root.wifiPopupOpen ? "#38ffffff" : (wifiMouse.containsMouse ? "#30ffffff" : "#22ffffff")
-                    border.color: "#40ffffff"
+                    color: root.wifiPopupOpen ? root.buttonOpen : (wifiMouse.containsMouse ? root.buttonHover : root.buttonFill)
+                    border.color: root.buttonBorder
                 }
 
                 Text {
                     anchors.centerIn: parent
                     text: "\ue63e"
-                    color: root.controlsService && root.controlsService.wifiConnected ? "#0b6bd3" : "#202124"
+                    color: root.controlsService && root.controlsService.wifiConnected ? "#0b6bd3" : root.topText
                     font.family: "Material Icons"
                     font.pixelSize: 16
                     opacity: root.controlsService && root.controlsService.wifiEnabled ? 1 : 0.45
@@ -545,14 +593,14 @@ PanelWindow {
                 Rectangle {
                     anchors.fill: parent
                     radius: 12
-                    color: root.spotlightOpen ? "#38ffffff" : (spotlightMouse.containsMouse ? "#30ffffff" : "#22ffffff")
-                    border.color: "#40ffffff"
+                    color: root.spotlightOpen ? root.buttonOpen : (spotlightMouse.containsMouse ? root.buttonHover : root.buttonFill)
+                    border.color: root.buttonBorder
                 }
 
                 Text {
                     anchors.centerIn: parent
                     text: "\ue8b6"
-                    color: "#202124"
+                    color: root.topText
                     font.family: "Material Icons"
                     font.pixelSize: 16
                 }
@@ -566,9 +614,74 @@ PanelWindow {
                 }
             }
 
+            Item {
+                id: inputMethodButton
+                Layout.preferredWidth: visible ? 36 : 0
+                Layout.preferredHeight: 24
+                Layout.alignment: Qt.AlignVCenter
+                visible: !!root.inputMethodService
+
+                Rectangle {
+                    anchors.fill: parent
+                    radius: 12
+                    color: inputMethodMouse.containsMouse ? root.buttonHover : root.buttonFill
+                    border.color: root.buttonBorder
+                }
+
+                Text {
+                    anchors.centerIn: parent
+                    text: root.inputMethodService ? root.inputMethodService.displayText : "--"
+                    color: root.inputMethodService && root.inputMethodService.active ? "#0b6bd3" : root.topText
+                    font.pixelSize: 11
+                    font.weight: Font.DemiBold
+                    opacity: root.inputMethodService && root.inputMethodService.available ? 1 : 0.45
+                    elide: Text.ElideRight
+                    maximumLineCount: 1
+                }
+
+                MouseArea {
+                    id: inputMethodMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: root.inputMethodService && root.inputMethodService.available ? Qt.PointingHandCursor : Qt.ArrowCursor
+                    onClicked: root.toggleInputMethod()
+                }
+            }
+
+            Item {
+                id: screenshotButton
+                Layout.preferredWidth: visible ? 30 : 0
+                Layout.preferredHeight: 24
+                Layout.alignment: Qt.AlignVCenter
+                visible: !!root.screenshotService
+
+                Rectangle {
+                    anchors.fill: parent
+                    radius: 12
+                    color: screenshotMouse.containsMouse ? root.buttonHover : root.buttonFill
+                    border.color: root.buttonBorder
+                }
+
+                Text {
+                    anchors.centerIn: parent
+                    text: "\ue3b0"
+                    color: root.topText
+                    font.family: "Material Icons"
+                    font.pixelSize: 16
+                }
+
+                MouseArea {
+                    id: screenshotMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.triggerScreenshot()
+                }
+            }
+
             Text {
                 text: Qt.formatDateTime(root.now, "ddd HH:mm")
-                color: "#2c2d30"
+                color: root.topTextSecondary
                 font.pixelSize: 13
                 verticalAlignment: Text.AlignVCenter
                 Layout.alignment: Qt.AlignVCenter
@@ -583,8 +696,8 @@ PanelWindow {
                 Rectangle {
                     anchors.fill: parent
                     radius: 12
-                    color: root.controlCenterOpen ? "#38ffffff" : "#22ffffff"
-                    border.color: "#40ffffff"
+                    color: root.controlCenterOpen ? root.buttonOpen : root.buttonFill
+                    border.color: root.buttonBorder
                 }
 
                 Row {
@@ -593,7 +706,7 @@ PanelWindow {
 
                     Text {
                         text: root.niriService ? root.niriService.activeWorkspaceName : "1"
-                        color: "#202124"
+                        color: root.topText
                         font.pixelSize: 12
                         anchors.verticalCenter: parent.verticalCenter
                     }

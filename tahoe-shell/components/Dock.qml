@@ -14,12 +14,14 @@ PanelWindow {
     // See shell.qml useSpring. Spring on Image geometry corrupts textures on
     // VMware/software GPUs; NumberAnimation is safe. Default false.
     property bool useSpring: false
+    property bool darkMode: false
     property real dockMouseX: -10000
     property bool dockHovered: false
     property bool pointerDragActive: false
     readonly property bool hasWindows: niriService && niriService.windowList && niriService.windowList.length > 0
-    readonly property color glassFill: GlassStyle.FillDock
-    readonly property color glassStroke: GlassStyle.StrokeDock
+    readonly property color glassFill: darkMode ? "#d01d1f24" : GlassStyle.FillDock
+    readonly property color glassStroke: darkMode ? "#38ffffff" : GlassStyle.StrokeDock
+    readonly property color dockText: darkMode ? "#f5f7fb" : "#202124"
 
     signal toggleLaunchpad()
 
@@ -92,6 +94,39 @@ PanelWindow {
         hoverExitTimer.stop();
         root.dockHovered = false;
         root.dockMouseX = -10000;
+    }
+
+    function openDownloads() {
+        Quickshell.execDetached({
+            command: [
+                "sh",
+                "-lc",
+                "dir=\"$HOME/Downloads\"; " +
+                "if command -v xdg-user-dir >/dev/null 2>&1; then " +
+                "found=\"$(xdg-user-dir DOWNLOAD 2>/dev/null || true)\"; " +
+                "[ -n \"$found\" ] && dir=\"$found\"; fi; " +
+                "xdg-open \"$dir\""
+            ]
+        });
+    }
+
+    function openTrash() {
+        Quickshell.execDetached({ command: ["gio", "open", "trash:///"] });
+    }
+
+    function trashUrls(urls) {
+        if (!urls || urls.length === 0)
+            return;
+
+        var command = ["gio", "trash"];
+        for (var i = 0; i < urls.length; i++) {
+            var path = root.appsService ? root.appsService.localPathFromDropUrl(urls[i]) : String(urls[i] || "");
+            if (path.length > 0)
+                command.push(path);
+        }
+
+        if (command.length > 2)
+            Quickshell.execDetached({ command: command });
     }
 
     onLaunchpadOpenChanged: if (launchpadOpen) resetDockHover()
@@ -201,7 +236,9 @@ PanelWindow {
                     // Kept writable (not readonly) so the Behavior reliably
                     // intercepts binding updates.
                     property real magnification: root.proximityScale(pinnedButton)
+                    readonly property int pinnedIndex: index
                     property real bounceOffset: 0
+                    property bool suppressNextClick: false
                     readonly property bool hovered: !root.pointerDragActive && iconMouse.containsMouse
                     readonly property bool running: modelData.shellAction !== "launchpad"
                         && root.appsService
@@ -219,6 +256,55 @@ PanelWindow {
                     // instead.
                     width: 62
                     height: 70
+
+                    Drag.active: reorderDrag.active
+                    Drag.source: pinnedButton
+                    Drag.keys: ["application/x-tahoe-pinned-app"]
+                    Drag.hotSpot.x: width / 2
+                    Drag.hotSpot.y: height / 2
+
+                    DragHandler {
+                        id: reorderDrag
+                        target: null
+                        enabled: modelData.shellAction !== "launchpad"
+                        onActiveChanged: {
+                            root.pointerDragActive = active;
+                            if (active) {
+                                pinnedButton.suppressNextClick = true;
+                            } else {
+                                root.resetDockHover();
+                                suppressClickReset.restart();
+                            }
+                        }
+                    }
+
+                    Timer {
+                        id: suppressClickReset
+                        interval: 180
+                        repeat: false
+                        onTriggered: pinnedButton.suppressNextClick = false
+                    }
+
+                    DropArea {
+                        anchors.fill: parent
+                        onDropped: function(drop) {
+                            if (!root.appsService)
+                                return;
+
+                            if (drop.source && drop.source.pinnedIndex !== undefined) {
+                                root.appsService.movePinnedApp(drop.source.pinnedIndex, pinnedButton.pinnedIndex);
+                                try { drop.acceptProposedAction(); } catch (e) {}
+                                return;
+                            }
+
+                            try {
+                                if (drop.urls && drop.urls.length > 0) {
+                                    root.appsService.openFilesWithApp(pinnedButton.modelData, drop.urls);
+                                    drop.acceptProposedAction();
+                                }
+                            } catch (e) {}
+                        }
+                    }
 
                     Rectangle {
                         x: 4
@@ -268,7 +354,7 @@ PanelWindow {
                             id: labelText
                             anchors.centerIn: parent
                             text: root.appsService ? root.appsService.appLabel(modelData) : ""
-                            color: "#202124"
+                            color: root.dockText
                             font.pixelSize: 11
                             elide: Text.ElideRight
                             maximumLineCount: 1
@@ -287,6 +373,7 @@ PanelWindow {
                         id: iconMouse
                         anchors.fill: parent
                         hoverEnabled: true
+                        acceptedButtons: Qt.LeftButton | Qt.RightButton
                         cursorShape: Qt.PointingHandCursor
                         onPositionChanged: function(mouse) {
                             var point = pinnedButton.mapToItem(dockSurface, mouse.x, mouse.y);
@@ -294,9 +381,15 @@ PanelWindow {
                         }
                         onEntered: root.markDockHovered()
                         onExited: root.scheduleDockHoverReset()
-                        onClicked: {
+                        onClicked: function(mouse) {
+                            if (pinnedButton.suppressNextClick)
+                                return;
+
                             pinnedButton.bounce();
-                            if (modelData.shellAction === "launchpad") {
+                            if (mouse.button === Qt.RightButton && modelData.shellAction !== "launchpad") {
+                                if (root.appsService)
+                                    root.appsService.unpinApp(modelData);
+                            } else if (modelData.shellAction === "launchpad") {
                                 root.toggleLaunchpad();
                             } else if (root.appsService) {
                                 root.appsService.launchApp(modelData);
@@ -361,7 +454,7 @@ PanelWindow {
                 width: 1
                 height: 46
                 radius: 1
-                color: "#3d000000"
+                color: root.darkMode ? "#40ffffff" : "#3d000000"
                 visible: root.hasWindows
                 anchors.verticalCenter: parent.verticalCenter
             }
@@ -392,6 +485,114 @@ PanelWindow {
                     onDockPointerExited: root.scheduleDockHoverReset()
                 }
             }
+
+            Rectangle {
+                width: 1
+                height: 46
+                radius: 1
+                color: root.darkMode ? "#40ffffff" : "#3d000000"
+                anchors.verticalCenter: parent.verticalCenter
+            }
+
+            DockToolButton {
+                iconSource: root.appsService ? root.appsService.iconPath("dock", "downloads.png") : ""
+                label: "下载"
+                onActivated: root.openDownloads()
+            }
+
+            DockToolButton {
+                iconSource: root.appsService ? root.appsService.iconPath("dock", "bin.png") : ""
+                label: "废纸篓"
+                acceptsTrashDrop: true
+                onActivated: root.openTrash()
+                onUrlsDropped: function(urls) {
+                    root.trashUrls(urls);
+                }
+            }
+        }
+    }
+
+    component DockToolButton: Item {
+        id: tool
+
+        property string iconSource: ""
+        property string label: ""
+        property bool acceptsTrashDrop: false
+
+        signal activated()
+        signal urlsDropped(var urls)
+
+        width: 54
+        height: 64
+
+        Rectangle {
+            anchors.fill: parent
+            anchors.margins: 3
+            radius: 16
+            color: toolMouse.containsMouse ? "#30ffffff" : "transparent"
+            border.color: toolMouse.containsMouse ? "#40ffffff" : "transparent"
+        }
+
+        Image {
+            anchors.horizontalCenter: parent.horizontalCenter
+            y: 7
+            width: 42
+            height: 42
+            source: tool.iconSource
+            fillMode: Image.PreserveAspectFit
+            smooth: true
+        }
+
+        Rectangle {
+            id: toolLabel
+            anchors.horizontalCenter: parent.horizontalCenter
+            y: toolMouse.containsMouse ? -32 : -22
+            width: Math.max(toolLabelText.implicitWidth + 18, 42)
+            height: 24
+            radius: 7
+            color: "#d9f7f8fb"
+            border.color: "#70ffffff"
+            opacity: toolMouse.containsMouse ? 1 : 0
+            visible: opacity > 0.01
+
+            Text {
+                id: toolLabelText
+                anchors.centerIn: parent
+                text: tool.label
+                color: root.dockText
+                font.pixelSize: 11
+                elide: Text.ElideRight
+                maximumLineCount: 1
+            }
+
+            Behavior on opacity {
+                NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
+            }
+
+            Behavior on y {
+                NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
+            }
+        }
+
+        DropArea {
+            anchors.fill: parent
+            enabled: tool.acceptsTrashDrop
+            onDropped: function(drop) {
+                try {
+                    if (drop.urls && drop.urls.length > 0) {
+                        tool.urlsDropped(drop.urls);
+                        drop.acceptProposedAction();
+                    }
+                } catch (e) {}
+            }
+        }
+
+        MouseArea {
+            id: toolMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: tool.activated()
         }
     }
 }

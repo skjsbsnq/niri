@@ -14,6 +14,7 @@ ShellRoot {
     property bool controlCenterOpen: false
     property bool launchpadOpen: false
     property bool appMenuOpen: false
+    property bool applicationMenuOpen: false
     property bool spotlightOpen: false
     property bool notificationCenterOpen: false
     property bool batteryPopupOpen: false
@@ -28,6 +29,7 @@ ShellRoot {
     // fontconfig fallback installed by arch-zh-setup handles emoji/edge cases.
     property string baseFontFamily: "Noto Sans CJK SC"
     property string monoFontFamily: "Noto Sans Mono CJK SC"
+    property bool darkMode: appearance.darkMode
 
     // Real hardware default: spring gives the dock and panel animations their
     // bouncy settle. If Image textures vanish on a VM/software renderer, flip
@@ -51,6 +53,8 @@ ShellRoot {
     function closeTopBarPopups(except) {
         if (except !== "appMenu")
             appMenuOpen = false;
+        if (except !== "applicationMenu")
+            applicationMenuOpen = false;
         if (except !== "controlCenter")
             controlCenterOpen = false;
         if (except !== "notificationCenter")
@@ -71,6 +75,7 @@ ShellRoot {
 
     onWifiPopupOpenChanged: if (wifiPopupOpen) {
         appMenuOpen = false;
+        applicationMenuOpen = false;
         controlCenterOpen = false;
         launchpadOpen = false;
         spotlightOpen = false;
@@ -103,12 +108,23 @@ ShellRoot {
         id: niri
     }
 
+    AppMenu {
+        id: appMenu
+        windowsService: niri
+        appsService: apps
+    }
+
     Controls {
         id: controls
     }
 
+    Appearance {
+        id: appearance
+    }
+
     Power {
         id: power
+        lockService: lockScreen
     }
 
     Battery {
@@ -123,12 +139,20 @@ ShellRoot {
         id: fanControl
     }
 
+    InputMethod {
+        id: inputMethod
+    }
+
     Sound {
         id: sound
     }
 
     ClipboardHistory {
         id: clipboardHistory
+    }
+
+    Screenshot {
+        id: screenshotService
     }
 
     // Owns the org.freedesktop.Notifications daemon for the session. Any
@@ -138,6 +162,10 @@ ShellRoot {
     Notifications {
         id: notifications
         soundService: sound
+    }
+
+    LockScreen {
+        id: lockScreen
     }
 
     Variants {
@@ -154,13 +182,17 @@ ShellRoot {
             TopBar {
                 screen: modelData
                 appsService: apps
+                appMenuService: appMenu
                 niriService: niri
                 notificationsService: notifications
                 batteryService: battery
                 controlsService: controls
                 fanService: fanControl
                 clipboardService: clipboardHistory
+                screenshotService: screenshotService
+                inputMethodService: inputMethod
                 appMenuOpen: shell.topBarPopupOpenFor(shell.appMenuOpen, modelData)
+                applicationMenuOpen: shell.topBarPopupOpenFor(shell.applicationMenuOpen, modelData)
                 spotlightOpen: shell.spotlightOpen
                 controlCenterOpen: shell.topBarPopupOpenFor(shell.controlCenterOpen, modelData)
                 launchpadOpen: shell.launchpadOpen
@@ -169,11 +201,20 @@ ShellRoot {
                 wifiPopupOpen: shell.topBarPopupOpenFor(shell.wifiPopupOpen, modelData)
                 fanPopupOpen: shell.topBarPopupOpenFor(shell.fanPopupOpen, modelData)
                 clipboardPopupOpen: shell.topBarPopupOpenFor(shell.clipboardPopupOpen, modelData)
+                darkMode: shell.darkMode
                 onToggleAppMenu: function(anchorRect) {
                     var wasOpenHere = shell.topBarPopupOpenFor(shell.appMenuOpen, modelData);
                     shell.prepareTopBarPopup(modelData, anchorRect);
                     shell.closeTopBarPopups("appMenu");
                     shell.appMenuOpen = !wasOpenHere;
+                    shell.launchpadOpen = false;
+                    shell.spotlightOpen = false;
+                }
+                onToggleApplicationMenu: function(anchorRect) {
+                    var wasOpenHere = shell.topBarPopupOpenFor(shell.applicationMenuOpen, modelData);
+                    shell.prepareTopBarPopup(modelData, anchorRect);
+                    shell.closeTopBarPopups("applicationMenu");
+                    shell.applicationMenuOpen = !wasOpenHere;
                     shell.launchpadOpen = false;
                     shell.spotlightOpen = false;
                 }
@@ -235,6 +276,13 @@ ShellRoot {
                     shell.launchpadOpen = false;
                     shell.spotlightOpen = false;
                 }
+                onTriggerScreenshot: {
+                    screenshotService.captureSelection();
+                    shell.closeTopBarPopups("");
+                    shell.launchpadOpen = false;
+                    shell.spotlightOpen = false;
+                }
+                onToggleInputMethod: inputMethod.toggle()
                 onOpenTrayMenu: function(item, anchorRect) {
                     shell.prepareTopBarPopup(modelData, anchorRect);
                     shell.closeTopBarPopups("trayMenu");
@@ -254,11 +302,20 @@ ShellRoot {
                 onCloseRequested: shell.appMenuOpen = false
             }
 
+            AppMenuPopup {
+                screen: modelData
+                anchorRect: shell.topBarPopupAnchorRect
+                open: shell.topBarPopupOpenFor(shell.applicationMenuOpen, modelData)
+                appMenuService: appMenu
+                onCloseRequested: shell.applicationMenuOpen = false
+            }
+
             Dock {
                 screen: modelData
                 appsService: apps
                 niriService: niri
                 useSpring: shell.useSpring
+                darkMode: shell.darkMode
                 launchpadOpen: shell.launchpadOpen
                 onToggleLaunchpad: {
                     shell.launchpadOpen = !shell.launchpadOpen;
@@ -271,6 +328,7 @@ ShellRoot {
                 screen: modelData
                 niriService: niri
                 controlsService: controls
+                appearanceService: appearance
                 anchorRect: shell.topBarPopupAnchorRect
                 open: shell.topBarPopupOpenFor(shell.controlCenterOpen, modelData)
                 onCloseRequested: shell.controlCenterOpen = false
@@ -287,6 +345,7 @@ ShellRoot {
             Spotlight {
                 screen: modelData
                 appsService: apps
+                screenshotService: screenshotService
                 open: shell.spotlightOpen
                 onCloseRequested: shell.spotlightOpen = false
             }

@@ -2,9 +2,11 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import Quickshell
+import Quickshell.Io
 
-QtObject {
+Item {
     id: root
+    visible: false
 
     readonly property string assetRoot: Quickshell.shellPath("assets")
     readonly property string backgroundRoot: assetRoot + "/backgrounds/"
@@ -17,6 +19,22 @@ QtObject {
     readonly property var realApplications: [...DesktopEntries.applications.values].filter(isLaunchableApplication).sort(compareApplications)
     readonly property var pinnedApps: buildPinnedApps()
     readonly property var launchpadApps: realApplications
+
+    FileView {
+        id: pinnedFile
+        path: Quickshell.stateDir + "/pinned-apps.json"
+        blockLoading: true
+        watchChanges: true
+        onFileChanged: reload()
+        onLoaded: root.ensurePinnedDefaults()
+        onLoadFailed: root.ensurePinnedDefaults()
+
+        JsonAdapter {
+            id: pinnedAdapter
+            property bool initialized: false
+            property var pinned: []
+        }
+    }
 
     function iconPath(iconSet, fileName) {
         if (!fileName || fileName.length === 0)
@@ -225,6 +243,218 @@ QtObject {
         });
     }
 
+    function appStableId(app) {
+        if (!app)
+            return "";
+        if (app.desktopEntry)
+            app = app.desktopEntry;
+
+        var id = String(app.id || "").trim();
+        if (id.length > 0)
+            return id;
+        var startup = String(app.startupClass || "").trim();
+        if (startup.length > 0)
+            return startup;
+        var name = String(app.name || "").trim();
+        return name;
+    }
+
+    function sanitizedPinnedIds(values) {
+        var result = [];
+        var seen = {};
+        var list = Array.isArray(values) ? values : [];
+        for (var i = 0; i < list.length; i++) {
+            var id = String(list[i] || "").trim();
+            if (id.length === 0 || seen[id])
+                continue;
+            seen[id] = true;
+            result.push(id);
+        }
+        return result;
+    }
+
+    function defaultPinnedIds() {
+        var ids = [];
+        var seen = {};
+
+        function add(app) {
+            var id = appStableId(app);
+            if (id.length === 0 || seen[id])
+                return;
+            seen[id] = true;
+            ids.push(id);
+        }
+
+        add(findApplication([
+            "org.gnome.Nautilus",
+            "nautilus",
+            "org.kde.dolphin",
+            "dolphin",
+            "thunar",
+            "pcmanfm",
+            "files"
+        ]));
+        add(findApplication([
+            "org.wezfurlong.wezterm",
+            "wezterm",
+            "org.gnome.Console",
+            "kgx",
+            "org.gnome.Terminal",
+            "gnome-terminal",
+            "org.kde.konsole",
+            "konsole",
+            "Alacritty",
+            "alacritty",
+            "kitty",
+            "foot",
+            "terminal"
+        ]));
+        add(findApplication([
+            "firefox",
+            "org.mozilla.firefox",
+            "chromium",
+            "google-chrome",
+            "brave-browser",
+            "browser"
+        ]));
+        add(findApplication([
+            "org.gnome.Settings",
+            "gnome-control-center",
+            "systemsettings",
+            "xfce4-settings-manager",
+            "settings"
+        ]));
+
+        return ids;
+    }
+
+    function configuredPinnedIds() {
+        var ids = sanitizedPinnedIds(pinnedAdapter.pinned);
+        return pinnedAdapter.initialized ? ids : (ids.length > 0 ? ids : defaultPinnedIds());
+    }
+
+    function setPinnedIds(ids) {
+        pinnedAdapter.initialized = true;
+        pinnedAdapter.pinned = sanitizedPinnedIds(ids);
+        pinnedFile.writeAdapter();
+    }
+
+    function ensurePinnedDefaults() {
+        if (!pinnedAdapter.initialized) {
+            var existing = sanitizedPinnedIds(pinnedAdapter.pinned);
+            setPinnedIds(existing.length > 0 ? existing : defaultPinnedIds());
+        }
+    }
+
+    function isPinnedApp(app) {
+        var id = appStableId(app);
+        if (id.length === 0)
+            return false;
+
+        var ids = configuredPinnedIds();
+        for (var i = 0; i < ids.length; i++) {
+            if (normalizedAppToken(ids[i]) === normalizedAppToken(id))
+                return true;
+        }
+        return false;
+    }
+
+    function pinApp(app) {
+        if (!isLaunchableApplication(app))
+            return;
+
+        var id = appStableId(app);
+        if (id.length === 0 || isPinnedApp(app))
+            return;
+
+        var ids = configuredPinnedIds().slice();
+        ids.push(id);
+        setPinnedIds(ids);
+    }
+
+    function unpinApp(app) {
+        var id = appStableId(app);
+        if (id.length === 0)
+            return;
+
+        var target = normalizedAppToken(id);
+        var ids = configuredPinnedIds();
+        var next = [];
+        for (var i = 0; i < ids.length; i++) {
+            if (normalizedAppToken(ids[i]) !== target)
+                next.push(ids[i]);
+        }
+        setPinnedIds(next);
+    }
+
+    function togglePinnedApp(app) {
+        if (isPinnedApp(app))
+            unpinApp(app);
+        else
+            pinApp(app);
+    }
+
+    function pinWindow(window) {
+        if (!window)
+            return;
+
+        var app = findApplication([
+            window.appId || "",
+            window.title || ""
+        ]);
+        if (app)
+            pinApp(app);
+    }
+
+    function movePinnedApp(fromIndex, toIndex) {
+        // Dock index 0 is the always-present Launchpad item. Persisted pins
+        // start at visual index 1.
+        var from = Number(fromIndex) - 1;
+        var to = Number(toIndex) - 1;
+        var ids = configuredPinnedIds().slice();
+        if (from < 0 || to < 0 || from >= ids.length || to >= ids.length || from === to)
+            return;
+
+        var moved = ids.splice(from, 1)[0];
+        ids.splice(to, 0, moved);
+        setPinnedIds(ids);
+    }
+
+    function localPathFromDropUrl(url) {
+        var text = String(url || "");
+        if (text.indexOf("file://") === 0)
+            return decodeURIComponent(text.replace(/^file:\/\//, ""));
+        return text;
+    }
+
+    function openFilesWithApp(app, urls) {
+        if (!app || !urls || urls.length === 0)
+            return;
+
+        if (app.desktopEntry)
+            app = app.desktopEntry;
+
+        var paths = [];
+        for (var i = 0; i < urls.length; i++) {
+            var path = localPathFromDropUrl(urls[i]);
+            if (path.length > 0)
+                paths.push(path);
+        }
+        if (paths.length === 0)
+            return;
+
+        if (app.command && app.command.length > 0) {
+            Quickshell.execDetached({
+                command: app.command.concat(paths),
+                workingDirectory: app.workingDirectory || ""
+            });
+            return;
+        }
+
+        for (var j = 0; j < paths.length; j++)
+            Quickshell.execDetached({ command: ["xdg-open", paths[j]] });
+    }
+
     function normalizedAppToken(value) {
         var token = String(value || "").trim().toLowerCase();
         if (token.length === 0)
@@ -408,45 +638,9 @@ QtObject {
         ];
         var seen = {};
 
-        appendApplication(result, seen, findApplication([
-            "org.gnome.Nautilus",
-            "nautilus",
-            "org.kde.dolphin",
-            "dolphin",
-            "thunar",
-            "pcmanfm",
-            "files"
-        ]));
-        appendApplication(result, seen, findApplication([
-            "org.wezfurlong.wezterm",
-            "wezterm",
-            "org.gnome.Console",
-            "kgx",
-            "org.gnome.Terminal",
-            "gnome-terminal",
-            "org.kde.konsole",
-            "konsole",
-            "Alacritty",
-            "alacritty",
-            "kitty",
-            "foot",
-            "terminal"
-        ]));
-        appendApplication(result, seen, findApplication([
-            "firefox",
-            "org.mozilla.firefox",
-            "chromium",
-            "google-chrome",
-            "brave-browser",
-            "browser"
-        ]));
-        appendApplication(result, seen, findApplication([
-            "org.gnome.Settings",
-            "gnome-control-center",
-            "systemsettings",
-            "xfce4-settings-manager",
-            "settings"
-        ]));
+        var ids = configuredPinnedIds();
+        for (var i = 0; i < ids.length; i++)
+            appendApplication(result, seen, findApplication([ids[i]]));
 
         return result;
     }

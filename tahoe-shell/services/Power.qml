@@ -16,6 +16,7 @@ Item {
     property string pendingTitle: ""
     property string pendingMessage: ""
     property string lastAction: ""
+    property var lockService: null
 
     readonly property bool hasPending: pendingAction.length > 0
 
@@ -75,13 +76,7 @@ Item {
 
     function commandFor(action) {
         if (action === "lock") {
-            return [
-                "sh",
-                "-lc",
-                "if command -v swaylock >/dev/null 2>&1; then exec swaylock -f; " +
-                "elif command -v gtklock >/dev/null 2>&1; then exec gtklock; " +
-                "else exec loginctl lock-session; fi"
-            ];
+            return ["loginctl", "lock-session"];
         }
 
         if (action === "sleep")
@@ -107,6 +102,12 @@ Item {
     }
 
     function runAction(action) {
+        if (action === "lock" && lockService && lockService.lock) {
+            lastAction = action;
+            lockService.lock();
+            return;
+        }
+
         var command = commandFor(action);
         if (!command || command.length === 0)
             return;

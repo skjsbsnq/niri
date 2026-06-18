@@ -148,7 +148,7 @@ Item {
     MouseArea {
         anchors.fill: parent
         hoverEnabled: true
-        acceptedButtons: Qt.LeftButton | Qt.MiddleButton
+        acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
         cursorShape: Qt.PointingHandCursor
         onPositionChanged: function(mouse) {
             if (root.dockSurfaceItem) {
@@ -160,10 +160,14 @@ Item {
         onExited: root.dockPointerExited()
         onClicked: function(mouse) {
             root.bounce();
-            if (mouse.button === Qt.MiddleButton)
+            if (mouse.button === Qt.RightButton) {
+                if (root.appsService)
+                    root.appsService.pinWindow(root.windowModel || root.toplevel);
+            } else if (mouse.button === Qt.MiddleButton) {
                 root.minimize();
-            else
+            } else {
                 root.restoreOrActivate();
+            }
         }
     }
 

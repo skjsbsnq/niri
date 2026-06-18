@@ -10,8 +10,9 @@ PanelWindow {
 
     property bool open: false
     property var appsService
+    property var screenshotService
     property string query: ""
-    readonly property var results: root.appsService ? root.appsService.spotlightResults(root.query, 6) : []
+    readonly property var results: root.buildResults()
 
     signal closeRequested()
 
@@ -40,11 +41,42 @@ PanelWindow {
     }
 
     function launchApp(app) {
-        if (!app || !root.appsService)
+        if (!app)
             return;
 
-        root.appsService.launchApp(app);
+        if (app.resultType === "screenshot") {
+            if (root.screenshotService)
+                root.screenshotService.activateResult(app);
+        } else if (root.appsService) {
+            root.appsService.launchApp(app);
+        }
         root.closeRequested();
+    }
+
+    function buildResults() {
+        var out = [];
+        if (root.screenshotService && root.screenshotService.matchesQuery(root.query))
+            out.push(root.screenshotService.spotlightResult());
+
+        if (root.appsService) {
+            var apps = root.appsService.spotlightResults(root.query, Math.max(1, 6 - out.length));
+            for (var i = 0; i < apps.length && out.length < 6; i++)
+                out.push(apps[i]);
+        }
+
+        return out;
+    }
+
+    function resultLabel(result) {
+        if (result && result.resultType === "screenshot")
+            return result.name;
+        return root.appsService ? root.appsService.appLabel(result) : "";
+    }
+
+    function resultIcon(result) {
+        if (result && result.resultType === "screenshot")
+            return root.appsService ? root.appsService.iconPath("dock", result.icon) : "";
+        return root.appsService ? root.appsService.iconForApp(result) : "";
     }
 
     function launchFirstResult() {
@@ -329,7 +361,7 @@ PanelWindow {
                             anchors.verticalCenter: parent.verticalCenter
                             width: 32
                             height: 32
-                            source: root.appsService ? root.appsService.iconForApp(resultButton.modelData) : ""
+                            source: root.resultIcon(resultButton.modelData)
                             fillMode: Image.PreserveAspectFit
                             smooth: true
                         }
@@ -340,7 +372,7 @@ PanelWindow {
                             anchors.right: parent.right
                             anchors.rightMargin: 12
                             anchors.verticalCenter: parent.verticalCenter
-                            text: root.appsService ? root.appsService.appLabel(resultButton.modelData) : ""
+                            text: root.resultLabel(resultButton.modelData)
                             color: "#202124"
                             font.pixelSize: 14
                             elide: Text.ElideRight

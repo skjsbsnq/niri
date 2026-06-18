@@ -60,12 +60,29 @@ Item {
         return id.length > 0 ? id : "未知";
     }
 
+    function setValue(name, value) {
+        if (root[name] !== value)
+            root[name] = value;
+    }
+
+    function sameStringArray(a, b) {
+        if (!a || !b || a.length !== b.length)
+            return false;
+
+        for (var i = 0; i < a.length; i++) {
+            if (String(a[i]) !== String(b[i]))
+                return false;
+        }
+
+        return true;
+    }
+
     function setProfile(id) {
         if (!id || !root.available || !root.supports(id) || root.updating)
             return;
 
-        root.profile = id;
-        root.updating = true;
+        root.setValue("profile", id);
+        root.setValue("updating", true);
         profileSetter.command = root.backend === "busctl"
             ? [
                 "busctl",
@@ -87,10 +104,10 @@ Item {
         if (!match)
             return;
 
-        root.profile = match[1];
-        root.available = true;
-        root.backend = source || "";
-        root.errorText = "";
+        root.setValue("profile", match[1]);
+        root.setValue("available", true);
+        root.setValue("backend", source || "");
+        root.setValue("errorText", "");
     }
 
     function parseProfileList(text) {
@@ -103,7 +120,7 @@ Item {
                 found.push(match[1]);
         }
 
-        if (found.length > 0)
+        if (found.length > 0 && !root.sameStringArray(root.availableProfileIds, found))
             root.availableProfileIds = found;
     }
 
@@ -159,8 +176,8 @@ Item {
         }
         onExited: function(code, exitStatus) {
             if (code !== 0 && !root.available) {
-                root.backend = "";
-                root.errorText = "需要 power-profiles-daemon";
+                root.setValue("backend", "");
+                root.setValue("errorText", "需要 power-profiles-daemon");
             }
         }
     }
@@ -174,7 +191,7 @@ Item {
             onStreamFinished: root.parseProfileList(cliListProbeOut.text)
         }
         onExited: function(code, exitStatus) {
-            if (code !== 0 && !root.available)
+            if (code !== 0 && !root.available && root.availableProfileIds.length > 0)
                 root.availableProfileIds = [];
         }
     }
@@ -183,7 +200,7 @@ Item {
         id: profileSetter
         running: false
         onExited: function(code, exitStatus) {
-            root.updating = false;
+            root.setValue("updating", false);
             root.refresh();
         }
     }

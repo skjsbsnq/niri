@@ -59,18 +59,6 @@ Item {
     readonly property string timeText: timeLabel()
     readonly property string healthText: healthLabel()
 
-    Component.onCompleted: logState("completed")
-    onReadyChanged: logState("readyChanged")
-    onRawPercentChanged: logState("rawPercentChanged")
-
-    function logState(reason) {
-        console.log("[Battery]", reason,
-                    "realDevice:", realDevice,
-                    "rawPercent:", rawPercent,
-                    "isLaptop:", realDevice && realDevice.isLaptopBattery,
-                    "ready:", ready);
-    }
-
     function stateLabel(value) {
         if (!available)
             return "无电池";

@@ -24,6 +24,11 @@ Item {
 
     readonly property int effectivePercent: targetPercent > 0 ? targetPercent : speedPercent
 
+    function setValue(name, value) {
+        if (root[name] !== value)
+            root[name] = value;
+    }
+
     function clampPercent(value) {
         var n = Math.round(Number(value));
         if (!isFinite(n))
@@ -47,10 +52,11 @@ Item {
 
     function parseBackend(path) {
         var value = String(path || "").trim();
-        root.available = value.length > 0;
-        root.backendName = root.available ? "NBFC" : "";
-        root.errorText = root.available ? "" : "需要安装并配置 nbfc-linux";
-        root.statusText = root.available ? "已连接 NBFC" : "未检测到 NBFC";
+        var detected = value.length > 0;
+        root.setValue("available", detected);
+        root.setValue("backendName", detected ? "NBFC" : "");
+        root.setValue("errorText", detected ? "" : "需要安装并配置 nbfc-linux");
+        root.setValue("statusText", detected ? "已连接 NBFC" : "未检测到 NBFC");
         if (root.available)
             Qt.callLater(root.refresh);
     }
@@ -87,31 +93,32 @@ Item {
             var lower = line.toLowerCase();
 
             if (lower.indexOf("auto") >= 0 && lower.indexOf("control") >= 0)
-                root.autoMode = root.boolFromLine(line);
+                root.setValue("autoMode", root.boolFromLine(line));
 
             if (lower.indexOf("target") >= 0 && lower.indexOf("fan") >= 0 && lower.indexOf("speed") >= 0) {
                 var target = root.firstNumber(line);
                 if (isFinite(target)) {
-                    root.targetPercent = root.clampPercent(target);
-                    root.manualPercent = root.targetPercent;
+                    var targetPercent = root.clampPercent(target);
+                    root.setValue("targetPercent", targetPercent);
+                    root.setValue("manualPercent", targetPercent);
                     sawSpeed = true;
                 }
             } else if (lower.indexOf("current") >= 0 && lower.indexOf("fan") >= 0 && lower.indexOf("speed") >= 0) {
                 var current = root.firstNumber(line);
                 if (isFinite(current)) {
-                    root.speedPercent = root.clampPercent(current);
+                    root.setValue("speedPercent", root.clampPercent(current));
                     sawSpeed = true;
                 }
             } else if (lower.indexOf("temperature") >= 0 || lower.indexOf("temp") >= 0) {
                 var temp = root.firstNumber(line);
                 if (isFinite(temp))
-                    root.temperatureText = Math.round(temp) + "°C";
+                    root.setValue("temperatureText", Math.round(temp) + "°C");
             }
         }
 
-        root.available = true;
-        root.errorText = "";
-        root.statusText = sawSpeed ? "风扇状态已更新" : "NBFC 已连接";
+        root.setValue("available", true);
+        root.setValue("errorText", "");
+        root.setValue("statusText", sawSpeed ? "风扇状态已更新" : "NBFC 已连接");
     }
 
     function setAutoMode(enabled) {
@@ -119,8 +126,8 @@ Item {
             return;
 
         if (enabled) {
-            root.autoMode = true;
-            root.updating = true;
+            root.setValue("autoMode", true);
+            root.setValue("updating", true);
             fanSetter.command = ["nbfc", "set", "-a"];
             fanSetter.running = true;
             return;
@@ -134,11 +141,11 @@ Item {
             return;
 
         var value = root.clampPercent(percent);
-        root.autoMode = false;
-        root.manualPercent = value;
-        root.targetPercent = value;
-        root.speedPercent = value;
-        root.pendingManualPercent = value;
+        root.setValue("autoMode", false);
+        root.setValue("manualPercent", value);
+        root.setValue("targetPercent", value);
+        root.setValue("speedPercent", value);
+        root.setValue("pendingManualPercent", value);
         manualCommitTimer.restart();
     }
 
@@ -151,8 +158,8 @@ Item {
         }
 
         var value = root.pendingManualPercent;
-        root.pendingManualPercent = -1;
-        root.updating = true;
+        root.setValue("pendingManualPercent", -1);
+        root.setValue("updating", true);
         fanSetter.command = ["nbfc", "set", "-s", String(value)];
         fanSetter.running = true;
     }
@@ -167,10 +174,10 @@ Item {
         }
         onExited: function(code, exitStatus) {
             if (code !== 0) {
-                root.available = false;
-                root.backendName = "";
-                root.errorText = "需要安装并配置 nbfc-linux";
-                root.statusText = "未检测到 NBFC";
+                root.setValue("available", false);
+                root.setValue("backendName", "");
+                root.setValue("errorText", "需要安装并配置 nbfc-linux");
+                root.setValue("statusText", "未检测到 NBFC");
             }
         }
     }
@@ -185,8 +192,8 @@ Item {
         }
         onExited: function(code, exitStatus) {
             if (code !== 0) {
-                root.statusText = "NBFC 状态不可用";
-                root.errorText = "请确认 nbfc 服务已启动并选择了机型配置";
+                root.setValue("statusText", "NBFC 状态不可用");
+                root.setValue("errorText", "请确认 nbfc 服务已启动并选择了机型配置");
             }
         }
     }
@@ -195,9 +202,9 @@ Item {
         id: fanSetter
         running: false
         onExited: function(code, exitStatus) {
-            root.updating = false;
+            root.setValue("updating", false);
             if (code !== 0)
-                root.errorText = "风扇写入失败，请检查 NBFC 权限或服务状态";
+                root.setValue("errorText", "风扇写入失败，请检查 NBFC 权限或服务状态");
             if (root.pendingManualPercent >= 0)
                 manualCommitTimer.restart();
             root.refresh();

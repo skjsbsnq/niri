@@ -75,6 +75,18 @@ Item {
     property bool brightnessAvailable: false
     property bool brightnessUpdating: false
 
+    function setBrightnessValue(value) {
+        var clamped = Math.max(0, Math.min(1, Number(value) || 0));
+        if (Math.abs(root.brightness - clamped) > 0.0005)
+            root.brightness = clamped;
+    }
+
+    function setBrightnessAvailable(available) {
+        var next = !!available;
+        if (root.brightnessAvailable !== next)
+            root.brightnessAvailable = next;
+    }
+
     function refreshBrightness() {
         brightnessProbe.running = true;
     }
@@ -84,7 +96,7 @@ Item {
             return;
         var v = Math.max(0.05, Math.min(1, Number(value) || 0));
         brightnessUpdating = true;
-        root.brightness = v;
+        root.setBrightnessValue(v);
         var pct = Math.round(v * 100).toString();
         brightnessSetter.command = ["brightnessctl", "set", pct + "%"];
         brightnessSetter.running = true;
@@ -115,16 +127,16 @@ Item {
                 }
 
                 if (isFinite(current) && isFinite(max) && max > 0) {
-                    root.brightness = Math.max(0, Math.min(1, current / max));
-                    root.brightnessAvailable = true;
+                    root.setBrightnessValue(current / max);
+                    root.setBrightnessAvailable(true);
                     return;
                 }
-                root.brightnessAvailable = false;
+                root.setBrightnessAvailable(false);
             }
         }
         onExited: function (code, exitStatus) {
             if (code !== 0)
-                root.brightnessAvailable = false;
+                root.setBrightnessAvailable(false);
         }
     }
 

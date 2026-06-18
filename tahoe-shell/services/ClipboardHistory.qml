@@ -17,9 +17,21 @@ Item {
     property var entries: []
     property string statusText: "检测中"
     property string errorText: ""
+    property bool listLoaded: false
+    property string lastListText: ""
 
     readonly property bool available: cliphistAvailable && wlCopyAvailable
     readonly property int historyCount: entries ? entries.length : 0
+
+    function setValue(name, value) {
+        if (root[name] !== value)
+            root[name] = value;
+    }
+
+    function clearEntries() {
+        if (root.entries.length > 0)
+            root.entries = [];
+    }
 
     function detectTools() {
         if (!toolProbe.running)
@@ -39,6 +51,10 @@ Item {
 
     function scheduleRefresh() {
         refreshTimer.restart();
+    }
+
+    function updateListStatus(count) {
+        root.setValue("statusText", count > 0 ? (count + " 项") : "暂无历史");
     }
 
     function parseTools(text) {
@@ -63,7 +79,16 @@ Item {
     }
 
     function parseList(text) {
-        var rawLines = String(text || "").split(/\r?\n/);
+        var normalizedText = String(text || "");
+        if (root.listLoaded && normalizedText === root.lastListText) {
+            root.updateListStatus(root.entries ? root.entries.length : 0);
+            return;
+        }
+
+        root.listLoaded = true;
+        root.lastListText = normalizedText;
+
+        var rawLines = normalizedText.split(/\r?\n/);
         var out = [];
         for (var i = 0; i < rawLines.length && out.length < 60; i++) {
             var line = rawLines[i];
@@ -90,7 +115,7 @@ Item {
         }
 
         root.entries = out;
-        root.statusText = out.length > 0 ? (out.length + " 项") : "暂无历史";
+        root.updateListStatus(out.length);
     }
 
     function startWatcher() {
@@ -127,8 +152,10 @@ Item {
         if (!root.cliphistAvailable)
             return;
 
-        root.entries = [];
-        root.statusText = "已清空";
+        root.listLoaded = false;
+        root.lastListText = "";
+        root.clearEntries();
+        root.setValue("statusText", "已清空");
         Quickshell.execDetached({
             command: ["cliphist", "wipe"],
             workingDirectory: ""
@@ -161,8 +188,10 @@ Item {
         onExited: function(code, exitStatus) {
             root.updating = false;
             if (code !== 0) {
-                root.entries = [];
-                root.statusText = "暂无历史";
+                root.listLoaded = false;
+                root.lastListText = "";
+                root.clearEntries();
+                root.setValue("statusText", "暂无历史");
             }
         }
     }

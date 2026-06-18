@@ -61,6 +61,10 @@ PanelWindow {
         };
     }
 
+    function msecsToNextMinute() {
+        return Math.max(250, 60000 - (root.now.getSeconds() * 1000 + root.now.getMilliseconds()));
+    }
+
     // When the Launchpad opens, the TopBar must disappear so the Launchpad
     // scrim truly covers everything. Otherwise the TopBar is a sibling
     // layer-shell panel that stays stacked above the Launchpad backdrop
@@ -86,7 +90,7 @@ PanelWindow {
     WlrLayershell.namespace: "tahoe-topbar"
 
     Timer {
-        interval: 1000
+        interval: root.msecsToNextMinute()
         running: true
         repeat: true
         onTriggered: root.now = new Date()

@@ -6,11 +6,9 @@ import Quickshell.Io
 
 // niri IPC backing service.
 //
-// First version intentionally uses a cheap `niri msg --json windows` snapshot
-// with light polling. This gives the shell stable niri ids, geometry, focus
-// timestamps and minimized/floating state without committing the UI to a long
-// event-stream parser yet. Event stream can replace the polling later while
-// keeping this public model intact.
+// The event stream is the primary path for stable niri ids, geometry, focus
+// timestamps and minimized/floating state. Snapshot polling remains as a
+// fallback when the stream is unavailable.
 
 Item {
     id: root
@@ -22,8 +20,18 @@ Item {
     property bool refreshInFlight: false
     property string lastError: ""
     property int pollInterval: 1200
+    property string lastWindowsJson: ""
+    property int eventApplyInterval: 900
+    property bool eventStreamReady: false
+    property var eventWindowsById: ({})
+    property var eventWindowOrder: []
 
     readonly property var focusedWindow: findFocusedWindow(windows)
+
+    function setValue(name, value) {
+        if (root[name] !== value)
+            root[name] = value;
+    }
 
     function refresh() {
         if (refreshInFlight || windowProbe.running)
@@ -34,6 +42,8 @@ Item {
     }
 
     function refreshSoon() {
+        if (root.eventStreamReady)
+            return;
         refreshDelay.restart();
     }
 
@@ -69,11 +79,17 @@ Item {
     }
 
     function applyWindows(rawWindows) {
+        var snapshot = normalizedWindowSnapshot(rawWindows);
+        root.applyNormalizedWindows(snapshot.windows, snapshot.byId);
+    }
+
+    function normalizedWindowSnapshot(rawWindows) {
         if (!Array.isArray(rawWindows))
             rawWindows = [];
 
         var next = [];
         var byId = {};
+        var order = [];
 
         for (var i = 0; i < rawWindows.length; i++) {
             var normalized = normalizeWindow(rawWindows[i]);
@@ -81,13 +97,182 @@ Item {
                 continue;
 
             next.push(normalized);
-            byId[String(normalized.id)] = normalized;
+            var key = String(normalized.id);
+            byId[key] = normalized;
+            order.push(key);
         }
 
+        return { "windows": next, "byId": byId, "order": order };
+    }
+
+    function applyNormalizedWindows(next, byId) {
         windows = next;
         windowsById = byId;
-        available = true;
-        lastError = "";
+        root.setValue("available", true);
+        root.setValue("lastError", "");
+    }
+
+    function loadEventWindows(rawWindows) {
+        var snapshot = root.normalizedWindowSnapshot(rawWindows);
+        root.eventWindowsById = snapshot.byId;
+        root.eventWindowOrder = snapshot.order;
+        root.applyNormalizedWindows(snapshot.windows, snapshot.byId);
+        root.setValue("eventStreamReady", true);
+    }
+
+    function applyEventWindows() {
+        var next = [];
+        var byId = {};
+        var seen = {};
+        var order = root.eventWindowOrder || [];
+
+        for (var i = 0; i < order.length; i++) {
+            var key = String(order[i]);
+            var window = root.eventWindowsById[key];
+            if (!window || seen[key])
+                continue;
+
+            next.push(window);
+            byId[key] = window;
+            seen[key] = true;
+        }
+
+        root.eventWindowOrder = next.map(function(window) { return String(window.id); });
+        root.applyNormalizedWindows(next, byId);
+        root.setValue("eventStreamReady", true);
+    }
+
+    function scheduleEventApply(immediate) {
+        if (immediate) {
+            eventApplyTimer.stop();
+            root.applyEventWindows();
+            return;
+        }
+
+        if (!eventApplyTimer.running)
+            eventApplyTimer.restart();
+    }
+
+    function sameWindow(left, right) {
+        return JSON.stringify(left) === JSON.stringify(right);
+    }
+
+    function setEventFocus(id) {
+        var changed = false;
+        var target = id === undefined || id === null ? "" : String(id);
+
+        for (var key in root.eventWindowsById) {
+            var window = root.eventWindowsById[key];
+            if (!window)
+                continue;
+
+            var focused = target.length > 0 && String(window.id) === target;
+            if (window.isFocused !== focused) {
+                window.isFocused = focused;
+                changed = true;
+            }
+        }
+
+        return changed;
+    }
+
+    function upsertEventWindow(rawWindow) {
+        var normalized = root.normalizeWindow(rawWindow);
+        if (!normalized)
+            return { "changed": false, "immediate": false };
+
+        var key = String(normalized.id);
+        var previous = root.eventWindowsById[key] || null;
+        var immediate = !previous || (!!previous.isFocused !== !!normalized.isFocused);
+        var changed = !previous || !root.sameWindow(previous, normalized);
+
+        if (normalized.isFocused)
+            changed = root.setEventFocus(normalized.id) || changed;
+
+        if (!previous || root.eventWindowOrder.indexOf(key) < 0)
+            root.eventWindowOrder.push(key);
+
+        root.eventWindowsById[key] = normalized;
+        return { "changed": changed, "immediate": immediate };
+    }
+
+    function closeEventWindow(id) {
+        var key = String(id);
+        if (!root.eventWindowsById[key])
+            return false;
+
+        delete root.eventWindowsById[key];
+        var nextOrder = [];
+        for (var i = 0; i < root.eventWindowOrder.length; i++) {
+            if (String(root.eventWindowOrder[i]) !== key)
+                nextOrder.push(root.eventWindowOrder[i]);
+        }
+        root.eventWindowOrder = nextOrder;
+        return true;
+    }
+
+    function updateEventWindowValue(id, propertyName, value, immediate) {
+        var key = String(id);
+        var window = root.eventWindowsById[key];
+        if (!window)
+            return false;
+
+        if (JSON.stringify(window[propertyName]) === JSON.stringify(value))
+            return false;
+
+        window[propertyName] = value;
+        if (propertyName === "layout")
+            window.geometry = root.geometryFromLayout(value);
+        root.scheduleEventApply(!!immediate);
+        return true;
+    }
+
+    function handleEventLine(line) {
+        var text = String(line || "").trim();
+        if (text.length === 0)
+            return;
+
+        try {
+            var event = JSON.parse(text);
+            if (event.WindowsChanged) {
+                root.loadEventWindows(event.WindowsChanged.windows || []);
+            } else if (event.WindowOpenedOrChanged) {
+                var result = root.upsertEventWindow(event.WindowOpenedOrChanged.window);
+                if (result.changed)
+                    root.scheduleEventApply(result.immediate);
+            } else if (event.WindowClosed) {
+                if (root.closeEventWindow(event.WindowClosed.id))
+                    root.scheduleEventApply(true);
+            } else if (event.WindowFocusChanged) {
+                if (root.setEventFocus(event.WindowFocusChanged.id))
+                    root.scheduleEventApply(true);
+            } else if (event.WindowFocusTimestampChanged) {
+                root.updateEventWindowValue(
+                    event.WindowFocusTimestampChanged.id,
+                    "focusTimestamp",
+                    event.WindowFocusTimestampChanged.focus_timestamp,
+                    false
+                );
+            } else if (event.WindowUrgencyChanged) {
+                root.updateEventWindowValue(
+                    event.WindowUrgencyChanged.id,
+                    "isUrgent",
+                    !!event.WindowUrgencyChanged.urgent,
+                    true
+                );
+            } else if (event.WindowLayoutsChanged) {
+                var changes = event.WindowLayoutsChanged.changes || [];
+                var changed = false;
+                for (var i = 0; i < changes.length; i++) {
+                    if (changes[i] && changes[i].length >= 2)
+                        changed = root.updateEventWindowValue(changes[i][0], "layout", changes[i][1], false) || changed;
+                }
+                if (changed)
+                    root.scheduleEventApply(false);
+            }
+        } catch (error) {
+            root.setValue("lastError", String(error));
+        }
     }
 
     function normalizeWindow(raw) {
@@ -180,9 +365,26 @@ Item {
 
     Timer {
         interval: root.pollInterval
-        running: true
+        running: !eventStream.running
         repeat: true
         onTriggered: root.refresh()
+    }
+
+    Timer {
+        id: eventApplyTimer
+        interval: root.eventApplyInterval
+        repeat: false
+        onTriggered: root.applyEventWindows()
+    }
+
+    Timer {
+        id: eventStreamRestartTimer
+        interval: 3000
+        repeat: false
+        onTriggered: {
+            if (!eventStream.running)
+                eventStream.running = true;
+        }
     }
 
     Timer {
@@ -190,6 +392,30 @@ Item {
         interval: 160
         repeat: false
         onTriggered: root.refresh()
+    }
+
+    Process {
+        id: eventStream
+        running: true
+        command: ["niri", "msg", "--json", "event-stream"]
+        stdout: SplitParser {
+            splitMarker: "\n"
+            onRead: function(line) {
+                root.handleEventLine(line);
+            }
+        }
+        onStarted: {
+            root.setValue("lastError", "");
+        }
+        onRunningChanged: {
+            if (!running && !eventStreamRestartTimer.running)
+                eventStreamRestartTimer.restart();
+        }
+        onExited: function(code, exitStatus) {
+            root.setValue("eventStreamReady", false);
+            if (code !== 0)
+                root.setValue("lastError", "niri event stream exited with code " + code);
+        }
     }
 
     Process {
@@ -202,23 +428,32 @@ Item {
                 var text = String(windowOut.text || "").trim();
                 if (text.length === 0)
                     return;
+                if (root.available && text === root.lastWindowsJson) {
+                    root.setValue("lastError", "");
+                    return;
+                }
 
                 try {
-                    root.applyWindows(JSON.parse(text));
+                    var parsed = JSON.parse(text);
+                    root.lastWindowsJson = text;
+                    root.applyWindows(parsed);
                 } catch (error) {
-                    root.available = false;
-                    root.lastError = String(error);
+                    root.setValue("available", false);
+                    root.setValue("lastError", String(error));
                 }
             }
         }
         onExited: function(code, exitStatus) {
             root.refreshInFlight = false;
             if (code !== 0) {
-                root.available = false;
-                root.lastError = "niri msg windows exited with code " + code;
+                root.setValue("available", false);
+                root.setValue("lastError", "niri msg windows exited with code " + code);
             }
         }
     }
 
-    Component.onCompleted: refresh()
+    Component.onCompleted: {
+        if (!eventStream.running)
+            root.refresh();
+    }
 }

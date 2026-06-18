@@ -16,6 +16,7 @@ PanelWindow {
     property bool useSpring: false
     property real dockMouseX: -10000
     property bool dockHovered: false
+    property bool pointerDragActive: false
     readonly property bool hasWindows: niriService && niriService.windowList && niriService.windowList.length > 0
     readonly property color glassFill: GlassStyle.FillDock
     readonly property color glassStroke: GlassStyle.StrokeDock
@@ -47,7 +48,7 @@ PanelWindow {
     // Range ~150px (web uses 195), peak scale 1.5 (web uses 1.7). Wider
     // range + bigger peak is what makes the neighbor-coupling wave visible.
     function proximityScale(item) {
-        if (!dockHovered || !item || !dockSurface)
+        if (pointerDragActive || !dockHovered || !item || !dockSurface)
             return 1.0;
 
         var point = item.mapToItem(dockSurface, item.width / 2, item.height / 2);
@@ -65,6 +66,22 @@ PanelWindow {
         hoverExitTimer.stop();
         root.dockMouseX = x;
         root.dockHovered = true;
+        root.pointerDragActive = false;
+    }
+
+    function updateDockHoverFromButtons(x, buttons) {
+        if (buttons !== Qt.NoButton) {
+            root.pointerDragActive = true;
+            root.resetDockHover();
+            return;
+        }
+
+        root.updateDockHover(x);
+    }
+
+    function updateDockHoverFromMouse(x, mouse) {
+        var buttons = mouse && mouse.buttons !== undefined ? mouse.buttons : Qt.NoButton;
+        root.updateDockHoverFromButtons(x, buttons);
     }
 
     function scheduleDockHoverReset() {
@@ -102,14 +119,14 @@ PanelWindow {
             item: dockSurface
             material: dockSurface.tahoeGlassMaterial
             radius: dockSurface.tahoeGlassRadius
-            blur: true
-            shadow: true
+            blur: false
+            shadow: false
             clip: true
-            // Keep the dock in its quiet resting material. Hover-driven
-            // interaction made the whole bar become visually heavy and could
-            // stick after pointer/drag transitions.
+            // Keep the dock in its quiet QML-painted resting surface. Any
+            // compositor-owned dock material becomes the heavy full-width bar
+            // after a click/drag-triggered repaint.
             interaction: 0.0
-            materialAlpha: dockSurface.opacity
+            materialAlpha: 0.0
             enabled: !root.launchpadOpen && dockSurface.opacity > 0.01
         }
     ]
@@ -145,7 +162,7 @@ PanelWindow {
             acceptedButtons: Qt.NoButton
             hoverEnabled: true
             onPositionChanged: function(mouse) {
-                root.updateDockHover(mouse.x);
+                root.updateDockHoverFromMouse(mouse.x, mouse);
             }
             onEntered: root.markDockHovered()
             onExited: root.scheduleDockHoverReset()
@@ -185,7 +202,7 @@ PanelWindow {
                     // intercepts binding updates.
                     property real magnification: root.proximityScale(pinnedButton)
                     property real bounceOffset: 0
-                    readonly property bool hovered: iconMouse.containsMouse
+                    readonly property bool hovered: !root.pointerDragActive && iconMouse.containsMouse
                     readonly property bool running: modelData.shellAction !== "launchpad"
                         && root.appsService
                         && root.niriService
@@ -273,7 +290,7 @@ PanelWindow {
                         cursorShape: Qt.PointingHandCursor
                         onPositionChanged: function(mouse) {
                             var point = pinnedButton.mapToItem(dockSurface, mouse.x, mouse.y);
-                            root.updateDockHover(point.x);
+                            root.updateDockHoverFromMouse(point.x, mouse);
                         }
                         onEntered: root.markDockHovered()
                         onExited: root.scheduleDockHoverReset()
@@ -364,8 +381,8 @@ PanelWindow {
                     magnification: root.proximityScale(windowButton)
                     dockWindow: root
                     dockSurfaceItem: dockSurface
-                    onDockPointerMoved: function(x) {
-                        root.updateDockHover(x);
+                    onDockPointerMoved: function(x, buttons) {
+                        root.updateDockHoverFromButtons(x, buttons === undefined ? Qt.NoButton : buttons);
                     }
                     onDockPointerEntered: root.markDockHovered()
                     onDockPointerExited: root.scheduleDockHoverReset()

@@ -25,7 +25,7 @@ Item {
     readonly property real lift: (magnification - 1.0) * 20
 
     signal activateRequested(var toplevel)
-    signal dockPointerMoved(real x)
+    signal dockPointerMoved(real x, int buttons)
     signal dockPointerEntered()
     signal dockPointerExited()
 
@@ -129,7 +129,7 @@ Item {
         onPositionChanged: function(mouse) {
             if (root.dockSurfaceItem) {
                 var point = root.mapToItem(root.dockSurfaceItem, mouse.x, mouse.y);
-                root.dockPointerMoved(point.x);
+                root.dockPointerMoved(point.x, mouse.buttons);
             }
         }
         onEntered: root.dockPointerEntered()

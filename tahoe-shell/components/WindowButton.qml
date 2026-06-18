@@ -27,6 +27,7 @@ Item {
     signal activateRequested(var toplevel)
     signal dockPointerMoved(real x)
     signal dockPointerEntered()
+    signal dockPointerExited()
 
     // Fixed width. Must NOT depend on magnification — WindowButton is fed
     // into Dock's proximityScale() which reads its geometry, so a
@@ -132,6 +133,7 @@ Item {
             }
         }
         onEntered: root.dockPointerEntered()
+        onExited: root.dockPointerExited()
         onClicked: function(mouse) {
             root.bounce();
             if (mouse.button === Qt.MiddleButton)

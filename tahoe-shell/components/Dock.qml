@@ -56,6 +56,36 @@ PanelWindow {
         return 1.0 + influence * 0.5;
     }
 
+    function markDockHovered() {
+        hoverExitTimer.stop();
+        root.dockHovered = true;
+    }
+
+    function updateDockHover(x) {
+        hoverExitTimer.stop();
+        root.dockMouseX = x;
+        root.dockHovered = true;
+    }
+
+    function scheduleDockHoverReset() {
+        hoverExitTimer.restart();
+    }
+
+    function resetDockHover() {
+        hoverExitTimer.stop();
+        root.dockHovered = false;
+        root.dockMouseX = -10000;
+    }
+
+    onLaunchpadOpenChanged: if (launchpadOpen) resetDockHover()
+
+    Timer {
+        id: hoverExitTimer
+        interval: 90
+        repeat: false
+        onTriggered: root.resetDockHover()
+    }
+
     anchors {
         left: true
         right: true
@@ -75,10 +105,10 @@ PanelWindow {
             blur: true
             shadow: true
             clip: true
-            // Intensify the dock glass while the pointer is over it; the
-            // compositor eases highlight/refraction/inner-shadow up via this
-            // scalar instead of changing region geometry.
-            interaction: root.dockHovered ? 1.0 : 0.0
+            // Keep the dock in its quiet resting material. Hover-driven
+            // interaction made the whole bar become visually heavy and could
+            // stick after pointer/drag transitions.
+            interaction: 0.0
             materialAlpha: dockSurface.opacity
             enabled: !root.launchpadOpen && dockSurface.opacity > 0.01
         }
@@ -115,13 +145,10 @@ PanelWindow {
             acceptedButtons: Qt.NoButton
             hoverEnabled: true
             onPositionChanged: function(mouse) {
-                root.dockMouseX = mouse.x;
+                root.updateDockHover(mouse.x);
             }
-            onEntered: root.dockHovered = true
-            onExited: {
-                root.dockHovered = false;
-                root.dockMouseX = -10000;
-            }
+            onEntered: root.markDockHovered()
+            onExited: root.scheduleDockHoverReset()
         }
 
         Rectangle {
@@ -246,10 +273,10 @@ PanelWindow {
                         cursorShape: Qt.PointingHandCursor
                         onPositionChanged: function(mouse) {
                             var point = pinnedButton.mapToItem(dockSurface, mouse.x, mouse.y);
-                            root.dockMouseX = point.x;
-                            root.dockHovered = true;
+                            root.updateDockHover(point.x);
                         }
-                        onEntered: root.dockHovered = true
+                        onEntered: root.markDockHovered()
+                        onExited: root.scheduleDockHoverReset()
                         onClicked: {
                             pinnedButton.bounce();
                             if (modelData.shellAction === "launchpad") {
@@ -338,10 +365,10 @@ PanelWindow {
                     dockWindow: root
                     dockSurfaceItem: dockSurface
                     onDockPointerMoved: function(x) {
-                        root.dockMouseX = x;
-                        root.dockHovered = true;
+                        root.updateDockHover(x);
                     }
-                    onDockPointerEntered: root.dockHovered = true
+                    onDockPointerEntered: root.markDockHovered()
+                    onDockPointerExited: root.scheduleDockHoverReset()
                 }
             }
         }

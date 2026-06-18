@@ -48,7 +48,7 @@ layout {
 
     snap-assist {
         on
-        threshold 36
+        threshold 16
         preview-color "#78beff40"
         preview-border-color "#78beffb4"
     }

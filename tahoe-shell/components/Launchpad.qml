@@ -25,15 +25,39 @@ PanelWindow {
         { "id": "games", "icon": "\ue338" },
         { "id": "system", "icon": "\ue8b8" }
     ]
+    readonly property int screenWidth: Math.max(1, root.numberOr(root.screen && root.screen.width, 1))
+    readonly property int screenHeight: Math.max(1, root.numberOr(root.screen && root.screen.height, 1))
+    readonly property int launcherWidth: Math.min(760, Math.max(280, root.screenWidth - 48))
+    readonly property int launcherHeight: Math.min(560, Math.max(360, root.screenHeight - 110))
+    readonly property int launcherLeft: Math.round(Math.max(8, (root.screenWidth - root.launcherWidth) / 2))
+    readonly property int launcherTop: Math.round(Math.max(8, Math.min(Math.max(8, root.screenHeight - root.launcherHeight - 8), (root.screenHeight - root.launcherHeight) / 2 - 12)))
 
     signal closeRequested()
 
+    function numberOr(value, fallback) {
+        var number = Number(value);
+        return isFinite(number) ? number : fallback;
+    }
+
     visible: open || launcher.opacity > 0.01
-    aboveWindows: true
+    exclusionMode: ExclusionMode.Ignore
     exclusiveZone: 0
     focusable: open
+    implicitWidth: launcherWidth
+    implicitHeight: launcherHeight
     color: "transparent"
+    WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.namespace: "tahoe-launchpad"
+
+    anchors {
+        left: true
+        top: true
+    }
+
+    margins {
+        left: root.launcherLeft
+        top: root.launcherTop
+    }
 
     onOpenChanged: {
         if (open) {
@@ -46,75 +70,53 @@ PanelWindow {
         }
     }
 
-    anchors {
-        left: true
-        right: true
-        top: true
-        bottom: true
-    }
-
     TahoeGlass.regions: [
         TahoeGlassRegion {
-            item: panelSurface
+            x: 0
+            y: 0
+            width: panelSurface.width
+            height: panelSurface.height
             material: panelSurface.tahoeGlassMaterial
             radius: panelSurface.tahoeGlassRadius
-            blur: false
-            shadow: false
+            blur: true
+            shadow: true
             clip: true
             interaction: launcher.opacity
-            materialAlpha: 0.0
+            materialAlpha: launcher.opacity
             enabled: root.open || launcher.opacity > 0.01
         }
     ]
 
-    Rectangle {
-        id: backdrop
-        readonly property string tahoeGlassMaterial: GlassStyle.MaterialBackdrop
-        readonly property real tahoeGlassRadius: GlassStyle.RadiusBackdrop
-
-        anchors.fill: parent
-        color: "transparent"
-        opacity: root.open ? 1 : 0
-
-        Behavior on opacity {
-            NumberAnimation { duration: 150; easing.type: Easing.OutCubic }
-        }
-    }
-
-    MouseArea {
-        anchors.fill: parent
-        onClicked: root.closeRequested()
-    }
-
     Item {
         id: launcher
-        anchors.centerIn: parent
-        anchors.verticalCenterOffset: -18
-        width: Math.min(parent.width - 36, 760)
-        height: Math.min(parent.height - 64, 540)
+        property real contentScale: root.open ? 1 : 0.98
+
+        anchors.fill: parent
         opacity: root.open ? 1 : 0
 
-        Behavior on opacity {
-            NumberAnimation { duration: 170; easing.type: Easing.OutCubic }
+        transform: Scale {
+            origin.x: launcher.width / 2
+            origin.y: launcher.height / 2
+            xScale: launcher.contentScale
+            yScale: launcher.contentScale
         }
 
-        MouseArea {
-            anchors.fill: parent
-            onClicked: function(mouse) {
-                mouse.accepted = true;
-            }
+        Behavior on opacity {
+            NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
+        }
+
+        Behavior on contentScale {
+            NumberAnimation { duration: 150; easing.type: Easing.OutCubic }
         }
 
         Rectangle {
             id: panelSurface
-            readonly property string tahoeGlassMaterial: GlassStyle.MaterialBackdrop
-            readonly property real tahoeGlassRadius: 26
+            readonly property string tahoeGlassMaterial: GlassStyle.MaterialPanel
+            readonly property real tahoeGlassRadius: GlassStyle.RadiusPanel
 
             anchors.fill: parent
             radius: tahoeGlassRadius
-            color: "#bdeaf6ff"
-            border.color: "#70ffffff"
-            border.width: 1
+            color: GlassStyle.FillPanelBright
         }
 
         Rectangle {
@@ -122,7 +124,7 @@ PanelWindow {
             anchors.margins: 1
             radius: panelSurface.radius - 1
             color: "transparent"
-            border.color: "#30ffffff"
+            border.color: GlassStyle.StrokePanelBright
             border.width: 1
         }
 
@@ -137,8 +139,8 @@ PanelWindow {
             Rectangle {
                 anchors.fill: parent
                 radius: 23
-                color: "#d7f7fbff"
-                border.color: "#72ffffff"
+                color: GlassStyle.FillPill
+                border.color: GlassStyle.StrokePill
                 border.width: 1
             }
 
@@ -147,7 +149,7 @@ PanelWindow {
                 anchors.margins: 1
                 radius: 22
                 color: "transparent"
-                border.color: "#24ffffff"
+                border.color: "#28ffffff"
                 border.width: 1
             }
 
@@ -222,8 +224,8 @@ PanelWindow {
                     Rectangle {
                         anchors.fill: parent
                         radius: 9
-                        color: root.category === modelData.id ? "#f2ffffff" : categoryMouse.containsMouse ? "#72ffffff" : "#38ffffff"
-                        border.color: root.category === modelData.id ? "#8cffffff" : "#32ffffff"
+                        color: root.category === modelData.id ? "#78ffffff" : categoryMouse.containsMouse ? "#50ffffff" : "#28ffffff"
+                        border.color: root.category === modelData.id ? GlassStyle.StrokePanelBright : "#30ffffff"
                         border.width: 1
                     }
 
@@ -263,8 +265,8 @@ PanelWindow {
             Grid {
                 id: grid
                 width: parent.width
-                columns: Math.max(3, Math.floor(width / 92))
-                rowSpacing: 18
+                columns: Math.max(3, Math.floor(width / 104))
+                rowSpacing: 12
                 columnSpacing: 0
 
                 Repeater {
@@ -278,24 +280,24 @@ PanelWindow {
                         required property var modelData
 
                         width: grid.width / grid.columns
-                        height: 66
+                        height: 94
 
                         Rectangle {
-                            anchors.centerIn: appIcon
-                            width: 58
-                            height: 58
-                            radius: 14
-                            color: appMouse.containsMouse ? "#56ffffff" : "transparent"
-                            border.color: appMouse.containsMouse ? "#42ffffff" : "transparent"
+                            anchors.fill: parent
+                            anchors.margins: 4
+                            radius: 15
+                            color: appMouse.containsMouse ? "#38ffffff" : "transparent"
+                            border.color: appMouse.containsMouse ? "#40ffffff" : "transparent"
                             border.width: 1
                         }
 
                         Image {
                             id: appIcon
                             anchors.horizontalCenter: parent.horizontalCenter
-                            anchors.verticalCenter: parent.verticalCenter
-                            width: 50
-                            height: 50
+                            anchors.top: parent.top
+                            anchors.topMargin: 8
+                            width: 48
+                            height: 48
                             source: root.appsService ? root.appsService.iconForApp(appButton.modelData) : ""
                             fillMode: Image.PreserveAspectFit
                             smooth: true
@@ -303,6 +305,23 @@ PanelWindow {
                             sourceSize.width: 128
                             sourceSize.height: 128
                             asynchronous: true
+                        }
+
+                        Text {
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.top: appIcon.bottom
+                            anchors.topMargin: 5
+                            anchors.leftMargin: 5
+                            anchors.rightMargin: 5
+                            text: root.appsService ? root.appsService.appLabel(appButton.modelData) : ""
+                            color: "#25303a"
+                            font.pixelSize: 11
+                            horizontalAlignment: Text.AlignHCenter
+                            wrapMode: Text.Wrap
+                            maximumLineCount: 2
+                            lineHeight: 0.9
+                            elide: Text.ElideRight
                         }
 
                         MouseArea {

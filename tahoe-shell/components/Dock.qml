@@ -26,18 +26,7 @@ PanelWindow {
 
     signal toggleLaunchpad()
 
-    // When the Launchpad opens, the Dock must disappear so the Launchpad
-    // scrim truly covers everything. Otherwise the Dock is a sibling
-    // layer-shell panel that stays stacked above the Launchpad backdrop
-    // and keeps blurring its own slice of the screen, so the three panels
-    // (Dock / TopBar / Launchpad) each compute their own glass and the
-    // Launchpad looks "not fully covering". See glass-consistency-fix-
-    // plan.md §1.2 B / §1.3 B.
-    //
-    // Visible stays true until the fade-out finishes so the panel is
-    // unmapped (and its glass region stops sampling) only once it's gone;
-    // during the fade the Launchpad scrim covers any residual blur.
-    visible: !launchpadOpen || dockSurface.opacity > 0.01
+    visible: true
 
     // Spring-smoothed dock magnification.
     //
@@ -193,7 +182,7 @@ PanelWindow {
             // after a click/drag-triggered repaint.
             interaction: 0.0
             materialAlpha: 0.0
-            enabled: !root.launchpadOpen && dockSurface.opacity > 0.01
+            enabled: dockSurface.opacity > 0.01
         }
     ]
 
@@ -209,11 +198,7 @@ PanelWindow {
         height: 78
         radius: tahoeGlassRadius
         color: root.glassFill
-        // Fade the dock surface out when the Launchpad opens (see the
-        // visible binding above). NumberAnimation, not spring — see
-        // shell.qml useSpring: spring on Image geometry corrupts the
-        // icon textures on VMware/software GPUs.
-        opacity: root.launchpadOpen ? 0 : 1
+        opacity: 1
 
         Behavior on opacity {
             NumberAnimation { duration: 170; easing.type: Easing.OutCubic }

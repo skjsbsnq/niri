@@ -193,6 +193,8 @@ function categoryColor(key, darkMode) {
         return "#30b0c8";     // teal (niri layout & window appearance)
     case "niri-glass":
         return "#5e5ce6";     // indigo (tahoe-glass materials & blur)
+    case "niri-input":
+        return "#0a84ff";     // system blue (keyboard/touchpad/display)
     case "startup":
         return "#ff9f0a";     // system orange
     case "health":

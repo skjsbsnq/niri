@@ -80,6 +80,16 @@ Flickable {
                 accentColor: page.panel ? page.panel.categoryColor("niri-glass") : "#5e5ce6"
                 onActivated: page.panel.selectedPage = "niri-glass"
             }
+
+            Controls.TahoeSummaryTile {
+                theme: page.theme
+                Layout.fillWidth: true
+                iconCode: "\e312"
+                title: "输入与显示"
+                detail: page.svc ? "键盘/触摸板手感，输出只读" : "niri 输入设置"
+                accentColor: page.panel ? page.panel.categoryColor("niri-input") : "#0a84ff"
+                onActivated: page.panel.selectedPage = "niri-input"
+            }
         }
     }
 }

@@ -765,6 +765,48 @@ submodules（`1e1d1e0`/`6211e44`）、phase6 基线。
   TahoeSegmented/NiriSettings/glassMaterials/blur 相关错误。临时实例已 trap 清理；线上会话未受影响。
 - 本阶段未进入 S5.2，未碰 binds/MRU/task-switcher，未生成违规 KDL。
 
+### 阶段 S5.2 验收记录（2026-06-20）
+
+- **范围**：新增 niri「输入与显示」域——键盘 repeat-rate/repeat-delay/numlock + 触摸板
+  tap/natural-scroll/dwt/accel-speed（可写），output scale 只读显示。未碰 dismiss/TahoeGlass
+  region/挂载点/binds。工作区 S5.2 改动为 5 改 + 1 新增。
+- **helper**：新增 `read_input_text`（keyboard/touchpad 默认值对齐 niri schema：repeat-rate 25/
+  repeat-delay 600/numlock off/tap off/natural-scroll off/dwt off/accel-speed 0）、
+  `flag_state_in_block`/`set_flag_in_block`（bare flag 读写：on 写裸 `name`、off 写 `name false`、
+  值未变则保留原 token）、`read_output_text`（首个 `output "name" {}` 的 scale，只读）。
+  `update_field` 增 `input.keyboard.repeat_rate(0..255)/repeat_delay(0..65535)/numlock`、
+  `input.touchpad.tap/natural_scroll/dwt/accel_speed(clamp[-1,1])`。`read`/`write` payload 增 `input`。
+- **round-trip（在 config 副本上）**：
+  - 读得 keyboard{repeat_rate 25, repeat_delay 600, numlock True}、touchpad{tap True,
+    natural_scroll True, dwt False, accel_speed 0}、output{eDP-2, scale 1.25}。
+  - TEST A（对已存在的 bare flag numlock/tap/natural-scroll 写回当前值）：byte-identical。
+  - TEST B（已存在 bare flag off→on 往返）：byte-identical（on 恒写裸 token）。
+  - TEST C（写入缺失的 repeat-rate 30/repeat-delay 500/dwt on/accel-speed 0.5）：`niri validate`
+    通过、读回值正确。
+  - TEST D（accel_speed 边界 -1/0/1）：均 `niri validate` 通过。
+  - TEST E（output 只读解析）：name=eDP-2、scale=1.25、present=True。
+- **service（`NiriSettings.qml`）**：键盘/触摸板标量属性 + output 只读属性（outputName/outputScale/
+  outputPresent）；setKeyboardRepeatRate/Delay/Numlock、setTouchpadTap/NaturalScroll/Dwt/AccelSpeed
+  （乐观更新 + writeField）；`applyInput`（input.output 走 clampReal 0.1..10）；handleRead/WriteOutput
+  调用 applyInput。
+- **UI（`NiriInputPage.qml`）**：键盘 section（repeat-rate 0..100/秒、repeat-delay 0..1000 ms 滑块 +
+  numlock 开关）+ 触摸板 section（tap/natural-scroll/dwt 开关 + accel-speed 滑块，-1..1 归一
+  (v*2-1)，带正负号）+ 输出只读 section（显示 outputName + scale，注明「分辨率/缩放/VRR 由 config.kdl
+  管理，VRR 保持关闭」，无控件）。所有 iconCode 经 cmap 核验（repeat/repeat_one/speed/lock/
+  touch_app/swipe/keyboard_hide/monitor）。
+- **路由**：`SettingsPanel.qml` `pageIndex` 增 `niri-input=11` + pageTitle「输入与显示」+ pageSubtitle +
+  StackLayout 挂 `NiriInputPage`；`NiriPage.qml` hub 增「输入与显示」tile→niri-input；
+  `SettingsTheme.js` `categoryColor` 增 `niri-input` blue `#0a84ff`。
+- **回归检查**：未碰 dismiss（`dc5bef9`）；未碰 TahoeGlass region 坐标/几何（`b7b8e5a`/`0704ea4`）；
+  未碰 `shell.qml:705-716` 挂载点；未新增 service 根类型（`666c3c8`）；未用 `BackgroundEffect`/`blurRegion`；
+  未生成 `variable-refresh-rate`（输出只读，GUI 永不写 VRR）或 broad `namespace="^quickshell"`；
+  未碰 binds（`441b637`）；`useSpring` 未被新动画依赖。
+- **检查脚本**：`py_compile` 0；`qmllint`（settings 全树 + SettingsPanel + NiriSettings）退出 0，
+  新文件零告警；guardrails 0；submodules 0；`niri validate` 0。
+- **运行时 smoke**：临时 `quickshell -p tahoe-shell`（隔离 XDG_CONFIG_HOME + config 副本）4s 存活、
+  无 QML load failure，无 NiriInputPage/input 相关错误；临时实例已 trap 清理；线上会话未受影响。
+- 本阶段未进入 S5.3，未碰 binds/MRU/task-switcher，未生成违规 KDL。
+
 ## 停止条件
 
 - S0–S5 全部验收通过；设置面板外观对齐 macOS System Settings、深色模式可用、niri 主要配置域

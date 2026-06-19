@@ -567,6 +567,91 @@ def set_blur_enabled(lines: list[str], enabled: bool) -> None:
         del lines[index]
 
 
+# --- input (S5.2) --------------------------------------------------------
+# keyboard repeat-rate/repeat-delay/numlock + touchpad tap/natural-scroll/
+# dwt/accel-speed. tap/natural-scroll/dwt/numlock are bare flags (presence =
+# on); the writer emits bare `name` for on and `name false` for off, and
+# preserves the original token when the state is unchanged. output scale is
+# read-only (display only) — the GUI never writes it, and VRR is never touched.
+
+INPUT_KEYBOARD_FLAGS = ["numlock"]
+INPUT_TOUCHPAD_FLAGS = ["tap", "natural-scroll", "dwt"]
+
+
+def flag_state_in_block(lines: list[str], block: tuple[int, int] | None, name: str, default: bool) -> bool:
+    if block is None:
+        return default
+    flag_re = re.compile(rf"^\s*{re.escape(name)}(?:\s+(true|false|on|off))?\s*$")
+    for index in iter_depth_lines(lines, block[0], block[1], 1):
+        body = uncommented_body(lines[index]).strip()
+        m = flag_re.match(body)
+        if not m:
+            continue
+        val = m.group(1)
+        return val not in ("false", "off")
+    return default
+
+
+def set_flag_in_block(lines: list[str], block: tuple[int, int], name: str, enabled: bool) -> None:
+    flag_re = re.compile(rf"^\s*{re.escape(name)}(?:\s+(?:true|false|on|off))?\s*$")
+    for index in iter_depth_lines(lines, block[0], block[1], 1):
+        body = uncommented_body(lines[index])
+        if not flag_re.match(body.strip()):
+            continue
+        current = flag_state_in_block(lines, block, name, default=not enabled)
+        if current == enabled:
+            return  # preserve original token (bare stays bare)
+        _, comment, newline = split_line_comment(lines[index])
+        indent = leading_indent(lines[index])
+        gap = " " if comment else ""
+        token = name if enabled else f"{name} false"
+        lines[index] = f"{indent}{token}{gap}{comment}{newline}"
+        return
+    # Absent: enabling inserts a bare flag; disabling is a no-op (absent = off).
+    if enabled:
+        indent = block_child_indent(lines, block)
+        lines.insert(block[1], f"{indent}{name}\n")
+
+
+def read_output_text(text: str) -> dict[str, Any]:
+    lines = text.splitlines(True)
+    start_re = re.compile(r'^\s*output\s+"([^"]+)"\s*\{\s*$')
+    depth = 0
+    for index, line in enumerate(lines):
+        body = uncommented_body(line)
+        if depth == 0 and start_re.match(body):
+            name = start_re.match(body).group(1)
+            local = 0
+            for end in range(index, len(lines)):
+                local += brace_delta(lines[end])
+                if local == 0:
+                    scale = simple_field_number(lines, index, end, "scale", 1.0)
+                    return {"name": name, "scale": normalize_number(scale), "present": True}
+            break
+        depth += brace_delta(line)
+    return {"name": "", "scale": 1.0, "present": False}
+
+
+def read_input_text(text: str) -> dict[str, Any]:
+    lines = text.splitlines(True)
+    input_block = find_top_level_block_or_none(lines, "input")
+    keyboard = {"repeat_rate": 25, "repeat_delay": 600, "numlock": False}
+    touchpad = {"tap": False, "natural_scroll": False, "dwt": False, "accel_speed": 0.0}
+    if input_block:
+        keyboard_block = find_child_block(lines, input_block[0], input_block[1], "keyboard")
+        if keyboard_block:
+            keyboard["repeat_rate"] = normalize_number(child_field_number(lines, keyboard_block, "repeat-rate", 25))
+            keyboard["repeat_delay"] = normalize_number(child_field_number(lines, keyboard_block, "repeat-delay", 600))
+            keyboard["numlock"] = flag_state_in_block(lines, keyboard_block, "numlock", default=False)
+        touchpad_block = find_child_block(lines, input_block[0], input_block[1], "touchpad")
+        if touchpad_block:
+            touchpad["tap"] = flag_state_in_block(lines, touchpad_block, "tap", default=False)
+            touchpad["natural_scroll"] = flag_state_in_block(lines, touchpad_block, "natural-scroll", default=False)
+            touchpad["dwt"] = flag_state_in_block(lines, touchpad_block, "dwt", default=False)
+            touchpad["accel_speed"] = normalize_number(child_field_number(lines, touchpad_block, "accel-speed", 0.0))
+    return {"keyboard": keyboard, "touchpad": touchpad, "output": read_output_text(text)}
+
+
 def update_field(text: str, field: str, raw_value: str) -> str:
     if field.startswith("layout."):
         return update_layout_text(text, field, raw_value)
@@ -598,6 +683,28 @@ def update_field(text: str, field: str, raw_value: str) -> str:
             set_leaf_value(lines, blur, name, format_float(bounded_number(raw_value, 0, 1000)))
         else:
             raise KdlEditError(f"unsupported blur field: {field}")
+        return "".join(lines)
+
+    if field.startswith("input."):
+        parts = field.split(".")
+        if len(parts) != 3:
+            raise KdlEditError(f"unsupported input field: {field}")
+        section, key_raw = parts[1], parts[2]
+        key_kdl = key_raw.replace("_", "-")
+        input_block = find_top_level_block(lines, "input")
+        child = find_child_block(lines, input_block[0], input_block[1], section)
+        if child is None:
+            child = create_child_block(lines, input_block, section, [])
+        if key_raw in INPUT_KEYBOARD_FLAGS or (section == "touchpad" and key_raw in ("tap", "natural_scroll", "dwt")):
+            set_flag_in_block(lines, child, key_kdl, parse_bool(raw_value))
+        elif section == "keyboard" and key_raw == "repeat_rate":
+            set_leaf_value(lines, child, key_kdl, format_number(bounded_number(raw_value, 0, 255)))
+        elif section == "keyboard" and key_raw == "repeat_delay":
+            set_leaf_value(lines, child, key_kdl, format_number(bounded_number(raw_value, 0, 65535)))
+        elif section == "touchpad" and key_raw == "accel_speed":
+            set_leaf_value(lines, child, key_kdl, format_float(bounded_number(raw_value, -1, 1)))
+        else:
+            raise KdlEditError(f"unsupported input field: {field}")
         return "".join(lines)
 
     raise KdlEditError(f"unsupported field: {field}")
@@ -680,6 +787,7 @@ def read_command(args: argparse.Namespace) -> None:
         "layout": read_layout_text(text),
         "glass": read_glass_text(text),
         "blur": read_blur_text(text),
+        "input": read_input_text(text),
     })
 
 
@@ -697,6 +805,7 @@ def write_command(args: argparse.Namespace) -> None:
         "layout": read_layout_text(updated),
         "glass": read_glass_text(updated),
         "blur": read_blur_text(updated),
+        "input": read_input_text(updated),
     })
 
 

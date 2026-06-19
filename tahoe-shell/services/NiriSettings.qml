@@ -50,6 +50,21 @@ Item {
     property real blurNoise: 0.012
     property real blurSaturation: 1.6
 
+    // S5.2 input mirrors. keyboard repeat-rate/repeat-delay/numlock and
+    // touchpad tap/natural-scroll/dwt/accel-speed are writable through setX.
+    // Defaults mirror the deployed config.kdl. Output scale is read-only
+    // (display only); the GUI never writes output or variable-refresh-rate.
+    property int keyboardRepeatRate: 25
+    property int keyboardRepeatDelay: 600
+    property bool keyboardNumlock: true
+    property bool touchpadTap: true
+    property bool touchpadNaturalScroll: true
+    property bool touchpadDwt: false
+    property real touchpadAccelSpeed: 0
+    property string outputName: ""
+    property real outputScale: 1
+    property bool outputPresent: false
+
     // Per-field queue of the latest intended value while a write is in
     // flight. setX updates its property optimistically (so the UI tracks a
     // drag immediately) and records the intended write here; the writer
@@ -226,6 +241,62 @@ Item {
         root.writeField("blur.saturation", next);
     }
 
+    function setKeyboardRepeatRate(value) {
+        var next = clampNumber(value, 0, 255, keyboardRepeatRate);
+        if (next === keyboardRepeatRate)
+            return;
+        root.keyboardRepeatRate = next;
+        root.writeField("input.keyboard.repeat_rate", next);
+    }
+
+    function setKeyboardRepeatDelay(value) {
+        var next = clampNumber(value, 0, 65535, keyboardRepeatDelay);
+        if (next === keyboardRepeatDelay)
+            return;
+        root.keyboardRepeatDelay = next;
+        root.writeField("input.keyboard.repeat_delay", next);
+    }
+
+    function setKeyboardNumlock(enabled) {
+        var next = !!enabled;
+        if (next === keyboardNumlock)
+            return;
+        root.keyboardNumlock = next;
+        root.writeField("input.keyboard.numlock", next);
+    }
+
+    function setTouchpadTap(enabled) {
+        var next = !!enabled;
+        if (next === touchpadTap)
+            return;
+        root.touchpadTap = next;
+        root.writeField("input.touchpad.tap", next);
+    }
+
+    function setTouchpadNaturalScroll(enabled) {
+        var next = !!enabled;
+        if (next === touchpadNaturalScroll)
+            return;
+        root.touchpadNaturalScroll = next;
+        root.writeField("input.touchpad.natural_scroll", next);
+    }
+
+    function setTouchpadDwt(enabled) {
+        var next = !!enabled;
+        if (next === touchpadDwt)
+            return;
+        root.touchpadDwt = next;
+        root.writeField("input.touchpad.dwt", next);
+    }
+
+    function setTouchpadAccelSpeed(value) {
+        var next = clampReal(value, -1, 1, touchpadAccelSpeed);
+        if (Math.abs(next - touchpadAccelSpeed) < 1e-9)
+            return;
+        root.touchpadAccelSpeed = next;
+        root.writeField("input.touchpad.accel_speed", next);
+    }
+
     function writeField(field, value) {
         root.lastError = "";
         var next = root.pending;
@@ -308,6 +379,27 @@ Item {
         root.blurSaturation = clampReal(blur.saturation, 0, 1000, 1.5);
     }
 
+    function applyInput(input) {
+        if (!input)
+            return;
+        if (input.keyboard) {
+            root.keyboardRepeatRate = clampNumber(input.keyboard.repeat_rate, 0, 255, 25);
+            root.keyboardRepeatDelay = clampNumber(input.keyboard.repeat_delay, 0, 65535, 600);
+            root.keyboardNumlock = !!input.keyboard.numlock;
+        }
+        if (input.touchpad) {
+            root.touchpadTap = !!input.touchpad.tap;
+            root.touchpadNaturalScroll = !!input.touchpad.natural_scroll;
+            root.touchpadDwt = !!input.touchpad.dwt;
+            root.touchpadAccelSpeed = clampReal(input.touchpad.accel_speed, -1, 1, 0);
+        }
+        if (input.output) {
+            root.outputPresent = !!input.output.present;
+            root.outputName = String(input.output.name || "");
+            root.outputScale = clampReal(input.output.scale, 0.1, 10, 1);
+        }
+    }
+
     function payloadError(text, fallback) {
         try {
             var payload = JSON.parse(String(text || "{}"));
@@ -329,6 +421,7 @@ Item {
             applyLayout(payload.layout);
             root.applyGlass(payload.glass);
             root.applyBlur(payload.blur);
+            root.applyInput(payload.input);
             root.lastError = "";
             root.loaded = true;
         } catch (error) {
@@ -347,6 +440,7 @@ Item {
             applyLayout(payload.layout);
             root.applyGlass(payload.glass);
             root.applyBlur(payload.blur);
+            root.applyInput(payload.input);
             root.lastError = "";
             root.loaded = true;
         } catch (error) {

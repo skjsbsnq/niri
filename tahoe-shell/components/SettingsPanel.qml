@@ -35,9 +35,12 @@ PanelWindow {
     readonly property color textPrimary: "#1d1d1f"
     readonly property color textSecondary: "#721d1d1f"
     readonly property color textMuted: "#5f6870"
-    readonly property color rowFill: "#34ffffff"
-    readonly property color rowFillHover: "#52ffffff"
-    readonly property color rowStroke: "#44ffffff"
+    readonly property color accentBlue: "#2c9cf2"
+    readonly property color sectionFill: "#24ffffff"
+    readonly property color sectionStroke: "#38ffffff"
+    readonly property color rowFill: "#28ffffff"
+    readonly property color rowFillHover: "#48ffffff"
+    readonly property color rowStroke: "#32ffffff"
 
     signal closeRequested()
 
@@ -81,19 +84,52 @@ PanelWindow {
     }
 
     function pageTitle() {
+        if (selectedPage === "appearance")
+            return "外观";
+        if (selectedPage === "notifications")
+            return "通知与输入";
+        if (selectedPage === "screenshot")
+            return "截图";
+        if (selectedPage === "dock")
+            return "Dock";
+        if (selectedPage === "startup")
+            return "启动项";
         if (selectedPage === "health")
             return "系统健康";
         if (selectedPage === "about")
             return "关于 niri";
-        return "设置";
+        return "概览";
     }
 
     function pageSubtitle() {
+        if (selectedPage === "appearance")
+            return "深浅色、夜览和色温";
+        if (selectedPage === "notifications")
+            return "勿扰、通知历史和输入法状态";
+        if (selectedPage === "screenshot")
+            return "保存目录、复制和通知动作";
+        if (selectedPage === "dock")
+            return "窗口按钮显示偏好";
+        if (selectedPage === "startup")
+            return "XDG autostart 和会话备注";
         if (selectedPage === "health")
             return systemStatusService ? "最后检测 " + systemStatusService.lastUpdatedText : "系统状态检测";
         if (selectedPage === "about")
             return "Tahoe Shell、niri、Quickshell 和当前会话";
-        return "桌面外观、通知、输入法、截图、Dock 和启动项";
+        return "常用状态、偏好入口和系统摘要";
+    }
+
+    function settingsPageVisible() {
+        return selectedPage === "settings"
+            || selectedPage === "appearance"
+            || selectedPage === "notifications"
+            || selectedPage === "screenshot"
+            || selectedPage === "dock"
+            || selectedPage === "startup";
+    }
+
+    function showCategory(name) {
+        return selectedPage === name;
     }
 
     function stateLabel(state) {
@@ -281,10 +317,48 @@ PanelWindow {
                     }
 
                     SidebarButton {
-                        label: "设置"
+                        label: "概览"
                         iconCode: "\ue8b8"
                         active: root.selectedPage === "settings"
                         onActivated: root.selectedPage = "settings"
+                    }
+
+                    SidebarButton {
+                        label: "外观"
+                        iconCode: "\ue51c"
+                        active: root.selectedPage === "appearance"
+                        onActivated: root.selectedPage = "appearance"
+                    }
+
+                    SidebarButton {
+                        label: "通知与输入"
+                        iconCode: "\ue7f4"
+                        active: root.selectedPage === "notifications"
+                        badgeText: root.notificationsService && root.notificationsService.historyCount > 0
+                            ? String(Math.min(99, root.notificationsService.historyCount))
+                            : ""
+                        onActivated: root.selectedPage = "notifications"
+                    }
+
+                    SidebarButton {
+                        label: "截图"
+                        iconCode: "\ue3b0"
+                        active: root.selectedPage === "screenshot"
+                        onActivated: root.selectedPage = "screenshot"
+                    }
+
+                    SidebarButton {
+                        label: "Dock"
+                        iconCode: "\ue8d0"
+                        active: root.selectedPage === "dock"
+                        onActivated: root.selectedPage = "dock"
+                    }
+
+                    SidebarButton {
+                        label: "启动项"
+                        iconCode: "\ue89e"
+                        active: root.selectedPage === "startup"
+                        onActivated: root.selectedPage = "startup"
                     }
 
                     SidebarButton {
@@ -381,16 +455,91 @@ PanelWindow {
                         contentHeight: settingsColumn.implicitHeight
                         clip: true
                         boundsBehavior: Flickable.StopAtBounds
-                        visible: root.selectedPage === "settings"
+                        visible: root.settingsPageVisible()
 
                         ColumnLayout {
                             id: settingsColumn
                             width: parent.width
-                            spacing: 10
+                            spacing: 12
+
+                            GridLayout {
+                                Layout.fillWidth: true
+                                columns: settingsColumn.width >= 620 ? 2 : 1
+                                columnSpacing: 10
+                                rowSpacing: 10
+                                visible: root.selectedPage === "settings"
+
+                                SummaryTile {
+                                    Layout.fillWidth: true
+                                    iconCode: root.appearanceService && root.appearanceService.darkMode ? "\ue51c" : "\ue518"
+                                    title: root.appearanceService && root.appearanceService.darkMode ? "深色模式" : "浅色模式"
+                                    detail: root.appearanceService && root.appearanceService.nightMode
+                                        ? "夜览 " + root.appearanceService.colorTemperature + "K"
+                                        : "夜览关闭"
+                                    accentColor: "#5b8def"
+                                    onActivated: root.selectedPage = "appearance"
+                                }
+
+                                SummaryTile {
+                                    Layout.fillWidth: true
+                                    iconCode: root.notificationsService && root.notificationsService.dndEnabled ? "\ue7f6" : "\ue7f4"
+                                    title: root.notificationsService && root.notificationsService.dndEnabled ? "勿扰已开启" : "通知正常"
+                                    detail: root.notificationsService
+                                        ? root.notificationsService.historyCount + " 条历史通知"
+                                        : "通知服务不可用"
+                                    accentColor: root.notificationsService && root.notificationsService.dndEnabled ? "#ff9f0a" : "#34c759"
+                                    onActivated: root.selectedPage = "notifications"
+                                }
+
+                                SummaryTile {
+                                    Layout.fillWidth: true
+                                    iconCode: "\ue3b0"
+                                    title: "截图"
+                                    detail: root.screenshotPathText()
+                                    accentColor: "#ff7a59"
+                                    onActivated: root.selectedPage = "screenshot"
+                                }
+
+                                SummaryTile {
+                                    Layout.fillWidth: true
+                                    iconCode: "\ue8d0"
+                                    title: "Dock"
+                                    detail: root.settingsService ? "窗口标题：" + root.settingsService.modeLabel(root.dockTitleMode()) : "设置服务不可用"
+                                    accentColor: "#af52de"
+                                    onActivated: root.selectedPage = "dock"
+                                }
+
+                                SummaryTile {
+                                    Layout.fillWidth: true
+                                    iconCode: root.systemStatusService && root.systemStatusService.missingCount > 0 ? "\ue002" : "\ue86c"
+                                    title: root.systemStatusService && root.systemStatusService.missingCount > 0 ? "有缺失项" : "系统健康"
+                                    detail: root.systemStatusService
+                                        ? root.systemStatusService.okCount + " 正常 · " + root.systemStatusService.warnCount + " 注意 · " + root.systemStatusService.missingCount + " 缺失"
+                                        : "等待检测"
+                                    accentColor: root.systemStatusService && root.systemStatusService.missingCount > 0 ? "#ff453a" : "#2c9cf2"
+                                    onActivated: {
+                                        root.selectedPage = "health";
+                                        if (root.systemStatusService)
+                                            root.systemStatusService.refresh();
+                                    }
+                                }
+
+                                SummaryTile {
+                                    Layout.fillWidth: true
+                                    iconCode: "\ue89e"
+                                    title: "启动项"
+                                    detail: root.settingsService && root.settingsService.startupNote.length > 0
+                                        ? root.settingsService.startupNote
+                                        : "管理 autostart 目录"
+                                    accentColor: "#30b0c7"
+                                    onActivated: root.selectedPage = "startup"
+                                }
+                            }
 
                             SectionBox {
                                 title: "外观"
                                 subtitle: "深浅色、夜览和色温"
+                                visible: root.showCategory("appearance")
 
                                 ToggleRow {
                                     label: "深色模式"
@@ -444,6 +593,7 @@ PanelWindow {
                             SectionBox {
                                 title: "通知与输入"
                                 subtitle: "通知历史、勿扰和输入法"
+                                visible: root.showCategory("notifications")
 
                                 ToggleRow {
                                     label: "勿扰模式"
@@ -497,6 +647,7 @@ PanelWindow {
                             SectionBox {
                                 title: "截图"
                                 subtitle: "保存目录、复制和通知动作"
+                                visible: root.showCategory("screenshot")
 
                                 SettingRow {
                                     label: "保存目录"
@@ -575,6 +726,7 @@ PanelWindow {
                             SectionBox {
                                 title: "Dock"
                                 subtitle: "窗口按钮显示偏好"
+                                visible: root.showCategory("dock")
 
                                 SettingRow {
                                     label: "窗口标题"
@@ -608,6 +760,7 @@ PanelWindow {
                             SectionBox {
                                 title: "启动项"
                                 subtitle: "XDG autostart 管理入口"
+                                visible: root.showCategory("startup")
 
                                 SettingRow {
                                     label: "自动启动文件夹"
@@ -892,6 +1045,93 @@ PanelWindow {
         }
     }
 
+    component SummaryTile: Item {
+        id: tile
+
+        property string iconCode: ""
+        property string title: ""
+        property string detail: ""
+        property color accentColor: root.accentBlue
+
+        signal activated()
+
+        Layout.preferredHeight: 86
+
+        Rectangle {
+            anchors.fill: parent
+            radius: 18
+            color: tileMouse.containsMouse ? "#4cffffff" : "#30ffffff"
+            border.color: tileMouse.containsMouse ? "#66ffffff" : "#42ffffff"
+            border.width: 1
+        }
+
+        RowLayout {
+            anchors.fill: parent
+            anchors.margins: 12
+            spacing: 12
+
+            Rectangle {
+                Layout.preferredWidth: 42
+                Layout.preferredHeight: 42
+                Layout.alignment: Qt.AlignVCenter
+                radius: 14
+                color: tile.accentColor
+                border.color: "#66ffffff"
+                border.width: 1
+
+                Text {
+                    anchors.centerIn: parent
+                    text: tile.iconCode
+                    color: "#ffffff"
+                    font.family: root.iconFont
+                    font.pixelSize: 22
+                }
+            }
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                Layout.alignment: Qt.AlignVCenter
+                spacing: 3
+
+                Text {
+                    Layout.fillWidth: true
+                    text: tile.title
+                    color: root.textPrimary
+                    font.pixelSize: 14
+                    font.weight: Font.DemiBold
+                    elide: Text.ElideRight
+                    maximumLineCount: 1
+                }
+
+                Text {
+                    Layout.fillWidth: true
+                    text: tile.detail
+                    color: root.textSecondary
+                    font.pixelSize: 11
+                    elide: Text.ElideRight
+                    maximumLineCount: 2
+                    wrapMode: Text.WordWrap
+                }
+            }
+
+            Text {
+                Layout.alignment: Qt.AlignVCenter
+                text: "\ue5cc"
+                color: root.textSecondary
+                font.family: root.iconFont
+                font.pixelSize: 18
+            }
+        }
+
+        MouseArea {
+            id: tileMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: tile.activated()
+        }
+    }
+
     component SectionBox: Rectangle {
         id: box
 
@@ -900,10 +1140,10 @@ PanelWindow {
         default property alias contentData: rows.data
 
         Layout.fillWidth: true
-        implicitHeight: rows.implicitHeight + 26
+        implicitHeight: visible ? rows.implicitHeight + 26 : 0
         radius: 18
-        color: "#2affffff"
-        border.color: "#42ffffff"
+        color: root.sectionFill
+        border.color: root.sectionStroke
         border.width: 1
 
         ColumnLayout {

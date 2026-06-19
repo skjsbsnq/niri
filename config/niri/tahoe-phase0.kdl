@@ -184,6 +184,10 @@ spawn-sh-at-startup "if [ \"${TAHOE_SKIP_QUICKSHELL_AUTOSTART:-0}\" != \"1\" ]; 
 
 spawn-at-startup "fcitx5" "-d" "--replace"
 
+// Polkit authentication agent. Guarded so direct niri launches on hosts
+// without polkit-gnome don't log a missing-binary error.
+spawn-sh-at-startup "command -v /usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1 >/dev/null 2>&1 && /usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1 &"
+
 animations {
     workspace-switch {
         spring damping-ratio=1.0 stiffness=780 epsilon=0.0001
@@ -329,6 +333,8 @@ layer-rule {
 layer-rule {
     match namespace="^tahoe-battery-popup$"
     match namespace="^tahoe-wifi-popup$"
+    match namespace="^tahoe-fan-popup$"
+    match namespace="^tahoe-clipboard-popup$"
 
     geometry-corner-radius 24
 
@@ -355,6 +361,7 @@ layer-rule {
 
 layer-rule {
     match namespace="^tahoe-menu-popup$"
+    match namespace="^tahoe-application-menu$"
     match namespace="^tahoe-tray-menu$"
     match namespace="^tahoe-notification-toast$"
 

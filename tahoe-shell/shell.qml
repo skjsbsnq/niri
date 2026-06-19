@@ -84,6 +84,76 @@ ShellRoot {
         return open && topBarPopupScreenName === screenName(screen);
     }
 
+    function topBarDismissOpenFor(screen) {
+        return topBarPopupOpenFor(appMenuOpen, screen)
+            || topBarPopupOpenFor(applicationMenuOpen, screen)
+            || topBarPopupOpenFor(controlCenterOpen, screen)
+            || topBarPopupOpenFor(notificationCenterOpen, screen)
+            || topBarPopupOpenFor(batteryPopupOpen, screen)
+            || topBarPopupOpenFor(wifiPopupOpen, screen)
+            || topBarPopupOpenFor(fanPopupOpen, screen)
+            || topBarPopupOpenFor(clipboardPopupOpen, screen)
+            || topBarPopupOpenFor(trayMenuOpen, screen);
+    }
+
+    function topBarDismissPopupWidth() {
+        if (applicationMenuOpen)
+            return 286;
+        if (controlCenterOpen)
+            return 360;
+        if (notificationCenterOpen)
+            return 360;
+        if (batteryPopupOpen)
+            return 292;
+        if (wifiPopupOpen)
+            return 328;
+        if (fanPopupOpen)
+            return 328;
+        if (clipboardPopupOpen)
+            return 360;
+        if (trayMenuOpen)
+            return 238;
+        return 218;
+    }
+
+    function topBarDismissPopupHeight() {
+        if (applicationMenuOpen)
+            return 700;
+        if (controlCenterOpen)
+            return 560;
+        if (notificationCenterOpen)
+            return 560;
+        if (batteryPopupOpen)
+            return 340;
+        if (wifiPopupOpen)
+            return 520;
+        if (fanPopupOpen)
+            return 440;
+        if (clipboardPopupOpen)
+            return 620;
+        if (trayMenuOpen)
+            return 560;
+        return 420;
+    }
+
+    function topBarDismissFallbackRight() {
+        if (applicationMenuOpen)
+            return 96;
+        if (notificationCenterOpen)
+            return 56;
+        if (batteryPopupOpen)
+            return 92;
+        if (wifiPopupOpen)
+            return 132;
+        if (fanPopupOpen)
+            return 164;
+        if (clipboardPopupOpen)
+            return 202;
+        if (trayMenuOpen)
+            return 40;
+        return 12;
+    }
+
     function prepareDockAppMenu(screen, app, anchorRect) {
         dockAppMenuScreenName = screenName(screen);
         dockAppMenuApp = app || null;
@@ -367,6 +437,16 @@ ShellRoot {
             Wallpaper {
                 screen: modelData
                 appsService: apps
+            }
+
+            PopupDismissLayer {
+                screen: modelData
+                open: shell.topBarDismissOpenFor(modelData)
+                anchorRect: shell.topBarPopupAnchorRect
+                popupWidth: shell.topBarDismissPopupWidth()
+                popupHeight: shell.topBarDismissPopupHeight()
+                fallbackRight: shell.topBarDismissFallbackRight()
+                onCloseRequested: shell.closeTopBarPopups("")
             }
 
             TopBar {

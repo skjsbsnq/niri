@@ -20,6 +20,11 @@ TAHOE_CONFIG_DIR="${TAHOE_CONFIG_DIR:-"$HOME/.config/quickshell/tahoe"}"
 TAHOE_USE_NIRI_SESSION_WRAPPER="${TAHOE_USE_NIRI_SESSION_WRAPPER:-auto}"
 TAHOE_SESSION_LOG_DIR="${TAHOE_SESSION_LOG_DIR:-"${XDG_STATE_HOME:-"$HOME/.local/state"}/tahoe-niri"}"
 TAHOE_SESSION_LOG_FILE="${TAHOE_SESSION_LOG_FILE:-"$TAHOE_SESSION_LOG_DIR/session.log"}"
+TAHOE_POWER_PROFILE="${TAHOE_POWER_PROFILE:-auto}"
+TAHOE_RESTORE_POWER_PROFILE="${TAHOE_RESTORE_POWER_PROFILE:-true}"
+
+TAHOE_PREVIOUS_POWER_PROFILE=""
+TAHOE_POWER_PROFILE_CHANGED=false
 
 export PATH="$NIRI_BIN_DIR:/usr/local/bin:/usr/bin:${PATH:-}"
 
@@ -36,6 +41,7 @@ init_logging() {
   log "electron: ELECTRON_OZONE_PLATFORM_HINT=${ELECTRON_OZONE_PLATFORM_HINT:-}"
   log "glx: __GLX_VENDOR_LIBRARY_NAME=${__GLX_VENDOR_LIBRARY_NAME:-}"
   log "runtime: XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-} XDG_SEAT=${XDG_SEAT:-} XDG_VTNR=${XDG_VTNR:-}"
+  log "requested power profile: $TAHOE_POWER_PROFILE"
 }
 
 resolve_command() {
@@ -82,6 +88,130 @@ resolve_niri_bin() {
   fi
 
   die "niri binary not found; run scripts/arch-update.sh first"
+}
+
+has_battery() {
+  local supply
+
+  for supply in /sys/class/power_supply/*; do
+    [[ -e "$supply/type" ]] || continue
+    [[ "$(cat "$supply/type" 2>/dev/null || true)" == Battery ]] && return 0
+  done
+
+  return 1
+}
+
+is_on_external_power() {
+  local supply type online
+
+  for supply in /sys/class/power_supply/*; do
+    [[ -e "$supply/type" ]] || continue
+    type="$(cat "$supply/type" 2>/dev/null || true)"
+
+    case "$type" in
+      Mains|USB|USB_C|USB_PD|Wireless)
+        online="$(cat "$supply/online" 2>/dev/null || true)"
+        [[ "$online" == 1 ]] && return 0
+        ;;
+    esac
+  done
+
+  # Desktops normally do not expose a battery, so treat them as externally
+  # powered.
+  if ! has_battery; then
+    return 0
+  fi
+
+  return 1
+}
+
+resolve_power_profile_target() {
+  case "$TAHOE_POWER_PROFILE" in
+    ""|off|none|keep)
+      return 1
+      ;;
+    auto)
+      if is_on_external_power; then
+        printf 'performance\n'
+        return 0
+      fi
+      return 1
+      ;;
+    power-saver|balanced|performance)
+      printf '%s\n' "$TAHOE_POWER_PROFILE"
+      ;;
+    *)
+      die "invalid TAHOE_POWER_PROFILE: $TAHOE_POWER_PROFILE; expected auto, performance, balanced, power-saver, or keep"
+      ;;
+  esac
+}
+
+apply_power_profile() {
+  local target current
+
+  if ! target="$(resolve_power_profile_target)"; then
+    log "power profile: unchanged ($TAHOE_POWER_PROFILE)"
+    return
+  fi
+
+  if ! command -v powerprofilesctl >/dev/null 2>&1; then
+    log "power profile: powerprofilesctl not found; leaving unchanged"
+    return
+  fi
+
+  current="$(powerprofilesctl get 2>/dev/null || true)"
+  if [[ -z "$current" ]]; then
+    log "power profile: unavailable; leaving unchanged"
+    return
+  fi
+
+  TAHOE_PREVIOUS_POWER_PROFILE="$current"
+  if [[ "$current" == "$target" ]]; then
+    log "power profile: $target"
+    return
+  fi
+
+  if powerprofilesctl set "$target" >/dev/null 2>&1; then
+    TAHOE_POWER_PROFILE_CHANGED=true
+    log "power profile: $current -> $target"
+  else
+    TAHOE_PREVIOUS_POWER_PROFILE=""
+    log "power profile: could not switch $current -> $target"
+  fi
+}
+
+restore_power_profile() {
+  if [[ "$TAHOE_RESTORE_POWER_PROFILE" != true || "$TAHOE_POWER_PROFILE_CHANGED" != true || -z "$TAHOE_PREVIOUS_POWER_PROFILE" ]]; then
+    return
+  fi
+
+  if command -v powerprofilesctl >/dev/null 2>&1 \
+    && powerprofilesctl set "$TAHOE_PREVIOUS_POWER_PROFILE" >/dev/null 2>&1; then
+    log "power profile: restored $TAHOE_PREVIOUS_POWER_PROFILE"
+  else
+    log "power profile: could not restore $TAHOE_PREVIOUS_POWER_PROFILE"
+  fi
+}
+
+run_session_command() {
+  local child status
+
+  apply_power_profile
+
+  if [[ "$TAHOE_RESTORE_POWER_PROFILE" != true || "$TAHOE_POWER_PROFILE_CHANGED" != true ]]; then
+    exec "$@"
+  fi
+
+  set +e
+  "$@" &
+  child=$!
+  trap 'kill -TERM "$child" 2>/dev/null' TERM HUP
+  trap 'kill -INT "$child" 2>/dev/null' INT
+  wait "$child"
+  status=$?
+  trap - TERM HUP INT
+  restore_power_profile
+  exit "$status"
 }
 
 activate_graphical_session_target() {
@@ -167,14 +297,14 @@ main() {
 
   if [[ "$use_wrapper" == true ]]; then
     log "niri session wrapper: $niri_session_bin"
-    exec "$niri_session_bin"
+    run_session_command "$niri_session_bin"
   fi
 
   niri_bin="$(resolve_niri_bin)"
   log "niri: $niri_bin"
   log "niri session wrapper: disabled"
   activate_graphical_session_target
-  exec "$niri_bin" --session --config "$NIRI_CONFIG"
+  run_session_command "$niri_bin" --session --config "$NIRI_CONFIG"
 }
 
 main "$@"

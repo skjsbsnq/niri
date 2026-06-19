@@ -142,6 +142,10 @@ enable_services() {
   log "enabling NetworkManager"
   sudo systemctl enable --now NetworkManager
 
+  log "enabling power-profiles-daemon"
+  sudo systemctl enable --now power-profiles-daemon >/dev/null 2>&1 \
+    || log "could not enable power-profiles-daemon; Tahoe can still run, but automatic performance profile may be unavailable"
+
   log "starting xdg desktop portal user services"
   systemctl --user daemon-reload || true
   for unit in \

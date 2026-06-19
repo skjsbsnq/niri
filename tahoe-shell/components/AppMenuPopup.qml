@@ -15,7 +15,7 @@ PanelWindow {
     property var anchorRect: null
     readonly property int edgePadding: 8
     readonly property int fallbackTop: 28
-    readonly property int popupGap: -1
+    readonly property int popupGap: 8
     readonly property int screenWidth: PopupGeometry.screenWidth(root.screen, root.width)
     readonly property int screenHeight: Math.max(1, PopupGeometry.numberOr(root.screen && root.screen.height, root.height))
     readonly property int maxPanelHeight: Math.max(180, screenHeight - popupTopMargin - edgePadding)

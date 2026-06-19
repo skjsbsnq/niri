@@ -16,7 +16,7 @@ PanelWindow {
     property var anchorRect: null
     readonly property int edgePadding: 8
     readonly property int fallbackTop: 28
-    readonly property int popupGap: -1
+    readonly property int popupGap: 8
     readonly property int screenWidth: PopupGeometry.screenWidth(root.screen, root.width)
     readonly property int popupLeftMargin: anchorRect
         ? PopupGeometry.popupLeft(anchorRect, root.implicitWidth, screenWidth, edgePadding, 12)
@@ -47,6 +47,22 @@ PanelWindow {
         left: root.popupLeftMargin
     }
 
+    onOpenChanged: {
+        if (!open && powerService)
+            powerService.cancelPending();
+    }
+
+    function triggerPower(action) {
+        if (!powerService) {
+            root.closeRequested();
+            return;
+        }
+
+        var pending = powerService.requestAction(action);
+        if (!pending)
+            root.closeRequested();
+    }
+
     TahoeGlass.regions: [
         TahoeGlassRegion {
             x: menuSurface.x
@@ -63,22 +79,6 @@ PanelWindow {
             enabled: root.open || menuSurface.opacity > 0.01
         }
     ]
-
-    onOpenChanged: {
-        if (!open && powerService)
-            powerService.cancelPending();
-    }
-
-    function triggerPower(action) {
-        if (!powerService) {
-            root.closeRequested();
-            return;
-        }
-
-        var pending = powerService.requestAction(action);
-        if (!pending)
-            root.closeRequested();
-    }
 
     Rectangle {
         id: menuSurface

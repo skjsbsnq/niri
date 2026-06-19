@@ -231,6 +231,8 @@ The script also defaults to `TAHOE_SHELL_LAUNCH_MODE=auto`:
 
 In child mode the script exports `TAHOE_SKIP_QUICKSHELL_AUTOSTART=1`, which prevents the config startup hook from creating a second Tahoe shell.
 
+Both Tahoe session launchers default to `TAHOE_POWER_PROFILE=auto`. When the machine is on external power, or when no battery is present, they ask `power-profiles-daemon` for the `performance` profile for the lifetime of the niri session and restore the previous profile when niri exits. This avoids GPU/CPU downclock stutter after the desktop has been idle. On battery, `auto` leaves the profile unchanged.
+
 When running from a terminal inside an existing desktop, force nested mode if needed:
 
 ```sh
@@ -265,6 +267,9 @@ NIRI_CONFIG=/path/to/config.kdl bash scripts/run-tahoe-session.sh
 TAHOE_CONFIG_DIR=/path/to/tahoe-shell bash scripts/run-tahoe-session.sh
 NIRI_BIN=/path/to/niri bash scripts/run-tahoe-session.sh
 QUICKSHELL_BIN=/path/to/quickshell bash scripts/run-tahoe-session.sh
+TAHOE_POWER_PROFILE=keep bash scripts/run-tahoe-session.sh
+TAHOE_POWER_PROFILE=performance bash scripts/run-tahoe-session.sh
+TAHOE_RESTORE_POWER_PROFILE=false bash scripts/run-tahoe-session.sh
 TAHOE_USE_NIRI_SESSION_WRAPPER=false ~/.local/bin/tahoe-niri-session
 ```
 

@@ -73,6 +73,19 @@ install_packages() {
   sudo pacman -Syu --needed "${PACMAN_PACKAGES[@]}"
 }
 
+enable_power_profiles_daemon() {
+  command -v systemctl >/dev/null 2>&1 || return
+  command -v sudo >/dev/null 2>&1 || return
+
+  if ! systemctl list-unit-files power-profiles-daemon.service >/dev/null 2>&1; then
+    return
+  fi
+
+  log "enabling power-profiles-daemon"
+  sudo systemctl enable --now power-profiles-daemon >/dev/null 2>&1 \
+    || log "could not enable power-profiles-daemon; Tahoe can still run, but automatic performance profile may be unavailable"
+}
+
 main() {
   require_cmd git
 
@@ -87,6 +100,7 @@ main() {
   fi
 
   install_packages
+  enable_power_profiles_daemon
 
   if ! command -v quickshell >/dev/null 2>&1; then
     log "quickshell command not found"

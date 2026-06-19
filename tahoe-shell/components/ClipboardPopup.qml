@@ -16,10 +16,11 @@ PanelWindow {
 
     readonly property string iconFont: "Material Icons"
     readonly property var entries: clipboardService ? clipboardService.entries : []
+    readonly property var pinnedEntries: clipboardService ? clipboardService.pinnedEntries : []
     readonly property int edgePadding: 8
     readonly property int fallbackRight: 202
     readonly property int fallbackTop: 28
-    readonly property int popupGap: -1
+    readonly property int popupGap: 8
     readonly property int screenWidth: PopupGeometry.screenWidth(root.screen, root.width)
     readonly property int popupLeftMargin: PopupGeometry.popupLeft(anchorRect, root.implicitWidth, screenWidth, edgePadding, fallbackRight)
     readonly property int popupTopMargin: PopupGeometry.popupTop(anchorRect, fallbackTop, popupGap)
@@ -46,6 +47,11 @@ PanelWindow {
         left: root.popupLeftMargin
     }
 
+    onOpenChanged: {
+        if (open && root.clipboardService)
+            root.clipboardService.refresh();
+    }
+
     TahoeGlass.regions: [
         TahoeGlassRegion {
             x: panel.x
@@ -62,11 +68,6 @@ PanelWindow {
             enabled: root.open || panel.opacity > 0.01
         }
     ]
-
-    onOpenChanged: {
-        if (open && root.clipboardService)
-            root.clipboardService.refresh();
-    }
 
     Rectangle {
         id: panel
@@ -127,14 +128,6 @@ PanelWindow {
                     Layout.fillWidth: true
                 }
 
-                Text {
-                    text: root.clipboardService ? root.clipboardService.statusText : ""
-                    color: "#731d1d1f"
-                    font.pixelSize: 11
-                    elide: Text.ElideRight
-                    Layout.maximumWidth: 110
-                }
-
                 IconButton {
                     iconCode: "\ue5d5"
                     enabled: !!root.clipboardService
@@ -143,8 +136,22 @@ PanelWindow {
                             root.clipboardService.refresh();
                     }
                 }
+            }
 
-                IconButton {
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+
+                Text {
+                    text: root.clipboardService ? root.clipboardService.statusText : ""
+                    color: "#731d1d1f"
+                    font.pixelSize: 11
+                    elide: Text.ElideRight
+                    Layout.fillWidth: true
+                }
+
+                TextButton {
+                    label: "清空历史"
                     iconCode: "\ue872"
                     enabled: root.clipboardService && root.clipboardService.cliphistAvailable && root.entries.length > 0
                     danger: true
@@ -165,6 +172,46 @@ PanelWindow {
                 visible: text.length > 0
             }
 
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 6
+                visible: root.pinnedEntries.length > 0
+
+                SectionHeader {
+                    label: "固定"
+                    count: root.pinnedEntries.length
+                }
+
+                ListView {
+                    id: pinnedList
+
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: Math.min(146, Math.max(44, contentHeight))
+                    clip: true
+                    spacing: 6
+                    boundsBehavior: Flickable.StopAtBounds
+                    model: root.pinnedEntries
+
+                    delegate: ClipboardRow {
+                        required property var modelData
+
+                        width: pinnedList.width
+                        entry: modelData
+                        pinnedRow: true
+                        pinned: true
+                        pinnable: true
+                        onCopyRequested: function(entry) {
+                            if (root.clipboardService)
+                                root.clipboardService.copyPinnedEntry(entry);
+                        }
+                        onUnpinRequested: function(entry) {
+                            if (root.clipboardService)
+                                root.clipboardService.unpinPinnedEntry(entry);
+                        }
+                    }
+                }
+            }
+
             Text {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 64
@@ -174,14 +221,20 @@ PanelWindow {
                 font.weight: Font.DemiBold
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
-                visible: root.entries.length === 0
+                visible: root.entries.length === 0 && root.pinnedEntries.length === 0
+            }
+
+            SectionHeader {
+                label: "历史"
+                count: root.entries.length
+                visible: root.entries.length > 0
             }
 
             ListView {
                 id: historyList
 
                 Layout.fillWidth: true
-                Layout.preferredHeight: Math.min(360, Math.max(120, contentHeight))
+                Layout.preferredHeight: Math.min(root.pinnedEntries.length > 0 ? 250 : 360, Math.max(120, contentHeight))
                 visible: root.entries.length > 0
                 clip: true
                 spacing: 6
@@ -193,9 +246,15 @@ PanelWindow {
 
                     width: historyList.width
                     entry: modelData
+                    pinned: root.clipboardService ? root.clipboardService.isEntryPinned(modelData) : false
+                    pinnable: modelData && modelData.pinnable !== false
                     onCopyRequested: function(entry) {
                         if (root.clipboardService)
                             root.clipboardService.copyEntry(entry);
+                    }
+                    onPinRequested: function(entry) {
+                        if (root.clipboardService)
+                            root.clipboardService.pinEntry(entry);
                     }
                     onDeleteRequested: function(entry) {
                         if (root.clipboardService)
@@ -210,7 +269,15 @@ PanelWindow {
         id: row
 
         property var entry
+        property bool pinned: false
+        property bool pinnedRow: false
+        property bool pinnable: true
+        readonly property bool copyEnabled: pinnedRow
+            ? !!(root.clipboardService && root.clipboardService.wlCopyAvailable)
+            : !!(root.clipboardService && root.clipboardService.available)
         signal copyRequested(var entry)
+        signal pinRequested(var entry)
+        signal unpinRequested(var entry)
         signal deleteRequested(var entry)
 
         height: rowFrame.implicitHeight
@@ -256,8 +323,21 @@ PanelWindow {
                 }
 
                 IconButton {
+                    iconCode: row.pinnedRow ? "\ue5cd" : "\ue866"
+                    enabled: row.pinnedRow || (root.clipboardService && root.clipboardService.cliphistAvailable && row.pinnable)
+                    active: row.pinned && !row.pinnedRow
+                    danger: row.pinnedRow
+                    onActivated: {
+                        if (row.pinnedRow)
+                            row.unpinRequested(row.entry);
+                        else
+                            row.pinRequested(row.entry);
+                    }
+                }
+
+                IconButton {
                     iconCode: "\ue14d"
-                    enabled: root.clipboardService && root.clipboardService.available
+                    enabled: row.copyEnabled
                     onActivated: row.copyRequested(row.entry)
                 }
 
@@ -265,6 +345,7 @@ PanelWindow {
                     iconCode: "\ue872"
                     enabled: root.clipboardService && root.clipboardService.cliphistAvailable
                     danger: true
+                    visible: !row.pinnedRow
                     onActivated: row.deleteRequested(row.entry)
                 }
             }
@@ -274,11 +355,41 @@ PanelWindow {
                 anchors.fill: parent
                 hoverEnabled: true
                 z: 0
-                cursorShape: root.clipboardService && root.clipboardService.available ? Qt.PointingHandCursor : Qt.ArrowCursor
+                cursorShape: row.copyEnabled ? Qt.PointingHandCursor : Qt.ArrowCursor
                 onClicked: {
-                    if (root.clipboardService && root.clipboardService.available)
+                    if (row.copyEnabled)
                         row.copyRequested(row.entry);
                 }
+            }
+        }
+    }
+
+    component SectionHeader: Item {
+        id: header
+
+        property string label: ""
+        property int count: 0
+
+        Layout.fillWidth: true
+        Layout.preferredHeight: 18
+
+        RowLayout {
+            anchors.fill: parent
+            spacing: 6
+
+            Text {
+                text: header.label
+                color: "#731d1d1f"
+                font.pixelSize: 11
+                font.weight: Font.DemiBold
+                Layout.fillWidth: true
+            }
+
+            Text {
+                text: String(header.count)
+                color: "#661d1d1f"
+                font.pixelSize: 10
+                font.weight: Font.DemiBold
             }
         }
     }
@@ -289,6 +400,7 @@ PanelWindow {
         property string iconCode: ""
         property bool enabled: true
         property bool danger: false
+        property bool active: false
         signal activated()
 
         Layout.preferredWidth: 26
@@ -298,8 +410,8 @@ PanelWindow {
         Rectangle {
             anchors.fill: parent
             radius: 12
-            color: btnMouse.containsMouse ? "#70ffffff" : "#34ffffff"
-            border.color: "#50ffffff"
+            color: btn.active ? "#d82c9cf2" : (btnMouse.containsMouse && btn.enabled ? "#70ffffff" : "#34ffffff")
+            border.color: btn.active ? "#70ffffff" : "#50ffffff"
             border.width: 1
             opacity: btn.enabled ? 1 : 0.45
         }
@@ -307,9 +419,64 @@ PanelWindow {
         Text {
             anchors.centerIn: parent
             text: btn.iconCode
-            color: btn.danger ? "#ccff453a" : "#1d1d1f"
+            color: btn.active ? "#ffffff" : (btn.danger ? "#ccff453a" : "#1d1d1f")
             font.family: root.iconFont
             font.pixelSize: 16
+        }
+
+        MouseArea {
+            id: btnMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: btn.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+            onClicked: {
+                if (btn.enabled)
+                    btn.activated();
+            }
+        }
+    }
+
+    component TextButton: Item {
+        id: btn
+
+        property string label: ""
+        property string iconCode: ""
+        property bool enabled: true
+        property bool danger: false
+        signal activated()
+
+        Layout.preferredWidth: Math.max(80, labelText.implicitWidth + (btn.iconCode.length > 0 ? 34 : 20))
+        Layout.preferredHeight: 24
+        Layout.alignment: Qt.AlignVCenter
+
+        Rectangle {
+            anchors.fill: parent
+            radius: 12
+            color: btnMouse.containsMouse && btn.enabled ? "#70ffffff" : "#34ffffff"
+            border.color: "#50ffffff"
+            border.width: 1
+            opacity: btn.enabled ? 1 : 0.45
+        }
+
+        Row {
+            anchors.centerIn: parent
+            spacing: 4
+
+            Text {
+                text: btn.iconCode
+                color: btn.danger ? "#ccff453a" : "#1d1d1f"
+                font.family: root.iconFont
+                font.pixelSize: 15
+                visible: btn.iconCode.length > 0
+            }
+
+            Text {
+                id: labelText
+                text: btn.label
+                color: btn.danger ? "#ccff453a" : "#1d1d1f"
+                font.pixelSize: 11
+                font.weight: Font.DemiBold
+            }
         }
 
         MouseArea {

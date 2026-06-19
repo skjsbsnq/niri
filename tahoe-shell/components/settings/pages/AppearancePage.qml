@@ -57,28 +57,18 @@ Flickable {
                 }
             }
 
-            Controls.TahoeListRow {
+            Controls.TahoeSlider {
                 theme: page.theme
-                label: "夜览色温"
-                detail: page.panel && page.panel.appearanceService ? page.panel.appearanceService.colorTemperature + "K" : "不可用"
                 iconCode: "\ueb37"
-
-                RowLayout {
-                    spacing: 7
-
-                    Controls.TahoeButton {
-                        theme: page.theme
-                        label: "-250"
-                        enabled: !!(page.panel && page.panel.appearanceService)
-                        onActivated: page.panel.appearanceService.setColorTemperature(page.panel.appearanceService.colorTemperature - 250)
-                    }
-
-                    Controls.TahoeButton {
-                        theme: page.theme
-                        label: "+250"
-                        enabled: !!(page.panel && page.panel.appearanceService)
-                        onActivated: page.panel.appearanceService.setColorTemperature(page.panel.appearanceService.colorTemperature + 250)
-                    }
+                label: "夜览色温"
+                valueText: page.panel && page.panel.appearanceService ? page.panel.appearanceService.colorTemperature + "K" : "—"
+                value: page.panel && page.panel.appearanceService
+                    ? Math.max(0, Math.min(1, (page.panel.appearanceService.colorTemperature - 2500) / 4000))
+                    : 0
+                enabled: !!(page.panel && page.panel.appearanceService)
+                onUserSet: function(v) {
+                    if (page.panel.appearanceService)
+                        page.panel.appearanceService.setColorTemperature(2500 + Math.round(v * 4000));
                 }
             }
         }

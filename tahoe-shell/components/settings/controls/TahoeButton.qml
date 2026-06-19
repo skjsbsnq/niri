@@ -18,6 +18,10 @@ Item {
     readonly property string iconFont: theme ? theme.iconFont : "Material Icons"
     readonly property color textPrimary: theme ? theme.textPrimary : "#1d1d1f"
     readonly property color rowFillHover: theme ? theme.rowFillHover : "#48ffffff"
+    readonly property color buttonFill: theme ? theme.buttonFill : "#40ffffff"
+    readonly property color buttonStroke: theme ? theme.buttonStroke : "#50ffffff"
+    readonly property color accentFill: theme ? theme.accentFillStrong : "#d8007ff7"
+    readonly property color accentStroke: theme ? theme.accentStrokeStrong : "#70ffffff"
 
     signal activated()
 
@@ -28,8 +32,8 @@ Item {
     Rectangle {
         anchors.fill: parent
         radius: btn.iconOnly ? 12 : 10
-        color: btn.primaryState ? "#d82c9cf2" : (buttonMouse.containsMouse && btn.enabled ? btn.rowFillHover : "#48ffffff")
-        border.color: btn.primaryState ? "#70ffffff" : "#50ffffff"
+        color: btn.primaryState ? btn.accentFill : (buttonMouse.containsMouse && btn.enabled ? btn.rowFillHover : btn.buttonFill)
+        border.color: btn.primaryState ? btn.accentStroke : btn.buttonStroke
         border.width: 1
     }
 

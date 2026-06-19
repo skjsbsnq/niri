@@ -36,7 +36,7 @@ Flickable {
                 detail: page.panel && page.panel.appearanceService && page.panel.appearanceService.nightMode
                     ? "夜览 " + page.panel.appearanceService.colorTemperature + "K"
                     : "夜览关闭"
-                accentColor: "#5b8def"
+                accentColor: page.panel ? page.panel.categoryColor("appearance") : "#5856d6"
                 onActivated: page.panel.selectedPage = "appearance"
             }
 
@@ -48,7 +48,7 @@ Flickable {
                 detail: page.panel && page.panel.notificationsService
                     ? page.panel.notificationsService.historyCount + " 条历史通知"
                     : "通知服务不可用"
-                accentColor: page.panel && page.panel.notificationsService && page.panel.notificationsService.dndEnabled ? "#ff9f0a" : "#34c759"
+                accentColor: page.panel ? page.panel.categoryColor("notifications") : "#ff3b30"
                 onActivated: page.panel.selectedPage = "notifications"
             }
 
@@ -58,7 +58,7 @@ Flickable {
                 iconCode: "\ue3b0"
                 title: "截图"
                 detail: page.panel ? page.panel.screenshotPathText() : ""
-                accentColor: "#ff7a59"
+                accentColor: page.panel ? page.panel.categoryColor("screenshot") : "#ff7a59"
                 onActivated: page.panel.selectedPage = "screenshot"
             }
 
@@ -68,7 +68,7 @@ Flickable {
                 iconCode: "\ue8d0"
                 title: "Dock"
                 detail: page.panel && page.panel.settingsService ? "窗口标题：" + page.panel.settingsService.modeLabel(page.panel.dockTitleMode()) : "设置服务不可用"
-                accentColor: "#af52de"
+                accentColor: page.panel ? page.panel.categoryColor("dock") : "#0a84ff"
                 onActivated: page.panel.selectedPage = "dock"
             }
 
@@ -80,7 +80,7 @@ Flickable {
                 detail: page.panel && page.panel.systemStatusService
                     ? page.panel.systemStatusService.okCount + " 正常 · " + page.panel.systemStatusService.warnCount + " 注意 · " + page.panel.systemStatusService.missingCount + " 缺失"
                     : "等待检测"
-                accentColor: page.panel && page.panel.systemStatusService && page.panel.systemStatusService.missingCount > 0 ? "#ff453a" : "#2c9cf2"
+                accentColor: page.panel ? page.panel.categoryColor("health") : "#34c759"
                 onActivated: {
                     page.panel.selectedPage = "health";
                     if (page.panel.systemStatusService)
@@ -96,7 +96,7 @@ Flickable {
                 detail: page.panel && page.panel.settingsService && page.panel.settingsService.startupNote.length > 0
                     ? page.panel.settingsService.startupNote
                     : "管理 autostart 目录"
-                accentColor: "#30b0c7"
+                accentColor: page.panel ? page.panel.categoryColor("startup") : "#ff9f0a"
                 onActivated: page.panel.selectedPage = "startup"
             }
         }

@@ -26,8 +26,8 @@ Flickable {
             Layout.fillWidth: true
             Layout.preferredHeight: 74
             radius: 18
-            color: "#2affffff"
-            border.color: "#42ffffff"
+            color: page.theme ? page.theme.heroFill : "#2affffff"
+            border.color: page.theme ? page.theme.heroStroke : "#42ffffff"
 
             RowLayout {
                 anchors.fill: parent
@@ -38,21 +38,21 @@ Flickable {
                     theme: page.theme
                     label: "正常"
                     value: page.panel && page.panel.systemStatusService ? page.panel.systemStatusService.okCount : 0
-                    colorValue: "#34c759"
+                    colorValue: page.theme ? page.theme.stateColor("ok") : "#34c759"
                 }
 
                 Controls.TahoeHealthCounter {
                     theme: page.theme
                     label: "注意"
                     value: page.panel && page.panel.systemStatusService ? page.panel.systemStatusService.warnCount : 0
-                    colorValue: "#ff9f0a"
+                    colorValue: page.theme ? page.theme.stateColor("warn") : "#ff9f0a"
                 }
 
                 Controls.TahoeHealthCounter {
                     theme: page.theme
                     label: "缺失"
                     value: page.panel && page.panel.systemStatusService ? page.panel.systemStatusService.missingCount : 0
-                    colorValue: "#ff453a"
+                    colorValue: page.theme ? page.theme.stateColor("missing") : "#ff453a"
                 }
 
                 Item { Layout.fillWidth: true }
@@ -69,7 +69,7 @@ Flickable {
         Text {
             Layout.fillWidth: true
             text: page.panel && page.panel.systemStatusService ? page.panel.systemStatusService.lastError : ""
-            color: "#ccff453a"
+            color: page.theme ? page.theme.danger : "#ff453a"
             font.pixelSize: 12
             font.weight: Font.DemiBold
             visible: text.length > 0

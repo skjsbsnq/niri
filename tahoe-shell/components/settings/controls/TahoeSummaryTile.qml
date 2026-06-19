@@ -15,6 +15,10 @@ Item {
     readonly property string iconFont: theme ? theme.iconFont : "Material Icons"
     readonly property color textPrimary: theme ? theme.textPrimary : "#1d1d1f"
     readonly property color textSecondary: theme ? theme.textSecondary : "#721d1d1f"
+    readonly property color tileFill: theme ? theme.tileFill : "#30ffffff"
+    readonly property color tileFillHover: theme ? theme.tileFillHover : "#4cffffff"
+    readonly property color tileStroke: theme ? theme.tileStroke : "#42ffffff"
+    readonly property color tileStrokeHover: theme ? theme.tileStrokeHover : "#66ffffff"
 
     signal activated()
 
@@ -23,8 +27,8 @@ Item {
     Rectangle {
         anchors.fill: parent
         radius: 18
-        color: tileMouse.containsMouse ? "#4cffffff" : "#30ffffff"
-        border.color: tileMouse.containsMouse ? "#66ffffff" : "#42ffffff"
+        color: tileMouse.containsMouse ? tile.tileFillHover : tile.tileFill
+        border.color: tileMouse.containsMouse ? tile.tileStrokeHover : tile.tileStroke
         border.width: 1
     }
 
@@ -33,22 +37,11 @@ Item {
         anchors.margins: 12
         spacing: 12
 
-        Rectangle {
-            Layout.preferredWidth: 42
-            Layout.preferredHeight: 42
-            Layout.alignment: Qt.AlignVCenter
-            radius: 14
-            color: tile.accentColor
-            border.color: "#66ffffff"
-            border.width: 1
-
-            Text {
-                anchors.centerIn: parent
-                text: tile.iconCode
-                color: "#ffffff"
-                font.family: tile.iconFont
-                font.pixelSize: 22
-            }
+        TahoeCategoryIcon {
+            theme: tile.theme
+            iconCode: tile.iconCode
+            accentColor: tile.accentColor
+            square: 42
         }
 
         ColumnLayout {

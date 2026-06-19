@@ -25,8 +25,12 @@ PanelWindow {
     readonly property bool darkMode: appearanceService && appearanceService.darkMode
     readonly property int screenWidth: Math.max(1, numberOr(root.screen && root.screen.width, root.width))
     readonly property int screenHeight: Math.max(1, numberOr(root.screen && root.screen.height, root.height))
-    readonly property int panelWidth: Math.max(320, Math.min(screenWidth - 32, 1080))
-    readonly property int panelHeight: Math.max(420, Math.min(screenHeight - 64, 720))
+    // macOS System Settings converges toward ~900x540; clamp the overlay there
+    // on typical screens while keeping a usable floor on small displays. The
+    // glass region follows panelSurface geometry, so shrinking the panel keeps
+    // the region inside the safe area (no spring on geometry, guardrail 0704ea4).
+    readonly property int panelWidth: Math.max(320, Math.min(screenWidth - 32, 900))
+    readonly property int panelHeight: Math.max(420, Math.min(screenHeight - 64, 540))
     readonly property int panelLeft: Math.round(Math.max(8, (screenWidth - panelWidth) / 2))
     readonly property int panelTop: Math.round(Math.max(42, (screenHeight - panelHeight) / 2))
     readonly property string iconFont: "Material Icons"
@@ -39,6 +43,32 @@ PanelWindow {
     readonly property color rowFill: SettingsTheme.rowFill(darkMode)
     readonly property color rowFillHover: SettingsTheme.rowFillHover(darkMode)
     readonly property color rowStroke: SettingsTheme.rowStroke(darkMode)
+    readonly property color sidebarFill: SettingsTheme.sidebarFill(darkMode)
+    readonly property color sidebarStroke: SettingsTheme.sidebarStroke(darkMode)
+    readonly property color sidebarActiveFill: SettingsTheme.sidebarActiveFill(darkMode)
+    readonly property color sidebarActiveStroke: SettingsTheme.sidebarActiveStroke(darkMode)
+    readonly property color sidebarHoverFill: SettingsTheme.sidebarHoverFill(darkMode)
+    readonly property color buttonFill: SettingsTheme.buttonFill(darkMode)
+    readonly property color buttonStroke: SettingsTheme.buttonStroke(darkMode)
+    readonly property color accentFillStrong: SettingsTheme.accentFillStrong(darkMode)
+    readonly property color accentStrokeStrong: SettingsTheme.accentStrokeStrong(darkMode)
+    readonly property color fieldFill: SettingsTheme.fieldFill(darkMode)
+    readonly property color fieldStroke: SettingsTheme.fieldStroke(darkMode)
+    readonly property color fieldStrokeFocus: SettingsTheme.fieldStrokeFocus(darkMode)
+    readonly property color sliderTrack: SettingsTheme.sliderTrack(darkMode)
+    readonly property color switchOff: SettingsTheme.switchOff(darkMode)
+    readonly property color tileFill: SettingsTheme.tileFill(darkMode)
+    readonly property color tileFillHover: SettingsTheme.tileFillHover(darkMode)
+    readonly property color tileStroke: SettingsTheme.tileStroke(darkMode)
+    readonly property color tileStrokeHover: SettingsTheme.tileStrokeHover(darkMode)
+    readonly property color heroFill: SettingsTheme.heroFill(darkMode)
+    readonly property color heroStroke: SettingsTheme.heroStroke(darkMode)
+    readonly property color scrim: SettingsTheme.scrim(darkMode)
+    readonly property color danger: SettingsTheme.danger(darkMode)
+
+    function categoryColor(key) {
+        return SettingsTheme.categoryColor(key, darkMode);
+    }
 
     signal closeRequested()
 
@@ -140,7 +170,7 @@ PanelWindow {
     }
 
     function stateColor(state) {
-        return SettingsTheme.stateColor(state);
+        return SettingsTheme.stateColor(state, darkMode);
     }
 
     function inputStatusText() {
@@ -183,7 +213,7 @@ PanelWindow {
 
     Rectangle {
         anchors.fill: parent
-        color: "#1a101418"
+        color: root.scrim
         opacity: root.open ? 1 : 0
 
         Behavior on opacity {

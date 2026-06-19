@@ -9,7 +9,7 @@ Item {
     property var theme
     property string label: ""
     property int value: 0
-    property color colorValue: "#2c9cf2"
+    property color colorValue: "#007ff7"
 
     readonly property color textSecondary: theme ? theme.textSecondary : "#721d1d1f"
 

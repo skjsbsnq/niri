@@ -27,8 +27,8 @@ Flickable {
             Layout.fillWidth: true
             Layout.preferredHeight: 92
             radius: 18
-            color: "#2affffff"
-            border.color: "#42ffffff"
+            color: page.theme ? page.theme.heroFill : "#2affffff"
+            border.color: page.theme ? page.theme.heroStroke : "#42ffffff"
 
             RowLayout {
                 anchors.fill: parent

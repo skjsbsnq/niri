@@ -15,13 +15,14 @@ Item {
     readonly property color textMuted: theme ? theme.textMuted : "#5f6870"
     readonly property color rowFill: theme ? theme.rowFill : "#28ffffff"
     readonly property color rowStroke: theme ? theme.rowStroke : "#32ffffff"
+    readonly property color danger: theme ? theme.danger : "#ff453a"
 
     function stateLabel(state) {
         return theme ? theme.stateLabel(state) : "信息";
     }
 
     function stateColor(state) {
-        return theme ? theme.stateColor(state) : "#2c9cf2";
+        return theme ? theme.stateColor(state) : "#007ff7";
     }
 
     Layout.fillWidth: true
@@ -98,7 +99,7 @@ Item {
             Text {
                 Layout.fillWidth: true
                 text: row.item ? row.item.action : ""
-                color: "#ccff453a"
+                color: row.danger
                 font.pixelSize: 11
                 font.weight: Font.DemiBold
                 wrapMode: Text.WordWrap

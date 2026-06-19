@@ -13,12 +13,19 @@ Rectangle {
     readonly property string iconFont: theme ? theme.iconFont : "Material Icons"
     readonly property color textPrimary: theme ? theme.textPrimary : "#1d1d1f"
     readonly property color textSecondary: theme ? theme.textSecondary : "#721d1d1f"
+    readonly property color sidebarFill: theme ? theme.sidebarFill : "#20ffffff"
+    readonly property color sidebarStroke: theme ? theme.sidebarStroke : "#34ffffff"
+    readonly property color accentBlue: theme ? theme.accentBlue : "#007ff7"
+
+    function categoryColor(key) {
+        return theme && theme.categoryColor ? theme.categoryColor(key) : accentBlue
+    }
 
     Layout.preferredWidth: 188
     Layout.fillHeight: true
     radius: 18
-    color: "#20ffffff"
-    border.color: "#34ffffff"
+    color: sidebar.sidebarFill
+    border.color: sidebar.sidebarStroke
     border.width: 1
 
     ColumnLayout {
@@ -31,20 +38,11 @@ Rectangle {
             Layout.preferredHeight: 42
             spacing: 9
 
-            Rectangle {
-                Layout.preferredWidth: 32
-                Layout.preferredHeight: 32
-                radius: 10
-                color: "#4cffffff"
-                border.color: "#42ffffff"
-
-                Text {
-                    anchors.centerIn: parent
-                    text: "\ue8b8"
-                    color: sidebar.textPrimary
-                    font.family: sidebar.iconFont
-                    font.pixelSize: 19
-                }
+            Controls.TahoeCategoryIcon {
+                theme: sidebar.theme
+                iconCode: "\ue8b8"
+                accentColor: sidebar.accentBlue
+                square: 30
             }
 
             ColumnLayout {
@@ -72,6 +70,7 @@ Rectangle {
             theme: sidebar.theme
             label: "概览"
             iconCode: "\ue8b8"
+            accentColor: sidebar.categoryColor("overview")
             active: sidebar.panel && sidebar.panel.selectedPage === "settings"
             onActivated: sidebar.panel.selectedPage = "settings"
         }
@@ -80,6 +79,7 @@ Rectangle {
             theme: sidebar.theme
             label: "外观"
             iconCode: "\ue51c"
+            accentColor: sidebar.categoryColor("appearance")
             active: sidebar.panel && sidebar.panel.selectedPage === "appearance"
             onActivated: sidebar.panel.selectedPage = "appearance"
         }
@@ -88,6 +88,7 @@ Rectangle {
             theme: sidebar.theme
             label: "通知与输入"
             iconCode: "\ue7f4"
+            accentColor: sidebar.categoryColor("notifications")
             active: sidebar.panel && sidebar.panel.selectedPage === "notifications"
             badgeText: sidebar.panel && sidebar.panel.notificationsService && sidebar.panel.notificationsService.historyCount > 0
                 ? String(Math.min(99, sidebar.panel.notificationsService.historyCount))
@@ -99,6 +100,7 @@ Rectangle {
             theme: sidebar.theme
             label: "截图"
             iconCode: "\ue3b0"
+            accentColor: sidebar.categoryColor("screenshot")
             active: sidebar.panel && sidebar.panel.selectedPage === "screenshot"
             onActivated: sidebar.panel.selectedPage = "screenshot"
         }
@@ -107,6 +109,7 @@ Rectangle {
             theme: sidebar.theme
             label: "Dock"
             iconCode: "\ue8d0"
+            accentColor: sidebar.categoryColor("dock")
             active: sidebar.panel && sidebar.panel.selectedPage === "dock"
             onActivated: sidebar.panel.selectedPage = "dock"
         }
@@ -115,6 +118,7 @@ Rectangle {
             theme: sidebar.theme
             label: "启动项"
             iconCode: "\ue89e"
+            accentColor: sidebar.categoryColor("startup")
             active: sidebar.panel && sidebar.panel.selectedPage === "startup"
             onActivated: sidebar.panel.selectedPage = "startup"
         }
@@ -123,6 +127,7 @@ Rectangle {
             theme: sidebar.theme
             label: "系统健康"
             iconCode: "\ue868"
+            accentColor: sidebar.categoryColor("health")
             active: sidebar.panel && sidebar.panel.selectedPage === "health"
             badgeText: sidebar.panel && sidebar.panel.systemStatusService && sidebar.panel.systemStatusService.missingCount > 0
                 ? String(sidebar.panel.systemStatusService.missingCount)
@@ -138,6 +143,7 @@ Rectangle {
             theme: sidebar.theme
             label: "关于"
             iconCode: "\ue88e"
+            accentColor: sidebar.categoryColor("about")
             active: sidebar.panel && sidebar.panel.selectedPage === "about"
             onActivated: sidebar.panel.selectedPage = "about"
         }

@@ -185,13 +185,6 @@ PanelWindow {
                     }
                 }
 
-                MenuRow {
-                    text: root.appMenuService ? root.appMenuService.nativeMenuStatus : "应用菜单不可用"
-                    icon: root.appMenuService && root.appMenuService.registrarAvailable ? "\ue86c" : "\ue88f"
-                    enabledRow: false
-                    visible: !root.nativeMenuAvailable
-                }
-
                 Rectangle {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 1

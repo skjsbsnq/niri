@@ -313,7 +313,6 @@ def candidate_services(app_id, pid):
     seen = set()
     app_id = str(app_id or "").strip()
     pid = str(pid or "").strip()
-    app_tokens = normalized_tokens(app_id)
 
     def add(name):
         name = str(name or "").strip()
@@ -323,9 +322,12 @@ def candidate_services(app_id, pid):
         candidates.append(name)
 
     if "." in app_id:
-        add(app_id)
+        # Do not probe an activatable well-known name unless it is already
+        # owned. Calling /MenuBar on a DBusActivatable desktop app starts it.
         owner = name_owner(app_id)
-        add(owner)
+        if owner:
+            add(app_id)
+            add(owner)
 
     for row in bus_names():
         if not isinstance(row, dict):
@@ -335,14 +337,11 @@ def candidate_services(app_id, pid):
         name = str(row.get("name") or "")
         connection = str(row.get("connection") or "")
         process = str(row.get("process") or "")
-
-        if pid and row_pid == pid:
-            add(name)
-            add(connection)
+        has_owner = connection.startswith(":") or (row_pid.isdigit() and int(row_pid) > 0)
+        if not has_owner:
             continue
 
-        row_tokens = normalized_tokens(name, process)
-        if app_tokens and app_tokens.intersection(row_tokens):
+        if pid and row_pid == pid:
             add(name)
             add(connection)
 

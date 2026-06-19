@@ -807,6 +807,42 @@ submodules（`1e1d1e0`/`6211e44`）、phase6 基线。
   无 QML load failure，无 NiriInputPage/input 相关错误；临时实例已 trap 清理；线上会话未受影响。
 - 本阶段未进入 S5.3，未碰 binds/MRU/task-switcher，未生成违规 KDL。
 
+### 阶段 S5.3 验收记录（2026-06-20）
+
+- **范围**：新增 niri「动画」域——4 个 spring 动作（workspace-switch/window-movement/
+  window-resize/overview-open-close）的 damping-ratio/stiffness/epsilon。未碰 dismiss/TahoeGlass
+  region/挂载点/binds。工作区 S5.3 改动为 5 改 + 1 新增。
+- **helper**：新增 `read_animations_text`（仅读上述 4 个 spring 动作；缺省 1.0/1000/0.0001）、
+  `parse_spring_line`/`format_spring`、`set_anim_spring`（整行重写
+  `spring damping-ratio=X stiffness=Y epsilon=Z`，值未变则跳过保留原 token；动作块无 spring 行则
+  拒绝改写，避免给 easing/shader 动作凭空造 spring）。`update_field` 增
+  `animations.<action>.damping_ratio[0.1,10]/stiffness[1,1e5]/epsilon[1e-5,0.1]`。`read`/`write`
+  payload 增 `animations`。
+- **round-trip（在 config 副本上）**：读得 workspace_switch{1.0,780,0.0001}、
+  window_movement{0.86,620,0.001}、window_resize{0.96,700,0.0005}、overview_open_close{0.95,760,0.0005}。
+  - TEST A（no-op 写回每参数当前值）：byte-identical（format_float/format_number 复现源格式）。
+  - TEST B（改写各参数）：`niri validate` 通过、读回值正确。
+  - TEST C（改后恢复原值）：byte-identical（整行重写格式与源一致）。
+  - TEST D（clamp 边界 damping 0.1/10、epsilon 1e-5/0.1、stiffness 1）：均 `niri validate` 通过。
+- **service（`NiriSettings.qml`）**：`animSprings` 嵌套对象（4 动作 × 3 参，默认对齐 config 真值）；
+  `setAnimParam(action,param,value)`（不可变对象重赋 + writeField）；`applyAnimations`；
+  handleRead/WriteOutput 调用 applyAnimations。**window-open/close 不暴露**（custom-shader，不写）。
+- **UI（`NiriAnimationsPage.qml`）**：每个 spring 动作一个 TahoeSection + 3 滑块
+  （damping-ratio[0.1,10]、stiffness[1,1000]、epsilon[1e-5,0.1]，各自归一 0..1 映射）。每控件读
+  service 镜像、`onUserSet` 走 setAnimParam。底部注明「窗口打开/关闭动画使用自定义着色器，不提供修改」。
+- **路由**：`SettingsPanel.qml` `pageIndex` 增 `niri-animations=12` + pageTitle「动画」+ pageSubtitle +
+  StackLayout 挂 `NiriAnimationsPage`；`NiriPage.qml` hub 增「动画」tile→niri-animations（animation
+  图标 e8c1，经 cmap 核验）；`SettingsTheme.js` `categoryColor` 增 `niri-animations` orange `#ff9f0a`。
+- **回归检查**：未碰 dismiss（`dc5bef9`）；未碰 TahoeGlass region 坐标/几何（`b7b8e5a`/`0704ea4`）；
+  未碰 `shell.qml:705-716` 挂载点；未新增 service 根类型（`666c3c8`）；未用 `BackgroundEffect`/`blurRegion`；
+  未生成 `variable-refresh-rate` 或 broad `namespace="^quickshell"`；未碰 binds（`441b637`）；
+  `useSpring` 未被新动画依赖。
+- **检查脚本**：`py_compile` 0；`qmllint`（settings 全树 + SettingsPanel + NiriSettings）退出 0，新文件零告警；
+  guardrails 0；submodules 0；`niri validate` 0。
+- **运行时 smoke**：临时 `quickshell -p tahoe-shell`（隔离 XDG_CONFIG_HOME + config 副本）4s 存活、
+  无 QML load failure，无 NiriAnimationsPage/animSprings 相关错误；临时实例已 trap 清理；线上会话未受影响。
+- 本阶段未进入 S5.4，未碰 binds/MRU/task-switcher，未生成违规 KDL。
+
 ## 停止条件
 
 - S0–S5 全部验收通过；设置面板外观对齐 macOS System Settings、深色模式可用、niri 主要配置域

@@ -90,6 +90,16 @@ Flickable {
                 accentColor: page.panel ? page.panel.categoryColor("niri-input") : "#0a84ff"
                 onActivated: page.panel.selectedPage = "niri-input"
             }
+
+            Controls.TahoeSummaryTile {
+                theme: page.theme
+                Layout.fillWidth: true
+                iconCode: "\e8c1"
+                title: "动画"
+                detail: page.svc ? "工作区/窗口/概览的弹簧手感" : "niri 动画设置"
+                accentColor: page.panel ? page.panel.categoryColor("niri-animations") : "#ff9f0a"
+                onActivated: page.panel.selectedPage = "niri-animations"
+            }
         }
     }
 }

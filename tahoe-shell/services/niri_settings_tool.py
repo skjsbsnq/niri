@@ -652,6 +652,84 @@ def read_input_text(text: str) -> dict[str, Any]:
     return {"keyboard": keyboard, "touchpad": touchpad, "output": read_output_text(text)}
 
 
+# --- animations (S5.3) ----------------------------------------------------
+# Spring params for the spring-based actions present in the config. Each action
+# node holds a single `spring damping-ratio=X stiffness=Y epsilon=Z` line; the
+# writer rewrites that whole line (preserving all three params) and skips the
+# rewrite when the target param is unchanged. window-open/close carry custom
+# GLSL shaders and are intentionally never touched by the GUI.
+
+ANIM_ACTIONS = ["workspace-switch", "window-movement", "window-resize", "overview-open-close"]
+ANIM_SPRING_PARAMS = ["damping-ratio", "stiffness", "epsilon"]
+
+
+def parse_spring_line(body: str) -> dict[str, float]:
+    vals = {"damping-ratio": 1.0, "stiffness": 1000.0, "epsilon": 0.0001}
+    for param in ANIM_SPRING_PARAMS:
+        m = re.search(rf"\b{re.escape(param)}=({NUMBER_RE})", body)
+        if m:
+            vals[param] = float(m.group(1))
+    return vals
+
+
+def format_spring(vals: dict[str, float]) -> str:
+    return (
+        f"spring damping-ratio={format_float(vals['damping-ratio'])} "
+        f"stiffness={format_number(vals['stiffness'])} "
+        f"epsilon={format_float(vals['epsilon'])}"
+    )
+
+
+def read_animations_text(text: str) -> dict[str, Any]:
+    lines = text.splitlines(True)
+    anim = find_top_level_block_or_none(lines, "animations")
+    actions: dict[str, Any] = {}
+    for action in ANIM_ACTIONS:
+        block = find_child_block(lines, anim[0], anim[1], action) if anim else None
+        vals: dict[str, float] | None = None
+        if block:
+            for index in iter_depth_lines(lines, block[0], block[1], 2):
+                body = uncommented_body(lines[index])
+                if re.match(r"^\s*spring\b", body):
+                    vals = parse_spring_line(body)
+                    break
+        if vals is None:
+            vals = {"damping-ratio": 1.0, "stiffness": 1000.0, "epsilon": 0.0001}
+        actions[action.replace("-", "_")] = {
+            "damping_ratio": normalize_number(vals["damping-ratio"]),
+            "stiffness": normalize_number(vals["stiffness"]),
+            "epsilon": normalize_number(vals["epsilon"]),
+        }
+    return {"actions": actions}
+
+
+def set_anim_spring(lines: list[str], anim: tuple[int, int], action: str, param: str, value: float) -> None:
+    block = find_child_block(lines, anim[0], anim[1], action)
+    if block is None:
+        vals = {"damping-ratio": 1.0, "stiffness": 1000.0, "epsilon": 0.0001}
+        vals[param] = value
+        create_child_block(lines, anim, action, [format_spring(vals)])
+        return
+
+    for index in iter_depth_lines(lines, block[0], block[1], 2):
+        body = uncommented_body(lines[index])
+        if not re.match(r"^\s*spring\b", body):
+            continue
+        vals = parse_spring_line(body)
+        if vals[param] == value:
+            return  # unchanged: preserve original token
+        vals[param] = value
+        _, comment, newline = split_line_comment(lines[index])
+        indent = leading_indent(lines[index])
+        gap = " " if comment else ""
+        lines[index] = f"{indent}{format_spring(vals)}{gap}{comment}{newline}"
+        return
+
+    # Action block exists but has no spring line (e.g. an easing/shader action);
+    # do not invent a spring line for it.
+    raise KdlEditError(f"action {action} has no spring line to edit")
+
+
 def update_field(text: str, field: str, raw_value: str) -> str:
     if field.startswith("layout."):
         return update_layout_text(text, field, raw_value)
@@ -705,6 +783,25 @@ def update_field(text: str, field: str, raw_value: str) -> str:
             set_leaf_value(lines, child, key_kdl, format_float(bounded_number(raw_value, -1, 1)))
         else:
             raise KdlEditError(f"unsupported input field: {field}")
+        return "".join(lines)
+
+    if field.startswith("animations."):
+        parts = field.split(".")
+        if len(parts) != 3:
+            raise KdlEditError(f"unsupported animations field: {field}")
+        action_raw, param_raw = parts[1], parts[2]
+        action_kdl = action_raw.replace("_", "-")
+        param_kdl = param_raw.replace("_", "-")
+        if action_kdl not in ANIM_ACTIONS or param_kdl not in ANIM_SPRING_PARAMS:
+            raise KdlEditError(f"unsupported animations field: {field}")
+        anim = find_top_level_block(lines, "animations")
+        if param_kdl == "damping-ratio":
+            value = bounded_number(raw_value, 0.1, 10)
+        elif param_kdl == "stiffness":
+            value = bounded_number(raw_value, 1, 100000)
+        else:
+            value = bounded_number(raw_value, 0.00001, 0.1)
+        set_anim_spring(lines, anim, action_kdl, param_kdl, value)
         return "".join(lines)
 
     raise KdlEditError(f"unsupported field: {field}")
@@ -788,6 +885,7 @@ def read_command(args: argparse.Namespace) -> None:
         "glass": read_glass_text(text),
         "blur": read_blur_text(text),
         "input": read_input_text(text),
+        "animations": read_animations_text(text),
     })
 
 
@@ -806,6 +904,7 @@ def write_command(args: argparse.Namespace) -> None:
         "glass": read_glass_text(updated),
         "blur": read_blur_text(updated),
         "input": read_input_text(updated),
+        "animations": read_animations_text(updated),
     })
 
 

@@ -129,6 +129,8 @@ PanelWindow {
             return "玻璃材质";
         if (selectedPage === "niri-input")
             return "输入与显示";
+        if (selectedPage === "niri-animations")
+            return "动画";
         if (selectedPage === "startup")
             return "启动项";
         if (selectedPage === "health")
@@ -155,6 +157,8 @@ PanelWindow {
             return "tahoe-glass 材质、折射与全局模糊";
         if (selectedPage === "niri-input")
             return "键盘、触摸板与显示器（输出只读）";
+        if (selectedPage === "niri-animations")
+            return "工作区、窗口移动/缩放与概览的弹簧动画";
         if (selectedPage === "startup")
             return "XDG autostart 和会话备注";
         if (selectedPage === "health")
@@ -187,6 +191,8 @@ PanelWindow {
             return 10;
         if (name === "niri-input")
             return 11;
+        if (name === "niri-animations")
+            return 12;
         return 0;
     }
 
@@ -429,6 +435,11 @@ PanelWindow {
                         }
 
                         Pages.NiriInputPage {
+                            panel: root
+                            theme: root
+                        }
+
+                        Pages.NiriAnimationsPage {
                             panel: root
                             theme: root
                         }

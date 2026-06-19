@@ -65,6 +65,18 @@ Item {
     property real outputScale: 1
     property bool outputPresent: false
 
+    // S5.3 animation mirrors. Spring params for the four spring-based actions
+    // in the config (workspace-switch/window-movement/window-resize/
+    // overview-open-close). window-open/close carry custom GLSL shaders and
+    // are never written by the GUI. animSprings is a nested object keyed by
+    // action; setAnimParam rebuilds the top-level object and queues a write.
+    property var animSprings: ({
+        "workspace_switch":  { damping_ratio: 1.0,  stiffness: 780, epsilon: 0.0001 },
+        "window_movement":   { damping_ratio: 0.86, stiffness: 620, epsilon: 0.001 },
+        "window_resize":     { damping_ratio: 0.96, stiffness: 700, epsilon: 0.0005 },
+        "overview_open_close": { damping_ratio: 0.95, stiffness: 760, epsilon: 0.0005 }
+    })
+
     // Per-field queue of the latest intended value while a write is in
     // flight. setX updates its property optimistically (so the UI tracks a
     // drag immediately) and records the intended write here; the writer
@@ -297,6 +309,21 @@ Item {
         root.writeField("input.touchpad.accel_speed", next);
     }
 
+    function setAnimParam(action, param, value) {
+        var current = root.animSprings[action];
+        if (!current)
+            return;
+        var number = Number(value);
+        if (!isFinite(number) || current[param] === number)
+            return;
+        var next = {};
+        for (var key in root.animSprings)
+            next[key] = key === action ? Object(root.animSprings[key]) : root.animSprings[key];
+        next[action][param] = number;
+        root.animSprings = next;
+        root.writeField("animations." + action + "." + param, String(number));
+    }
+
     function writeField(field, value) {
         root.lastError = "";
         var next = root.pending;
@@ -400,6 +427,12 @@ Item {
         }
     }
 
+    function applyAnimations(anim) {
+        if (!anim || !anim.actions)
+            return;
+        root.animSprings = anim.actions;
+    }
+
     function payloadError(text, fallback) {
         try {
             var payload = JSON.parse(String(text || "{}"));
@@ -422,6 +455,7 @@ Item {
             root.applyGlass(payload.glass);
             root.applyBlur(payload.blur);
             root.applyInput(payload.input);
+            root.applyAnimations(payload.animations);
             root.lastError = "";
             root.loaded = true;
         } catch (error) {
@@ -441,6 +475,7 @@ Item {
             root.applyGlass(payload.glass);
             root.applyBlur(payload.blur);
             root.applyInput(payload.input);
+            root.applyAnimations(payload.animations);
             root.lastError = "";
             root.loaded = true;
         } catch (error) {

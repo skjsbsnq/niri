@@ -706,13 +706,6 @@ ShellRoot {
                 appearanceService: appearance
                 notificationsService: notifications
                 inputMethodService: inputMethod
-                screenshotService: screenshotService
-                controlsService: controls
-                clipboardService: clipboardHistory
-                batteryService: battery
-                powerProfileService: powerProfiles
-                fanService: fanControl
-                windowsService: niri
                 open: shell.navigationOpenFor(shell.settingsPanelOpen, shell.settingsPanelScreenName, modelData)
                 onCloseRequested: shell.closeSettingsPanel()
             }

@@ -905,6 +905,45 @@ submodules（`1e1d1e0`/`6211e44`）、phase6 基线。
   load failure，Search 静默加载；临时实例已 trap 清理；线上会话未受影响。
 - 本阶段未进入 S5.6，未写 binds/MRU/task-switcher，未生成违规 KDL。
 
+### 阶段 S5.6 验收记录（2026-06-20）—— 彩色图标升级 + 最终收敛
+
+- **范围**：把 `controls/TahoeCategoryIcon.qml` 的实心方块背景升级为**垂直渐变**（顶 `Qt.lighter(accent,1.2)`
+  → 底 `accent`，保留 Material 字形与 `#59ffffff` 内描边），并跑 S5 最终全量回归。未碰 dismiss/TahoeGlass
+  region/挂载点/binds。工作区 S5.6 改动为 1 改。
+- **实现选择**：用 `Rectangle` 原生 `gradient`（基础 QtQuick，非 shader effect）+ `Qt.lighter`，对全色板
+  （indigo/red/coral/blue/orange/green/gray/teal）一致；**无 spring、无 Image**，故护栏 E（useSpring）与
+  VMware 图标消失失败模式均不适用。范围限定为「渐变方块 + 字形」；逐类自绘 SVG 艺术图留待后续质量提升。
+- **最终全量回归（S5.0–S5.6 合并基线）**：
+  - `python3 -m py_compile services/niri_settings_tool.py`：退出码 0。
+  - `/usr/lib/qt6/bin/qmllint --signal-handler-parameters disable -I quickshell/build-tahoe/qml_modules`
+    （settings 全树 + SettingsPanel + NiriSettings + Search）：退出码 0，仅余 S1 基线已记录的
+    Quickshell/TahoeGlass 自定义类型噪声（`PanelWindow` uncreatable、`TahoeGlassRegion` incomplete、
+    region id unqualified）；S5 引入的新文件（NiriLayoutPage/NiriGlassPage/NiriInputPage/NiriAnimationsPage/
+    NiriKeyboardPage/TahoeSegmented/TahoeCategoryIcon）零告警。
+  - `scripts/check-tahoe-glass-guardrails.sh`：退出码 0（VRR 默认关、无 broad quickshell、保留 tahoe- namespace、
+    无直接 BackgroundEffect/blurRegion、Phase 5 popup region 几何静态）。
+  - `bash scripts/check-submodules.sh`：退出码 0。
+  - `niri/target/release/niri validate -c config/niri/tahoe-phase0.kdl`：退出码 0，`config is valid`。
+- **全域 combined round-trip（在 config 副本上）**：一次写跨 5 域 10 字段
+  （layout.gaps、glass.panel.edge_highlight、glass.dock.refraction、blur.passes、blur.saturation、
+  input.keyboard.repeat_rate、input.touchpad.dwt、input.touchpad.accel_speed、
+  animations.workspace_switch.stiffness、animations.window_resize.damping_ratio）→ `niri validate` 通过 →
+  逐域读回 10 值全部正确；CLI `read` payload 含 layout/glass/blur/input/animations/binds 全部 6 键，
+  binds 127 条。
+- **运行时 smoke（最终）**：临时 `quickshell -p tahoe-shell`（隔离 XDG_CONFIG_HOME + config 副本）5s 存活；
+  IPC `openSettings` → `niri msg layers` 的 `tahoe-settings` 计数 0→1；`closeSettings` → 1→0（dismiss 路由无回归）；
+  全日志无 load error；渐变图标静默渲染。临时实例已 trap 清理；线上会话未受影响。
+- **护栏 A–E 全复核**：未碰 dismiss（`dc5bef9`，自身 MouseArea）；未碰 TahoeGlass region 坐标/几何
+  （`b7b8e5a`/`0704ea4`，surface-local、无 spring）；未碰 `shell.qml:705-716` 挂载点；未新增 service 根类型
+  （`NiriSettings` 仍 `Item { visible:false }`，`666c3c8`）；未用 `BackgroundEffect`/`blurRegion`；未生成
+  `variable-refresh-rate`（输出只读、GUI 永不写 VRR）或 broad `namespace="^quickshell"`；未写 binds
+  （`441b637`，S5.4 只读）；`useSpring` 全局降级未被 S5 新动画/图标依赖（护栏 E）。
+- **S5 阶段产出小结**：niri 中心页（hub）+ 5 子页（布局/玻璃材质/输入与显示/动画/快捷键）；4 个写域
+  （layout/glass/input/animations + blur）经 NiriSettings service 写 config.kdl 并热重载，注释/格式零漂移
+  （浮点行仅在被实际改动的字段上有可接受的 token 归一化）；binds 只读查看 + 保护标注；Spotlight 5 项直达；
+  彩色图标渐变化；侧栏 9 项不变；深色模式全量 token 覆盖。逐子步独立提交（S5.0 hub → S5.1 玻璃 → S5.2 输入 →
+  S5.3 动画 → S5.4 快捷键 → S5.5 Spotlight → S5.6 图标 + 收敛）。
+
 ## 停止条件
 
 - S0–S5 全部验收通过；设置面板外观对齐 macOS System Settings、深色模式可用、niri 主要配置域

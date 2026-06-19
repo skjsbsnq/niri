@@ -4,11 +4,12 @@ import QtQuick
 import QtQuick.Layouts
 import "../controls" as Controls
 
-// S4 first batch: the niri layout domain wired to the NiriSettings service.
-// Every control reads the service mirror and writes through setX, which
-// updates the property optimistically (so sliders track the drag), queues
-// the field write, and hot-reloads niri once the write round-trips. No
-// binds/MRU/task-switcher are touched here (guardrail 441b637).
+// S5.0: the niri hub. The sidebar's "布局与窗口" entry now opens this hub,
+// which links to one page per niri config domain. Each domain page reads the
+// NiriSettings service mirror and writes through setX (optimistic update +
+// queued KDL write + hot-reload). Tiles are appended as each S5 sub-step
+// lands its page; this first batch wires only the layout domain (moved here
+// from the old single NiriPage into NiriLayoutPage).
 Flickable {
     id: page
 
@@ -25,11 +26,6 @@ Flickable {
     readonly property var svc: page.panel && page.panel.niriSettingsService ? page.panel.niriSettingsService : null
     readonly property bool ready: !!page.svc && page.svc.loaded
 
-    function signed(n) {
-        var value = Math.round(Number(n) || 0);
-        return value > 0 ? "+" + value : "" + value;
-    }
-
     ColumnLayout {
         id: settingsColumn
         width: parent.width
@@ -37,7 +33,7 @@ Flickable {
 
         // Status line: surfaces service-absent, still-loading and write-error
         // states. Hidden once loaded and error-free so it does not clutter
-        // the page in the common case.
+        // the hub in the common case.
         Text {
             Layout.fillWidth: true
             visible: !page.ready || (page.svc && page.svc.lastError.length > 0)
@@ -51,170 +47,29 @@ Flickable {
             wrapMode: Text.WordWrap
         }
 
-        Controls.TahoeSection {
-            theme: page.theme
-            title: "布局间距"
-            subtitle: "窗口与边缘之间的留白"
-
-            Controls.TahoeSlider {
-                theme: page.theme
-                iconCode: "\ue256"
-                label: "内边距（gaps）"
-                valueText: (page.svc ? page.svc.gaps : 16) + " px"
-                value: page.svc ? Math.max(0, Math.min(1, page.svc.gaps / 64)) : 0
-                enabled: page.ready
-                onUserSet: function(v) {
-                    if (page.svc)
-                        page.svc.setGaps(Math.round(v * 64));
-                }
-            }
-        }
-
-        Controls.TahoeSection {
-            theme: page.theme
-            title: "窗口装饰"
-            subtitle: "焦点环与边框"
-
-            Controls.TahoeListRow {
-                theme: page.theme
-                label: "焦点环"
-                detail: page.svc && page.svc.focusRingEnabled ? "高亮当前焦点窗口" : "关闭"
-                iconCode: "\ue873"
-                checkable: true
-                checked: page.svc ? page.svc.focusRingEnabled : false
-                enabled: page.ready
-                onToggled: function(c) {
-                    if (page.svc)
-                        page.svc.setFocusRingEnabled(c);
-                }
-            }
-
-            Controls.TahoeListRow {
-                theme: page.theme
-                label: "边框"
-                detail: page.svc && page.svc.borderEnabled ? "为所有窗口绘制边框" : "关闭"
-                iconCode: "\ue8c4"
-                checkable: true
-                checked: page.svc ? page.svc.borderEnabled : false
-                enabled: page.ready
-                onToggled: function(c) {
-                    if (page.svc)
-                        page.svc.setBorderEnabled(c);
-                }
-            }
-        }
-
-        Controls.TahoeSection {
-            theme: page.theme
-            title: "窗口阴影"
-            subtitle: "柔和度、扩散与偏移"
-
-            Controls.TahoeListRow {
-                theme: page.theme
-                label: "启用阴影"
-                detail: page.svc && page.svc.shadowEnabled ? "已开启" : "关闭"
-                iconCode: "\ue53b"
-                checkable: true
-                checked: page.svc ? page.svc.shadowEnabled : false
-                enabled: page.ready
-                onToggled: function(c) {
-                    if (page.svc)
-                        page.svc.setShadowEnabled(c);
-                }
-            }
-
-            Controls.TahoeSlider {
-                theme: page.theme
-                iconCode: "\ue3a4"
-                label: "柔和度"
-                valueText: page.svc ? page.svc.shadowSoftness : ""
-                value: page.svc ? Math.max(0, Math.min(1, page.svc.shadowSoftness / 100)) : 0
-                enabled: page.ready
-                onUserSet: function(v) {
-                    if (page.svc)
-                        page.svc.setShadowSoftness(Math.round(v * 100));
-                }
-            }
-
-            Controls.TahoeSlider {
-                theme: page.theme
-                iconCode: "\ue3aa"
-                label: "扩散"
-                valueText: page.svc ? page.svc.shadowSpread : ""
-                value: page.svc ? Math.max(0, Math.min(1, page.svc.shadowSpread / 40)) : 0
-                enabled: page.ready
-                onUserSet: function(v) {
-                    if (page.svc)
-                        page.svc.setShadowSpread(Math.round(v * 40));
-                }
-            }
-
-            Controls.TahoeSlider {
-                theme: page.theme
-                iconCode: "\ue915"
-                label: "水平偏移"
-                valueText: page.svc ? page.signed(page.svc.shadowOffsetX) : ""
-                value: page.svc ? Math.max(0, Math.min(1, (page.svc.shadowOffsetX + 40) / 80)) : 0.5
-                enabled: page.ready
-                onUserSet: function(v) {
-                    if (page.svc)
-                        page.svc.setShadowOffsetX(Math.round(v * 80 - 40));
-                }
-            }
-
-            Controls.TahoeSlider {
-                theme: page.theme
-                iconCode: "\ue7c9"
-                label: "垂直偏移"
-                valueText: page.svc ? page.signed(page.svc.shadowOffsetY) : ""
-                value: page.svc ? Math.max(0, Math.min(1, (page.svc.shadowOffsetY + 40) / 80)) : 0.5
-                enabled: page.ready
-                onUserSet: function(v) {
-                    if (page.svc)
-                        page.svc.setShadowOffsetY(Math.round(v * 80 - 40));
-                }
-            }
-        }
-
-        Controls.TahoeSection {
-            theme: page.theme
-            title: "Snap 助手"
-            subtitle: "拖近屏幕边缘时自动吸附为半屏"
-
-            Controls.TahoeListRow {
-                theme: page.theme
-                label: "启用 Snap 助手"
-                detail: page.svc && page.svc.snapAssistEnabled ? "已开启" : "关闭"
-                iconCode: "\ue8f4"
-                checkable: true
-                checked: page.svc ? page.svc.snapAssistEnabled : false
-                enabled: page.ready
-                onToggled: function(c) {
-                    if (page.svc)
-                        page.svc.setSnapAssistEnabled(c);
-                }
-            }
-
-            Controls.TahoeSlider {
-                theme: page.theme
-                iconCode: "\ue859"
-                label: "吸附阈值"
-                valueText: (page.svc ? page.svc.snapAssistThreshold : 16) + " px"
-                value: page.svc ? Math.max(0, Math.min(1, page.svc.snapAssistThreshold / 80)) : 0
-                enabled: page.ready
-                onUserSet: function(v) {
-                    if (page.svc)
-                        page.svc.setSnapAssistThreshold(Math.round(v * 80));
-                }
-            }
-        }
-
         Text {
             Layout.fillWidth: true
-            text: "这些选项写入 niri 的 config.kdl 并在写入后立即热重载，重启 niri 后仍然生效。"
+            text: "这些设置写入 niri 的 config.kdl，写入后立即热重载，重启 niri 后仍然生效。选择一个分类开始。"
             color: page.theme ? page.theme.textSecondary : "#721d1d1f"
-            font.pixelSize: 10
+            font.pixelSize: 11
             wrapMode: Text.WordWrap
+        }
+
+        GridLayout {
+            Layout.fillWidth: true
+            columns: settingsColumn.width >= 560 ? 2 : 1
+            columnSpacing: 10
+            rowSpacing: 10
+
+            Controls.TahoeSummaryTile {
+                theme: page.theme
+                Layout.fillWidth: true
+                iconCode: "\ue871"
+                title: "布局与窗口"
+                detail: page.svc ? "间距 " + page.svc.gaps + " px · 焦点环/边框/阴影/Snap" : "niri 布局设置"
+                accentColor: page.panel ? page.panel.categoryColor("niri") : "#30b0c8"
+                onActivated: page.panel.selectedPage = "niri-layout"
+            }
         }
     }
 }

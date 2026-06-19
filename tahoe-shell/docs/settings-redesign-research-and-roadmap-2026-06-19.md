@@ -672,6 +672,51 @@ submodules（`1e1d1e0`/`6211e44`）、phase6 基线。
 
 回归检查：全部护栏（A–E）+ 所有前序阶段基线。
 
+### 实施决策（2026-06-20 确认）
+
+- **页面结构**：niri 中心页（hub）+ 子页。侧栏保持 9 项不变；「布局与窗口」入口打开 niri
+  hub，hub 内 summary tile 跳转各域子页（布局/玻璃材质/输入与显示/动画/快捷键）。
+- **binds（子步 4）**：只读查看 + 保护标注（task-switcher/MRU IPC binds 标为受保护）+「在编辑器
+  打开 config.kdl」按钮；**不提供 GUI 改键**，规避 `441b637` 与 replace-on-conflict 风险。
+- **输入与显示（子步 2）**：仅键盘（repeat-rate/repeat-delay/numlock）+ 触摸板
+  （tap/natural-scroll/dwt/accel-speed）；output scale 只读，绝不写 `variable-refresh-rate`。
+- 子步拆为 S5.0（hub 骨架）→ S5.1 玻璃 → S5.2 输入 → S5.3 动画 → S5.4 快捷键 → S5.5 Spotlight →
+  S5.6 图标 + 最终收敛，每步独立提交 + 验收。
+
+### 阶段 S5.0 验收记录（2026-06-20）
+
+- **范围**：把 niri 设置拆为 hub + 子页骨架，行为保持。未改 niri 源配置、未改 service/helper、
+  未碰 dismiss/TahoeGlass region/挂载点。工作区 S5.0 改动为 3 改 + 1 新增。
+- **NiriLayoutPage.qml（新增）**：把原 `NiriPage.qml` 的 4 个 layout section（布局间距/窗口装饰/
+  窗口阴影/Snap 助手）原样搬入，控件与 `setX` 调用零变化；仅更新文件头注释说明来源。
+  iconCode 经 cp 从原文件逐字保留（space_bar/border_outer/crop_square/layers/blur_on/gradient/compare_arrows/height/magnet/aspect_ratio），与 S4 基线一致。
+- **NiriPage.qml → hub**：改为 Flickable + 状态行 + 说明文 + GridLayout + 单个 summary tile
+  「布局与窗口」→ `selectedPage = "niri-layout"`（其余 4 tile 在各自子步追加）。tile 读 service 镜像
+  显示当前 gaps。
+- **SettingsPanel.qml**：`pageIndex` 增 `niri-layout=9`（"niri" hub 仍 = 8）；`pageTitle/pageSubtitle`
+  增 niri-layout 项（标题「布局与窗口」、副标题同 niri）；StackLayout 在 `NiriPage` 之后按 index
+  顺序挂 `Pages.NiriLayoutPage`。
+- **SettingsSidebar.qml**：「布局与窗口」`active` 由 `=== "niri"` 扩展为
+  `=== "niri" || indexOf("niri-") === 0`，使子页时该侧栏项仍高亮；点击仍回 hub。
+- **回归检查**：未碰 dismiss（自身全屏 MouseArea，`dc5bef9`）；未碰 TahoeGlass region 坐标/几何
+  （`b7b8e5a`/`0704ea4`，无 spring）；未碰 `shell.qml:705-716` 挂载点；未新增 service 根类型
+  （`666c3c8`）；未用 `BackgroundEffect`/`blurRegion`；未生成 `variable-refresh-rate` 或 broad
+  `namespace="^quickshell"`；未碰 binds（`441b637`）。
+- **检查脚本**：
+  - `python3 -m py_compile services/niri_settings_tool.py`：退出码 0（本步未改 helper，复测）。
+  - `/usr/lib/qt6/bin/qmllint --signal-handler-parameters disable -I quickshell/build-tahoe/qml_modules`
+    （settings 全树 + `SettingsPanel.qml` + `services/NiriSettings.qml`）：退出码 0，无新增告警。
+  - `scripts/check-tahoe-glass-guardrails.sh`：退出码 0。
+  - `bash scripts/check-submodules.sh`：退出码 0。
+  - `niri/target/release/niri validate -c config/niri/tahoe-phase0.kdl`：退出码 0，`config is valid`。
+- **运行时 smoke**：从仓库路径临时启动 `quickshell -p /home/wwt/niri/tahoe-shell`，
+  `XDG_CONFIG_HOME` 指向只含 config 副本的临时目录（隔离，不写线上 config/state）。实例 4s 后存活、
+  无 QML load failure；日志仅见既有运行时现象（`shell.qml:322` font 只读警告、magnification/
+  bounceOffset interceptor 警告、通知服务已被线上会话占用），无 NiriPage/NiriLayoutPage/
+  SettingsPanel/SettingsSidebar 相关错误。临时实例已 trap 清理；线上会话（PID 1291，运行
+  `~/.config/quickshell/tahoe` 副本）全程未受影响。
+- 本阶段未进入 S5.1，未新增配置域，未碰 binds/MRU/task-switcher，未生成违规 KDL。
+
 ## 停止条件
 
 - S0–S5 全部验收通过；设置面板外观对齐 macOS System Settings、深色模式可用、niri 主要配置域

@@ -89,7 +89,10 @@ Rectangle {
             label: "布局与窗口"
             iconCode: "\ue871"
             accentColor: sidebar.categoryColor("niri")
-            active: sidebar.panel && sidebar.panel.selectedPage === "niri"
+            // Stays active on the niri hub and every niri-* sub-page so the
+            // sidebar highlights the group the user is inside.
+            active: sidebar.panel && (sidebar.panel.selectedPage === "niri"
+                || String(sidebar.panel.selectedPage).indexOf("niri-") === 0)
             onActivated: sidebar.panel.selectedPage = "niri"
         }
 

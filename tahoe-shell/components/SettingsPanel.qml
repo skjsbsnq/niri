@@ -123,6 +123,8 @@ PanelWindow {
             return "Dock";
         if (selectedPage === "niri")
             return "布局与窗口";
+        if (selectedPage === "niri-layout")
+            return "布局与窗口";
         if (selectedPage === "startup")
             return "启动项";
         if (selectedPage === "health")
@@ -142,6 +144,8 @@ PanelWindow {
         if (selectedPage === "dock")
             return "窗口按钮显示偏好";
         if (selectedPage === "niri")
+            return "niri 间距、焦点环、边框、阴影与 snap 助手";
+        if (selectedPage === "niri-layout")
             return "niri 间距、焦点环、边框、阴影与 snap 助手";
         if (selectedPage === "startup")
             return "XDG autostart 和会话备注";
@@ -169,6 +173,8 @@ PanelWindow {
             return 7;
         if (name === "niri")
             return 8;
+        if (name === "niri-layout")
+            return 9;
         return 0;
     }
 
@@ -396,6 +402,11 @@ PanelWindow {
                         }
 
                         Pages.NiriPage {
+                            panel: root
+                            theme: root
+                        }
+
+                        Pages.NiriLayoutPage {
                             panel: root
                             theme: root
                         }

@@ -125,6 +125,8 @@ PanelWindow {
             return "布局与窗口";
         if (selectedPage === "niri-layout")
             return "布局与窗口";
+        if (selectedPage === "niri-glass")
+            return "玻璃材质";
         if (selectedPage === "startup")
             return "启动项";
         if (selectedPage === "health")
@@ -147,6 +149,8 @@ PanelWindow {
             return "niri 间距、焦点环、边框、阴影与 snap 助手";
         if (selectedPage === "niri-layout")
             return "niri 间距、焦点环、边框、阴影与 snap 助手";
+        if (selectedPage === "niri-glass")
+            return "tahoe-glass 材质、折射与全局模糊";
         if (selectedPage === "startup")
             return "XDG autostart 和会话备注";
         if (selectedPage === "health")
@@ -175,6 +179,8 @@ PanelWindow {
             return 8;
         if (name === "niri-layout")
             return 9;
+        if (name === "niri-glass")
+            return 10;
         return 0;
     }
 
@@ -407,6 +413,11 @@ PanelWindow {
                         }
 
                         Pages.NiriLayoutPage {
+                            panel: root
+                            theme: root
+                        }
+
+                        Pages.NiriGlassPage {
                             panel: root
                             theme: root
                         }

@@ -717,6 +717,54 @@ submodules（`1e1d1e0`/`6211e44`）、phase6 基线。
   `~/.config/quickshell/tahoe` 副本）全程未受影响。
 - 本阶段未进入 S5.1，未新增配置域，未碰 binds/MRU/task-switcher，未生成违规 KDL。
 
+### 阶段 S5.1 验收记录（2026-06-20）
+
+- **范围**：新增 niri「玻璃材质」域（tahoe-glass material 各字段 + 全局 blur），经 hub 接入
+  设置面板。未碰 dismiss/TahoeGlass region/挂载点/binds。工作区 S5.1 改动为 5 改 + 2 新增。
+- **helper（`niri_settings_tool.py`）**：新增 `read_glass_text`/`read_blur_text`（缺省容错：
+  block 缺失返回 niri 默认）、string-arg `find_material_block`/`create_material_block`、
+  `set_leaf_value`（写前比较：值未变则保留原始 token，避免 0.10→0.1 归一化漂移）、`format_float`
+  （保留小数点）、`set_blur_enabled`（on/off flag 写法）、统一分发器 `update_field`（layout/glass/blur）。
+  `read`/`write` payload 增 `glass`/`blur`。glass 字段 clamp 与 schema `FloatOrInt<0,1000>` 一致；
+  blur passes∈[0,255] offset∈[0,100] noise/saturation∈[0,1000]。
+- **round-trip（在 config 副本上）**：
+  - TEST A（no-op 写回每字段当前值）：byte-identical，证明 token 保留。
+  - TEST B（全字段改写为测试值）：`niri validate` 通过、读回值正确。
+  - TEST C（改后恢复原值）：仅 2 行浮点 token 归一化（0.10→0.1、0.40→0.4，仅限被实际改动过的行），
+    零结构/注释漂移，恢复后 `niri validate` 通过。
+- **CLI smoke**：`read` 返回 layout+glass+blur；`write glass.panel.edge_highlight=0.55` 与
+  `write layout.gaps=20`（回归：layout 仍经 update_field）均 ok，`diff` 仅 2 行预期变化，validate 通过。
+- **service（`NiriSettings.qml`）**：`glassMaterials` 嵌套对象属性（6 material × 5 field，默认对齐
+  config 真值）+ blur 5 标量；`setGlassField(m,f,v)`（不可变对象重赋 + `Object()` 浅拷 + writeField）、
+  `setBlurEnabled/Passes/Offset/Noise/Saturation`（乐观更新 + writeField）、`clampReal`（float 不取整）、
+  `applyGlass`/`applyBlur`；`handleReadOutput`/`handleWriteOutput` 调用 applyGlass/applyBlur。
+- **UI（`NiriGlassPage.qml` + 新控件 `TahoeSegmented.qml`）**：「全局模糊」section（启用开关 +
+  passes/offset/noise/saturation 滑块）+「材质」section（6 选 1 分段选择器 + edge-highlight[0,2]/
+  refraction[0,0.12]/inner-shadow[0,0.5]/chromatic[0,0.1]/lens-depth[0,0.3] 五滑块）。每控件读
+  service 镜像、`onUserSet`/`onToggled` 走 setX。**不暴露 xray**（保持 false，护栏 `74b384a`）。
+  所有 iconCode 经 MaterialIconsRound.ttf cmap 核验存在（blur_on/blur_circular/filter_alt/tune/
+  scatter_plot/palette/flare/3d_rotation/invert_colors/auto_awesome/lens_blur）。
+- **路由**：`SettingsPanel.qml` `pageIndex` 增 `niri-glass=10` + pageTitle「玻璃材质」+ pageSubtitle +
+  StackLayout 挂 `NiriGlassPage`；`NiriPage.qml` hub 增「玻璃材质」tile→niri-glass；
+  `SettingsTheme.js` `categoryColor` 增 `niri-glass` indigo `#5e5ce6`。
+- **回归检查**：未碰 dismiss（`dc5bef9`）；未碰 TahoeGlass region 坐标/几何（`b7b8e5a`/`0704ea4`，
+  无 spring）；未碰 `shell.qml:705-716` 挂载点；未新增 service 根类型（`666c3c8`，NiriSettings 仍 Item）；
+  未用 `BackgroundEffect`/`blurRegion`；未生成 `variable-refresh-rate` 或 broad `namespace="^quickshell"`；
+  未碰 binds（`441b637`）；`useSpring` 未被新动画依赖（TahoeSegmented 无 spring）。
+- **检查脚本**：
+  - `python3 -m py_compile services/niri_settings_tool.py`：退出码 0。
+  - `/usr/lib/qt6/bin/qmllint --signal-handler-parameters disable -I quickshell/build-tahoe/qml_modules`
+    （settings 全树 + `SettingsPanel.qml` + `services/NiriSettings.qml`）：退出码 0；新文件
+    `TahoeSegmented.qml`/`NiriGlassPage.qml`/`NiriSettings.qml` 零告警（`index` 未限定告警已修为
+    `segment.index`），仅余 S1 基线已记录的 Quickshell/TahoeGlass 自定义类型噪声。
+  - `scripts/check-tahoe-glass-guardrails.sh`：退出码 0。
+  - `bash scripts/check-submodules.sh`：退出码 0。
+  - `niri/target/release/niri validate -c config/niri/tahoe-phase0.kdl`：退出码 0，`config is valid`。
+- **运行时 smoke**：从仓库路径临时启动 `quickshell -p /home/wwt/niri/tahoe-shell`，`XDG_CONFIG_HOME`
+  指向只含 config 副本的临时目录（隔离）。实例 4s 后存活、无 QML load failure，无 NiriGlassPage/
+  TahoeSegmented/NiriSettings/glassMaterials/blur 相关错误。临时实例已 trap 清理；线上会话未受影响。
+- 本阶段未进入 S5.2，未碰 binds/MRU/task-switcher，未生成违规 KDL。
+
 ## 停止条件
 
 - S0–S5 全部验收通过；设置面板外观对齐 macOS System Settings、深色模式可用、niri 主要配置域

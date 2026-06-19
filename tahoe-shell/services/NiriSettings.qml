@@ -30,6 +30,26 @@ Item {
     property bool snapAssistEnabled: true
     property int snapAssistThreshold: 16
 
+    // S5.1 glass + blur mirrors. glassMaterials is a nested object keyed by
+    // material name; each material carries the five visual material fields
+    // (edge_highlight/refraction/inner_shadow/chromatic/lens_depth). Defaults
+    // mirror the deployed config.kdl so the first frame matches truth before
+    // the first read reconciles. setGlassField rebuilds the top-level object
+    // (QML does not observe nested mutation) and queues a glass.<m>.<f> write.
+    property var glassMaterials: ({
+        "panel":    { edge_highlight: 0.34, refraction: 0.04,  inner_shadow: 0.12, chromatic: 0.0,   lens_depth: 0.04 },
+        "pill":     { edge_highlight: 0.38, refraction: 0.045, inner_shadow: 0.10, chromatic: 0.008, lens_depth: 0.06 },
+        "dock":     { edge_highlight: 0.40, refraction: 0.05,  inner_shadow: 0.14, chromatic: 0.006, lens_depth: 0.05 },
+        "menu":     { edge_highlight: 0.42, refraction: 0.02,  inner_shadow: 0.16, chromatic: 0.0,   lens_depth: 0.04 },
+        "toast":    { edge_highlight: 0.42, refraction: 0.02,  inner_shadow: 0.14, chromatic: 0.0,   lens_depth: 0.04 },
+        "backdrop": { edge_highlight: 0.22, refraction: 0.02,  inner_shadow: 0.0,  chromatic: 0.0,   lens_depth: 0.0 }
+    })
+    property bool blurEnabled: true
+    property int blurPasses: 5
+    property real blurOffset: 7
+    property real blurNoise: 0.012
+    property real blurSaturation: 1.6
+
     // Per-field queue of the latest intended value while a write is in
     // flight. setX updates its property optimistically (so the UI tracks a
     // drag immediately) and records the intended write here; the writer
@@ -144,6 +164,68 @@ Item {
         writeField("layout.snap_assist.threshold", next);
     }
 
+    function setGlassField(material, field, value) {
+        var current = root.glassMaterials[material];
+        if (!current)
+            return;
+        var number = Number(value);
+        if (!isFinite(number) || current[field] === number)
+            return;
+        var next = {};
+        for (var key in root.glassMaterials)
+            next[key] = key === material ? Object(root.glassMaterials[key]) : root.glassMaterials[key];
+        next[material][field] = number;
+        root.glassMaterials = next;
+        root.writeField("glass." + material + "." + field, String(number));
+    }
+
+    function clampReal(value, minimum, maximum, fallback) {
+        var number = Number(value);
+        if (!isFinite(number))
+            number = fallback;
+        return Math.max(minimum, Math.min(maximum, number));
+    }
+
+    function setBlurEnabled(enabled) {
+        var next = !!enabled;
+        if (next === blurEnabled)
+            return;
+        root.blurEnabled = next;
+        root.writeField("blur.enabled", next);
+    }
+
+    function setBlurPasses(value) {
+        var next = clampNumber(value, 0, 255, blurPasses);
+        if (next === blurPasses)
+            return;
+        root.blurPasses = next;
+        root.writeField("blur.passes", next);
+    }
+
+    function setBlurOffset(value) {
+        var next = clampReal(value, 0, 100, blurOffset);
+        if (Math.abs(next - blurOffset) < 1e-9)
+            return;
+        root.blurOffset = next;
+        root.writeField("blur.offset", next);
+    }
+
+    function setBlurNoise(value) {
+        var next = clampReal(value, 0, 1000, blurNoise);
+        if (Math.abs(next - blurNoise) < 1e-9)
+            return;
+        root.blurNoise = next;
+        root.writeField("blur.noise", next);
+    }
+
+    function setBlurSaturation(value) {
+        var next = clampReal(value, 0, 1000, blurSaturation);
+        if (Math.abs(next - blurSaturation) < 1e-9)
+            return;
+        root.blurSaturation = next;
+        root.writeField("blur.saturation", next);
+    }
+
     function writeField(field, value) {
         root.lastError = "";
         var next = root.pending;
@@ -210,6 +292,22 @@ Item {
         }
     }
 
+    function applyGlass(glass) {
+        if (!glass || !glass.materials)
+            return;
+        root.glassMaterials = glass.materials;
+    }
+
+    function applyBlur(blur) {
+        if (!blur)
+            return;
+        root.blurEnabled = !!blur.enabled;
+        root.blurPasses = clampNumber(blur.passes, 0, 255, 5);
+        root.blurOffset = clampReal(blur.offset, 0, 100, 3);
+        root.blurNoise = clampReal(blur.noise, 0, 1000, 0.02);
+        root.blurSaturation = clampReal(blur.saturation, 0, 1000, 1.5);
+    }
+
     function payloadError(text, fallback) {
         try {
             var payload = JSON.parse(String(text || "{}"));
@@ -229,6 +327,8 @@ Item {
                 return;
             }
             applyLayout(payload.layout);
+            root.applyGlass(payload.glass);
+            root.applyBlur(payload.blur);
             root.lastError = "";
             root.loaded = true;
         } catch (error) {
@@ -245,6 +345,8 @@ Item {
                 return;
             }
             applyLayout(payload.layout);
+            root.applyGlass(payload.glass);
+            root.applyBlur(payload.blur);
             root.lastError = "";
             root.loaded = true;
         } catch (error) {

@@ -423,6 +423,186 @@ def update_layout_text(text: str, field: str, raw_value: str) -> str:
     return "".join(lines)
 
 
+# --- tahoe-glass + blur (S5.1) -------------------------------------------
+# tahoe-glass materials are keyed by a string argument (material "panel" {}),
+# one level deeper than the layout child blocks, so they need a dedicated
+# string-arg finder. The per-field readers default to 0.0 / niri defaults
+# when a block or field is absent so the GUI never hard-fails on an optional
+# block. All glass/blur writes reuse the same atomic_write path (guardrails +
+# niri validate) as layout.
+
+GLASS_MATERIAL_NAMES = ["panel", "pill", "dock", "menu", "toast", "backdrop"]
+GLASS_MATERIAL_FIELDS = ["edge-highlight", "refraction", "inner-shadow", "chromatic", "lens-depth"]
+
+
+def find_top_level_block_or_none(lines: list[str], name: str) -> tuple[int, int] | None:
+    try:
+        return find_top_level_block(lines, name)
+    except KdlEditError:
+        return None
+
+
+def block_child_indent(lines: list[str], block: tuple[int, int]) -> str:
+    parent_indent = leading_indent(lines[block[0]])
+    for index in range(block[0] + 1, block[1]):
+        if uncommented_body(lines[index]).strip():
+            return leading_indent(lines[index])
+    return parent_indent + "    "
+
+
+def find_material_block(lines: list[str], glass: tuple[int, int], name: str) -> tuple[int, int] | None:
+    depth = 1
+    start_re = re.compile(rf'^\s*material\s+"{re.escape(name)}"\s*\{{\s*$')
+    for index in range(glass[0] + 1, glass[1]):
+        body = uncommented_body(lines[index])
+        if depth == 1 and start_re.match(body):
+            local_depth = 0
+            for end in range(index, glass[1] + 1):
+                local_depth += brace_delta(lines[end])
+                if local_depth == 0:
+                    return index, end
+            raise KdlEditError(f"unterminated material {name}")
+        depth += brace_delta(lines[index])
+    return None
+
+
+def create_material_block(lines: list[str], glass: tuple[int, int], name: str, body_lines: list[str]) -> tuple[int, int]:
+    indent = block_child_indent(lines, glass)
+    inner = indent + "    "
+    block = [f'{indent}material "{name}" {{\n']
+    block.extend(f"{inner}{line}\n" for line in body_lines)
+    block.append(f"{indent}}}\n")
+    insert_at = glass[1]
+    lines[insert_at:insert_at] = block
+    return insert_at, insert_at + len(block) - 1
+
+
+def set_leaf_value(lines: list[str], block: tuple[int, int], name: str, value_str: str) -> None:
+    """Set a `name value` leaf among the direct children of block.
+
+    value_str is the exact text to write after the name, so callers control
+    int vs float formatting (glass/blur fields are floats in the source and
+    must round-trip 0.0 -> 0.0, not 0.0 -> 0).
+    """
+    node_re = re.compile(rf"^\s*{re.escape(name)}\b\s+")
+    for index in iter_depth_lines(lines, block[0], block[1], 1):
+        body = uncommented_body(lines[index])
+        if "{" in body:
+            continue
+        match = node_re.match(body)
+        if match:
+            # Preserve the original token when the value is unchanged: glass
+            # floats are written with varying precision in the source (0.10,
+            # 0.045, 0.4) and re-writing the same value should not normalize
+            # 0.10 -> 0.1. Only lines whose value actually changes get the
+            # canonical formatting.
+            existing = parse_number(body[match.end():], default=float("nan"))
+            try:
+                desired = float(value_str)
+            except ValueError:
+                desired = float("nan")
+            if existing == desired:
+                return
+            replace_simple_line(lines, index, name, value_str)
+            return
+    indent = block_child_indent(lines, block)
+    lines.insert(block[1], f"{indent}{name} {value_str}\n")
+
+
+def format_float(value: float) -> str:
+    """Format a float preserving a decimal point (0 -> "0.0", 0.34 -> "0.34")."""
+    v = float(value)
+    if v == int(v):
+        return f"{int(v)}.0"
+    return f"{v:.6f}".rstrip("0")
+
+
+def read_glass_text(text: str) -> dict[str, Any]:
+    lines = text.splitlines(True)
+    glass = find_top_level_block_or_none(lines, "tahoe-glass")
+    materials: dict[str, Any] = {}
+    for name in GLASS_MATERIAL_NAMES:
+        material: dict[str, Any] = {}
+        block = find_material_block(lines, glass, name) if glass else None
+        for field in GLASS_MATERIAL_FIELDS:
+            material[field.replace("-", "_")] = (
+                normalize_number(child_field_number(lines, block, field, 0.0)) if block else 0.0
+            )
+        materials[name] = material
+    return {"materials": materials}
+
+
+def read_blur_text(text: str) -> dict[str, Any]:
+    lines = text.splitlines(True)
+    blur = find_top_level_block_or_none(lines, "blur")
+    if blur is None:
+        return {"enabled": True, "passes": 3, "offset": 3, "noise": 0.02, "saturation": 1.5}
+    return {
+        "enabled": block_toggle(lines, blur, absent_default=True, empty_default=True, on_wins=True),
+        "passes": normalize_number(simple_field_number(lines, blur[0], blur[1], "passes", 3)),
+        "offset": normalize_number(simple_field_number(lines, blur[0], blur[1], "offset", 3)),
+        "noise": normalize_number(simple_field_number(lines, blur[0], blur[1], "noise", 0.02)),
+        "saturation": normalize_number(simple_field_number(lines, blur[0], blur[1], "saturation", 1.5)),
+    }
+
+
+def set_blur_enabled(lines: list[str], enabled: bool) -> None:
+    blur = find_top_level_block(lines, "blur")
+    flag_re = re.compile(r"^\s*(?:on|off)\s*$")
+    first: int | None = None
+    remove: list[int] = []
+    for index in iter_depth_lines(lines, blur[0], blur[1], 1):
+        body = uncommented_body(lines[index])
+        if flag_re.match(body):
+            if first is None:
+                first = index
+            else:
+                remove.append(index)
+    if first is None:
+        indent = block_child_indent(lines, blur)
+        lines.insert(blur[0] + 1, f"{indent}{'on' if enabled else 'off'}\n")
+        return
+    replace_flag_line(lines, first, enabled)
+    for index in reversed(remove):
+        del lines[index]
+
+
+def update_field(text: str, field: str, raw_value: str) -> str:
+    if field.startswith("layout."):
+        return update_layout_text(text, field, raw_value)
+
+    lines = text.splitlines(True)
+
+    if field.startswith("glass."):
+        parts = field.split(".")
+        if len(parts) != 3:
+            raise KdlEditError(f"unsupported glass field: {field}")
+        material_name, field_raw = parts[1], parts[2]
+        field_kdl = field_raw.replace("_", "-")
+        glass = find_top_level_block(lines, "tahoe-glass")
+        block = find_material_block(lines, glass, material_name)
+        if block is None:
+            block = create_material_block(lines, glass, material_name, [f"{field_kdl} 0.0"])
+        set_leaf_value(lines, block, field_kdl, format_float(bounded_number(raw_value, 0, 1000)))
+        return "".join(lines)
+
+    if field.startswith("blur."):
+        name = field.split(".", 1)[1]
+        blur = find_top_level_block(lines, "blur")
+        if name == "enabled":
+            set_blur_enabled(lines, parse_bool(raw_value))
+        elif name in {"passes", "offset"}:
+            maximum = 100 if name == "offset" else 255
+            set_leaf_value(lines, blur, name, format_number(bounded_number(raw_value, 0, maximum)))
+        elif name in {"noise", "saturation"}:
+            set_leaf_value(lines, blur, name, format_float(bounded_number(raw_value, 0, 1000)))
+        else:
+            raise KdlEditError(f"unsupported blur field: {field}")
+        return "".join(lines)
+
+    raise KdlEditError(f"unsupported field: {field}")
+
+
 def config_guardrails(text: str) -> None:
     if re.search(r"(?m)^[ \t]*variable-refresh-rate(?:[ \t]|$)", text):
         raise KdlEditError("guardrail failed: variable-refresh-rate must stay disabled by default")
@@ -494,18 +674,30 @@ def atomic_write(path: Path, text: str, explicit_niri_bin: str | None, skip_guar
 def read_command(args: argparse.Namespace) -> None:
     config_path = Path(args.config).expanduser()
     text = config_path.read_text(encoding="utf-8")
-    json_out({"ok": True, "config": str(config_path), "layout": read_layout_text(text)})
+    json_out({
+        "ok": True,
+        "config": str(config_path),
+        "layout": read_layout_text(text),
+        "glass": read_glass_text(text),
+        "blur": read_blur_text(text),
+    })
 
 
 def write_command(args: argparse.Namespace) -> None:
     config_path = Path(args.config).expanduser()
     text = config_path.read_text(encoding="utf-8")
-    updated = update_layout_text(text, args.field, args.value)
+    updated = update_field(text, args.field, args.value)
     changed = updated != text
     if changed:
         atomic_write(config_path, updated, args.niri_bin, args.skip_guardrails)
-    layout = read_layout_text(updated)
-    json_out({"ok": True, "changed": changed, "config": str(config_path), "layout": layout})
+    json_out({
+        "ok": True,
+        "changed": changed,
+        "config": str(config_path),
+        "layout": read_layout_text(updated),
+        "glass": read_glass_text(updated),
+        "blur": read_blur_text(updated),
+    })
 
 
 def build_parser() -> argparse.ArgumentParser:

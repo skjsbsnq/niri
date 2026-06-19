@@ -879,6 +879,32 @@ submodules（`1e1d1e0`/`6211e44`）、phase6 基线。
   临时实例已 trap 清理；线上会话未受影响。
 - 本阶段未进入 S5.5，未写 binds/MRU/task-switcher，未生成违规 KDL。
 
+### 阶段 S5.5 验收记录（2026-06-20）
+
+- **范围**：Spotlight 集成——在 `services/Search.qml` 的 `settingsItems[]` 增加 5 项，使 niri 各设置页
+  可从 Spotlight 搜索直达。未改任何 niri 域逻辑/控件/dismiss/glass。工作区 S5.5 改动为 1 改。
+- **新增 settingsItems（各带中文 keywords，走既有 `internalPage` 路由）**：
+  - `tahoe-niri`「niri 设置」→ `internalPage:"niri"`（hub）。
+  - `tahoe-niri-glass`「玻璃材质」→ `niri-glass`。
+  - `tahoe-niri-input`「输入与显示」→ `niri-input`。
+  - `tahoe-niri-animations`「动画」→ `niri-animations`。
+  - `tahoe-niri-keyboard`「键盘快捷键」→ `niri-keyboard`。
+- **路由链路复核（源码事实）**：`Search.qml` `activateSettingsItem` 对 `internalPage` 项发
+  `openSettingsRequested(page)`；`shell.qml:417-419` `Search { onOpenSettingsRequested: page => shell.openSettingsPanel(page) }`；
+  `openSettingsPanel` 设 `settingsPanelPage` → SettingsPanel.page → selectedPage → `pageIndex()`（niri=8/
+  niri-glass=10/niri-input=11/niri-animations=12/niri-keyboard=13，S5.0–S5.4 已就位）→ StackLayout。
+  全链路既有，本阶段只加数据项。
+- **可发现性**：keywords 覆盖中英（玻璃/材质/模糊/blur/折射；输入/键盘/触摸板/重复/自然滚动/numlock/缩放；
+  动画/弹簧/阻尼/刚度/spring/damping；快捷键/键位/binds/shortcut/热键），`settingsResults` 的
+  `scoreText` 对 title/subtitle/keywords 命中打分，搜「玻璃/动画/快捷键/输入」均能命中对应项。
+- **回归检查**：未碰 dismiss（`dc5bef9`）；未碰 TahoeGlass region；未碰挂载点；未新增 service；
+  未用 `BackgroundEffect`/`blurRegion`；未生成 `variable-refresh-rate` 或 broad `namespace="^quickshell"`；
+  未写 binds（`441b637`）。
+- **检查脚本**：`qmllint services/Search.qml` 退出 0；guardrails 0；submodules 0；`niri validate` 0。
+- **运行时 smoke**：临时 `quickshell -p tahoe-shell`（隔离 XDG_CONFIG_HOME + config 副本）5s 存活、无 QML
+  load failure，Search 静默加载；临时实例已 trap 清理；线上会话未受影响。
+- 本阶段未进入 S5.6，未写 binds/MRU/task-switcher，未生成违规 KDL。
+
 ## 停止条件
 
 - S0–S5 全部验收通过；设置面板外观对齐 macOS System Settings、深色模式可用、niri 主要配置域

@@ -33,6 +33,41 @@ Item {
             "internalPage": "about"
         },
         {
+            "id": "tahoe-niri",
+            "title": "niri 设置",
+            "subtitle": "布局、玻璃材质、输入、动画与快捷键",
+            "keywords": ["niri", "布局", "窗口", "间距", "玻璃", "动画", "快捷键", "compositor", "wayland", "合成器"],
+            "internalPage": "niri"
+        },
+        {
+            "id": "tahoe-niri-glass",
+            "title": "玻璃材质",
+            "subtitle": "tahoe-glass 折射、边缘光与全局模糊",
+            "keywords": ["玻璃", "材质", "模糊", "blur", "折射", "refraction", "glass", "边缘光", "色散", "透镜", "niri"],
+            "internalPage": "niri-glass"
+        },
+        {
+            "id": "tahoe-niri-input",
+            "title": "输入与显示",
+            "subtitle": "键盘、触摸板与显示器缩放（输出只读）",
+            "keywords": ["输入", "键盘", "触摸板", "触控板", "重复", "自然滚动", "numlock", "显示", "缩放", "input", "keyboard", "touchpad", "display", "niri"],
+            "internalPage": "niri-input"
+        },
+        {
+            "id": "tahoe-niri-animations",
+            "title": "动画",
+            "subtitle": "工作区、窗口与概览的弹簧动画",
+            "keywords": ["动画", "弹簧", "阻尼", "刚度", "弹性", "animation", "spring", "damping", "stiffness", "niri"],
+            "internalPage": "niri-animations"
+        },
+        {
+            "id": "tahoe-niri-keyboard",
+            "title": "键盘快捷键",
+            "subtitle": "niri binds 只读查看",
+            "keywords": ["快捷键", "键位", "binds", "shortcut", "keybind", "热键", "niri"],
+            "internalPage": "niri-keyboard"
+        },
+        {
             "id": "system",
             "title": "系统设置",
             "subtitle": "打开桌面系统设置",

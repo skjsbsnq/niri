@@ -77,6 +77,11 @@ Item {
         "overview_open_close": { damping_ratio: 0.95, stiffness: 760, epsilon: 0.0005 }
     })
 
+    // S5.4 binds mirror (read-only). binds is a replace-on-conflict authoritative
+    // block; the GUI never writes it. bindsList holds {combo, action, protected}
+    // for the viewer; protected marks the task-switcher IPC binds (441b637).
+    property var bindsList: []
+
     // Per-field queue of the latest intended value while a write is in
     // flight. setX updates its property optimistically (so the UI tracks a
     // drag immediately) and records the intended write here; the writer
@@ -433,6 +438,26 @@ Item {
         root.animSprings = anim.actions;
     }
 
+    function applyBinds(binds) {
+        if (!binds || !binds.items)
+            return;
+        root.bindsList = binds.items;
+    }
+
+    // Read-only convenience: open config.kdl in the user's $EDITOR (fallback
+    // xdg-open) so keybinds can be edited by hand. The GUI never writes binds.
+    function openConfigInEditor() {
+        Quickshell.execDetached({
+            command: [
+                "sh", "-lc",
+                'editor="${EDITOR:-${VISUAL:-xdg-open}}"; exec "$editor" "$1"',
+                "sh",
+                root.configPath
+            ],
+            workingDirectory: ""
+        });
+    }
+
     function payloadError(text, fallback) {
         try {
             var payload = JSON.parse(String(text || "{}"));
@@ -456,6 +481,7 @@ Item {
             root.applyBlur(payload.blur);
             root.applyInput(payload.input);
             root.applyAnimations(payload.animations);
+            root.applyBinds(payload.binds);
             root.lastError = "";
             root.loaded = true;
         } catch (error) {
@@ -476,6 +502,7 @@ Item {
             root.applyBlur(payload.blur);
             root.applyInput(payload.input);
             root.applyAnimations(payload.animations);
+            root.applyBinds(payload.binds);
             root.lastError = "";
             root.loaded = true;
         } catch (error) {

@@ -197,6 +197,8 @@ function categoryColor(key, darkMode) {
         return "#0a84ff";     // system blue (keyboard/touchpad/display)
     case "niri-animations":
         return "#ff9f0a";     // system orange (spring animations)
+    case "niri-keyboard":
+        return "#8e8e93";     // system gray (read-only binds viewer)
     case "startup":
         return "#ff9f0a";     // system orange
     case "health":

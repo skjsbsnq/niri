@@ -730,6 +730,52 @@ def set_anim_spring(lines: list[str], anim: tuple[int, int], action: str, param:
     raise KdlEditError(f"action {action} has no spring line to edit")
 
 
+# --- binds (S5.4, read-only) ---------------------------------------------
+# Enumerate the top-level `binds {}` block for a read-only viewer. Each child
+# node is one keybind whose node-name IS the key combo; we capture the combo,
+# the first action token, the full raw text, and whether it is one of the
+# Tahoe task-switcher IPC binds (protected — guardrail 441b637). There is no
+# write path: the GUI never edits binds.
+
+PROTECTED_BIND_TOKENS = ("cycleTaskSwitcher", "toggleWindowOverview", "openWindowOverview")
+
+
+def read_binds_text(text: str) -> dict[str, Any]:
+    lines = text.splitlines(True)
+    binds = find_top_level_block_or_none(lines, "binds")
+    items: list[dict[str, Any]] = []
+    if not binds:
+        return {"items": items}
+
+    for index in iter_depth_lines(lines, binds[0], binds[1], 1):
+        body = uncommented_body(lines[index])
+        if not body.strip():
+            continue
+        combo_match = re.match(r"^\s*(\S+)", body)
+        combo = combo_match.group(1) if combo_match else "?"
+
+        # Gather the full bind node (single line, or multi-line until braces balance).
+        raw_lines = [lines[index].rstrip("\n")]
+        depth = 0
+        for j in range(index, binds[1] + 1):
+            depth += brace_delta(lines[j])
+            if j > index:
+                raw_lines.append(lines[j].rstrip("\n"))
+            if depth == 0:
+                break
+        raw = "\n".join(raw_lines).strip()
+
+        first_action = ""
+        action_match = re.search(r"\{[^;{}]*?([\w-]+)", raw)
+        if action_match:
+            first_action = action_match.group(1)
+
+        protected = any(token in raw for token in PROTECTED_BIND_TOKENS)
+        items.append({"combo": combo, "action": first_action, "raw": raw, "protected": protected})
+
+    return {"items": items}
+
+
 def update_field(text: str, field: str, raw_value: str) -> str:
     if field.startswith("layout."):
         return update_layout_text(text, field, raw_value)
@@ -886,6 +932,7 @@ def read_command(args: argparse.Namespace) -> None:
         "blur": read_blur_text(text),
         "input": read_input_text(text),
         "animations": read_animations_text(text),
+        "binds": read_binds_text(text),
     })
 
 
@@ -905,6 +952,7 @@ def write_command(args: argparse.Namespace) -> None:
         "blur": read_blur_text(updated),
         "input": read_input_text(updated),
         "animations": read_animations_text(updated),
+        "binds": read_binds_text(updated),
     })
 
 

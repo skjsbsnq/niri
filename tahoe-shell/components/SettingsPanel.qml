@@ -131,6 +131,8 @@ PanelWindow {
             return "输入与显示";
         if (selectedPage === "niri-animations")
             return "动画";
+        if (selectedPage === "niri-keyboard")
+            return "快捷键";
         if (selectedPage === "startup")
             return "启动项";
         if (selectedPage === "health")
@@ -159,6 +161,8 @@ PanelWindow {
             return "键盘、触摸板与显示器（输出只读）";
         if (selectedPage === "niri-animations")
             return "工作区、窗口移动/缩放与概览的弹簧动画";
+        if (selectedPage === "niri-keyboard")
+            return "niri binds 只读查看（任务切换 binds 受保护）";
         if (selectedPage === "startup")
             return "XDG autostart 和会话备注";
         if (selectedPage === "health")
@@ -193,6 +197,8 @@ PanelWindow {
             return 11;
         if (name === "niri-animations")
             return 12;
+        if (name === "niri-keyboard")
+            return 13;
         return 0;
     }
 
@@ -440,6 +446,11 @@ PanelWindow {
                         }
 
                         Pages.NiriAnimationsPage {
+                            panel: root
+                            theme: root
+                        }
+
+                        Pages.NiriKeyboardPage {
                             panel: root
                             theme: root
                         }

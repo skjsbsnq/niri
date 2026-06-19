@@ -843,6 +843,42 @@ submodules（`1e1d1e0`/`6211e44`）、phase6 基线。
   无 QML load failure，无 NiriAnimationsPage/animSprings 相关错误；临时实例已 trap 清理；线上会话未受影响。
 - 本阶段未进入 S5.4，未碰 binds/MRU/task-switcher，未生成违规 KDL。
 
+### 阶段 S5.4 验收记录（2026-06-20）
+
+- **范围**：新增 niri「快捷键」域——binds 只读查看器，标注受保护的 task-switcher IPC binds，
+  提供「在编辑器打开 config.kdl」。**GUI 永不写 binds**（最高风险项按用户决策降为只读）。
+  未碰 dismiss/TahoeGlass region/挂载点。工作区 S5.4 改动为 5 改 + 1 新增。
+- **helper（`niri_settings_tool.py`）**：新增 `read_binds_text`（枚举 `binds{}` 的 depth-1 子节点，
+  逐节点提取 combo（节点名）/首个 action token/完整 raw 文本，单行与多行 block 均处理；标记
+  `protected`：raw 含 `cycleTaskSwitcher`/`toggleWindowOverview`/`openWindowOverview`，即 task-switcher
+  IPC binds，护栏 `441b637`）。**只读，update_field 无 binds 写分支**。`read`/`write` payload 增 `binds`。
+- **binds reader smoke**：读得 127 条 binds；protected 恰为 3 条（Mod+Ctrl+Tab、Mod+Ctrl+Shift+Tab、
+  Mod+Shift+O，均 spawn-sh 调 IPC）；单行（Mod+T → spawn）与多行（Mod+Ctrl+Tab → spawn-sh）action 解析正确。
+- **service（`NiriSettings.qml`）**：`bindsList` 数组属性 + `applyBinds`（无 setter）；
+  `openConfigInEditor()`（`Quickshell.execDetached` 调 `${EDITOR:-${VISUAL:-xdg-open}} <configPath>`）；
+  handleRead/WriteOutput 调用 applyBinds。
+- **UI（`NiriKeyboardPage.qml`）**：「键盘快捷键」section（说明 binds 是 replace-on-conflict 权威全集、
+  此处只读、改键请编辑 config.kdl；+「在编辑器打开」TahoeButton）+「全部快捷键」section（Repeater
+  over bindsList，每行 combo（等宽粗体）+ action（等宽次要色）；protected 项橙色底 + 锁图标 + 「受保护」
+  徽标，说明走 IPC 勿改）。Repeater 用裸 JS 数组 `model: page.binds`（ComponentBehavior: Bound +
+  required modelData），不引 ScriptModel/Quickshell 依赖。
+- **路由**：`SettingsPanel.qml` `pageIndex` 增 `niri-keyboard=13` + pageTitle「快捷键」+ pageSubtitle +
+  StackLayout 挂 `NiriKeyboardPage`；`NiriPage.qml` hub 增「快捷键」tile→niri-keyboard（keyboard_command_key
+  e8ef，经 cmap 核验）；`SettingsTheme.js` `categoryColor` 增 `niri-keyboard` gray `#8e8e93`。
+- **回归检查**：未碰 dismiss（`dc5bef9`）；未碰 TahoeGlass region 坐标/几何（`b7b8e5a`/`0704ea4`）；
+  未碰 `shell.qml:705-716` 挂载点；未新增 service 根类型（`666c3c8`）；未用 `BackgroundEffect`/`blurRegion`；
+  未生成 `variable-refresh-rate` 或 broad `namespace="^quickshell"`；**未写 binds（`441b637`，只读）**；
+  `useSpring` 未被新动画依赖。
+- **检查脚本**：`py_compile` 0；`qmllint`（settings 全树 + SettingsPanel + NiriSettings）退出 0，新文件零告警；
+  guardrails 0；submodules 0；`niri validate` 0。
+- **运行时 smoke**：临时 `quickshell -p tahoe-shell`（隔离 XDG_CONFIG_HOME + config 副本）6s 存活、无 QML
+  load failure，无 NiriKeyboardPage/bindsList 相关错误。说明：首次 smoke 命中一次**非确定性**崩溃
+  （SIGABRT，backtrace 全在 Qt 的 `IconImageProvider::requestPixmap`→`QPlatformPixmap::fromFile`→
+  `__cxa_pure_virtual`，本机 NVIDIA+AMD 双 GPU 下的图标像素加载竞态，栈中无任何本阶段 QML 帧），
+  随后连续 3 次 smoke（5s/5s/6s）均存活且无 load error，确认为既有 flaky 现象、与本阶段无关。
+  临时实例已 trap 清理；线上会话未受影响。
+- 本阶段未进入 S5.5，未写 binds/MRU/task-switcher，未生成违规 KDL。
+
 ## 停止条件
 
 - S0–S5 全部验收通过；设置面板外观对齐 macOS System Settings、深色模式可用、niri 主要配置域

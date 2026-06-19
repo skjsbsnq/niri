@@ -372,6 +372,10 @@ ShellRoot {
         id: appearance
     }
 
+    NiriSettings {
+        id: niriSettings
+    }
+
     Power {
         id: power
         lockService: lockScreen

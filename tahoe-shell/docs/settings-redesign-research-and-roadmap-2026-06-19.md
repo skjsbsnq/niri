@@ -462,6 +462,69 @@ submodules（`1e1d1e0`/`6211e44`）、phase6 基线。
 
 退出门槛：S3 全部验收通过后才允许进入 S4。
 
+### 阶段 S3 验收记录（2026-06-19）
+
+- **范围**：完成 niri 配置写回基础设施，未新增/改动设置 UI，未改
+  `config/niri/tahoe-phase0.kdl`，未碰设置面板 dismiss、TahoeGlass region、现有
+  `DesktopSettings`/`Appearance` 持久化路径。
+- **include 合并语义实验**：用临时主配置在末尾加入 `include "override.kdl"`，被 include
+  文件仅包含 `layout { gaps 23 }`；`niri/target/release/niri validate -c 临时主配置`
+  退出码 0，确认跨文件重复 `layout {}` 不会触发「同文件 duplicate node」错误。结合
+  `niri-config/src/lib.rs` 的源码事实（include 按出现位置解析 `ConfigPart` 并 merge 到同一
+  `Config`），判断「后出现的 include 可覆盖/合并前序 layout 字段」成立；S3 主路径仍采用
+  精确编辑主 `config.kdl`，include 外提留给后续长期方案。
+- **KDL 读写层**：新增 `tahoe-shell/services/niri_settings_tool.py`。支持读取/写回
+  `layout.gaps`、`layout.focus_ring.enabled`、`layout.border.enabled`、
+  `layout.shadow.enabled/softness/spread/offset_x/offset_y`、
+  `layout.snap_assist.enabled/threshold`；写回为行/块级精确替换，保留注释和原格式。
+  写入采用同目录临时文件 + `fsync` + `os.replace` + `utime`，替换前对候选文件执行
+  `niri validate -c`，并内置配置级 guardrails（VRR 默认关闭、无 broad quickshell
+  namespace、保留 explicit `tahoe-` namespace）。
+- **round-trip 验证**：在 `config/niri/tahoe-phase0.kdl` 临时副本上逐项写入上述所有 layout
+  字段，再全部恢复原值；最终 `diff -u config/niri/tahoe-phase0.kdl 临时副本` 无输出，
+  说明注释/格式未漂移。helper 读取当前源配置得到 gaps=16、focus-ring=false、
+  border=false、shadow=true(softness=36/spread=4/offset 0,10)、snap-assist=true(threshold=16)。
+- **NiriSettings service**：新增 `tahoe-shell/services/NiriSettings.qml`，根为
+  `Item { visible: false }`（符合 `666c3c8` 护栏）。service 持有 layout 运行时镜像，
+  `setX(v)` 调 helper 写 `config.kdl`，写入成功后执行
+  `niri msg action load-config-file --path "$config"`，失败静默降级且不崩 shell。`shell.qml`
+  仅注册 `NiriSettings { id: niriSettings }`，没有接入任何 UI。
+- **热重载 smoke**：当前 Tahoe 会话中 `niri msg --json outputs` 可用；对真实
+  `~/.config/niri/tahoe/config.kdl` 用 helper 将 `layout.gaps` 从 16 临时写为 18，
+  `niri msg action load-config-file --path ~/.config/niri/tahoe/config.kdl` 退出码 0；
+  随后通过 trap 恢复为 16，最终 helper 读取 live config 确认为 16。写入过程中未产生
+  niri validate 错误，未保留临时配置改动。
+- **部署防覆盖**：`scripts/arch-update.sh` 新增
+  `NIRI_CONFIG_DEPLOY_BASELINE=$TAHOE_STATE_DIR/niri-config-deployed-baseline.kdl` 与
+  `FORCE_NIRI_CONFIG_DEPLOY=false`。若目标 `config.kdl` 与上次部署基线不同，默认先备份为
+  `config.kdl.user-YYYYMMDD-HHMMSS.bak`，再把新模板写到 `config.kdl.new`，并保留 live
+  config 不覆盖；只有显式 `FORCE_NIRI_CONFIG_DEPLOY=true` 才会在备份后覆盖。临时目录模拟：
+  baseline 为 gaps=16、目标被用户改为 gaps=18 后调用 `deploy_niri_config()`，结果
+  backup_count=1、`config.kdl.new` 存在、live config 仍为 gaps=18。正常路径也已验证：
+  目标未修改且 baseline 缺失时直接部署并创建 baseline，backup_count=0。
+- **运行时 load smoke**：临时从仓库路径启动 `quickshell -p /home/wwt/niri/tahoe-shell`，
+  `services/qmldir` 正常发现 `NiriSettings 1.0 NiriSettings.qml`，日志显示
+  `NiriSettings` 类型解析成功，无 `NiriSettings` 相关 QML load failure。已结束临时
+  quickshell 进程；日志中的 `font` 只读警告和 portal app-id 警告为既有运行时现象。
+- **检查脚本**：
+  - `python3 -m py_compile tahoe-shell/services/niri_settings_tool.py`：退出码 0。
+  - `bash -n scripts/arch-update.sh`：退出码 0。
+  - `/usr/lib/qt6/bin/qmllint --signal-handler-parameters disable -I quickshell/build-tahoe/qml_modules tahoe-shell/services/NiriSettings.qml`：
+    退出码 0。`signal-handler-parameters` 关闭仅用于 Quickshell `Process.onExited`
+    的 `QProcess::ExitStatus` 元类型警告，现有 service 也会触发同类警告。
+  - `niri/target/release/niri validate -c config/niri/tahoe-phase0.kdl`：退出码 0，
+    `config is valid`。
+  - `scripts/check-tahoe-glass-guardrails.sh`：退出码 0。
+  - `bash scripts/check-submodules.sh`：退出码 0（仍打印 git submodule dry-run 用法说明，
+    行为与前序阶段一致）。
+- **工作区**：S3 预期改动为 `scripts/arch-update.sh`、`tahoe-shell/shell.qml`、
+  新增 `tahoe-shell/services/NiriSettings.qml`、新增
+  `tahoe-shell/services/niri_settings_tool.py`、本文档验收记录；既有未跟踪
+  `tahoe-shell/services/__pycache__/` 未清理、未覆盖。
+- 本阶段未进入 S4，未新增 niri 设置页，未碰 binds/MRU/task-switcher，未生成
+  `variable-refresh-rate`、broad `namespace="^quickshell"` 或直接 QML
+  `BackgroundEffect`/`blurRegion`。
+
 ## 阶段 S4：niri 设置 UI —— MVP（第一批域）
 
 目标：把 S3 机制接进设置面板，新增 niri 设置分类，**第一批范围默认为「布局与窗口外观」**

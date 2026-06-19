@@ -29,6 +29,7 @@ QUICKSHELL_BIN_NAME="${QUICKSHELL_BIN_NAME:-quickshell}"
 TAHOE_CONFIG_DIR="${TAHOE_CONFIG_DIR:-"$HOME/.config/quickshell/tahoe"}"
 NIRI_CONFIG_DIR="${NIRI_CONFIG_DIR:-"$HOME/.config/niri/tahoe"}"
 NIRI_CONFIG_TARGET="${NIRI_CONFIG_TARGET:-"$NIRI_CONFIG_DIR/config.kdl"}"
+NIRI_CONFIG_DEPLOY_BASELINE="${NIRI_CONFIG_DEPLOY_BASELINE:-"$TAHOE_STATE_DIR/niri-config-deployed-baseline.kdl"}"
 TAHOE_SESSION_LAUNCHER_SRC="${TAHOE_SESSION_LAUNCHER_SRC:-"$REPO_DIR/scripts/tahoe-niri-session.sh"}"
 TAHOE_SESSION_BIN="${TAHOE_SESSION_BIN:-"$NIRI_BIN_DIR/tahoe-niri-session"}"
 TAHOE_SYSTEM_SESSION_BIN="${TAHOE_SYSTEM_SESSION_BIN:-/usr/local/bin/tahoe-niri-session}"
@@ -42,6 +43,7 @@ DEPLOY_TAHOE_SESSION_ENTRY="${DEPLOY_TAHOE_SESSION_ENTRY:-true}"
 DEPLOY_TAHOE_SYSTEM_SESSION_ENTRY="${DEPLOY_TAHOE_SYSTEM_SESSION_ENTRY:-true}"
 DEPLOY_TAHOE_XSESSION_ENTRY="${DEPLOY_TAHOE_XSESSION_ENTRY:-false}"
 CLEANUP_TAHOE_XSESSION_ENTRY="${CLEANUP_TAHOE_XSESSION_ENTRY:-true}"
+FORCE_NIRI_CONFIG_DEPLOY="${FORCE_NIRI_CONFIG_DEPLOY:-false}"
 ALLOW_ROOT_ARCH_UPDATE="${ALLOW_ROOT_ARCH_UPDATE:-false}"
 BUILD_NIRI_FORK="${BUILD_NIRI_FORK:-false}"
 FORCE_NIRI_BUILD="${FORCE_NIRI_BUILD:-false}"
@@ -506,6 +508,31 @@ migrate_legacy_tahoe_shell_state() {
   fi
 }
 
+niri_config_target_modified() {
+  [[ -f "$NIRI_CONFIG_TARGET" ]] || return 1
+
+  if [[ -f "$NIRI_CONFIG_DEPLOY_BASELINE" ]]; then
+    files_differ "$NIRI_CONFIG_DEPLOY_BASELINE" "$NIRI_CONFIG_TARGET"
+    return
+  fi
+
+  files_differ "$NIRI_CONFIG_SRC" "$NIRI_CONFIG_TARGET"
+}
+
+backup_niri_config_target() {
+  local timestamp
+  local backup
+
+  timestamp="$(date +%Y%m%d-%H%M%S)"
+  backup="$NIRI_CONFIG_TARGET.user-$timestamp.bak"
+  if [[ -e "$backup" ]]; then
+    backup="$NIRI_CONFIG_TARGET.user-$timestamp-$$.bak"
+  fi
+
+  cp -p "$NIRI_CONFIG_TARGET" "$backup"
+  printf '%s\n' "$backup"
+}
+
 deploy_niri_config() {
   if [[ ! -f "$NIRI_CONFIG_SRC" ]]; then
     log "skipping niri config deploy; source file does not exist: $NIRI_CONFIG_SRC"
@@ -514,9 +541,31 @@ deploy_niri_config() {
 
   assert_niri_config_vrr_policy "$NIRI_CONFIG_SRC"
 
-  log "deploying niri Tahoe config to $NIRI_CONFIG_TARGET"
   mkdir -p "$NIRI_CONFIG_DIR"
+  mkdir -p "$(dirname -- "$NIRI_CONFIG_DEPLOY_BASELINE")"
+
+  if niri_config_target_modified; then
+    local backup
+    local proposed
+
+    backup="$(backup_niri_config_target)"
+    log "existing niri Tahoe config has local changes; backed up to $backup"
+
+    if [[ "$FORCE_NIRI_CONFIG_DEPLOY" != true ]]; then
+      proposed="$NIRI_CONFIG_TARGET.new"
+      install -m644 "$NIRI_CONFIG_SRC" "$proposed"
+      log "leaving modified niri Tahoe config in place"
+      log "new Tahoe config template written to $proposed"
+      log "set FORCE_NIRI_CONFIG_DEPLOY=true to overwrite after reviewing the backup"
+      return
+    fi
+
+    log "FORCE_NIRI_CONFIG_DEPLOY=true; overwriting modified niri Tahoe config after backup"
+  fi
+
+  log "deploying niri Tahoe config to $NIRI_CONFIG_TARGET"
   install -m644 "$NIRI_CONFIG_SRC" "$NIRI_CONFIG_TARGET"
+  install -m644 "$NIRI_CONFIG_SRC" "$NIRI_CONFIG_DEPLOY_BASELINE"
   niri_config_deployed=true
 }
 
@@ -924,7 +973,8 @@ main() {
   fi
 
   if changed_since_pull '^(config/niri/|.*\.kdl$)' \
-    || files_differ "$NIRI_CONFIG_SRC" "$NIRI_CONFIG_TARGET"; then
+    || files_differ "$NIRI_CONFIG_SRC" "$NIRI_CONFIG_TARGET" \
+    || [[ ! -f "$NIRI_CONFIG_DEPLOY_BASELINE" ]]; then
     need_niri_config_deploy=true
   fi
 

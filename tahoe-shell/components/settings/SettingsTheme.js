@@ -189,6 +189,8 @@ function categoryColor(key, darkMode) {
         return "#ff7a59";     // coral
     case "dock":
         return "#0a84ff";     // system blue
+    case "niri":
+        return "#30b0c8";     // teal (niri layout & window appearance)
     case "startup":
         return "#ff9f0a";     // system orange
     case "health":

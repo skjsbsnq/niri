@@ -553,6 +553,93 @@ submodules（`1e1d1e0`/`6211e44`）、phase6 基线。
 
 退出门槛：S4 全部验收通过后才允许进入 S5。
 
+### 阶段 S4 验收记录（2026-06-19）
+
+- **范围**：把 S3 的 NiriSettings 机制接进设置面板，新增 niri「布局与窗口」分类
+  （第一批域：gaps/焦点环/边框/阴影/snap 助手）。未碰 binds/MRU/task-switcher
+  （`441b637`）、未改 dismiss、未改 TahoeGlass region、未改 niri 源配置、未改既有
+  DesktopSettings/Appearance 持久化路径。工作区 S4 改动仅限设置面板（6 改 + 1 新增）。
+- **NiriSettings service 增强**（`services/NiriSettings.qml`，S3 产物上做最小改动）：
+  - `setX` 改为**乐观更新**：先 `root.<prop> = next` 再 `writeField`，使滑块拖动时
+    填充条立即跟手，不必等写回 round-trip。
+  - 写入**串行化**：新增 `property var pending: ({})` per-field 队列。`writeField`
+    把字段最新值记入 pending；`flushPending` 每次取队首一个字段、`startWriter` 写入；
+    `writer.onExited` 成功后 `applyNiriConfig()`（热重载）再 `flushPending()` 续写下
+    一个，失败则清空 pending 并 `refresh()` 回退真相。这样快速拖动滑块、以及同一
+    写回窗口内交叉改多个字段，最终都收敛到盘上。
+  - 属性默认值对齐 `config.kdl` 真值（gaps=16/focus-ring=off/border=off/shadow=on
+    softness=36 spread=4 offset 0,10/snap=on threshold=16），消除首帧错值闪烁。
+  - service 根仍为 `Item { visible: false }`（`666c3c8`）；execDetached 失败静默降级。
+- **新增 NiriPage**（`components/settings/pages/NiriPage.qml`）：用 S1/S2 控件库搭
+  四个 section——
+  - 布局间距：gaps 滑块（0..64 px，`value=gaps/64`）。
+  - 窗口装饰：焦点环开关、边框开关（`TahoeListRow` checkable）。
+  - 窗口阴影：启用开关 + 柔和度（0..100）、扩散（0..40）、水平/垂直偏移（-40..40，
+    带正负号）四个滑块。
+  - Snap 助手：启用开关 + 吸附阈值滑块（0..80 px）。
+  每个控件读 service 镜像、`onUserSet`/`onToggled` 走 `setX`。顶部状态行在
+  服务缺失/读取中/写错误时提示，控件在 `loaded` 前禁用。所有 iconCode 经
+  `MaterialIconsRound.ttf` cmap 核验存在（dashboard e871、space_bar e256、
+  border_outer e873、crop_square e8c4、layers e53b、blur_on e3a4、gradient e3aa、
+  compare_arrows e915、height e7c9、magnet e8f4、aspect_ratio e859）。
+- **接进面板路由与侧栏**：
+  - `SettingsPanel.qml`：新增 `property var niriSettingsService`；`pageIndex("niri")=8`；
+    `pageTitle`/`pageSubtitle` 加 niri 项；`StackLayout` 末尾挂 `Pages.NiriPage`。
+  - `SettingsSidebar.qml`：「外观」后新增「布局与窗口」按钮（dashboard 图标 +
+    `categoryColor("niri")`），`active`/`onActivated` 走 `selectedPage === "niri"`。
+  - `OverviewPage.qml`：Dock tile 后新增 niri summary tile（显示当前 gaps，点击跳转）。
+  - `SettingsTheme.js`：`categoryColor` 增 `case "niri": return "#30b0c8"`（teal，
+    与既有 indigo/red/coral/blue/orange/green/gray 不撞色）。
+  - `shell.qml`：`SettingsPanel` 注入 `niriSettingsService: niriSettings`（service
+    本体在 `shell.qml` 注册，S3 已就位）。
+- **「窗口圆角」说明**：S4 第一批范围文档提及「窗口圆角」，但 niri `layout` 不暴露
+  窗口圆角字段（focus-ring/border 仅为描边，无 radius），S3 helper 也无对应字段，
+  故本批不提供该控件——避免发明无后端的开关。本批控件严格映射到 S3 已验证的字段。
+- **回归检查**：
+  - 未碰 dismiss（自身全屏 MouseArea，`dc5bef9`）；未碰 TahoeGlass region 坐标/几何
+    （`b7b8e5a`/`0704ea4`，无 spring）；未碰 `shell.qml` 挂载点之外；未新增 service
+    根类型（`666c3c8`）；未用 `BackgroundEffect`/`blurRegion`；未生成
+    `variable-refresh-rate` 或 broad `namespace="^quickshell"`；未碰 binds（`441b637`）。
+  - 现有外观页（深浅色/夜览/色温，走 Appearance service）与 niri config 写回共存，
+    互不影响。
+- **检查脚本**：
+  - `python3 -m py_compile tahoe-shell/services/niri_settings_tool.py`：退出码 0
+    （helper 本阶段未改，仅复测）。
+  - `/usr/lib/qt6/bin/qmllint --signal-handler-parameters disable -I quickshell/build-tahoe/qml_modules`
+    （settings 全树 + `SettingsPanel.qml` + `services/NiriSettings.qml`）：退出码 0，
+    仅 14 条 S1 基线已记录为可接受的 Quickshell/TahoeGlass 自定义类型噪声
+    （`PanelWindow` uncreatable、`TahoeGlassRegion` incomplete、region id unqualified），
+    无任何 NiriPage/NiriSettings/niriSettingsService 相关告警。
+  - `niri/target/release/niri validate -c config/niri/tahoe-phase0.kdl`：退出码 0，
+    `config is valid`。
+  - `scripts/check-tahoe-glass-guardrails.sh`：退出码 0（VRR 默认关、无 broad
+    quickshell、保留 tahoe- namespace、无直接 BackgroundEffect/blurRegion）。
+  - `bash scripts/check-submodules.sh`：退出码 0。
+- **写回路径 round-trip**（在 `config.kdl` 副本上，不碰线上配置）：逐字段写入全部
+  10 个 layout 字段（gaps/focus-ring/border/shadow enabled+softness+spread+offset_x/
+  offset_y/snap enabled+threshold）再全部恢复，`diff -u 源 副本` 无输出（注释/格式零
+  漂移），恢复后副本 `niri validate` 通过。helper 读取源配置得到 gaps=16、focus-ring=
+  off、border=off、shadow=on(softness=36/spread=4/offset 0,10)、snap=on(threshold=16)，
+  与 service 默认值一致。
+- **运行时 smoke**：从仓库路径临时启动 `quickshell -p /home/wwt/niri/tahoe-shell`，
+  `XDG_CONFIG_HOME` 指向只含 config 副本的临时目录（隔离，不写线上 config/state）。
+  实例正常加载、存活；日志无任何 NiriPage/NiriSettings/niriSettingsService/
+  SettingsSidebar/OverviewPage/SettingsTheme 相关 load 错误，无任何 QML load failure。
+  Quickshell IPC（`--pid` 路由）`openSettings` 后 `niri msg layers` 出现 1 个
+  `tahoe-settings` overlay、`closeSettings` 后归 0（dismiss 路由无回归）。临时实例已
+  经 trap 清理。线上会话（`~/.config/quickshell/tahoe`）全程未受影响。
+  - 说明：现有 IPC 仅 `openSettings`(→概览)/`openAbout`/`openSystemHealth`/
+    `closeSettings`，无按页打开的 IPC，故 niri 页通过侧栏「布局与窗口」按钮与概览
+    tile 进入（UI 可达）；NiriPage 作为 `StackLayout` 子项在面板实例化时即创建，
+    无 load 错误即证明其绑定在运行时成立。
+- **工作区**：S4 预期改动为 `SettingsPanel.qml`、`SettingsSidebar.qml`、
+  `SettingsTheme.js`、`pages/OverviewPage.qml`、`shell.qml`、新增
+  `pages/NiriPage.qml`、本文档验收记录。S3 的改动（`scripts/arch-update.sh`、
+  `services/NiriSettings.qml`、`services/niri_settings_tool.py`、本文档 S3 记录）
+  仍在工作区未提交；既有未跟踪 `tahoe-shell/services/__pycache__/` 未清理、未覆盖。
+- 本阶段未进入 S5，未碰 binds/MRU/task-switcher，未做玻璃/输入·显示/动画/键位域，
+  未生成违规 KDL。
+
 ## 阶段 S5：niri 设置扩展 + Search 集成 + 收敛
 
 目标：补其余 niri 域 + Spotlight 集成 + 真机收敛。按优先级分小步，每步独立验收。

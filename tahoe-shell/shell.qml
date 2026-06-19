@@ -710,6 +710,7 @@ ShellRoot {
                 appearanceService: appearance
                 notificationsService: notifications
                 inputMethodService: inputMethod
+                niriSettingsService: niriSettings
                 open: shell.navigationOpenFor(shell.settingsPanelOpen, shell.settingsPanelScreenName, modelData)
                 onCloseRequested: shell.closeSettingsPanel()
             }

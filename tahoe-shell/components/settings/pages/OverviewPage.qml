@@ -75,6 +75,18 @@ Flickable {
             Controls.TahoeSummaryTile {
                 theme: page.theme
                 Layout.fillWidth: true
+                iconCode: "\ue871"
+                title: "布局与窗口"
+                detail: page.panel && page.panel.niriSettingsService
+                    ? "间距 " + page.panel.niriSettingsService.gaps + " px"
+                    : "niri 布局设置"
+                accentColor: page.panel ? page.panel.categoryColor("niri") : "#30b0c8"
+                onActivated: page.panel.selectedPage = "niri"
+            }
+
+            Controls.TahoeSummaryTile {
+                theme: page.theme
+                Layout.fillWidth: true
                 iconCode: page.panel && page.panel.systemStatusService && page.panel.systemStatusService.missingCount > 0 ? "\ue002" : "\ue86c"
                 title: page.panel && page.panel.systemStatusService && page.panel.systemStatusService.missingCount > 0 ? "有缺失项" : "系统健康"
                 detail: page.panel && page.panel.systemStatusService

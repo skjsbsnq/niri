@@ -21,6 +21,7 @@ PanelWindow {
     property var appearanceService
     property var notificationsService
     property var inputMethodService
+    property var niriSettingsService
 
     readonly property bool darkMode: appearanceService && appearanceService.darkMode
     readonly property int screenWidth: Math.max(1, numberOr(root.screen && root.screen.width, root.width))
@@ -120,6 +121,8 @@ PanelWindow {
             return "截图";
         if (selectedPage === "dock")
             return "Dock";
+        if (selectedPage === "niri")
+            return "布局与窗口";
         if (selectedPage === "startup")
             return "启动项";
         if (selectedPage === "health")
@@ -138,6 +141,8 @@ PanelWindow {
             return "保存目录、复制和通知动作";
         if (selectedPage === "dock")
             return "窗口按钮显示偏好";
+        if (selectedPage === "niri")
+            return "niri 间距、焦点环、边框、阴影与 snap 助手";
         if (selectedPage === "startup")
             return "XDG autostart 和会话备注";
         if (selectedPage === "health")
@@ -162,6 +167,8 @@ PanelWindow {
             return 6;
         if (name === "about")
             return 7;
+        if (name === "niri")
+            return 8;
         return 0;
     }
 
@@ -384,6 +391,11 @@ PanelWindow {
                         }
 
                         Pages.AboutPage {
+                            panel: root
+                            theme: root
+                        }
+
+                        Pages.NiriPage {
                             panel: root
                             theme: root
                         }

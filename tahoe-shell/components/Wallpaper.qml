@@ -11,18 +11,29 @@ PanelWindow {
     property var appsService
     property var settingsService
 
-    readonly property bool dynamicDesired: settingsService
+    readonly property bool settingsReady: settingsService && settingsService.loaded
+    readonly property bool dynamicDesired: settingsReady
         && settingsService.wallpaperMode === "dynamic"
         && settingsService.effectiveDynamicWallpaperCommand.length > 0
     readonly property string dynamicCommand: dynamicDesired
         ? resolveDynamicCommand(settingsService.effectiveDynamicWallpaperCommand)
         : ""
-    readonly property bool externalDesired: settingsService
+    readonly property bool externalDesired: settingsReady
         && settingsService.wallpaperMode === "external"
+    readonly property bool dynamicSuppressesStatic: dynamicDesired && !dynamicLaunchFailed
+    readonly property bool externalSuppressesStatic: externalDesired
+        && (!externalStateLoaded || (externalCommand.length > 0 && !externalLaunchFailed))
+    readonly property bool showStaticWallpaper: settingsReady
+        && !dynamicActive
+        && !dynamicSuppressesStatic
+        && !externalSuppressesStatic
     property string externalCommand: ""
     property bool dynamicActive: false
     property bool dynamicRestartPending: false
     property bool externalRestartPending: false
+    property bool dynamicLaunchFailed: false
+    property bool externalLaunchFailed: false
+    property bool externalStateLoaded: false
     property bool completed: false
 
     anchors {
@@ -173,6 +184,7 @@ PanelWindow {
 
         if (!dynamicDesired || dynamicCommand.length === 0) {
             dynamicRestartPending = false;
+            dynamicLaunchFailed = false;
             dynamicProcess.running = false;
             if (!externalProcess.running)
                 dynamicActive = false;
@@ -186,6 +198,7 @@ PanelWindow {
         }
 
         dynamicActive = false;
+        dynamicLaunchFailed = false;
         dynamicProcess.running = true;
     }
 
@@ -195,6 +208,7 @@ PanelWindow {
 
         if (!externalDesired || externalCommand.length === 0) {
             externalRestartPending = false;
+            externalLaunchFailed = false;
             externalProcess.running = false;
             if (!dynamicProcess.running)
                 dynamicActive = false;
@@ -208,16 +222,27 @@ PanelWindow {
         }
 
         dynamicActive = false;
+        externalLaunchFailed = false;
         externalProcess.running = true;
     }
 
-    onDynamicDesiredChanged: syncDynamicProcess()
-    onDynamicCommandChanged: syncDynamicProcess()
+    onDynamicDesiredChanged: {
+        dynamicLaunchFailed = false;
+        syncDynamicProcess();
+    }
+    onDynamicCommandChanged: {
+        dynamicLaunchFailed = false;
+        syncDynamicProcess();
+    }
     onExternalDesiredChanged: {
+        externalLaunchFailed = false;
         refreshExternalCommand();
         syncExternalProcess();
     }
-    onExternalCommandChanged: syncExternalProcess()
+    onExternalCommandChanged: {
+        externalLaunchFailed = false;
+        syncExternalProcess();
+    }
     Component.onCompleted: {
         completed = true;
         activeWallpaperFile.reload();
@@ -231,13 +256,13 @@ PanelWindow {
         fillMode: Image.PreserveAspectCrop
         smooth: true
         asynchronous: true
-        visible: !root.dynamicActive
+        visible: root.showStaticWallpaper
     }
 
     Rectangle {
         anchors.fill: parent
         color: "#18000000"
-        visible: !root.dynamicActive
+        visible: root.showStaticWallpaper
     }
 
     Process {
@@ -246,12 +271,15 @@ PanelWindow {
         command: ["sh", "-lc", root.dynamicCommand]
         onStarted: {
             root.dynamicActive = true;
+            root.dynamicLaunchFailed = false;
         }
         onRunningChanged: {
             if (!running && root.dynamicRestartPending)
                 dynamicRestartTimer.restart();
         }
         onExited: function(code, exitStatus) {
+            if (root.dynamicDesired && root.dynamicCommand.length > 0 && !root.dynamicRestartPending)
+                root.dynamicLaunchFailed = true;
             if (!externalProcess.running)
                 root.dynamicActive = false;
         }
@@ -263,12 +291,15 @@ PanelWindow {
         command: ["sh", "-lc", root.externalCommand]
         onStarted: {
             root.dynamicActive = true;
+            root.externalLaunchFailed = false;
         }
         onRunningChanged: {
             if (!running && root.externalRestartPending)
                 externalRestartTimer.restart();
         }
         onExited: function(code, exitStatus) {
+            if (root.externalDesired && root.externalCommand.length > 0 && !root.externalRestartPending)
+                root.externalLaunchFailed = true;
             if (!dynamicProcess.running)
                 root.dynamicActive = false;
         }
@@ -304,10 +335,12 @@ PanelWindow {
         blockLoading: true
         printErrors: false
         onLoaded: {
+            root.externalStateLoaded = true;
             root.refreshExternalCommand();
             root.syncExternalProcess();
         }
         onLoadFailed: {
+            root.externalStateLoaded = true;
             root.refreshExternalCommand();
             root.syncExternalProcess();
         }

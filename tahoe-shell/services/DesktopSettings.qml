@@ -66,7 +66,7 @@ Item {
     }
 
     function validWallpaperMode(value) {
-        return value === "static" || value === "dynamic";
+        return value === "static" || value === "dynamic" || value === "external";
     }
 
     function clampInt(value, minimum, maximum, fallback) {
@@ -86,7 +86,9 @@ Item {
 
     function wallpaperModeLabel(mode) {
         if (mode === "dynamic")
-            return "动态";
+            return "动态命令";
+        if (mode === "external")
+            return "UX 管理";
         return "静态";
     }
 
@@ -159,6 +161,17 @@ Item {
 
     function useDynamicWallpaperExampleCommand() {
         setDynamicWallpaperCommand(dynamicWallpaperExampleCommand);
+    }
+
+    function openWallpaperEngineUx() {
+        Quickshell.execDetached({
+            command: [
+                "sh",
+                "-lc",
+                "command -v linux-wallpaper-engine-ux >/dev/null 2>&1 && exec linux-wallpaper-engine-ux"
+            ],
+            workingDirectory: ""
+        });
     }
 
     function setScreenshotDirectory(path) {

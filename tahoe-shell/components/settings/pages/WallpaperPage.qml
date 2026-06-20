@@ -51,12 +51,23 @@ Flickable {
 
                     Controls.TahoeButton {
                         theme: page.theme
-                        label: "动态"
+                        label: "命令"
                         active: page.panel && page.panel.settingsService && page.panel.settingsService.wallpaperMode === "dynamic"
                         minimumWidth: 72
                         onActivated: {
                             if (page.panel.settingsService)
                                 page.panel.settingsService.setWallpaperMode("dynamic");
+                        }
+                    }
+
+                    Controls.TahoeButton {
+                        theme: page.theme
+                        label: "UX 管理"
+                        active: page.panel && page.panel.settingsService && page.panel.settingsService.wallpaperMode === "external"
+                        minimumWidth: 82
+                        onActivated: {
+                            if (page.panel.settingsService)
+                                page.panel.settingsService.setWallpaperMode("external");
                         }
                     }
                 }
@@ -105,13 +116,32 @@ Flickable {
         Controls.TahoeSection {
             theme: page.theme
             title: "动态壁纸"
-            subtitle: "命令退出时回落到静态壁纸"
+            subtitle: "用命令托管，或交给 Linux Wallpaper Engine UX 切换"
+
+            Controls.TahoeListRow {
+                theme: page.theme
+                label: "Linux Wallpaper Engine"
+                detail: "打开软件后可在软件内浏览、应用和切换动态壁纸"
+                iconCode: "\ue8b8"
+
+                RowLayout {
+                    spacing: 7
+
+                    Controls.TahoeButton {
+                        theme: page.theme
+                        label: "打开管理器"
+                        enabled: !!(page.panel && page.panel.settingsService)
+                        onActivated: page.panel.settingsService.openWallpaperEngineUx()
+                    }
+                }
+            }
 
             Controls.TahoeListRow {
                 theme: page.theme
                 label: "启动命令"
                 detail: "支持 {output} 输出名占位符，示例里的 WALLPAPER_ID 需替换"
                 iconCode: "\ue8b8"
+                enabled: !!(page.panel && page.panel.settingsService && page.panel.settingsService.wallpaperMode === "dynamic")
 
                 RowLayout {
                     spacing: 7
@@ -121,6 +151,7 @@ Flickable {
                         id: dynamicCommandInput
                         theme: page.theme
                         Layout.preferredWidth: 370
+                        enabled: !!(page.panel && page.panel.settingsService && page.panel.settingsService.wallpaperMode === "dynamic")
                         text: page.panel && page.panel.settingsService ? page.panel.settingsService.dynamicWallpaperCommand : ""
                         onEditingFinished: {
                             if (page.panel.settingsService)
@@ -131,14 +162,14 @@ Flickable {
                     Controls.TahoeButton {
                         theme: page.theme
                         label: "保存"
-                        enabled: !!(page.panel && page.panel.settingsService)
+                        enabled: !!(page.panel && page.panel.settingsService && page.panel.settingsService.wallpaperMode === "dynamic")
                         onActivated: page.panel.settingsService.setDynamicWallpaperCommand(dynamicCommandInput.text)
                     }
 
                     Controls.TahoeButton {
                         theme: page.theme
                         label: "示例"
-                        enabled: !!(page.panel && page.panel.settingsService)
+                        enabled: !!(page.panel && page.panel.settingsService && page.panel.settingsService.wallpaperMode === "dynamic")
                         onActivated: page.panel.settingsService.useDynamicWallpaperExampleCommand()
                     }
                 }

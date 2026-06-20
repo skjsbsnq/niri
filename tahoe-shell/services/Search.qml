@@ -21,8 +21,8 @@ Item {
         {
             "id": "tahoe-wallpaper",
             "title": "壁纸设置",
-            "subtitle": "静态图片和 linux-wallpaper-engine 动态壁纸",
-            "keywords": ["壁纸", "动态壁纸", "wallpaper", "live wallpaper", "linux-wallpaper-engine", "wallpaperengine"],
+            "subtitle": "静态图片、动态命令和 Linux Wallpaper Engine UX",
+            "keywords": ["壁纸", "动态壁纸", "wallpaper", "live wallpaper", "linux-wallpaper-engine", "wallpaperengine", "ux"],
             "internalPage": "wallpaper"
         },
         {

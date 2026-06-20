@@ -17,8 +17,12 @@ PanelWindow {
     readonly property string dynamicCommand: dynamicDesired
         ? resolveDynamicCommand(settingsService.effectiveDynamicWallpaperCommand)
         : ""
+    readonly property bool externalDesired: settingsService
+        && settingsService.wallpaperMode === "external"
+    property string externalCommand: ""
     property bool dynamicActive: false
     property bool dynamicRestartPending: false
+    property bool externalRestartPending: false
     property bool completed: false
 
     anchors {
@@ -43,6 +47,11 @@ PanelWindow {
         return "'" + String(value || "").replace(/'/g, "'\\''") + "'";
     }
 
+    function numberValue(value, fallback) {
+        var number = Number(value);
+        return isFinite(number) ? number : fallback;
+    }
+
     function resolveDynamicCommand(command) {
         var output = screenName();
         var quotedOutput = shellQuote(output);
@@ -59,6 +68,105 @@ PanelWindow {
         return appsService ? appsService.wallpaper : "";
     }
 
+    function wallpaperEngineAssetsDir() {
+        var home = settingsService ? settingsService.homeDir : Quickshell.env("HOME");
+        home = home === undefined || home === null ? "" : String(home);
+        if (home.length === 0)
+            return "";
+        return home + "/.local/share/Steam/steamapps/common/wallpaper_engine/assets";
+    }
+
+    function commandForUxWallpaper(entry, fallbackScreen) {
+        if (!entry)
+            return "";
+
+        var backgroundId = String(entry.backgroundId || entry.id || "").trim();
+        if (backgroundId.length === 0)
+            return "";
+
+        var screen = String(fallbackScreen || entry.screen || "").trim();
+        if (screen.length === 0)
+            return "";
+
+        var parts = [
+            "linux-wallpaperengine",
+            "--screen-root", shellQuote(screen),
+            "--bg", shellQuote(backgroundId),
+            "--layer", "background"
+        ];
+
+        var scaling = String(entry.scaling || "").trim();
+        if (scaling.length > 0)
+            parts.push("--scaling", shellQuote(scaling));
+
+        var clamp = String(entry.clamp || "").trim();
+        if (clamp.length > 0)
+            parts.push("--clamp", shellQuote(clamp));
+
+        var fps = Math.max(1, Math.round(numberValue(entry.fps, 30)));
+        parts.push("--fps", String(fps));
+
+        if (entry.silent) {
+            parts.push("--silent");
+        } else {
+            var volume = Math.max(0, Math.round(numberValue(entry.volume, 15)));
+            parts.push("--volume", String(volume));
+        }
+
+        if (entry.noAutomute)
+            parts.push("--noautomute");
+        if (entry.noAudioProcessing)
+            parts.push("--no-audio-processing");
+        if (entry.disableMouse)
+            parts.push("--disable-mouse");
+        if (entry.disableParallax)
+            parts.push("--disable-parallax");
+        if (entry.disableParticles)
+            parts.push("--disable-particles");
+        if (entry.noFullscreenPause)
+            parts.push("--no-fullscreen-pause");
+
+        var assetsDir = wallpaperEngineAssetsDir();
+        if (assetsDir.length > 0)
+            parts.push("--assets-dir", shellQuote(assetsDir));
+
+        return parts.join(" ");
+    }
+
+    function restoreCommandFromUxState() {
+        if (!externalDesired)
+            return "";
+
+        var text = "";
+        try {
+            text = activeWallpaperFile.text();
+        } catch (e) {
+            return "";
+        }
+
+        if (String(text || "").trim().length === 0)
+            return "";
+
+        try {
+            var state = JSON.parse(text);
+            var active = state && state.activeWallpapers ? state.activeWallpapers : {};
+            var output = screenName();
+            var entry = active[output] || null;
+            if (!entry) {
+                var keys = Object.keys(active);
+                if (keys.length === 1)
+                    entry = active[keys[0]];
+            }
+            return commandForUxWallpaper(entry, output);
+        } catch (e) {
+            return "";
+        }
+    }
+
+    function refreshExternalCommand() {
+        externalCommand = externalDesired ? restoreCommandFromUxState() : "";
+    }
+
     function syncDynamicProcess() {
         if (!completed)
             return;
@@ -66,7 +174,8 @@ PanelWindow {
         if (!dynamicDesired || dynamicCommand.length === 0) {
             dynamicRestartPending = false;
             dynamicProcess.running = false;
-            dynamicActive = false;
+            if (!externalProcess.running)
+                dynamicActive = false;
             return;
         }
 
@@ -80,11 +189,40 @@ PanelWindow {
         dynamicProcess.running = true;
     }
 
+    function syncExternalProcess() {
+        if (!completed)
+            return;
+
+        if (!externalDesired || externalCommand.length === 0) {
+            externalRestartPending = false;
+            externalProcess.running = false;
+            if (!dynamicProcess.running)
+                dynamicActive = false;
+            return;
+        }
+
+        if (externalProcess.running) {
+            externalRestartPending = true;
+            externalProcess.running = false;
+            return;
+        }
+
+        dynamicActive = false;
+        externalProcess.running = true;
+    }
+
     onDynamicDesiredChanged: syncDynamicProcess()
     onDynamicCommandChanged: syncDynamicProcess()
+    onExternalDesiredChanged: {
+        refreshExternalCommand();
+        syncExternalProcess();
+    }
+    onExternalCommandChanged: syncExternalProcess()
     Component.onCompleted: {
         completed = true;
+        activeWallpaperFile.reload();
         syncDynamicProcess();
+        syncExternalProcess();
     }
 
     Image {
@@ -114,7 +252,25 @@ PanelWindow {
                 dynamicRestartTimer.restart();
         }
         onExited: function(code, exitStatus) {
-            root.dynamicActive = false;
+            if (!externalProcess.running)
+                root.dynamicActive = false;
+        }
+    }
+
+    Process {
+        id: externalProcess
+        running: false
+        command: ["sh", "-lc", root.externalCommand]
+        onStarted: {
+            root.dynamicActive = true;
+        }
+        onRunningChanged: {
+            if (!running && root.externalRestartPending)
+                externalRestartTimer.restart();
+        }
+        onExited: function(code, exitStatus) {
+            if (!dynamicProcess.running)
+                root.dynamicActive = false;
         }
     }
 
@@ -126,6 +282,34 @@ PanelWindow {
             root.dynamicRestartPending = false;
             if (root.dynamicDesired && root.dynamicCommand.length > 0)
                 dynamicProcess.running = true;
+        }
+    }
+
+    Timer {
+        id: externalRestartTimer
+        interval: 120
+        repeat: false
+        onTriggered: {
+            root.externalRestartPending = false;
+            if (root.externalDesired && root.externalCommand.length > 0)
+                externalProcess.running = true;
+        }
+    }
+
+    FileView {
+        id: activeWallpaperFile
+        path: root.settingsService && root.settingsService.homeDir.length > 0
+            ? root.settingsService.homeDir + "/.config/Linux Wallpaper Engine/active-wallpapers.json"
+            : ""
+        blockLoading: true
+        printErrors: false
+        onLoaded: {
+            root.refreshExternalCommand();
+            root.syncExternalProcess();
+        }
+        onLoadFailed: {
+            root.refreshExternalCommand();
+            root.syncExternalProcess();
         }
     }
 }

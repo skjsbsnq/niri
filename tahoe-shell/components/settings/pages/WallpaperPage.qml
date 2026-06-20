@@ -121,7 +121,7 @@ Flickable {
             Controls.TahoeListRow {
                 theme: page.theme
                 label: "Linux Wallpaper Engine"
-                detail: "打开软件后可在软件内浏览、应用和切换动态壁纸"
+                detail: "UX 管理模式会在 Tahoe 启动时恢复上次应用的动态壁纸"
                 iconCode: "\ue8b8"
 
                 RowLayout {

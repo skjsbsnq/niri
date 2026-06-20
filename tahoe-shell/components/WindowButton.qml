@@ -61,6 +61,10 @@ Item {
         }
     }
 
+    function scheduleDockRectangleUpdate() {
+        dockRectangleRefresh.restart();
+    }
+
     function restoreOrActivate() {
         if (!root.windowModel && !root.toplevel)
             return;
@@ -98,6 +102,22 @@ Item {
         else
             root.toplevel.minimized = true;
         root.activateRequested(root.windowModel || root.toplevel);
+    }
+
+    onXChanged: scheduleDockRectangleUpdate()
+    onYChanged: scheduleDockRectangleUpdate()
+    onWidthChanged: scheduleDockRectangleUpdate()
+    onHeightChanged: scheduleDockRectangleUpdate()
+    onDockWindowChanged: scheduleDockRectangleUpdate()
+    onWindowModelChanged: scheduleDockRectangleUpdate()
+    onToplevelChanged: scheduleDockRectangleUpdate()
+    Component.onCompleted: scheduleDockRectangleUpdate()
+
+    Timer {
+        id: dockRectangleRefresh
+        interval: 0
+        repeat: false
+        onTriggered: root.updateDockRectangle(0, 0)
     }
 
     Rectangle {

@@ -502,6 +502,8 @@ render Genie animations
 
 ### Phase 7：视觉调优与性能优化
 
+状态：已完成。验收记录见 `genie-minimize-phase7-8-acceptance-2026-06-21.md`。
+
 目标：让 Genie 效果接近 GNOME/macOS 插件的手感，同时保持性能。
 
 任务：
@@ -522,6 +524,8 @@ render Genie animations
 完成条件：视觉和性能都可接受。
 
 ### Phase 8：测试、文档、回归护栏
+
+状态：已完成。验收记录见 `genie-minimize-phase7-8-acceptance-2026-06-21.md`。
 
 目标：把实现固化为可维护能力。
 
@@ -579,4 +583,3 @@ Phase 0 的第一项代码研究建议：
 2. 分别对 floating 和 scrolling 做最小化/恢复。
 3. 在 fractional scale 下复测。
 4. 如果差异来自 offscreen offset，优先让 alpha-only 动画不走 offscreen path。
-

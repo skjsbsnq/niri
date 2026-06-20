@@ -25,7 +25,53 @@ Flickable {
         Controls.TahoeSection {
             theme: page.theme
             title: "Dock"
-            subtitle: "窗口按钮显示偏好"
+            subtitle: "自动隐藏、触发热区和窗口按钮"
+
+            Controls.TahoeListRow {
+                theme: page.theme
+                label: "自动隐藏"
+                detail: page.panel && page.panel.settingsService && page.panel.settingsService.dockAutoHide
+                    ? "鼠标移到底部热区时显示"
+                    : "始终显示并为窗口预留底部空间"
+                iconCode: "\ue5d2"
+                checkable: true
+                checked: page.panel && page.panel.settingsService && page.panel.settingsService.dockAutoHide
+                enabled: !!(page.panel && page.panel.settingsService)
+                onToggled: function(checked) {
+                    if (page.panel.settingsService)
+                        page.panel.settingsService.setDockAutoHide(checked);
+                }
+            }
+
+            Controls.TahoeSlider {
+                theme: page.theme
+                iconCode: "\ue425"
+                label: "隐藏延迟"
+                valueText: page.panel && page.panel.settingsService ? page.panel.settingsService.dockAutoHideDelayMs + " ms" : "—"
+                value: page.panel && page.panel.settingsService
+                    ? Math.max(0, Math.min(1, page.panel.settingsService.dockAutoHideDelayMs / 1500))
+                    : 0
+                enabled: !!(page.panel && page.panel.settingsService && page.panel.settingsService.dockAutoHide)
+                onUserSet: function(v) {
+                    if (page.panel.settingsService)
+                        page.panel.settingsService.setDockAutoHideDelayMs(Math.round(v * 1500));
+                }
+            }
+
+            Controls.TahoeSlider {
+                theme: page.theme
+                iconCode: "\ue5d5"
+                label: "底部触发热区"
+                valueText: page.panel && page.panel.settingsService ? page.panel.settingsService.dockRevealZoneHeight + " px" : "—"
+                value: page.panel && page.panel.settingsService
+                    ? Math.max(0, Math.min(1, (page.panel.settingsService.dockRevealZoneHeight - 2) / 22))
+                    : 0
+                enabled: !!(page.panel && page.panel.settingsService && page.panel.settingsService.dockAutoHide)
+                onUserSet: function(v) {
+                    if (page.panel.settingsService)
+                        page.panel.settingsService.setDockRevealZoneHeight(2 + Math.round(v * 22));
+                }
+            }
 
             Controls.TahoeListRow {
                 theme: page.theme

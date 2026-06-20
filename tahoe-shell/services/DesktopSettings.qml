@@ -16,6 +16,15 @@ Item {
     readonly property string dockWindowTitleMode: settingsAdapter.dockWindowTitleMode
     readonly property bool dockForceIconOnly: dockWindowTitleMode === "icons"
     readonly property bool dockPreferTitles: dockWindowTitleMode === "titles"
+    readonly property bool dockAutoHide: settingsAdapter.dockAutoHide
+    readonly property int dockAutoHideDelayMs: settingsAdapter.dockAutoHideDelayMs
+    readonly property int dockRevealZoneHeight: settingsAdapter.dockRevealZoneHeight
+    readonly property string wallpaperMode: settingsAdapter.wallpaperMode
+    readonly property string staticWallpaperPath: settingsAdapter.staticWallpaperPath
+    readonly property string effectiveStaticWallpaper: normalizedPath(staticWallpaperPath)
+    readonly property string dynamicWallpaperCommand: settingsAdapter.dynamicWallpaperCommand
+    readonly property string effectiveDynamicWallpaperCommand: String(dynamicWallpaperCommand || "").trim()
+    readonly property string dynamicWallpaperExampleCommand: "linux-wallpaperengine --screen-root {output} --assets-dir \"$HOME/.local/share/Steam/steamapps/workshop/content/431960\" WALLPAPER_ID"
     readonly property string screenshotDirectory: settingsAdapter.screenshotDirectory
     readonly property string effectiveScreenshotDirectory: normalizedDirectory(screenshotDirectory).length > 0
         ? normalizedDirectory(screenshotDirectory)
@@ -41,8 +50,30 @@ Item {
         return text;
     }
 
+    function normalizedPath(value) {
+        var text = String(value || "").trim();
+        if (text.length === 0)
+            return "";
+        if (text === "~")
+            return homeDir;
+        if (text.indexOf("~/") === 0 && homeDir.length > 0)
+            return homeDir + text.substring(1);
+        return text;
+    }
+
     function validDockWindowTitleMode(value) {
         return value === "auto" || value === "icons" || value === "titles";
+    }
+
+    function validWallpaperMode(value) {
+        return value === "static" || value === "dynamic";
+    }
+
+    function clampInt(value, minimum, maximum, fallback) {
+        var number = Math.round(Number(value));
+        if (!isFinite(number))
+            number = fallback;
+        return Math.max(minimum, Math.min(maximum, number));
     }
 
     function modeLabel(mode) {
@@ -53,6 +84,12 @@ Item {
         return "自动";
     }
 
+    function wallpaperModeLabel(mode) {
+        if (mode === "dynamic")
+            return "动态";
+        return "静态";
+    }
+
     function setDockWindowTitleMode(mode) {
         var next = validDockWindowTitleMode(mode) ? mode : "auto";
         if (settingsAdapter.dockWindowTitleMode === next)
@@ -60,6 +97,68 @@ Item {
 
         settingsAdapter.dockWindowTitleMode = next;
         settingsFile.writeAdapter();
+    }
+
+    function setDockAutoHide(enabled) {
+        var next = !!enabled;
+        if (settingsAdapter.dockAutoHide === next)
+            return;
+
+        settingsAdapter.dockAutoHide = next;
+        settingsFile.writeAdapter();
+    }
+
+    function setDockAutoHideDelayMs(value) {
+        var next = clampInt(value, 0, 1500, 260);
+        if (settingsAdapter.dockAutoHideDelayMs === next)
+            return;
+
+        settingsAdapter.dockAutoHideDelayMs = next;
+        settingsFile.writeAdapter();
+    }
+
+    function setDockRevealZoneHeight(value) {
+        var next = clampInt(value, 2, 24, 8);
+        if (settingsAdapter.dockRevealZoneHeight === next)
+            return;
+
+        settingsAdapter.dockRevealZoneHeight = next;
+        settingsFile.writeAdapter();
+    }
+
+    function setWallpaperMode(mode) {
+        var next = validWallpaperMode(mode) ? mode : "static";
+        if (settingsAdapter.wallpaperMode === next)
+            return;
+
+        settingsAdapter.wallpaperMode = next;
+        settingsFile.writeAdapter();
+    }
+
+    function setStaticWallpaperPath(path) {
+        var next = normalizedPath(path);
+        if (settingsAdapter.staticWallpaperPath === next)
+            return;
+
+        settingsAdapter.staticWallpaperPath = next;
+        settingsFile.writeAdapter();
+    }
+
+    function resetStaticWallpaperPath() {
+        setStaticWallpaperPath("");
+    }
+
+    function setDynamicWallpaperCommand(command) {
+        var next = String(command || "").trim();
+        if (settingsAdapter.dynamicWallpaperCommand === next)
+            return;
+
+        settingsAdapter.dynamicWallpaperCommand = next;
+        settingsFile.writeAdapter();
+    }
+
+    function useDynamicWallpaperExampleCommand() {
+        setDynamicWallpaperCommand(dynamicWallpaperExampleCommand);
     }
 
     function setScreenshotDirectory(path) {
@@ -125,6 +224,35 @@ Item {
             changed = true;
         }
 
+        var autoHideDelay = clampInt(settingsAdapter.dockAutoHideDelayMs, 0, 1500, 260);
+        if (settingsAdapter.dockAutoHideDelayMs !== autoHideDelay) {
+            settingsAdapter.dockAutoHideDelayMs = autoHideDelay;
+            changed = true;
+        }
+
+        var revealHeight = clampInt(settingsAdapter.dockRevealZoneHeight, 2, 24, 8);
+        if (settingsAdapter.dockRevealZoneHeight !== revealHeight) {
+            settingsAdapter.dockRevealZoneHeight = revealHeight;
+            changed = true;
+        }
+
+        if (!validWallpaperMode(settingsAdapter.wallpaperMode)) {
+            settingsAdapter.wallpaperMode = "static";
+            changed = true;
+        }
+
+        var wallpaperPath = normalizedPath(settingsAdapter.staticWallpaperPath);
+        if (settingsAdapter.staticWallpaperPath !== wallpaperPath) {
+            settingsAdapter.staticWallpaperPath = wallpaperPath;
+            changed = true;
+        }
+
+        var dynamicCommand = String(settingsAdapter.dynamicWallpaperCommand || "").trim();
+        if (settingsAdapter.dynamicWallpaperCommand !== dynamicCommand) {
+            settingsAdapter.dynamicWallpaperCommand = dynamicCommand;
+            changed = true;
+        }
+
         var normalized = normalizedDirectory(settingsAdapter.screenshotDirectory);
         if (settingsAdapter.screenshotDirectory !== normalized) {
             settingsAdapter.screenshotDirectory = normalized;
@@ -152,6 +280,12 @@ Item {
         JsonAdapter {
             id: settingsAdapter
             property string dockWindowTitleMode: "auto"
+            property bool dockAutoHide: false
+            property int dockAutoHideDelayMs: 260
+            property int dockRevealZoneHeight: 8
+            property string wallpaperMode: "static"
+            property string staticWallpaperPath: ""
+            property string dynamicWallpaperCommand: ""
             property string screenshotDirectory: ""
             property bool screenshotCopyToClipboard: true
             property bool screenshotOfferActions: true

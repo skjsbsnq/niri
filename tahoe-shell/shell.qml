@@ -441,6 +441,7 @@ ShellRoot {
             Wallpaper {
                 screen: modelData
                 appsService: apps
+                settingsService: desktopSettings
             }
 
             PopupDismissLayer {

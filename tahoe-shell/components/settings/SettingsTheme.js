@@ -183,6 +183,8 @@ function categoryColor(key, darkMode) {
         return "#8e8e93";     // system gray (General)
     case "appearance":
         return "#5856d6";     // system indigo
+    case "wallpaper":
+        return "#30b0c8";     // teal
     case "notifications":
         return "#ff3b30";     // system red
     case "screenshot":

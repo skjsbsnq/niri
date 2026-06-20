@@ -21,6 +21,10 @@ PanelWindow {
     property bool pointerDragActive: false
     property int dragTargetVisualIndex: -1
     readonly property bool hasWindows: niriService && niriService.windowList && niriService.windowList.length > 0
+    readonly property bool dockAutoHide: settingsService && settingsService.dockAutoHide
+    readonly property int dockHideDelay: settingsService ? settingsService.dockAutoHideDelayMs : 260
+    readonly property int dockRevealZoneHeight: settingsService ? settingsService.dockRevealZoneHeight : 8
+    readonly property bool dockHidden: dockAutoHide && !dockHovered && !pointerDragActive && !launchpadOpen
     readonly property int dockOuterMargin: 28
     readonly property int dockSurfacePadding: 34
     readonly property int dockItemSpacing: 8
@@ -210,7 +214,7 @@ PanelWindow {
 
     Timer {
         id: hoverExitTimer
-        interval: 90
+        interval: root.dockAutoHide ? root.dockHideDelay : 90
         repeat: false
         onTriggered: root.resetDockHover()
     }
@@ -221,7 +225,7 @@ PanelWindow {
         bottom: true
     }
 
-    exclusiveZone: 98
+    exclusiveZone: dockAutoHide ? 0 : 98
     implicitHeight: 132
     color: "transparent"
     WlrLayershell.namespace: "tahoe-dock"
@@ -243,6 +247,21 @@ PanelWindow {
         }
     ]
 
+    MouseArea {
+        anchors {
+            left: parent.left
+            right: parent.right
+            bottom: parent.bottom
+        }
+        height: Math.max(2, root.dockRevealZoneHeight)
+        enabled: root.dockAutoHide
+        hoverEnabled: true
+        acceptedButtons: Qt.NoButton
+        onEntered: root.markDockHovered()
+        onPositionChanged: root.markDockHovered()
+        onExited: root.scheduleDockHoverReset()
+    }
+
     Rectangle {
         id: dockSurface
         readonly property string tahoeGlassMaterial: GlassStyle.MaterialDock
@@ -255,7 +274,15 @@ PanelWindow {
         height: 78
         radius: tahoeGlassRadius
         color: root.glassFill
-        opacity: 1
+        opacity: root.dockHidden ? 0 : 1
+
+        transform: Translate {
+            y: root.dockHidden ? 88 : 0
+
+            Behavior on y {
+                NumberAnimation { duration: 180; easing.type: Easing.OutCubic }
+            }
+        }
 
         Behavior on opacity {
             NumberAnimation { duration: 170; easing.type: Easing.OutCubic }

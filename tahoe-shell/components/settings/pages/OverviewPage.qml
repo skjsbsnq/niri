@@ -65,9 +65,23 @@ Flickable {
             Controls.TahoeSummaryTile {
                 theme: page.theme
                 Layout.fillWidth: true
+                iconCode: "\ue40b"
+                title: "壁纸"
+                detail: page.panel && page.panel.settingsService
+                    ? page.panel.settingsService.wallpaperModeLabel(page.panel.settingsService.wallpaperMode)
+                    : "设置服务不可用"
+                accentColor: page.panel ? page.panel.categoryColor("wallpaper") : "#30b0c8"
+                onActivated: page.panel.selectedPage = "wallpaper"
+            }
+
+            Controls.TahoeSummaryTile {
+                theme: page.theme
+                Layout.fillWidth: true
                 iconCode: "\ue8d0"
                 title: "Dock"
-                detail: page.panel && page.panel.settingsService ? "窗口标题：" + page.panel.settingsService.modeLabel(page.panel.dockTitleMode()) : "设置服务不可用"
+                detail: page.panel && page.panel.settingsService
+                    ? (page.panel.settingsService.dockAutoHide ? "自动隐藏" : "始终显示") + " · " + page.panel.settingsService.modeLabel(page.panel.dockTitleMode())
+                    : "设置服务不可用"
                 accentColor: page.panel ? page.panel.categoryColor("dock") : "#0a84ff"
                 onActivated: page.panel.selectedPage = "dock"
             }

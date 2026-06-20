@@ -14,9 +14,23 @@ Item {
         {
             "id": "tahoe-settings",
             "title": "Tahoe 设置",
-            "subtitle": "外观、通知、输入法、截图、Dock 和启动项",
-            "keywords": ["设置", "tahoe", "settings", "preferences", "desktop", "dock", "截图", "通知", "输入法"],
+            "subtitle": "外观、壁纸、通知、输入法、截图、Dock 和启动项",
+            "keywords": ["设置", "tahoe", "settings", "preferences", "desktop", "dock", "壁纸", "wallpaper", "截图", "通知", "输入法"],
             "internalPage": "settings"
+        },
+        {
+            "id": "tahoe-wallpaper",
+            "title": "壁纸设置",
+            "subtitle": "静态图片和 linux-wallpaper-engine 动态壁纸",
+            "keywords": ["壁纸", "动态壁纸", "wallpaper", "live wallpaper", "linux-wallpaper-engine", "wallpaperengine"],
+            "internalPage": "wallpaper"
+        },
+        {
+            "id": "tahoe-dock",
+            "title": "Dock 设置",
+            "subtitle": "自动隐藏、触发热区和窗口按钮",
+            "keywords": ["dock", "自动隐藏", "隐藏", "热区", "窗口标题", "autohide", "auto hide"],
+            "internalPage": "dock"
         },
         {
             "id": "tahoe-health",

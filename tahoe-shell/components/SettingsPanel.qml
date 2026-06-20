@@ -115,6 +115,8 @@ PanelWindow {
     function pageTitle() {
         if (selectedPage === "appearance")
             return "外观";
+        if (selectedPage === "wallpaper")
+            return "壁纸";
         if (selectedPage === "notifications")
             return "通知与输入";
         if (selectedPage === "screenshot")
@@ -145,6 +147,8 @@ PanelWindow {
     function pageSubtitle() {
         if (selectedPage === "appearance")
             return "深浅色、夜览和色温";
+        if (selectedPage === "wallpaper")
+            return "静态图片和动态壁纸";
         if (selectedPage === "notifications")
             return "勿扰、通知历史和输入法状态";
         if (selectedPage === "screenshot")
@@ -175,30 +179,32 @@ PanelWindow {
     function pageIndex(name) {
         if (name === "appearance")
             return 1;
-        if (name === "notifications")
+        if (name === "wallpaper")
             return 2;
-        if (name === "screenshot")
+        if (name === "notifications")
             return 3;
-        if (name === "dock")
+        if (name === "screenshot")
             return 4;
-        if (name === "startup")
+        if (name === "dock")
             return 5;
-        if (name === "health")
+        if (name === "startup")
             return 6;
-        if (name === "about")
+        if (name === "health")
             return 7;
-        if (name === "niri")
+        if (name === "about")
             return 8;
-        if (name === "niri-layout")
+        if (name === "niri")
             return 9;
-        if (name === "niri-glass")
+        if (name === "niri-layout")
             return 10;
-        if (name === "niri-input")
+        if (name === "niri-glass")
             return 11;
-        if (name === "niri-animations")
+        if (name === "niri-input")
             return 12;
-        if (name === "niri-keyboard")
+        if (name === "niri-animations")
             return 13;
+        if (name === "niri-keyboard")
+            return 14;
         return 0;
     }
 
@@ -391,6 +397,11 @@ PanelWindow {
                         }
 
                         Pages.AppearancePage {
+                            panel: root
+                            theme: root
+                        }
+
+                        Pages.WallpaperPage {
                             panel: root
                             theme: root
                         }

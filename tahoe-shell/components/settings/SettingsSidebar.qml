@@ -86,6 +86,15 @@ Rectangle {
 
         Controls.TahoeSidebarButton {
             theme: sidebar.theme
+            label: "壁纸"
+            iconCode: "\ue40b"
+            accentColor: sidebar.categoryColor("wallpaper")
+            active: sidebar.panel && sidebar.panel.selectedPage === "wallpaper"
+            onActivated: sidebar.panel.selectedPage = "wallpaper"
+        }
+
+        Controls.TahoeSidebarButton {
+            theme: sidebar.theme
             label: "布局与窗口"
             iconCode: "\ue871"
             accentColor: sidebar.categoryColor("niri")

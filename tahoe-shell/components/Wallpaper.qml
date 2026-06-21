@@ -39,6 +39,10 @@ PanelWindow {
     property bool externalLaunchFailed: false
     property bool externalStateLoaded: false
     property bool completed: false
+    property bool prestartedWallpaperAdopted: false
+    property bool prestartedWallpaperReleased: false
+    property string prestartedWallpaperMode: ""
+    property string adoptedDynamicCommand: ""
     readonly property string prestartedWallpaperPidFile: Quickshell.stateDir + "/wallpaper-prestart.pids"
 
     anchors {
@@ -204,16 +208,74 @@ PanelWindow {
         prestartedWallpaperCleanupTimer.restart();
     }
 
+    function hasPrestartedWallpaper() {
+        var text = "";
+        try {
+            text = prestartedWallpaperFile.text();
+        } catch (e) {
+            return false;
+        }
+
+        var lines = String(text || "").split(/\r?\n/);
+        for (var i = 0; i < lines.length; i++) {
+            if (/^[0-9]+$/.test(String(lines[i]).trim()))
+                return true;
+        }
+
+        return false;
+    }
+
+    function tryAdoptPrestartedWallpaper(mode) {
+        if (prestartedWallpaperAdopted)
+            return prestartedWallpaperMode === mode;
+
+        if (prestartedWallpaperReleased)
+            return false;
+
+        if (!hasPrestartedWallpaper())
+            return false;
+
+        prestartedWallpaperAdopted = true;
+        prestartedWallpaperMode = mode;
+        adoptedDynamicCommand = mode === "dynamic" ? dynamicCommand : "";
+        dynamicActive = true;
+        return true;
+    }
+
+    function releasePrestartedWallpaper() {
+        if (!prestartedWallpaperAdopted)
+            return;
+
+        prestartedWallpaperAdopted = false;
+        prestartedWallpaperReleased = true;
+        prestartedWallpaperMode = "";
+        adoptedDynamicCommand = "";
+        stopPrestartedWallpaper();
+    }
+
     function syncDynamicProcess() {
         if (!completed)
             return;
 
         if (!dynamicDesired || dynamicCommand.length === 0) {
+            if (prestartedWallpaperMode === "dynamic")
+                releasePrestartedWallpaper();
             dynamicRestartPending = false;
             dynamicLaunchFailed = false;
             dynamicProcess.running = false;
-            if (!externalProcess.running)
+            if (!externalProcess.running && !prestartedWallpaperAdopted)
                 dynamicActive = false;
+            return;
+        }
+
+        if (prestartedWallpaperMode === "dynamic"
+                && prestartedWallpaperAdopted
+                && adoptedDynamicCommand !== dynamicCommand)
+            releasePrestartedWallpaper();
+
+        if (tryAdoptPrestartedWallpaper("dynamic")) {
+            dynamicLaunchFailed = false;
+            dynamicActive = true;
             return;
         }
 
@@ -233,11 +295,19 @@ PanelWindow {
             return;
 
         if (!externalDesired || externalCommand.length === 0) {
+            if (prestartedWallpaperMode === "external")
+                releasePrestartedWallpaper();
             externalRestartPending = false;
             externalLaunchFailed = false;
             externalProcess.running = false;
-            if (!dynamicProcess.running)
+            if (!dynamicProcess.running && !prestartedWallpaperAdopted)
                 dynamicActive = false;
+            return;
+        }
+
+        if (tryAdoptPrestartedWallpaper("external")) {
+            externalLaunchFailed = false;
+            dynamicActive = true;
             return;
         }
 
@@ -271,6 +341,7 @@ PanelWindow {
     }
     Component.onCompleted: {
         completed = true;
+        prestartedWallpaperFile.reload();
         activeWallpaperFile.reload();
         syncDynamicProcess();
         syncExternalProcess();
@@ -360,6 +431,13 @@ PanelWindow {
         interval: 2500
         repeat: false
         onTriggered: root.stopPrestartedWallpaper()
+    }
+
+    FileView {
+        id: prestartedWallpaperFile
+        path: root.prestartedWallpaperPidFile
+        blockLoading: true
+        printErrors: false
     }
 
     FileView {

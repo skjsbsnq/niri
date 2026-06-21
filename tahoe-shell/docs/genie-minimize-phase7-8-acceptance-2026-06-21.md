@@ -9,13 +9,14 @@ Scope: Tahoe Dock + niri Genie minimize/restore visual tuning, performance guard
 Implemented in niri:
 
 - `src/render_helpers/shaders/genie.frag`
-  - Bottom edge now advances faster than the top edge.
-  - Top edge lags longer to keep the pulled-into-Dock feel.
-  - End fade starts earlier to avoid a smeared block over the Dock icon.
-  - Target-side x/y squash keeps the last visible frames from becoming a hard rectangle.
+  - Bottom edge still leads the top edge, but with a softer curve to avoid a snap into the Dock.
+  - Top edge lag is reduced enough to keep the pulled-into-Dock feel without a hard stretch.
+  - End fade waits until the final 12% of the morph so the motion reads as continuous.
+  - Target-side x/y squash is subtle, keeping the last visible frames from becoming a hard rectangle.
 - `src/layout/minimize_window_animation.rs`
   - Shader draw area remains `window_rect union target_rect + 24px padding`.
   - Unit tests cover the bounded area calculation so future edits do not accidentally damage/draw the whole output.
+  - Valid Genie target/source rectangles use a smoother curve and at least 320 ms duration, while no-rect fallback fade keeps the normal window animation timing.
 
 Fallback behavior:
 
@@ -47,6 +48,9 @@ Automated guardrails added:
 - Shader area:
   - `genie_area_is_window_target_union_with_padding`
   - `genie_area_does_not_expand_beyond_local_union`
+- Genie timing:
+  - `genie_animation_config_slows_valid_target_rect`
+  - `genie_animation_config_preserves_fallback_fade`
 
 Manual test entrypoint:
 

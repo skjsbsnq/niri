@@ -6,7 +6,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT/niri"
 
 cargo test -p niri minimize_restore_with_rect
-cargo test -p niri genie_area
+cargo test -p niri genie_
 cargo test -p niri foreign_toplevel_set_rectangle_tracks_layer_surface_rect
 cargo test -p niri xdg_toplevel_set_minimized_minimizes_window
 

@@ -27,6 +27,10 @@ PanelWindow {
         && !dynamicActive
         && !dynamicSuppressesStatic
         && !externalSuppressesStatic
+    readonly property bool yieldToDynamicWallpaper: !settingsReady
+        || dynamicActive
+        || dynamicSuppressesStatic
+        || externalSuppressesStatic
     property string externalCommand: ""
     property bool dynamicActive: false
     property bool dynamicRestartPending: false
@@ -47,7 +51,7 @@ PanelWindow {
     exclusionMode: ExclusionMode.Ignore
     WlrLayershell.layer: WlrLayer.Background
     WlrLayershell.namespace: "tahoe-wallpaper"
-    color: dynamicActive ? "transparent" : "#1c1d20"
+    color: yieldToDynamicWallpaper ? "transparent" : "#1c1d20"
 
     function screenName() {
         if (!root.screen)

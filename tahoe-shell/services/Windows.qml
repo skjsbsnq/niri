@@ -397,14 +397,14 @@ Item {
             if (match.index !== -1)
                 usedToplevels[String(match.index)] = true;
 
-            result.push(buildWindowModel(ipcWindow, match.toplevel));
+            result.push(buildWindowModel(ipcWindow, match.toplevel, i));
         }
 
         for (var j = 0; j < list.length; j++) {
             if (usedToplevels[String(j)])
                 continue;
 
-            result.push(buildWindowModel(null, list[j]));
+            result.push(buildWindowModel(null, list[j], j));
         }
 
         return result;
@@ -430,7 +430,7 @@ Item {
         return result;
     }
 
-    function buildWindowModel(ipcWindow, toplevel) {
+    function buildWindowModel(ipcWindow, toplevel, fallbackIndex) {
         var title = ipcWindow && ipcWindow.title ? ipcWindow.title : toplevelText(toplevel, "title");
         var appId = ipcWindow && ipcWindow.appId ? ipcWindow.appId : toplevelText(toplevel, "appId");
         var workspace = ipcWindow ? workspaceFromId(ipcWindow.workspaceId) : null;
@@ -440,6 +440,7 @@ Item {
 
         return {
             "id": ipcWindow ? ipcWindow.id : null,
+            "modelKey": windowModelKey(ipcWindow, toplevel, fallbackIndex),
             "title": title,
             "appId": appId,
             "workspace": workspace,
@@ -460,6 +461,14 @@ Item {
             "ipcWindow": ipcWindow,
             "toplevel": toplevel
         };
+    }
+
+    function windowModelKey(ipcWindow, toplevel, fallbackIndex) {
+        if (ipcWindow && ipcWindow.id !== undefined && ipcWindow.id !== null)
+            return "id:" + String(ipcWindow.id);
+
+        var appId = toplevelText(toplevel, "appId");
+        return "toplevel:" + appId + ":" + String(fallbackIndex || 0);
     }
 
     function findMatchingToplevel(ipcWindow, toplevels, usedToplevels) {

@@ -35,6 +35,7 @@ PanelWindow {
     property bool externalLaunchFailed: false
     property bool externalStateLoaded: false
     property bool completed: false
+    readonly property string prestartedWallpaperPidFile: Quickshell.stateDir + "/wallpaper-prestart.pids"
 
     anchors {
         left: true
@@ -178,6 +179,27 @@ PanelWindow {
         externalCommand = externalDesired ? restoreCommandFromUxState() : "";
     }
 
+    function stopPrestartedWallpaper() {
+        Quickshell.execDetached({
+            command: [
+                "sh",
+                "-lc",
+                "pidfile=\"$1\"; [ -f \"$pidfile\" ] || exit 0; " +
+                "while IFS= read -r pid; do " +
+                "case \"$pid\" in ''|*[!0-9]*) continue ;; esac; " +
+                "kill -TERM -- -\"$pid\" 2>/dev/null || kill \"$pid\" 2>/dev/null || true; " +
+                "done < \"$pidfile\"; rm -f \"$pidfile\"",
+                "sh",
+                prestartedWallpaperPidFile
+            ],
+            workingDirectory: ""
+        });
+    }
+
+    function schedulePrestartedWallpaperCleanup() {
+        prestartedWallpaperCleanupTimer.restart();
+    }
+
     function syncDynamicProcess() {
         if (!completed)
             return;
@@ -272,6 +294,7 @@ PanelWindow {
         onStarted: {
             root.dynamicActive = true;
             root.dynamicLaunchFailed = false;
+            root.schedulePrestartedWallpaperCleanup();
         }
         onRunningChanged: {
             if (!running && root.dynamicRestartPending)
@@ -292,6 +315,7 @@ PanelWindow {
         onStarted: {
             root.dynamicActive = true;
             root.externalLaunchFailed = false;
+            root.schedulePrestartedWallpaperCleanup();
         }
         onRunningChanged: {
             if (!running && root.externalRestartPending)
@@ -325,6 +349,13 @@ PanelWindow {
             if (root.externalDesired && root.externalCommand.length > 0)
                 externalProcess.running = true;
         }
+    }
+
+    Timer {
+        id: prestartedWallpaperCleanupTimer
+        interval: 2500
+        repeat: false
+        onTriggered: root.stopPrestartedWallpaper()
     }
 
     FileView {

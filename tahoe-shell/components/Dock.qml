@@ -646,6 +646,7 @@ PanelWindow {
 
                         Repeater {
                             model: ScriptModel {
+                                objectProp: "modelKey"
                                 values: root.niriService ? root.niriService.windowList : []
                             }
 

@@ -225,10 +225,25 @@ PanelWindow {
         bottom: true
     }
 
-    exclusiveZone: dockAutoHide ? 0 : 98
+    exclusiveZone: 98
+    exclusionMode: dockAutoHide ? ExclusionMode.Ignore : ExclusionMode.Normal
     implicitHeight: 132
     color: "transparent"
     WlrLayershell.namespace: "tahoe-dock"
+
+    mask: Region {
+        Region {
+            item: dockSurface
+            radius: dockSurface.radius
+        }
+
+        Region {
+            x: 0
+            y: Math.max(0, root.height - root.dockRevealZoneHeight)
+            width: root.width
+            height: root.dockAutoHide ? Math.max(2, root.dockRevealZoneHeight) : 0
+        }
+    }
 
     TahoeGlass.regions: [
         TahoeGlassRegion {

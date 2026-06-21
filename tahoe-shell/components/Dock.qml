@@ -233,7 +233,10 @@ PanelWindow {
 
     mask: Region {
         Region {
-            item: dockSurface
+            x: Math.round(dockSurface.x)
+            y: root.dockHidden ? 0 : Math.max(0, root.height - dockSurface.height)
+            width: dockSurface.width
+            height: root.dockHidden ? 0 : dockSurface.height
             radius: dockSurface.radius
         }
 

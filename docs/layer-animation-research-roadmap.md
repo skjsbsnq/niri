@@ -315,7 +315,7 @@ QML 只需要做两件事：
 | Tray Menu | `tahoe-tray-menu` | popin anchor | 是，任务 9 | 和 menu popup 同 profile |
 | Dock App Menu | `tahoe-dock-app-menu` | popin anchor | 是，任务 9 | origin 来自 dock item |
 | Dock Window Menu | `tahoe-dock-window-menu` | popin anchor | 是，任务 9 | origin 来自 dock item |
-| Launchpad | `tahoe-launchpad` | popin center | 是，任务 11 | 注意图标模糊 |
+| Launchpad | `tahoe-launchpad` | 保留 QML | 否，任务 12 后回退 | 大 surface，compositor 缩放会让图标和玻璃变软 |
 | Spotlight | `tahoe-spotlight` | popin center | 是，任务 11 | 注意输入焦点 |
 | Notification Toast | `tahoe-notification-toast` | slide right + fade | 是，任务 12 | 不应抢注意力 |
 | Dock | `tahoe-dock` | 保留现状 | 暂缓 | 常驻 surface，先不动 |
@@ -649,18 +649,17 @@ layer-close {
 }
 ```
 
-### Profile E：Tahoe Launchpad / Spotlight
+### Profile E：Tahoe Spotlight
 
 适用：
 
-- `tahoe-launchpad`
 - `tahoe-spotlight`
 
 行为：
 
 - 从中心轻微 popin。
-- 不做大位移，避免图标模糊和布局重排。
-- QML 内部搜索框、列表、结果项继续保留自己的细节动画。
+- 不做大位移，避免搜索文字和结果项布局重排。
+- QML 内部搜索框、列表和结果项继续保留自己的细节动画。
 
 建议参数：
 
@@ -1748,7 +1747,7 @@ XDG_STATE_HOME=/tmp/tmp.KURpKK1WM3/state XDG_CACHE_HOME=/tmp/tmp.KURpKK1WM3/cach
 
 范围：
 
-- `tahoe-launchpad`
+- `tahoe-launchpad`（任务 12 后回退到 QML）
 - `tahoe-spotlight`
 
 操作：
@@ -1767,7 +1766,7 @@ XDG_STATE_HOME=/tmp/tmp.KURpKK1WM3/state XDG_CACHE_HOME=/tmp/tmp.KURpKK1WM3/cach
 
 完成条件：
 
-- Launchpad 和 Spotlight 迁移完成。
+- Launchpad 和 Spotlight 迁移完成；任务 12 后确认 Launchpad 回退到 QML 更稳。
 - 最终参数记录。
 
 未完成不得进入任务 12。
@@ -1776,8 +1775,7 @@ XDG_STATE_HOME=/tmp/tmp.KURpKK1WM3/state XDG_CACHE_HOME=/tmp/tmp.KURpKK1WM3/cach
 
 实现范围：
 
-- 修改 `/home/wwt/niri/config/niri/tahoe-phase0.kdl`，新增 Tahoe Launchpad / Spotlight center profile，匹配：
-  - `tahoe-launchpad`
+- 修改 `/home/wwt/niri/config/niri/tahoe-phase0.kdl`，新增 Tahoe Spotlight center profile，匹配：
   - `tahoe-spotlight`
 - 最终参数采用路线图的中心型 surface profile：
 
@@ -1803,10 +1801,9 @@ layer-close {
 
 - 修改 `/home/wwt/niri/tahoe-shell/components/Launchpad.qml`：
   - 新增 `property var settingsService`。
-  - 新增 `readonly property bool compositorLayerAnimations`，只从 `root.settingsService.compositorLayerAnimations` 读取。
-  - 开关关闭时保留旧 `open || launcher.opacity > 0.01`、`opacity` 和 `contentScale` QML 外层动画路径。
-  - 开关开启时 `visible` 跟随 `open`，外层 `opacity` 固定为 `1`，`contentScale` 固定为 `1`。
-  - Tahoe Glass `interaction` / `materialAlpha` 在 compositor 模式下固定为 `1`，避免 surface alpha 与 material alpha 双重变暗。
+  - 任务 12 后改为始终保留 QML 外层动画路径，避免 compositor 缩放让应用图标和玻璃模糊。
+  - surface 改为全屏透明承载层，面板仍保持居中尺寸；点击面板外空白区域会触发关闭。
+  - Tahoe Glass `interaction` / `materialAlpha` 继续跟随 QML opacity。
 - 修改 `/home/wwt/niri/tahoe-shell/components/Spotlight.qml`：
   - 新增 `property var settingsService`。
   - 使用同一 `compositorLayerAnimations` handoff 模式。
@@ -1986,7 +1983,8 @@ XDG_STATE_HOME=/tmp/.../state XDG_CACHE_HOME=/tmp/.../cache XDG_CONFIG_HOME=/tmp
 
 - `PopupDismissLayer` 显式设置 `WlrLayershell.layer: WlrLayer.Overlay` 和 `focusable: false`，确保顶栏 popup 打开后空白区域点击仍由 dismiss layer 接收；该 namespace 仍不配置 layer animation。
 - layer open animation 不再只包装 Wayland surface / solid-color；`Shadow`、`BackgroundEffect` 和 `TahoeGlass` render element 也跟随同一个 open transform，避免 compositor layer 动画只动内容、不动玻璃和阴影，导致视觉上“看不出 layer 动画”。
-- Launchpad / Spotlight 的 center pop 参数从 `scale-from 0.94` / `scale-to 0.96` 收窄为 `0.98` / `0.985`，降低大 surface 图标和玻璃材质在 compositor 缩放期间的模糊风险。
+- Spotlight 的 center pop 参数从 `scale-from 0.94` / `scale-to 0.96` 收窄为 `0.98` / `0.985`。
+- Launchpad 从 compositor layer animation 回退到 QML 外层动画，并改成全屏透明承载层加面板外点击关闭；原因是大 surface compositor 缩放仍会让应用图标和玻璃材质变软。
 
 ### 任务 13：性能和稳定性验证
 
@@ -2153,7 +2151,6 @@ layer-rule {
 }
 
 layer-rule {
-    match namespace="^tahoe-launchpad$"
     match namespace="^tahoe-spotlight$"
 
     animations {
@@ -2256,7 +2253,7 @@ Tahoe Glass 的 region material alpha 当前跟 QML opacity 绑定。迁移到 c
 
 1. niri 支持 per-layer-rule 的 layer open/close 动画。
 2. Tahoe namespace 能配置不同 motion profile。
-3. 小弹窗、控制中心、通知中心、Launchpad、Spotlight、Toast 的外层显隐动画统一由 compositor 驱动。
+3. 小弹窗、控制中心、通知中心、Spotlight、Toast 的外层显隐动画统一由 compositor 驱动；Launchpad 因图标和玻璃清晰度保留 QML 外层动画。
 4. QML 内部控件动画保留。
 5. 没有双重动画。
 6. 没有关闭残影。

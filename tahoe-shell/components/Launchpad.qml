@@ -32,8 +32,9 @@ PanelWindow {
     readonly property int launcherHeight: Math.min(560, Math.max(360, root.screenHeight - 110))
     readonly property int launcherLeft: Math.round(Math.max(8, (root.screenWidth - root.launcherWidth) / 2))
     readonly property int launcherTop: Math.round(Math.max(8, Math.min(Math.max(8, root.screenHeight - root.launcherHeight - 8), (root.screenHeight - root.launcherHeight) / 2 - 12)))
-    readonly property bool compositorLayerAnimations:
-        root.settingsService && root.settingsService.compositorLayerAnimations
+    // Launchpad stays on the QML outer animation path: compositor scaling made
+    // app icons and the glass blur look soft on large centered surfaces.
+    readonly property bool compositorLayerAnimations: false
 
     signal closeRequested()
 
@@ -46,20 +47,17 @@ PanelWindow {
     exclusionMode: ExclusionMode.Ignore
     exclusiveZone: 0
     focusable: open
-    implicitWidth: launcherWidth
-    implicitHeight: launcherHeight
+    implicitWidth: screenWidth
+    implicitHeight: screenHeight
     color: "transparent"
     WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.namespace: "tahoe-launchpad"
 
     anchors {
         left: true
+        right: true
         top: true
-    }
-
-    margins {
-        left: root.launcherLeft
-        top: root.launcherTop
+        bottom: true
     }
 
     onOpenChanged: {
@@ -75,8 +73,8 @@ PanelWindow {
 
     TahoeGlass.regions: [
         TahoeGlassRegion {
-            x: 0
-            y: 0
+            x: launcher.x + panelSurface.x
+            y: launcher.y + panelSurface.y
             width: panelSurface.width
             height: panelSurface.height
             material: panelSurface.tahoeGlassMaterial
@@ -90,11 +88,20 @@ PanelWindow {
         }
     ]
 
+    MouseArea {
+        anchors.fill: parent
+        enabled: root.open
+        onClicked: root.closeRequested()
+    }
+
     Item {
         id: launcher
         property real contentScale: root.compositorLayerAnimations ? 1 : (root.open ? 1 : 0.98)
 
-        anchors.fill: parent
+        x: root.launcherLeft
+        y: root.launcherTop
+        width: root.launcherWidth
+        height: root.launcherHeight
         opacity: root.compositorLayerAnimations ? 1 : (root.open ? 1 : 0)
 
         transform: Scale {
@@ -110,6 +117,13 @@ PanelWindow {
 
         Behavior on contentScale {
             NumberAnimation { duration: 150; easing.type: Easing.OutCubic }
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            onClicked: function(mouse) {
+                mouse.accepted = true;
+            }
         }
 
         Rectangle {

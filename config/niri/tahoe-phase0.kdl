@@ -358,10 +358,9 @@ layer-rule {
     }
 }
 
-// Layer animation Launchpad / Spotlight profile. Centered surfaces use a
-// conservative pop so app icons and search text stay crisp.
+// Layer animation Spotlight profile. Launchpad stays on the QML path because
+// compositor scaling makes the app grid and glass blur look soft.
 layer-rule {
-    match namespace="^tahoe-launchpad$"
     match namespace="^tahoe-spotlight$"
 
     animations {

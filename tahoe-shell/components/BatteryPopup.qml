@@ -14,6 +14,7 @@ PanelWindow {
     property var batteryService
     property var powerProfileService
     property var anchorRect: null
+    property var settingsService
 
     readonly property bool available: !!batteryService && batteryService.available
     readonly property int percentage: available ? batteryService.roundedPercentage : 0
@@ -27,10 +28,12 @@ PanelWindow {
     readonly property int popupLeftMargin: PopupGeometry.popupLeft(anchorRect, root.implicitWidth, screenWidth, edgePadding, fallbackRight)
     readonly property int popupTopMargin: PopupGeometry.popupTop(anchorRect, fallbackTop, popupGap)
     readonly property real popupOriginX: PopupGeometry.originX(anchorRect, popupLeftMargin, root.implicitWidth, screenWidth, fallbackRight)
+    readonly property bool compositorLayerAnimations:
+        root.settingsService && root.settingsService.compositorLayerAnimations
 
     signal closeRequested()
 
-    visible: open || panel.opacity > 0.01
+    visible: compositorLayerAnimations ? open : (open || panel.opacity > 0.01)
     aboveWindows: true
     exclusionMode: ExclusionMode.Ignore
     implicitWidth: 292
@@ -59,8 +62,8 @@ PanelWindow {
             blur: true
             shadow: true
             clip: true
-            interaction: panel.opacity
-            materialAlpha: panel.opacity
+            interaction: root.compositorLayerAnimations ? 1 : panel.opacity
+            materialAlpha: root.compositorLayerAnimations ? 1 : panel.opacity
             enabled: root.open || panel.opacity > 0.01
         }
     ]
@@ -69,7 +72,7 @@ PanelWindow {
         id: panel
         readonly property string tahoeGlassMaterial: GlassStyle.MaterialPanel
         readonly property real tahoeGlassRadius: GlassStyle.RadiusPopup
-        property real contentScale: root.open ? 1 : 0.98
+        property real contentScale: root.compositorLayerAnimations ? 1 : (root.open ? 1 : 0.98)
 
         // Keep the compositor glass region anchored; popup motion is content
         // scale/opacity plus material alpha, not region translation.
@@ -79,7 +82,7 @@ PanelWindow {
         height: implicitHeight
         radius: tahoeGlassRadius
         color: GlassStyle.FillPanelBright
-        opacity: root.open ? 1 : 0
+        opacity: root.compositorLayerAnimations ? 1 : (root.open ? 1 : 0)
 
         transform: Scale {
             origin.x: root.popupOriginX

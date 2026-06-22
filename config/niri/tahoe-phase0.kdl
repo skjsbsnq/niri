@@ -361,6 +361,34 @@ layer-rule {
     }
 }
 
+// Layer animation phase 0 trial: only the two top-bar small popups that are
+// wired to the QML compatibility switch in task 8. Fan, clipboard, menu, tray,
+// dock menus, control center, notification center, launchpad, spotlight and
+// toast remain draft-only for later tasks.
+layer-rule {
+    match namespace="^tahoe-battery-popup$"
+    match namespace="^tahoe-wifi-popup$"
+
+    animations {
+        layer-open {
+            style "popin"
+            scale-from 0.96
+            opacity-from 0
+            duration-ms 140
+            curve "menu-decel"
+            origin "anchor"
+        }
+        layer-close {
+            style "popout"
+            scale-to 0.97
+            opacity-to 0
+            duration-ms 95
+            curve "menu-accel"
+            origin "anchor"
+        }
+    }
+}
+
 layer-rule {
     match namespace="^tahoe-menu-popup$"
     match namespace="^tahoe-application-menu$"

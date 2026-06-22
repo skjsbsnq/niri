@@ -32,6 +32,7 @@ Item {
     readonly property bool screenshotCopyToClipboard: settingsAdapter.screenshotCopyToClipboard
     readonly property bool screenshotOfferActions: settingsAdapter.screenshotOfferActions
     readonly property string startupNote: settingsAdapter.startupNote
+    readonly property bool compositorLayerAnimations: settingsAdapter.compositorLayerAnimations
     property bool loaded: false
 
     function envString(name) {
@@ -214,6 +215,15 @@ Item {
         settingsFile.writeAdapter();
     }
 
+    function setCompositorLayerAnimations(enabled) {
+        var next = !!enabled;
+        if (settingsAdapter.compositorLayerAnimations === next)
+            return;
+
+        settingsAdapter.compositorLayerAnimations = next;
+        settingsFile.writeAdapter();
+    }
+
     function openAutostartFolder() {
         var dir = homeDir.length > 0 ? homeDir + "/.config/autostart" : Quickshell.stateDir;
         Quickshell.execDetached({
@@ -303,6 +313,7 @@ Item {
             property bool screenshotCopyToClipboard: true
             property bool screenshotOfferActions: true
             property string startupNote: ""
+            property bool compositorLayerAnimations: false
         }
     }
 }

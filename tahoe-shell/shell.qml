@@ -728,6 +728,7 @@ ShellRoot {
                 screen: modelData
                 batteryService: battery
                 powerProfileService: powerProfiles
+                settingsService: desktopSettings
                 anchorRect: shell.topBarPopupAnchorRect
                 open: shell.topBarPopupOpenFor(shell.batteryPopupOpen, modelData)
                 onCloseRequested: shell.batteryPopupOpen = false
@@ -736,6 +737,7 @@ ShellRoot {
             WifiPopup {
                 screen: modelData
                 controlsService: controls
+                settingsService: desktopSettings
                 anchorRect: shell.topBarPopupAnchorRect
                 open: shell.topBarPopupOpenFor(shell.wifiPopupOpen, modelData)
                 onCloseRequested: shell.wifiPopupOpen = false

@@ -1,7 +1,7 @@
 [submodule "niri"]
 	path = niri
 	url = https://github.com/skjsbsnq/tahoe-desktop.git
-	branch = main
+	branch = tahoe-layer-animations
 [submodule "quickshell"]
 	path = quickshell
 	url = https://github.com/skjsbsnq/quickshell.git

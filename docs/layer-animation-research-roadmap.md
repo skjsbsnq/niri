@@ -667,7 +667,7 @@ layer-close {
 ```kdl
 layer-open {
     style "popin"
-    scale-from 0.94
+    scale-from 0.98
     opacity-from 0
     duration-ms 180
     curve "emphasized-decel"
@@ -676,7 +676,7 @@ layer-open {
 
 layer-close {
     style "popout"
-    scale-to 0.96
+    scale-to 0.985
     opacity-to 0
     duration-ms 110
     curve "menu-accel"
@@ -1784,7 +1784,7 @@ XDG_STATE_HOME=/tmp/tmp.KURpKK1WM3/state XDG_CACHE_HOME=/tmp/tmp.KURpKK1WM3/cach
 ```kdl
 layer-open {
     style "popin"
-    scale-from 0.94
+    scale-from 0.98
     opacity-from 0
     duration-ms 180
     curve "emphasized-decel"
@@ -1793,7 +1793,7 @@ layer-open {
 
 layer-close {
     style "popout"
-    scale-to 0.96
+    scale-to 0.985
     opacity-to 0
     duration-ms 110
     curve "menu-accel"
@@ -1980,6 +1980,14 @@ XDG_STATE_HOME=/tmp/.../state XDG_CACHE_HOME=/tmp/.../cache XDG_CONFIG_HOME=/tmp
 - 本轮完成了真实 niri 会话中的 Toast layer map/unmap 生命周期观察。
 - 按用户要求，未继续耗时做通知打断视线程度、真实 notification daemon 30 条压力触发和长时间肉眼 A/B；这些更完整的视觉与性能检查归入任务 13。
 
+#### 任务 12 后缺陷修复记录（2026-06-22）
+
+修复范围：
+
+- `PopupDismissLayer` 显式设置 `WlrLayershell.layer: WlrLayer.Overlay` 和 `focusable: false`，确保顶栏 popup 打开后空白区域点击仍由 dismiss layer 接收；该 namespace 仍不配置 layer animation。
+- layer open animation 不再只包装 Wayland surface / solid-color；`Shadow`、`BackgroundEffect` 和 `TahoeGlass` render element 也跟随同一个 open transform，避免 compositor layer 动画只动内容、不动玻璃和阴影，导致视觉上“看不出 layer 动画”。
+- Launchpad / Spotlight 的 center pop 参数从 `scale-from 0.94` / `scale-to 0.96` 收窄为 `0.98` / `0.985`，降低大 surface 图标和玻璃材质在 compositor 缩放期间的模糊风险。
+
 ### 任务 13：性能和稳定性验证
 
 目标：确认没有因为 layer animation 引入持续重绘、卡顿、资源泄漏。
@@ -2151,7 +2159,7 @@ layer-rule {
     animations {
         layer-open {
             style "popin"
-            scale-from 0.94
+            scale-from 0.98
             opacity-from 0
             duration-ms 180
             curve "emphasized-decel"
@@ -2159,7 +2167,7 @@ layer-rule {
         }
         layer-close {
             style "popout"
-            scale-to 0.96
+            scale-to 0.985
             opacity-to 0
             duration-ms 110
             curve "menu-accel"

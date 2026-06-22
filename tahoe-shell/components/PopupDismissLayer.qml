@@ -27,9 +27,11 @@ PanelWindow {
     visible: open
     aboveWindows: true
     exclusionMode: ExclusionMode.Ignore
+    focusable: false
     implicitWidth: screenWidth
     implicitHeight: screenHeight
     color: "transparent"
+    WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.namespace: "tahoe-popup-dismiss"
 
     mask: Region {

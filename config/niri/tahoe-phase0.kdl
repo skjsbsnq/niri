@@ -367,7 +367,7 @@ layer-rule {
     animations {
         layer-open {
             style "popin"
-            scale-from 0.94
+            scale-from 0.98
             opacity-from 0
             duration-ms 180
             curve "emphasized-decel"
@@ -375,7 +375,7 @@ layer-rule {
         }
         layer-close {
             style "popout"
-            scale-to 0.96
+            scale-to 0.985
             opacity-to 0
             duration-ms 110
             curve "menu-accel"

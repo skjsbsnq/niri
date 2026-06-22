@@ -1532,6 +1532,97 @@ cat "$tmpdir/state/quickshell/by-shell/tahoe/desktop-settings.json"
 
 未完成不得进入任务 10。
 
+#### 任务 9 验收记录（2026-06-22）
+
+实现范围：
+
+- 修改 `/home/wwt/niri/config/niri/tahoe-phase0.kdl`，把 Tahoe Small Popup profile 从任务 7/8 的 Battery/Wi-Fi 试点扩展到完整 Small Popup 组：
+  - `tahoe-battery-popup`
+  - `tahoe-wifi-popup`
+  - `tahoe-fan-popup`
+  - `tahoe-clipboard-popup`
+  - `tahoe-menu-popup`
+  - `tahoe-application-menu`
+  - `tahoe-tray-menu`
+  - `tahoe-dock-app-menu`
+  - `tahoe-dock-window-menu`
+- 最终参数保持 Tahoe Small Popup profile：
+
+```kdl
+layer-open {
+    style "popin"
+    scale-from 0.96
+    opacity-from 0
+    duration-ms 140
+    curve "menu-decel"
+    origin "anchor"
+}
+
+layer-close {
+    style "popout"
+    scale-to 0.97
+    opacity-to 0
+    duration-ms 95
+    curve "menu-accel"
+    origin "anchor"
+}
+```
+
+- 保留任务 8 已迁移的 `/home/wwt/niri/tahoe-shell/components/BatteryPopup.qml` 和 `/home/wwt/niri/tahoe-shell/components/WifiPopup.qml`。
+- 修改以下剩余 Small Popup QML 组件，全部接入 `settingsService.compositorLayerAnimations`：
+  - `/home/wwt/niri/tahoe-shell/components/FanPopup.qml`
+  - `/home/wwt/niri/tahoe-shell/components/ClipboardPopup.qml`
+  - `/home/wwt/niri/tahoe-shell/components/MenuPopup.qml`
+  - `/home/wwt/niri/tahoe-shell/components/AppMenuPopup.qml`
+  - `/home/wwt/niri/tahoe-shell/components/TrayMenu.qml`
+  - `/home/wwt/niri/tahoe-shell/components/DockAppMenu.qml`
+  - `/home/wwt/niri/tahoe-shell/components/DockWindowMenu.qml`
+- 每个迁移组件统一使用：
+  - `property var settingsService`
+  - `readonly property bool compositorLayerAnimations: root.settingsService && root.settingsService.compositorLayerAnimations`
+  - 开关关闭时保留旧 `open || opacity > 0.01`、`opacity` 和 `contentScale` QML 外层动画路径。
+  - 开关开启时 `visible` 只跟随 `open`，外层 `opacity` 固定为 `1`，`contentScale` 固定为 `1`。
+  - 开关开启时 Tahoe Glass `interaction` / `materialAlpha` 固定为 `1`，避免 QML alpha 与 compositor alpha 双重压暗。
+- 修改 `/home/wwt/niri/tahoe-shell/shell.qml`，为 `MenuPopup`、`AppMenuPopup`、`DockAppMenu`、`DockWindowMenu`、`FanPopup`、`ClipboardPopup` 和 `TrayMenu` 显式传入 `settingsService: desktopSettings`。Battery/Wi-Fi 的传参沿用任务 8。
+
+边界确认：
+
+- 未修改 Control Center、Notification Center、Launchpad、Spotlight、Toast、Dock、Task Switcher 或 Window Overview。
+- 未改变 motion 参数，完整 Small Popup 组统一使用同一套 `0.96/0.97`、`140ms/95ms`、`menu-decel/menu-accel` 参数。
+- 未重写组件结构，未改内部控件动画、列表、按钮、菜单 row、Dock menu 动作或服务调用。
+- 未改变 `focusable` 配置；ClipboardPopup 仍为 `focusable: false`，其他组件保持原有焦点行为。
+- 组件没有直接读取 JSON 文件、环境变量或临时全局变量；开关只来自 `shell.qml` 传入的 `desktopSettings`。
+- 未修改 niri Rust runtime。
+
+验收命令：
+
+```bash
+target/debug/niri validate --config /home/wwt/niri/config/niri/tahoe-phase0.kdl
+cargo test -p niri-config parse_layer_rule_animations
+cargo test -p niri-config parse_layer_rule_animation_styles
+cargo test -p niri layer_rule_animations_select_style_by_namespace
+cargo check -p niri
+git diff --check
+XDG_STATE_HOME=/tmp/tmp.nbvLFkbmOp/state XDG_CACHE_HOME=/tmp/tmp.nbvLFkbmOp/cache XDG_CONFIG_HOME=/tmp/tmp.nbvLFkbmOp/config timeout 8 /home/wwt/niri/quickshell/build-tahoe/src/quickshell -p /home/wwt/niri/tahoe-shell
+```
+
+验收结果：
+
+- `niri validate` 通过，日志显示 `config is valid`。
+- `parse_layer_rule_animations` 通过。
+- `parse_layer_rule_animation_styles` 通过。
+- `layer_rule_animations_select_style_by_namespace` 通过。
+- `cargo check -p niri` 通过。
+- 外层仓库和 `/home/wwt/niri/niri` 子仓库的 `git diff --check` 均通过。
+- Quickshell 隔离 smoke 在 `compositorLayerAnimations: false` 默认路径下成功加载到 `Configuration Loaded`；退出码 `124` 来自 `timeout` 主动结束。
+- Quickshell 隔离 smoke 在临时 state 手动设为 `compositorLayerAnimations: true` 后再次成功加载到 `Configuration Loaded`；退出码 `124` 来自 `timeout` 主动结束。
+- smoke 日志中的 `Qt.application.font` 只读、通知服务已注册、portal app-id 注册失败、首次 state 文件不存在、WindowButton interceptor 等 warning 为当前 shell smoke 环境的既有/环境类现象；没有出现由任务 9 新增 `settingsService` 或 `compositorLayerAnimations` 绑定导致的 QML load failure。
+
+视觉验收状态：
+
+- 当前会话完成了配置、编译、QML 加载和开关 false/true 两条路径的自动化验证。
+- 当前命令环境没有可靠的真实桌面点击入口逐个打开 9 个 popup；部署到实际 Tahoe 会话后，应逐个快速打开/关闭 Small Popup 组，确认无双重动画、无 glass 闪烁、无 blur/shadow 残留，并在任务 13 的 50 次 toggle 压力测试中继续记录。
+
 ### 任务 10：迁移 Control Center / Notification Center
 
 目标：迁移大面板，采用更谨慎参数。
@@ -1561,6 +1652,95 @@ cat "$tmpdir/state/quickshell/by-shell/tahoe/desktop-settings.json"
 - 记录最终参数。
 
 未完成不得进入任务 11。
+
+#### 任务 10 验收记录（2026-06-22）
+
+实现范围：
+
+- 修改 `/home/wwt/niri/config/niri/tahoe-phase0.kdl`，新增 Tahoe Panel Pop profile，匹配：
+  - `tahoe-control-center`
+  - `tahoe-notification-center`
+- 最终参数采用路线图的谨慎大面板 profile：
+
+```kdl
+layer-open {
+    style "popin"
+    scale-from 0.93
+    opacity-from 0
+    duration-ms 180
+    curve "emphasized-decel"
+    origin "anchor"
+}
+
+layer-close {
+    style "popout"
+    scale-to 0.94
+    opacity-to 0
+    duration-ms 130
+    curve "menu-accel"
+    origin "anchor"
+}
+```
+
+- 先迁移 `/home/wwt/niri/tahoe-shell/components/ControlCenter.qml`：
+  - 新增 `property var settingsService`。
+  - 新增 `readonly property bool compositorLayerAnimations`，只从 `root.settingsService.compositorLayerAnimations` 读取。
+  - 开关关闭时保留旧 `open || panel.opacity > 0.01`、`opacity` 和 `contentScale` QML 外层动画路径。
+  - 开关开启时 `visible` 跟随 `open`，外层 `opacity` 固定为 `1`，`contentScale` 固定为 `1`。
+  - Tahoe Glass `interaction` / `materialAlpha` 在 compositor 模式下固定为 `1`，避免 surface alpha 与 material alpha 双重变暗。
+- 再迁移 `/home/wwt/niri/tahoe-shell/components/NotificationCenter.qml`，使用同一 handoff 模式。
+- 修改 `/home/wwt/niri/tahoe-shell/shell.qml`，给 `ControlCenter` 和 `NotificationCenter` 显式传入 `settingsService: desktopSettings`。
+
+边界确认：
+
+- 未修改 Launchpad、Spotlight、Toast、Dock、Task Switcher 或 Window Overview。
+- 未改 Control Center 内部按钮、展开区、slider、utility row 动画。
+- 未改 Notification Center 内部 DND toggle、通知列表、滚动和单条移除行为。
+- 未改变 focusable / keyboard interactivity 配置。
+- 未尝试 edge-reveal 或 slide-right profile；`popin` + `anchor` 在本轮 live harness 中位置稳定，没有必要切换 profile。
+- 组件没有直接读取 JSON 文件、环境变量或临时全局变量；开关只来自 `shell.qml` 传入的 `desktopSettings`。
+- 未修改 niri Rust runtime。
+
+验收命令：
+
+```bash
+niri/target/debug/niri validate --config /home/wwt/niri/config/niri/tahoe-phase0.kdl
+cargo test -p niri-config parse_layer_rule_animations
+cargo test -p niri-config parse_layer_rule_animation_styles
+cargo test -p niri layer_rule_animations_select_style_by_namespace
+cargo check -p niri
+git diff --check
+XDG_STATE_HOME=/tmp/tmp.KURpKK1WM3/state XDG_CACHE_HOME=/tmp/tmp.KURpKK1WM3/cache XDG_CONFIG_HOME=/tmp/tmp.KURpKK1WM3/config timeout 8 /home/wwt/niri/quickshell/build-tahoe/src/quickshell -p /home/wwt/niri/tahoe-shell
+```
+
+额外 live harness：
+
+- 生成临时 niri 配置 `/tmp/tmp.0rQFEBzyin/config-task10.kdl`，基于当前部署配置追加本任务的大面板 animation rule。
+- 使用 `/home/wwt/.local/bin/niri msg action load-config-file --path /tmp/tmp.0rQFEBzyin/config-task10.kdl` 临时加载。
+- 启动临时 Quickshell harness `/tmp/tmp.0rQFEBzyin/task10-harness.qml`，设置 `compositorLayerAnimations: true`，按顺序自动打开/关闭 Control Center，再打开/关闭 Notification Center。
+- 用 `niri msg layers` 在 0.9s 观察到 `tahoe-control-center` 出现在 Top layer。
+- 用 `niri msg layers` 在 3.0s 观察到 `tahoe-notification-center` 出现在 Top layer。
+- 用 `niri msg layers` 在 5.2s 观察到两个测试 panel 都已消失，只剩原本的 `tahoe-dock` 和 `tahoe-topbar`。
+- 使用 `grim` 抓取 Control Center 和 Notification Center 打开状态截图，面板位于右上锚点附近，没有明显漂移、错位或双重变暗。
+- 测试完成后立即执行 `/home/wwt/.local/bin/niri msg action load-config-file --path /home/wwt/.config/niri/tahoe/config.kdl` 恢复当前部署配置，并再次确认 layer 列表回到原状态。
+
+验收结果：
+
+- `niri validate` 通过，日志显示 `config is valid`。
+- `parse_layer_rule_animations` 通过。
+- `parse_layer_rule_animation_styles` 通过。
+- `layer_rule_animations_select_style_by_namespace` 通过。
+- `cargo check -p niri` 通过。
+- 外层仓库和 `/home/wwt/niri/niri` 子仓库的 `git diff --check` 均通过。
+- Quickshell 隔离 smoke 在 `compositorLayerAnimations: false` 默认路径下成功加载到 `Configuration Loaded`；退出码 `124` 来自 `timeout` 主动结束。
+- Quickshell 隔离 smoke 在临时 state 手动设为 `compositorLayerAnimations: true` 后再次成功加载到 `Configuration Loaded`；退出码 `124` 来自 `timeout` 主动结束。
+- live harness 中两个 namespace 都能按顺序 map/unmap，结束后无 layer 残留。
+- smoke / harness 日志中的 `Qt.application.font` 只读、通知服务已注册、portal app-id 注册失败、WindowButton interceptor、qmlscanner 绝对 `file:` import warning 等为当前测试方式或既有环境现象；没有出现由任务 10 新增 `settingsService` 或 `compositorLayerAnimations` 绑定导致的 QML load failure。
+
+视觉验收状态：
+
+- 本轮完成了真实 niri 会话中的临时 layer map/unmap 和截图观察：两个大面板位置稳定，右上锚点 origin 正常，未看到明显双重变暗。
+- 内部控件代码未被修改；真实用户点击 slider、DND toggle、通知列表滚动的长时间交互和快速多次 toggle 仍按路线图归入任务 13 压力验证。
 
 ### 任务 11：迁移 Launchpad / Spotlight
 
@@ -1592,6 +1772,98 @@ cat "$tmpdir/state/quickshell/by-shell/tahoe/desktop-settings.json"
 
 未完成不得进入任务 12。
 
+#### 任务 11 验收记录（2026-06-22）
+
+实现范围：
+
+- 修改 `/home/wwt/niri/config/niri/tahoe-phase0.kdl`，新增 Tahoe Launchpad / Spotlight center profile，匹配：
+  - `tahoe-launchpad`
+  - `tahoe-spotlight`
+- 最终参数采用路线图的中心型 surface profile：
+
+```kdl
+layer-open {
+    style "popin"
+    scale-from 0.94
+    opacity-from 0
+    duration-ms 180
+    curve "emphasized-decel"
+    origin "center"
+}
+
+layer-close {
+    style "popout"
+    scale-to 0.96
+    opacity-to 0
+    duration-ms 110
+    curve "menu-accel"
+    origin "center"
+}
+```
+
+- 修改 `/home/wwt/niri/tahoe-shell/components/Launchpad.qml`：
+  - 新增 `property var settingsService`。
+  - 新增 `readonly property bool compositorLayerAnimations`，只从 `root.settingsService.compositorLayerAnimations` 读取。
+  - 开关关闭时保留旧 `open || launcher.opacity > 0.01`、`opacity` 和 `contentScale` QML 外层动画路径。
+  - 开关开启时 `visible` 跟随 `open`，外层 `opacity` 固定为 `1`，`contentScale` 固定为 `1`。
+  - Tahoe Glass `interaction` / `materialAlpha` 在 compositor 模式下固定为 `1`，避免 surface alpha 与 material alpha 双重变暗。
+- 修改 `/home/wwt/niri/tahoe-shell/components/Spotlight.qml`：
+  - 新增 `property var settingsService`。
+  - 使用同一 `compositorLayerAnimations` handoff 模式。
+  - 开关开启时外层 `spotlightPanel.opacity` 和 `spotlightPanel.scale` 固定为 `1`。
+  - 搜索结果 panel 的 `resultsSurface.opacity` 行为保留，作为内部结果列表显隐动画。
+- 修改 `/home/wwt/niri/tahoe-shell/shell.qml`：
+  - 给 `Launchpad` 和 `Spotlight` 显式传入 `settingsService: desktopSettings`。
+
+边界确认：
+
+- 未修改 Launchpad 的应用搜索、分类切换、应用 grid delegate 或启动行为。
+- 未修改 Spotlight 的输入框、快捷入口、结果项、结果列表 opacity 动画或激活行为。
+- 未修改 Dock、Task Switcher、Window Overview 或 niri Rust runtime。
+- 组件没有直接读取 JSON 文件、环境变量或临时全局变量；开关只来自 `shell.qml` 传入的 `desktopSettings`。
+- `focusable: open`、`TextInput.focus: root.open` 和打开后 `forceActiveFocus()` 路径保持原样。
+
+验收命令：
+
+```bash
+niri/target/debug/niri validate --config /home/wwt/niri/config/niri/tahoe-phase0.kdl
+cargo test -p niri-config parse_layer_rule_animations
+cargo test -p niri-config parse_layer_rule_animation_styles
+cargo test -p niri layer_rule_animations_select_style_by_namespace
+cargo check -p niri
+git diff --check
+XDG_STATE_HOME=/tmp/.../state XDG_CACHE_HOME=/tmp/.../cache XDG_CONFIG_HOME=/tmp/.../config timeout 8 /home/wwt/niri/quickshell/build-tahoe/src/quickshell -p /home/wwt/niri/tahoe-shell
+```
+
+额外 live harness：
+
+- 生成临时 niri 配置 `/tmp/tmp.EyUdZdnTWC/config-task1112.kdl`，基于当前部署配置追加任务 11/12 的 animation rules。
+- 使用 `/home/wwt/.local/bin/niri msg action load-config-file --path /tmp/tmp.EyUdZdnTWC/config-task1112.kdl` 临时加载。
+- 启动临时 Quickshell harness，设置 `compositorLayerAnimations: true`，自动打开/关闭 Launchpad 和 Spotlight，并在打开期间修改 `query` 模拟快速输入绑定。
+- 用 `niri msg layers` 观察到：
+  - `tahoe-launchpad` 出现在 Overlay layer，keyboard interactivity 为 `on-demand`。
+  - `tahoe-spotlight` 出现在 Top layer，keyboard interactivity 为 `on-demand`。
+  - harness 结束后两个测试 surface 均消失，只剩当前会话原有的 `tahoe-dock` 和 `tahoe-topbar`。
+- 测试完成后执行 `/home/wwt/.local/bin/niri msg action load-config-file --path /home/wwt/.config/niri/tahoe/config.kdl` 恢复当前部署配置。
+
+验收结果：
+
+- `niri validate` 通过，日志显示 `config is valid`。
+- `parse_layer_rule_animations` 通过。
+- `parse_layer_rule_animation_styles` 通过。
+- `layer_rule_animations_select_style_by_namespace` 通过。
+- `cargo check -p niri` 通过。
+- 外层仓库和 `/home/wwt/niri/niri` 子仓库的 `git diff --check` 均通过。
+- Quickshell 隔离 smoke 在 `compositorLayerAnimations: false` 默认路径下成功加载到 `Configuration Loaded`；退出码 `124` 来自 `timeout` 主动结束。
+- Quickshell 隔离 smoke 在临时 state 手动设为 `compositorLayerAnimations: true` 后再次成功加载到 `Configuration Loaded`；退出码 `124` 来自 `timeout` 主动结束。
+- live harness 中 Launchpad / Spotlight 能按顺序 map/unmap，结束后无 layer 残留。
+- smoke / harness 日志中的 `Qt.application.font` 只读、通知服务已注册、portal app-id 注册失败、WindowButton interceptor、临时 harness asset 路径等 warning 为当前测试方式或既有环境现象；没有出现由任务 11 新增 `settingsService` 或 `compositorLayerAnimations` 绑定导致的 QML load failure。
+
+视觉验收状态：
+
+- 本轮完成了真实 niri 会话中的 layer 生命周期观察和 QML 快速输入绑定 smoke。
+- 按用户要求，未继续耗时做 Launchpad 图标清晰度截图和长时间肉眼 A/B；这些更完整的视觉与压力检查归入任务 13。
+
 ### 任务 12：迁移 Toast / Dock / TaskSwitcher / Overview
 
 目标：处理剩余需要特殊策略的 surface。
@@ -1615,6 +1887,98 @@ cat "$tmpdir/state/quickshell/by-shell/tahoe/desktop-settings.json"
 - 不追求全部 compositor 化。
 
 未完成不得进入任务 13。
+
+#### 任务 12 验收记录（2026-06-22）
+
+实现范围：
+
+- 修改 `/home/wwt/niri/config/niri/tahoe-phase0.kdl`，新增 Tahoe Toast profile，只匹配：
+  - `tahoe-notification-toast`
+- 最终参数采用路线图的 toast slide profile：
+
+```kdl
+layer-open {
+    style "slide"
+    edge "right"
+    distance 28
+    opacity-from 0
+    duration-ms 170
+    curve "emphasized-decel"
+}
+
+layer-close {
+    style "slide"
+    edge "right"
+    distance 18
+    opacity-to 0
+    duration-ms 100
+    curve "menu-accel"
+}
+```
+
+- 修改 `/home/wwt/niri/tahoe-shell/components/NotificationToast.qml`：
+  - 新增 `property var settingsService`。
+  - 新增 `readonly property bool compositorLayerAnimations`，只从 `root.settingsService.compositorLayerAnimations` 读取。
+  - 开关关闭时保留旧 QML `x` slide 和 `opacity` fade 路径。
+  - 开关开启时 `visible` 跟随 `hasCurrent`，外层 `card.x` 固定为 `0`，`card.opacity` 固定为 `1`。
+  - Tahoe Glass `interaction` / `materialAlpha` 在 compositor 模式下固定为 `1`，避免 surface alpha 与 material alpha 双重变暗。
+  - 显式设置 `WlrLayershell.layer: WlrLayer.Top` 和 `exclusionMode: ExclusionMode.Ignore`。
+  - 将右上定位改为 top/left anchor 加 `toastLeftMargin` 计算，视觉仍保持右上 16px 边距，同时确保 layer-shell surface 在 niri 中稳定 map 并被 namespace 规则匹配。
+- 修改 `/home/wwt/niri/tahoe-shell/shell.qml`：
+  - 给 `NotificationToast` 显式传入 `settingsService: desktopSettings`。
+
+保留策略：
+
+- `tahoe-dock`：保持常驻 surface，不启用 open/close compositor animation。
+- `tahoe-task-switcher`：保持 QML / 现有交互路径，不迁移到 compositor layer animation。
+- `tahoe-window-overview`：保持 QML / 现有 overview 路径，不迁移到 compositor layer animation，避免和 niri overview 逻辑冲突。
+
+边界确认：
+
+- 未修改 Dock、TaskSwitcher、WindowOverview 的 QML。
+- 未给 `tahoe-dock`、`tahoe-task-switcher`、`tahoe-window-overview` 增加 KDL layer animation rule。
+- 未改变 notification service 的 queue、history、DND、auto-expire 或 action invocation 逻辑。
+- Toast 内部高度动画、内容布局、action button 行为保留。
+- 组件没有直接读取 JSON 文件、环境变量或临时全局变量；开关只来自 `shell.qml` 传入的 `desktopSettings`。
+- 未修改 niri Rust runtime。
+
+验收命令：
+
+```bash
+niri/target/debug/niri validate --config /home/wwt/niri/config/niri/tahoe-phase0.kdl
+cargo test -p niri-config parse_layer_rule_animations
+cargo test -p niri-config parse_layer_rule_animation_styles
+cargo test -p niri layer_rule_animations_select_style_by_namespace
+cargo check -p niri
+git diff --check
+XDG_STATE_HOME=/tmp/.../state XDG_CACHE_HOME=/tmp/.../cache XDG_CONFIG_HOME=/tmp/.../config timeout 8 /home/wwt/niri/quickshell/build-tahoe/src/quickshell -p /home/wwt/niri/tahoe-shell
+```
+
+额外 live harness：
+
+- 使用任务 11 同一临时 niri 配置 `/tmp/tmp.EyUdZdnTWC/config-task1112.kdl`。
+- 启动临时 Toast-only Quickshell harness，设置 `compositorLayerAnimations: true` 并提供 static notification stub。
+- 用 `niri msg layers` 观察到 `tahoe-notification-toast` 出现在 Top layer，keyboard interactivity 为 `none`。
+- harness 结束后再次用 `niri msg layers` 确认 toast surface 消失，只剩当前会话原有的 `tahoe-dock` 和 `tahoe-topbar`。
+- 测试完成后执行 `/home/wwt/.local/bin/niri msg action load-config-file --path /home/wwt/.config/niri/tahoe/config.kdl` 恢复当前部署配置。
+
+验收结果：
+
+- `niri validate` 通过，日志显示 `config is valid`。
+- `parse_layer_rule_animations` 通过。
+- `parse_layer_rule_animation_styles` 通过。
+- `layer_rule_animations_select_style_by_namespace` 通过。
+- `cargo check -p niri` 通过。
+- 外层仓库和 `/home/wwt/niri/niri` 子仓库的 `git diff --check` 均通过。
+- Quickshell 隔离 smoke 在 `compositorLayerAnimations: false` 默认路径下成功加载到 `Configuration Loaded`；退出码 `124` 来自 `timeout` 主动结束。
+- Quickshell 隔离 smoke 在临时 state 手动设为 `compositorLayerAnimations: true` 后再次成功加载到 `Configuration Loaded`；退出码 `124` 来自 `timeout` 主动结束。
+- live harness 中 Toast 能 map 为 `tahoe-notification-toast` layer surface，结束后无 layer 残留。
+- 当前 `niri msg layers` 在恢复部署配置后只显示原有 `tahoe-dock` 和 `tahoe-topbar`，未残留测试 surface。
+
+视觉验收状态：
+
+- 本轮完成了真实 niri 会话中的 Toast layer map/unmap 生命周期观察。
+- 按用户要求，未继续耗时做通知打断视线程度、真实 notification daemon 30 条压力触发和长时间肉眼 A/B；这些更完整的视觉与性能检查归入任务 13。
 
 ### 任务 13：性能和稳定性验证
 

@@ -13,6 +13,7 @@ PanelWindow {
     property bool open: false
     property var appMenuService
     property var anchorRect: null
+    property var settingsService
     readonly property int edgePadding: 8
     readonly property int fallbackTop: 28
     readonly property int popupGap: 8
@@ -27,10 +28,12 @@ PanelWindow {
     readonly property real popupOriginX: anchorRect
         ? PopupGeometry.originX(anchorRect, popupLeftMargin, root.implicitWidth, screenWidth, 96)
         : 0
+    readonly property bool compositorLayerAnimations:
+        root.settingsService && root.settingsService.compositorLayerAnimations
 
     signal closeRequested()
 
-    visible: open || panel.opacity > 0.01
+    visible: compositorLayerAnimations ? open : (open || panel.opacity > 0.01)
     aboveWindows: true
     exclusionMode: ExclusionMode.Ignore
     implicitWidth: 286
@@ -64,8 +67,8 @@ PanelWindow {
             blur: true
             shadow: true
             clip: true
-            interaction: panel.opacity
-            materialAlpha: panel.opacity
+            interaction: root.compositorLayerAnimations ? 1 : panel.opacity
+            materialAlpha: root.compositorLayerAnimations ? 1 : panel.opacity
             enabled: root.open || panel.opacity > 0.01
         }
     ]
@@ -74,14 +77,14 @@ PanelWindow {
         id: panel
         readonly property string tahoeGlassMaterial: GlassStyle.MaterialMenu
         readonly property real tahoeGlassRadius: GlassStyle.RadiusMenu
-        property real contentScale: root.open ? 1 : 0.98
+        property real contentScale: root.compositorLayerAnimations ? 1 : (root.open ? 1 : 0.98)
 
         width: parent.width
         implicitHeight: Math.min(root.maxPanelHeight, content.implicitHeight + 16)
         height: implicitHeight
         radius: tahoeGlassRadius
         color: GlassStyle.FillPanelBright
-        opacity: root.open ? 1 : 0
+        opacity: root.compositorLayerAnimations ? 1 : (root.open ? 1 : 0)
 
         transform: Scale {
             origin.x: root.popupOriginX

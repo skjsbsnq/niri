@@ -14,6 +14,7 @@ PanelWindow {
     property var appsService
     property var window: null
     property var anchorRect: null
+    property var settingsService
     readonly property int edgePadding: 8
     readonly property int popupGap: 8
     readonly property int screenWidth: Math.max(1, numberOr(root.screen && root.screen.width, root.width))
@@ -37,10 +38,12 @@ PanelWindow {
     readonly property int popupLeft: popupLeftFor()
     readonly property int popupTop: popupTopFor()
     readonly property real popupOriginX: Math.max(0, Math.min(panel.width, anchorCenterX() - panel.x))
+    readonly property bool compositorLayerAnimations:
+        root.settingsService && root.settingsService.compositorLayerAnimations
 
     signal closeRequested()
 
-    visible: open || panel.opacity > 0.01
+    visible: compositorLayerAnimations ? open : (open || panel.opacity > 0.01)
     aboveWindows: true
     exclusionMode: ExclusionMode.Ignore
     implicitWidth: screenWidth
@@ -111,8 +114,8 @@ PanelWindow {
             blur: true
             shadow: true
             clip: true
-            interaction: panel.opacity
-            materialAlpha: panel.opacity
+            interaction: root.compositorLayerAnimations ? 1 : panel.opacity
+            materialAlpha: root.compositorLayerAnimations ? 1 : panel.opacity
             enabled: root.open || panel.opacity > 0.01
         }
     ]
@@ -127,7 +130,7 @@ PanelWindow {
         id: panel
         readonly property string tahoeGlassMaterial: GlassStyle.MaterialMenu
         readonly property real tahoeGlassRadius: GlassStyle.RadiusMenu
-        property real contentScale: root.open ? 1 : 0.98
+        property real contentScale: root.compositorLayerAnimations ? 1 : (root.open ? 1 : 0.98)
 
         z: 1
         x: root.popupLeft
@@ -137,7 +140,7 @@ PanelWindow {
         height: implicitHeight
         radius: tahoeGlassRadius
         color: GlassStyle.FillPanelBright
-        opacity: root.open ? 1 : 0
+        opacity: root.compositorLayerAnimations ? 1 : (root.open ? 1 : 0)
 
         transform: Scale {
             origin.x: root.popupOriginX

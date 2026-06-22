@@ -14,6 +14,7 @@ PanelWindow {
     property string activeApp: "桌面"
     property var powerService
     property var anchorRect: null
+    property var settingsService
     readonly property int edgePadding: 8
     readonly property int fallbackTop: 28
     readonly property int popupGap: 8
@@ -25,11 +26,13 @@ PanelWindow {
     readonly property real popupOriginX: anchorRect
         ? PopupGeometry.originX(anchorRect, popupLeftMargin, root.implicitWidth, screenWidth, 12)
         : 0
+    readonly property bool compositorLayerAnimations:
+        root.settingsService && root.settingsService.compositorLayerAnimations
 
     signal closeRequested()
     signal openSettingsRequested(string page)
 
-    visible: open || menuSurface.opacity > 0.01
+    visible: compositorLayerAnimations ? open : (open || menuSurface.opacity > 0.01)
     aboveWindows: true
     exclusionMode: ExclusionMode.Ignore
     implicitWidth: 218
@@ -74,8 +77,8 @@ PanelWindow {
             blur: true
             shadow: true
             clip: true
-            interaction: menuSurface.opacity
-            materialAlpha: menuSurface.opacity
+            interaction: root.compositorLayerAnimations ? 1 : menuSurface.opacity
+            materialAlpha: root.compositorLayerAnimations ? 1 : menuSurface.opacity
             enabled: root.open || menuSurface.opacity > 0.01
         }
     ]
@@ -84,7 +87,7 @@ PanelWindow {
         id: menuSurface
         readonly property string tahoeGlassMaterial: GlassStyle.MaterialMenu
         readonly property real tahoeGlassRadius: GlassStyle.RadiusMenu
-        property real contentScale: root.open ? 1 : 0.98
+        property real contentScale: root.compositorLayerAnimations ? 1 : (root.open ? 1 : 0.98)
 
         x: 0
         // menuSurface is the compositor-owned glass region item. Open/close
@@ -95,7 +98,7 @@ PanelWindow {
         height: parent.height
         radius: tahoeGlassRadius
         color: GlassStyle.FillPanelBright
-        opacity: root.open ? 1 : 0
+        opacity: root.compositorLayerAnimations ? 1 : (root.open ? 1 : 0)
 
         transform: Scale {
             origin.x: root.popupOriginX

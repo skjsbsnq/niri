@@ -14,6 +14,7 @@ PanelWindow {
     property var niriService
     property var controlsService
     property var appearanceService
+    property var settingsService
     property var anchorRect: null
     property bool controlsExpanded: false
     readonly property bool darkMode: appearanceService && appearanceService.darkMode
@@ -40,13 +41,15 @@ PanelWindow {
     readonly property color textSecondary: darkMode ? "#c8d0d8" : "#991d1d1f"
     readonly property color textTertiary: darkMode ? "#9da7b1" : "#731d1d1f"
     readonly property color sliderFill: darkMode ? "#d8e4f0" : "#f2ffffff" // ~0.95 white
+    readonly property bool compositorLayerAnimations:
+        root.settingsService && root.settingsService.compositorLayerAnimations
 
     // Material Icons font name registered once in shell.qml via FontLoader.
     readonly property string iconFont: "Material Icons"
 
     signal closeRequested()
 
-    visible: open || panel.opacity > 0.01
+    visible: compositorLayerAnimations ? open : (open || panel.opacity > 0.01)
     aboveWindows: true
     exclusionMode: ExclusionMode.Ignore
     implicitWidth: 360
@@ -75,8 +78,8 @@ PanelWindow {
             blur: true
             shadow: true
             clip: true
-            interaction: panel.opacity
-            materialAlpha: panel.opacity
+            interaction: root.compositorLayerAnimations ? 1 : panel.opacity
+            materialAlpha: root.compositorLayerAnimations ? 1 : panel.opacity
             enabled: root.open || panel.opacity > 0.01
         }
     ]
@@ -85,7 +88,7 @@ PanelWindow {
         id: panel
         readonly property string tahoeGlassMaterial: GlassStyle.MaterialPanel
         readonly property real tahoeGlassRadius: GlassStyle.RadiusPanel
-        property real contentScale: root.open ? 1 : 0.98
+        property real contentScale: root.compositorLayerAnimations ? 1 : (root.open ? 1 : 0.98)
 
         x: 0
         // panel is the compositor-owned glass region item. Its region geometry
@@ -98,7 +101,7 @@ PanelWindow {
         height: implicitHeight
         radius: tahoeGlassRadius
         color: root.glassFill
-        opacity: root.open ? 1 : 0
+        opacity: root.compositorLayerAnimations ? 1 : (root.open ? 1 : 0)
 
         transform: Scale {
             origin.x: root.popupOriginX

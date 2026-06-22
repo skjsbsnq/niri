@@ -10,6 +10,7 @@ PanelWindow {
 
     property bool open: false
     property var appsService
+    property var settingsService
     // Kept for the shell.qml interface. The launcher no longer scales as a
     // whole, because scaling the layer makes themed app icons look blurry.
     property bool useSpring: false
@@ -31,6 +32,8 @@ PanelWindow {
     readonly property int launcherHeight: Math.min(560, Math.max(360, root.screenHeight - 110))
     readonly property int launcherLeft: Math.round(Math.max(8, (root.screenWidth - root.launcherWidth) / 2))
     readonly property int launcherTop: Math.round(Math.max(8, Math.min(Math.max(8, root.screenHeight - root.launcherHeight - 8), (root.screenHeight - root.launcherHeight) / 2 - 12)))
+    readonly property bool compositorLayerAnimations:
+        root.settingsService && root.settingsService.compositorLayerAnimations
 
     signal closeRequested()
 
@@ -39,7 +42,7 @@ PanelWindow {
         return isFinite(number) ? number : fallback;
     }
 
-    visible: open || launcher.opacity > 0.01
+    visible: compositorLayerAnimations ? open : (open || launcher.opacity > 0.01)
     exclusionMode: ExclusionMode.Ignore
     exclusiveZone: 0
     focusable: open
@@ -81,18 +84,18 @@ PanelWindow {
             blur: true
             shadow: true
             clip: true
-            interaction: launcher.opacity
-            materialAlpha: launcher.opacity
+            interaction: root.compositorLayerAnimations ? 1 : launcher.opacity
+            materialAlpha: root.compositorLayerAnimations ? 1 : launcher.opacity
             enabled: root.open || launcher.opacity > 0.01
         }
     ]
 
     Item {
         id: launcher
-        property real contentScale: root.open ? 1 : 0.98
+        property real contentScale: root.compositorLayerAnimations ? 1 : (root.open ? 1 : 0.98)
 
         anchors.fill: parent
-        opacity: root.open ? 1 : 0
+        opacity: root.compositorLayerAnimations ? 1 : (root.open ? 1 : 0)
 
         transform: Scale {
             origin.x: launcher.width / 2

@@ -574,6 +574,7 @@ ShellRoot {
                 open: shell.topBarPopupOpenFor(shell.appMenuOpen, modelData)
                 activeApp: apps.toplevelLabel(niri.focusedWindow || niri.activeToplevel)
                 powerService: power
+                settingsService: desktopSettings
                 onCloseRequested: shell.appMenuOpen = false
                 onOpenSettingsRequested: function(page) {
                     shell.openSettingsPanel(page);
@@ -585,6 +586,7 @@ ShellRoot {
                 anchorRect: shell.topBarPopupAnchorRect
                 open: shell.topBarPopupOpenFor(shell.applicationMenuOpen, modelData)
                 appMenuService: appMenu
+                settingsService: desktopSettings
                 onCloseRequested: shell.applicationMenuOpen = false
             }
 
@@ -632,6 +634,7 @@ ShellRoot {
                 app: shell.dockAppMenuApp
                 anchorRect: shell.dockAppMenuAnchorRect
                 open: shell.dockAppMenuOpenFor(modelData)
+                settingsService: desktopSettings
                 onCloseRequested: shell.closeDockAppMenu()
             }
 
@@ -642,6 +645,7 @@ ShellRoot {
                 window: shell.dockWindowMenuWindow
                 anchorRect: shell.dockWindowMenuAnchorRect
                 open: shell.dockWindowMenuOpenFor(modelData)
+                settingsService: desktopSettings
                 onCloseRequested: shell.closeDockWindowMenu()
             }
 
@@ -650,6 +654,7 @@ ShellRoot {
                 niriService: niri
                 controlsService: controls
                 appearanceService: appearance
+                settingsService: desktopSettings
                 anchorRect: shell.topBarPopupAnchorRect
                 open: shell.topBarPopupOpenFor(shell.controlCenterOpen, modelData)
                 onCloseRequested: shell.controlCenterOpen = false
@@ -658,6 +663,7 @@ ShellRoot {
             Launchpad {
                 screen: modelData
                 appsService: apps
+                settingsService: desktopSettings
                 useSpring: shell.useSpring
                 open: shell.launchpadOpen
                 onCloseRequested: shell.launchpadOpen = false
@@ -667,6 +673,7 @@ ShellRoot {
                 screen: modelData
                 appsService: apps
                 searchService: search
+                settingsService: desktopSettings
                 open: shell.spotlightOpen
                 onCloseRequested: shell.spotlightOpen = false
             }
@@ -719,6 +726,7 @@ ShellRoot {
             NotificationCenter {
                 screen: modelData
                 notificationsService: notifications
+                settingsService: desktopSettings
                 anchorRect: shell.topBarPopupAnchorRect
                 open: shell.topBarPopupOpenFor(shell.notificationCenterOpen, modelData)
                 onCloseRequested: shell.notificationCenterOpen = false
@@ -746,6 +754,7 @@ ShellRoot {
             FanPopup {
                 screen: modelData
                 fanService: fanControl
+                settingsService: desktopSettings
                 anchorRect: shell.topBarPopupAnchorRect
                 open: shell.topBarPopupOpenFor(shell.fanPopupOpen, modelData)
                 onCloseRequested: shell.fanPopupOpen = false
@@ -754,6 +763,7 @@ ShellRoot {
             ClipboardPopup {
                 screen: modelData
                 clipboardService: clipboardHistory
+                settingsService: desktopSettings
                 anchorRect: shell.topBarPopupAnchorRect
                 open: shell.topBarPopupOpenFor(shell.clipboardPopupOpen, modelData)
                 onCloseRequested: shell.clipboardPopupOpen = false
@@ -762,6 +772,7 @@ ShellRoot {
             TrayMenu {
                 screen: modelData
                 trayItem: shell.trayMenuItem
+                settingsService: desktopSettings
                 anchorRect: shell.topBarPopupAnchorRect
                 open: shell.topBarPopupOpenFor(shell.trayMenuOpen, modelData)
                 onCloseRequested: {
@@ -773,6 +784,7 @@ ShellRoot {
             NotificationToast {
                 screen: modelData
                 notificationsService: notifications
+                settingsService: desktopSettings
                 useSpring: shell.useSpring
             }
         }

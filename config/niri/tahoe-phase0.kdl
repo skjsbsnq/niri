@@ -332,6 +332,58 @@ layer-rule {
     }
 }
 
+// Layer animation Panel Pop profile. Large top-bar panels use a slightly
+// slower, smaller pop than menus so they feel anchored without drifting.
+layer-rule {
+    match namespace="^tahoe-control-center$"
+    match namespace="^tahoe-notification-center$"
+
+    animations {
+        layer-open {
+            style "popin"
+            scale-from 0.93
+            opacity-from 0
+            duration-ms 180
+            curve "emphasized-decel"
+            origin "anchor"
+        }
+        layer-close {
+            style "popout"
+            scale-to 0.94
+            opacity-to 0
+            duration-ms 130
+            curve "menu-accel"
+            origin "anchor"
+        }
+    }
+}
+
+// Layer animation Launchpad / Spotlight profile. Centered surfaces use a
+// conservative pop so app icons and search text stay crisp.
+layer-rule {
+    match namespace="^tahoe-launchpad$"
+    match namespace="^tahoe-spotlight$"
+
+    animations {
+        layer-open {
+            style "popin"
+            scale-from 0.94
+            opacity-from 0
+            duration-ms 180
+            curve "emphasized-decel"
+            origin "center"
+        }
+        layer-close {
+            style "popout"
+            scale-to 0.96
+            opacity-to 0
+            duration-ms 110
+            curve "menu-accel"
+            origin "center"
+        }
+    }
+}
+
 layer-rule {
     match namespace="^tahoe-battery-popup$"
     match namespace="^tahoe-wifi-popup$"
@@ -361,13 +413,18 @@ layer-rule {
     }
 }
 
-// Layer animation phase 0 trial: only the two top-bar small popups that are
-// wired to the QML compatibility switch in task 8. Fan, clipboard, menu, tray,
-// dock menus, control center, notification center, launchpad, spotlight and
-// toast remain draft-only for later tasks.
+// Layer animation Small Popup profile. These surfaces are wired to the Tahoe
+// QML compatibility switch and share the fast popin/popout menu motion.
 layer-rule {
     match namespace="^tahoe-battery-popup$"
     match namespace="^tahoe-wifi-popup$"
+    match namespace="^tahoe-fan-popup$"
+    match namespace="^tahoe-clipboard-popup$"
+    match namespace="^tahoe-menu-popup$"
+    match namespace="^tahoe-application-menu$"
+    match namespace="^tahoe-tray-menu$"
+    match namespace="^tahoe-dock-app-menu$"
+    match namespace="^tahoe-dock-window-menu$"
 
     animations {
         layer-open {
@@ -385,6 +442,31 @@ layer-rule {
             duration-ms 95
             curve "menu-accel"
             origin "anchor"
+        }
+    }
+}
+
+// Layer animation Toast profile. Toasts slide from the right with a short
+// fade so they register without pulling focus from the current work.
+layer-rule {
+    match namespace="^tahoe-notification-toast$"
+
+    animations {
+        layer-open {
+            style "slide"
+            edge "right"
+            distance 28
+            opacity-from 0
+            duration-ms 170
+            curve "emphasized-decel"
+        }
+        layer-close {
+            style "slide"
+            edge "right"
+            distance 18
+            opacity-to 0
+            duration-ms 100
+            curve "menu-accel"
         }
     }
 }

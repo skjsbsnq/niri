@@ -28,6 +28,7 @@ PanelWindow {
     id: root
 
     property var notificationsService
+    property var settingsService
     property var current: notificationsService ? notificationsService.current : null
     property bool hasCurrent: !!current
     // Kept for shell.qml compatibility. The card is a glass/blur region item,
@@ -39,23 +40,34 @@ PanelWindow {
         ? notificationsService.iconUrlFor(current)
         : ""
     readonly property bool hasIcon: iconUrl.length > 0
+    readonly property int screenWidth: Math.max(1, root.numberOr(root.screen && root.screen.width, 1))
+    readonly property int toastLeftMargin: Math.round(Math.max(8, root.screenWidth - root.implicitWidth - 16))
+    readonly property bool compositorLayerAnimations:
+        root.settingsService && root.settingsService.compositorLayerAnimations
 
-    visible: hasCurrent && card.opacity > 0.01
+    function numberOr(value, fallback) {
+        var number = Number(value);
+        return isFinite(number) ? number : fallback;
+    }
+
+    visible: compositorLayerAnimations ? hasCurrent : (hasCurrent || card.opacity > 0.01)
     aboveWindows: true
+    exclusionMode: ExclusionMode.Ignore
     exclusiveZone: 0
     implicitWidth: 318
     implicitHeight: card.height
     color: "transparent"
+    WlrLayershell.layer: WlrLayer.Top
     WlrLayershell.namespace: "tahoe-notification-toast"
 
     anchors {
         top: true
-        right: true
+        left: true
     }
 
     margins {
         top: 48
-        right: 16
+        left: root.toastLeftMargin
     }
 
     // Urgency accent. Normal = neutral hairline; Critical gets a warm red
@@ -78,10 +90,8 @@ PanelWindow {
             blur: true
             shadow: true
             clip: true
-            // Ride the compositor material easing along the card's enter/exit
-            // opacity so the glass "grows in" instead of popping on.
-            interaction: card.opacity
-            materialAlpha: card.opacity
+            interaction: root.compositorLayerAnimations ? 1 : card.opacity
+            materialAlpha: root.compositorLayerAnimations ? 1 : card.opacity
             enabled: root.hasCurrent || card.opacity > 0.01
         }
     ]
@@ -91,17 +101,16 @@ PanelWindow {
         readonly property string tahoeGlassMaterial: GlassStyle.MaterialToast
         readonly property real tahoeGlassRadius: GlassStyle.RadiusToast
 
-        // Slide + fade in from the right when a notification arrives.
-        // x changes the blur/glass geometry, so it uses a bounded
-        // NumberAnimation. Opacity remains independent of region geometry.
-        x: root.hasCurrent ? 0 : root.width + 24
+        // In compatibility mode QML keeps the legacy slide/fade. With
+        // compositor layer animations enabled, niri owns the outer motion.
+        x: root.compositorLayerAnimations ? 0 : (root.hasCurrent ? 0 : root.width + 24)
         y: 0
         width: parent.width
         implicitHeight: 86
         height: Math.max(86, column.implicitHeight + 28)
         radius: tahoeGlassRadius
         color: GlassStyle.FillPanelBright
-        opacity: root.hasCurrent ? 1 : 0
+        opacity: root.compositorLayerAnimations ? 1 : (root.hasCurrent ? 1 : 0)
 
         // NOTE: no `border.width` on the card itself. A centered 1px
         // border on a large-radius Rectangle is antialiased against the

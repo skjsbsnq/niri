@@ -11,12 +11,15 @@ PanelWindow {
     property bool open: false
     property var appsService
     property var searchService
+    property var settingsService
     property string query: ""
     readonly property var results: root.searchService ? root.searchService.resultsForQuery(root.query, 6) : []
+    readonly property bool compositorLayerAnimations:
+        root.settingsService && root.settingsService.compositorLayerAnimations
 
     signal closeRequested()
 
-    visible: open || spotlightPanel.opacity > 0.01
+    visible: compositorLayerAnimations ? open : (open || spotlightPanel.opacity > 0.01)
     aboveWindows: true
     exclusiveZone: 0
     focusable: open
@@ -94,8 +97,8 @@ PanelWindow {
             blur: true
             shadow: true
             clip: true
-            interaction: spotlightPanel.opacity
-            materialAlpha: spotlightPanel.opacity
+            interaction: root.compositorLayerAnimations ? 1 : spotlightPanel.opacity
+            materialAlpha: root.compositorLayerAnimations ? 1 : spotlightPanel.opacity
             enabled: root.open || spotlightPanel.opacity > 0.01
         },
         TahoeGlassRegion {
@@ -126,8 +129,8 @@ PanelWindow {
         y: Math.max(58, parent.height * 0.18)
         width: Math.min(parent.width - 28, 690)
         height: spotlightSurface.height + (resultsSurface.visible ? resultsSurface.height + 10 : 0)
-        opacity: root.open ? 1 : 0
-        scale: root.open ? 1 : 1.04
+        opacity: root.compositorLayerAnimations ? 1 : (root.open ? 1 : 0)
+        scale: root.compositorLayerAnimations ? 1 : (root.open ? 1 : 1.04)
 
         Behavior on opacity {
             NumberAnimation { duration: 150; easing.type: Easing.OutCubic }

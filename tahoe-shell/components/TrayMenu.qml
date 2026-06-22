@@ -6,6 +6,7 @@ import Quickshell
 import Quickshell.Wayland
 import Quickshell.Widgets
 import "TahoeGlass.js" as GlassStyle
+import "Motion.js" as Motion
 import "PopupGeometry.js" as PopupGeometry
 
 PanelWindow {
@@ -107,11 +108,11 @@ PanelWindow {
         }
 
         Behavior on opacity {
-            NumberAnimation { duration: 120; easing.type: Easing.OutCubic }
+            NumberAnimation { duration: Motion.menuExitDuration; easing.type: Motion.standardDecel }
         }
 
         Behavior on contentScale {
-            NumberAnimation { duration: 130; easing.type: Easing.OutCubic }
+            NumberAnimation { duration: Motion.elementMoveDuration; easing.type: Motion.emphasizedDecel }
         }
 
         ColumnLayout {

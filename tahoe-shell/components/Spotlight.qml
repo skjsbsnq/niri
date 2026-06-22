@@ -4,6 +4,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Wayland
 import "TahoeGlass.js" as GlassStyle
+import "Motion.js" as Motion
 
 PanelWindow {
     id: root
@@ -133,11 +134,11 @@ PanelWindow {
         scale: root.compositorLayerAnimations ? 1 : (root.open ? 1 : 1.04)
 
         Behavior on opacity {
-            NumberAnimation { duration: 150; easing.type: Easing.OutCubic }
+            NumberAnimation { duration: Motion.fadeFastDuration; easing.type: Motion.standardDecel }
         }
 
         Behavior on scale {
-            NumberAnimation { duration: 180; easing.type: Easing.OutCubic }
+            NumberAnimation { duration: Motion.panelEnterDuration; easing.type: Motion.emphasizedDecel }
         }
 
         MouseArea {
@@ -274,7 +275,7 @@ PanelWindow {
             visible: opacity > 0.01
 
             Behavior on opacity {
-                NumberAnimation { duration: 120; easing.type: Easing.OutCubic }
+                NumberAnimation { duration: Motion.fadeFastDuration; easing.type: Motion.standardDecel }
             }
 
             Column {

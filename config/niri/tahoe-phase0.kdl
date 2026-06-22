@@ -332,28 +332,60 @@ layer-rule {
     }
 }
 
-// Layer animation Panel Pop profile. Large top-bar panels use a slightly
-// slower, smaller pop than menus so they feel anchored without drifting.
+// Layer animation Control Center profile. The panel opens from the top bar
+// using edge-attached motion instead of scaling the whole glass surface.
 layer-rule {
     match namespace="^tahoe-control-center$"
+
+    animations {
+        layer-open {
+            style "edge-reveal"
+            edge "top"
+            distance 24
+            opacity-from 0.84
+            transform-duration-ms 210
+            transform-curve "emphasized-decel"
+            opacity-duration-ms 110
+            opacity-curve "standard-decel"
+        }
+        layer-close {
+            style "edge-reveal"
+            edge "top"
+            distance 20
+            opacity-to 0.55
+            transform-duration-ms 140
+            transform-curve "emphasized-accel"
+            opacity-duration-ms 90
+            opacity-curve "menu-accel"
+        }
+    }
+}
+
+// Layer animation Notification Center profile. This surface behaves like a
+// right-side drawer, so keep the motion directional rather than centered.
+layer-rule {
     match namespace="^tahoe-notification-center$"
 
     animations {
         layer-open {
-            style "popin"
-            scale-from 0.93
-            opacity-from 0
-            duration-ms 180
-            curve "emphasized-decel"
-            origin "anchor"
+            style "slide"
+            edge "right"
+            distance 36
+            opacity-from 0.86
+            transform-duration-ms 210
+            transform-curve "emphasized-decel"
+            opacity-duration-ms 100
+            opacity-curve "standard-decel"
         }
         layer-close {
-            style "popout"
-            scale-to 0.94
-            opacity-to 0
-            duration-ms 130
-            curve "menu-accel"
-            origin "anchor"
+            style "slide"
+            edge "right"
+            distance 28
+            opacity-to 0.55
+            transform-duration-ms 140
+            transform-curve "emphasized-accel"
+            opacity-duration-ms 90
+            opacity-curve "menu-accel"
         }
     }
 }
@@ -366,18 +398,22 @@ layer-rule {
     animations {
         layer-open {
             style "popin"
-            scale-from 0.98
+            scale-from 0.985
             opacity-from 0
-            duration-ms 180
-            curve "emphasized-decel"
+            transform-duration-ms 180
+            transform-curve "emphasized-decel"
+            opacity-duration-ms 120
+            opacity-curve "standard-decel"
             origin "center"
         }
         layer-close {
             style "popout"
-            scale-to 0.985
+            scale-to 0.992
             opacity-to 0
-            duration-ms 110
-            curve "menu-accel"
+            transform-duration-ms 110
+            transform-curve "menu-accel"
+            opacity-duration-ms 80
+            opacity-curve "menu-accel"
             origin "center"
         }
     }
@@ -412,8 +448,8 @@ layer-rule {
     }
 }
 
-// Layer animation Small Popup profile. These surfaces are wired to the Tahoe
-// QML compatibility switch and share the fast popin/popout menu motion.
+// Layer animation Small Popup profile. Top-bar popups use short top-edge
+// reveal motion because niri cannot know the exact dynamic button origin.
 layer-rule {
     match namespace="^tahoe-battery-popup$"
     match namespace="^tahoe-wifi-popup$"
@@ -422,25 +458,58 @@ layer-rule {
     match namespace="^tahoe-menu-popup$"
     match namespace="^tahoe-application-menu$"
     match namespace="^tahoe-tray-menu$"
+
+    animations {
+        layer-open {
+            style "edge-reveal"
+            edge "top"
+            distance 18
+            opacity-from 0.82
+            transform-duration-ms 180
+            transform-curve "emphasized-decel"
+            opacity-duration-ms 90
+            opacity-curve "standard-decel"
+        }
+        layer-close {
+            style "edge-reveal"
+            edge "top"
+            distance 14
+            opacity-to 0.55
+            transform-duration-ms 120
+            transform-curve "emphasized-accel"
+            opacity-duration-ms 80
+            opacity-curve "menu-accel"
+        }
+    }
+}
+
+// Layer animation Dock Menu candidate profile. Dock menu origin is dynamic;
+// use a conservative bottom edge-reveal until visual tuning decides whether
+// these should stay compositor-driven or return to QML outer animation.
+layer-rule {
     match namespace="^tahoe-dock-app-menu$"
     match namespace="^tahoe-dock-window-menu$"
 
     animations {
         layer-open {
-            style "popin"
-            scale-from 0.96
-            opacity-from 0
-            duration-ms 140
-            curve "menu-decel"
-            origin "anchor"
+            style "edge-reveal"
+            edge "bottom"
+            distance 18
+            opacity-from 0.82
+            transform-duration-ms 180
+            transform-curve "emphasized-decel"
+            opacity-duration-ms 90
+            opacity-curve "standard-decel"
         }
         layer-close {
-            style "popout"
-            scale-to 0.97
-            opacity-to 0
-            duration-ms 95
-            curve "menu-accel"
-            origin "anchor"
+            style "edge-reveal"
+            edge "bottom"
+            distance 14
+            opacity-to 0.55
+            transform-duration-ms 120
+            transform-curve "emphasized-accel"
+            opacity-duration-ms 80
+            opacity-curve "menu-accel"
         }
     }
 }
@@ -455,17 +524,21 @@ layer-rule {
             style "slide"
             edge "right"
             distance 28
-            opacity-from 0
-            duration-ms 170
-            curve "emphasized-decel"
+            opacity-from 0.75
+            transform-duration-ms 180
+            transform-curve "emphasized-decel"
+            opacity-duration-ms 100
+            opacity-curve "standard-decel"
         }
         layer-close {
             style "slide"
             edge "right"
-            distance 18
-            opacity-to 0
-            duration-ms 100
-            curve "menu-accel"
+            distance 22
+            opacity-to 0.35
+            transform-duration-ms 110
+            transform-curve "emphasized-accel"
+            opacity-duration-ms 80
+            opacity-curve "menu-accel"
         }
     }
 }

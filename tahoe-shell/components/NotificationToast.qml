@@ -4,6 +4,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Wayland
 import "TahoeGlass.js" as GlassStyle
+import "Motion.js" as Motion
 
 // Real notification toast.
 //
@@ -131,15 +132,15 @@ PanelWindow {
         // Slide + fade in from the right. This card is the glass-region item,
         // so geometry must never be driven by SpringAnimation.
         Behavior on x {
-            NumberAnimation { duration: 260; easing.type: Easing.OutCubic }
+            NumberAnimation { duration: Motion.panelEnterDuration; easing.type: Motion.emphasizedDecel }
         }
 
         Behavior on height {
-            NumberAnimation { duration: 180; easing.type: Easing.OutCubic }
+            NumberAnimation { duration: Motion.elementResizeDuration; easing.type: Motion.emphasizedDecel }
         }
 
         Behavior on opacity {
-            NumberAnimation { duration: 170; easing.type: Easing.OutCubic }
+            NumberAnimation { duration: Motion.fadeFastDuration; easing.type: Motion.standardDecel }
         }
 
         Column {

@@ -5,6 +5,7 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
 import "TahoeGlass.js" as GlassStyle
+import "Motion.js" as Motion
 import "PopupGeometry.js" as PopupGeometry
 
 PanelWindow {
@@ -127,11 +128,11 @@ PanelWindow {
         }
 
         Behavior on opacity {
-            NumberAnimation { duration: 200; easing.type: Easing.OutCubic }
+            NumberAnimation { duration: Motion.panelEnterDuration; easing.type: Motion.standardDecel }
         }
 
         Behavior on contentScale {
-            NumberAnimation { duration: 180; easing.type: Easing.OutCubic }
+            NumberAnimation { duration: Motion.panelEnterDuration; easing.type: Motion.emphasizedDecel }
         }
 
         ColumnLayout {
@@ -246,11 +247,11 @@ PanelWindow {
                     // panel's implicitHeight, which is the glass-region
                     // geometry; a spring overshoot here is the same crash
                     // class as animating panel.y/scale directly.
-                    NumberAnimation { duration: 180; easing.type: Easing.OutCubic }
+                    NumberAnimation { duration: Motion.elementResizeDuration; easing.type: Motion.emphasizedDecel }
                 }
 
                 Behavior on opacity {
-                    NumberAnimation { duration: 160; easing.type: Easing.OutCubic }
+                    NumberAnimation { duration: Motion.panelExitDuration; easing.type: Motion.standardDecel }
                 }
 
                     UtilityButton {

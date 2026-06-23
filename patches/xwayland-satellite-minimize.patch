@@ -1,47 +1,59 @@
-diff --git a/src/server/selection.rs b/src/server/selection.rs
-index e9f6e4b..73e2e63 100644
---- a/src/server/selection.rs
-+++ b/src/server/selection.rs
-@@ -95,18 +95,23 @@ impl<S: X11Selection> InnerServerState<S> {
+diff --git a/src/server/event.rs b/src/server/event.rs
+index ba31797..73bc44e 100644
+--- a/src/server/event.rs
++++ b/src/server/event.rs
+@@ -762,11 +762,20 @@ impl Event for client::wl_pointer::Event {
+                     pub const LEFT: u32 = 0x110;
+                 }
+ 
++                let mut last_click_serial = None;
+                 if button_state == WEnum::Value(client::wl_pointer::ButtonState::Pressed)
+                     && button == button_codes::LEFT
+                 {
+                     match current_surface {
+                         CurrentSurface::Xwayland(entity) => {
++                            let clicked_window = state
++                                .world
++                                .get::<&x::Window>(*entity)
++                                .ok()
++                                .map(|window| *window);
++                            if let Some(window) = clicked_window {
++                                last_click_serial = Some((window, seat.clone(), serial));
++                            }
+                             cmd.insert(*entity, (LastClickSerial(seat.clone(), serial),));
+                         }
+                         CurrentSurface::Decoration(parent) => {
+@@ -781,6 +790,9 @@ impl Event for client::wl_pointer::Event {
+ 
+                 server.button(serial, time, button, convert_wenum(button_state));
+                 drop(query);
++                if last_click_serial.is_some() {
++                    state.last_click_serial = last_click_serial;
++                }
+                 cmd.run_on(&mut state.world);
              }
-         }
- 
-+        let selection_cancelled = events.cancelled;
-         if events.cancelled {
-             state.source = None;
-             events.cancelled = false;
-         }
- 
--        if state.source.is_none() {
--            if let Some(offer) = T::take_offer(&mut events.offer) {
--                let mime_types = T::get_mimes(&offer);
--                let foreign = ForeignSelection {
--                    mime_types,
--                    inner: offer,
--                };
--                state.source = Some(SelectionData::Foreign(foreign));
--            }
-+        if let Some(offer) = T::take_offer(&mut events.offer) {
-+            // Wayland selections do not cancel old data offers when a different
-+            // Wayland client replaces the clipboard. Keep X11-owned selections
-+            // until the compositor cancels our source, but always refresh stale
-+            // foreign offers.
-+            if selection_cancelled || !matches!(state.source, Some(SelectionData::X11 { .. })) {
-+                let mime_types = T::get_mimes(&offer);
-+                let foreign = ForeignSelection {
-+                    mime_types,
-+                    inner: offer,
-+                };
-+                state.source = Some(SelectionData::Foreign(foreign));
-+            }
-         }
-     }
- 
+             _ => {
 diff --git a/src/server/mod.rs b/src/server/mod.rs
-index d9df430..68ced07 100644
+index 0496628..5fceefd 100644
 --- a/src/server/mod.rs
 +++ b/src/server/mod.rs
-@@ -1177,6 +1177,30 @@ impl<C: XConnection> ServerState<C> {
+@@ -458,6 +458,7 @@ pub struct InnerServerState<S: X11Selection> {
+     unfocus: bool,
+     last_focused_toplevel: Option<x::Window>,
+     last_hovered: Option<x::Window>,
++    last_click_serial: Option<(x::Window, client::wl_seat::WlSeat, u32)>,
+ 
+     xdg_wm_base: XdgWmBase,
+     compositor: client::wl_compositor::WlCompositor,
+@@ -559,6 +560,7 @@ impl<S: X11Selection> ServerState<NoConnection<S>> {
+             unfocus: false,
+             last_focused_toplevel: None,
+             last_hovered: None,
++            last_click_serial: None,
+             xdg_wm_base,
+             compositor,
+             subcompositor,
+@@ -1173,6 +1175,30 @@ impl<S: X11Selection + 'static> InnerServerState<S> {
          }
      }
  
@@ -72,11 +84,87 @@ index d9df430..68ced07 100644
      pub fn set_transient_for(&mut self, window: x::Window, parent: x::Window) {
          let Some(mut win) = self
              .windows
+@@ -1235,7 +1261,14 @@ impl<S: X11Selection + 'static> InnerServerState<S> {
+             return;
+         };
+ 
+-        let Some(last_click_data) = data.get::<&LastClickSerial>() else {
++        let last_click_data = data
++            .get::<&LastClickSerial>()
++            .map(|last| (last.0.clone(), last.1))
++            .or_else(|| {
++                let (clicked_window, seat, serial) = self.last_click_serial.as_ref()?;
++                (*clicked_window == window).then(|| (seat.clone(), *serial))
++            });
++        let Some((seat, serial)) = last_click_data else {
+             warn!("Requested move of window {window:?} but we don't have a click serial for it");
+             return;
+         };
+@@ -1246,7 +1279,7 @@ impl<S: X11Selection + 'static> InnerServerState<S> {
+             return;
+         };
+ 
+-        data.toplevel._move(&last_click_data.0, last_click_data.1);
++        data.toplevel._move(&seat, serial);
+     }
+ 
+     pub fn resize_window(&mut self, window: x::Window, direction: MoveResizeDirection) {
+@@ -1260,7 +1293,14 @@ impl<S: X11Selection + 'static> InnerServerState<S> {
+             return;
+         };
+ 
+-        let Some(last_click_data) = data.get::<&LastClickSerial>() else {
++        let last_click_data = data
++            .get::<&LastClickSerial>()
++            .map(|last| (last.0.clone(), last.1))
++            .or_else(|| {
++                let (clicked_window, seat, serial) = self.last_click_serial.as_ref()?;
++                (*clicked_window == window).then(|| (seat.clone(), *serial))
++            });
++        let Some((seat, serial)) = last_click_data else {
+             warn!("Requested resize of window {window:?} but we don't have a click serial for it");
+             return;
+         };
+@@ -1286,8 +1326,7 @@ impl<S: X11Selection + 'static> InnerServerState<S> {
+             | MoveResizeDirection::Cancel => unreachable!(),
+         };
+ 
+-        data.toplevel
+-            .resize(&last_click_data.0, last_click_data.1, edge);
++        data.toplevel.resize(&seat, serial, edge);
+     }
+ 
+     pub fn destroy_window(&mut self, window: x::Window) {
+diff --git a/src/server/selection.rs b/src/server/selection.rs
+index bd32aaa..a6df77b 100644
+--- a/src/server/selection.rs
++++ b/src/server/selection.rs
+@@ -93,13 +93,18 @@ impl<S: X11Selection> InnerServerState<S> {
+             }
+         }
+ 
++        let selection_cancelled = events.cancelled;
+         if events.cancelled {
+             state.source = None;
+             events.cancelled = false;
+         }
+ 
+-        if state.source.is_none() {
+-            if let Some(offer) = T::take_offer(&mut events.offer) {
++        if let Some(offer) = T::take_offer(&mut events.offer) {
++            // Wayland selections do not cancel old data offers when a different
++            // Wayland client replaces the clipboard. Keep X11-owned selections
++            // until the compositor cancels our source, but always refresh stale
++            // foreign offers.
++            if selection_cancelled || !matches!(state.source, Some(SelectionData::X11 { .. })) {
+                 let mime_types = T::get_mimes(&offer);
+                 let foreign = ForeignSelection {
+                     mime_types,
 diff --git a/src/server/tests.rs b/src/server/tests.rs
-index 09a338d..73d4603 100644
+index 13492cd..453fb1f 100644
 --- a/src/server/tests.rs
 +++ b/src/server/tests.rs
-@@ -1279,6 +1279,19 @@ fn fullscreen() {
+@@ -1278,6 +1278,19 @@ fn fullscreen() {
      );
  }
  
@@ -97,10 +185,10 @@ index 09a338d..73d4603 100644
  fn window_title_and_class() {
      let (mut f, comp) = TestFixture::new_with_compositor();
 diff --git a/src/xstate/mod.rs b/src/xstate/mod.rs
-index 369516d..219f17f 100644
+index e9425f0..261ce29 100644
 --- a/src/xstate/mod.rs
 +++ b/src/xstate/mod.rs
-@@ -303,6 +303,7 @@ impl XState {
+@@ -302,6 +302,7 @@ impl XState {
                  self.atoms.motif_wm_hints,
                  self.atoms.net_wm_state,
                  self.atoms.wm_fullscreen,
@@ -108,7 +196,7 @@ index 369516d..219f17f 100644
                  self.atoms.moveresize,
              ],
          );
-@@ -565,6 +566,21 @@ impl XState {
+@@ -563,6 +564,21 @@ impl XState {
                      }
                  }
              }
@@ -130,7 +218,16 @@ index 369516d..219f17f 100644
              x if x == self.atoms.active_win => {
                  server_state.activate_window(e.window());
              }
-@@ -1034,6 +1049,7 @@ xcb::atoms_struct! {
+@@ -579,7 +595,7 @@ impl XState {
+                 let button = data[3];
+                 // XXX: This can technically be driven by keyboard events and other mouse buttons as well,
+                 // but I haven't found an application that does this yet. We'll cross that bridge when we get to it.
+-                if button != 1 {
++                if button != 0 && button != 1 {
+                     warn!(
+                         "Attempted move/resize of {:?} with non left click button ({button})",
+                         e.window()
+@@ -1032,6 +1048,7 @@ xcb::atoms_struct! {
          wm_protocols => b"WM_PROTOCOLS" only_if_exists = false,
          wm_delete_window => b"WM_DELETE_WINDOW" only_if_exists = false,
          wm_transient_for => b"WM_TRANSIENT_FOR" only_if_exists = false,
@@ -138,7 +235,7 @@ index 369516d..219f17f 100644
          wm_state => b"WM_STATE" only_if_exists = false,
          wm_s0 => b"WM_S0" only_if_exists = false,
          wm_check => b"_NET_SUPPORTING_WM_CHECK" only_if_exists = false,
-@@ -1041,6 +1057,7 @@ xcb::atoms_struct! {
+@@ -1039,6 +1056,7 @@ xcb::atoms_struct! {
          wm_pid => b"_NET_WM_PID" only_if_exists = false,
          net_wm_state => b"_NET_WM_STATE" only_if_exists = false,
          wm_fullscreen => b"_NET_WM_STATE_FULLSCREEN" only_if_exists = false,
@@ -147,10 +244,10 @@ index 369516d..219f17f 100644
          active_win => b"_NET_ACTIVE_WINDOW" only_if_exists = false,
          client_list => b"_NET_CLIENT_LIST" only_if_exists = false,
 diff --git a/testwl/src/lib.rs b/testwl/src/lib.rs
-index 5fba0d8..977c549 100644
+index f8d850f..952e8d0 100644
 --- a/testwl/src/lib.rs
 +++ b/testwl/src/lib.rs
-@@ -159,6 +159,7 @@ pub struct Toplevel {
+@@ -158,6 +158,7 @@ pub struct Toplevel {
      pub min_size: Option<Vec2>,
      pub max_size: Option<Vec2>,
      pub states: Vec<xdg_toplevel::State>,
@@ -172,7 +269,7 @@ index 5fba0d8..977c549 100644
              xdg_toplevel::Request::Destroy => {}
              xdg_toplevel::Request::SetTitle { title } => {
                  let data = state.surfaces.get_mut(surface_id).unwrap();
-@@ -1652,6 +1659,7 @@ impl Dispatch<XdgSurface, SurfaceId> for State {
+@@ -1649,6 +1657,7 @@ impl Dispatch<XdgSurface, SurfaceId> for State {
                      min_size: None,
                      max_size: None,
                      states: Vec::new(),

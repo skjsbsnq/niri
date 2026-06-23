@@ -480,26 +480,6 @@ layer-rule {
     }
 }
 
-// TahoeGlass top-bar panels keep their layer mapped during close and move the
-// live glass region in QML. Do not run a compositor close snapshot afterwards:
-// non-xray framebuffer effects cannot be baked into an unmap snapshot with the
-// same background sampling as a live frame, which makes the panel flash pale.
-layer-rule {
-    match namespace="^tahoe-control-center$"
-    match namespace="^tahoe-notification-center$"
-    match namespace="^tahoe-battery-popup$"
-    match namespace="^tahoe-wifi-popup$"
-    match namespace="^tahoe-fan-popup$"
-    match namespace="^tahoe-clipboard-popup$"
-
-    animations {
-        layer-close {
-            transform-duration-ms 0
-            opacity-duration-ms 0
-        }
-    }
-}
-
 // Layer animation Dock Menu candidate profile. Dock menu origin is dynamic;
 // use a conservative bottom edge-reveal until visual tuning decides whether
 // these should stay compositor-driven or return to QML outer animation.

@@ -16,9 +16,6 @@ PanelWindow {
     property var powerProfileService
     property var anchorRect: null
     property var settingsService
-    property bool closeHold: false
-    property bool wasOpen: false
-    property real panelOffset: 0
 
     readonly property bool available: !!batteryService && batteryService.available
     readonly property int percentage: available ? batteryService.roundedPercentage : 0
@@ -32,10 +29,9 @@ PanelWindow {
     readonly property int popupLeftMargin: PopupGeometry.popupLeft(anchorRect, root.implicitWidth, screenWidth, edgePadding, fallbackRight)
     readonly property int popupTopMargin: PopupGeometry.popupTop(anchorRect, fallbackTop, popupGap)
     readonly property real popupOriginX: PopupGeometry.originX(anchorRect, popupLeftMargin, root.implicitWidth, screenWidth, fallbackRight)
-    readonly property int closeDistance: 18
     signal closeRequested()
 
-    visible: open || closeHold
+    visible: open
     aboveWindows: true
     exclusionMode: ExclusionMode.Ignore
     implicitWidth: 292
@@ -51,38 +47,6 @@ PanelWindow {
     margins {
         top: root.popupTopMargin
         left: root.popupLeftMargin
-    }
-
-    onOpenChanged: {
-        if (open) {
-            closeUnmapTimer.stop();
-            closeMotion.stop();
-            wasOpen = true;
-            closeHold = false;
-            panelOffset = 0;
-        } else if (wasOpen) {
-            wasOpen = false;
-            closeHold = true;
-            closeMotion.restart();
-            closeUnmapTimer.restart();
-        }
-    }
-
-    NumberAnimation {
-        id: closeMotion
-        target: root
-        property: "panelOffset"
-        from: 0
-        to: -root.closeDistance
-        duration: Motion.panelExitDuration
-        easing.type: Motion.emphasizedAccel
-    }
-
-    Timer {
-        id: closeUnmapTimer
-        interval: Motion.panelExitDuration
-        repeat: false
-        onTriggered: if (!root.open) root.closeHold = false
     }
 
     TahoeGlass.regions: [
@@ -107,8 +71,9 @@ PanelWindow {
         readonly property string tahoeGlassMaterial: GlassStyle.MaterialPanel
         readonly property real tahoeGlassRadius: GlassStyle.RadiusPopup
 
-        // Keep TahoeGlass live during close; niri only owns the map/open motion.
-        y: root.panelOffset
+        // Keep the compositor glass region anchored. In compositor animation
+        // mode niri owns the outer motion.
+        y: 0
         width: parent.width
         implicitHeight: content.implicitHeight + 24
         height: implicitHeight

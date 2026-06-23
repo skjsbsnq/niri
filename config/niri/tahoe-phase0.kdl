@@ -352,11 +352,10 @@ layer-rule {
             style "edge-reveal"
             edge "top"
             distance 24
-            opacity-to 0.84
+            opacity-to 1
             transform-duration-ms 210
             transform-curve "emphasized-accel"
-            opacity-duration-ms 110
-            opacity-curve "menu-accel"
+            opacity-duration-ms 0
         }
     }
 }
@@ -381,11 +380,10 @@ layer-rule {
             style "edge-reveal"
             edge "top"
             distance 24
-            opacity-to 0.86
+            opacity-to 1
             transform-duration-ms 210
             transform-curve "emphasized-accel"
-            opacity-duration-ms 100
-            opacity-curve "menu-accel"
+            opacity-duration-ms 0
         }
     }
 }
@@ -474,11 +472,10 @@ layer-rule {
             style "edge-reveal"
             edge "top"
             distance 18
-            opacity-to 0.82
+            opacity-to 1
             transform-duration-ms 180
             transform-curve "emphasized-accel"
-            opacity-duration-ms 90
-            opacity-curve "menu-accel"
+            opacity-duration-ms 0
         }
     }
 }
@@ -505,11 +502,10 @@ layer-rule {
             style "edge-reveal"
             edge "bottom"
             distance 18
-            opacity-to 0.82
+            opacity-to 1
             transform-duration-ms 180
             transform-curve "emphasized-accel"
-            opacity-duration-ms 90
-            opacity-curve "menu-accel"
+            opacity-duration-ms 0
         }
     }
 }

@@ -16,8 +16,13 @@ PanelWindow {
     property int fallbackTop: 28
     property int popupGap: 8
     property int edgePadding: 8
-    readonly property int popupLeft: PopupGeometry.popupLeft(anchorRect, popupWidth, screenWidth, edgePadding, fallbackRight)
-    readonly property int popupTop: PopupGeometry.popupTop(anchorRect, fallbackTop, popupGap)
+    property bool usePopupCutout: true
+    property bool useTopBarCutout: true
+    property bool useCustomPopupGeometry: false
+    property int customPopupLeft: 0
+    property int customPopupTop: 0
+    readonly property int popupLeft: useCustomPopupGeometry ? customPopupLeft : PopupGeometry.popupLeft(anchorRect, popupWidth, screenWidth, edgePadding, fallbackRight)
+    readonly property int popupTop: useCustomPopupGeometry ? customPopupTop : PopupGeometry.popupTop(anchorRect, fallbackTop, popupGap)
     readonly property int cutoutPadding: 8
     readonly property int screenWidth: Math.max(1, Number(root.screen && root.screen.width) || root.width)
     readonly property int screenHeight: Math.max(1, Number(root.screen && root.screen.height) || root.height)
@@ -45,8 +50,8 @@ PanelWindow {
 
             x: Math.max(0, root.popupLeft - root.cutoutPadding)
             y: Math.max(0, root.popupTop - root.cutoutPadding)
-            width: Math.min(root.screenWidth - popupCutout.x, root.popupWidth + root.cutoutPadding * 2)
-            height: Math.min(root.screenHeight - popupCutout.y, root.popupHeight + root.cutoutPadding * 2)
+            width: root.usePopupCutout ? Math.min(root.screenWidth - popupCutout.x, root.popupWidth + root.cutoutPadding * 2) : 0
+            height: root.usePopupCutout ? Math.min(root.screenHeight - popupCutout.y, root.popupHeight + root.cutoutPadding * 2) : 0
             radius: 30
             intersection: Intersection.Subtract
         }
@@ -56,7 +61,7 @@ PanelWindow {
             x: 0
             y: 0
             width: root.screenWidth
-            height: 44
+            height: root.useTopBarCutout ? 44 : 0
         }
     }
 

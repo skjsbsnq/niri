@@ -352,7 +352,7 @@ layer-rule {
             style "edge-reveal"
             edge "top"
             distance 20
-            opacity-to 0.55
+            opacity-to 0.86
             transform-duration-ms 140
             transform-curve "emphasized-accel"
             opacity-duration-ms 90
@@ -381,7 +381,7 @@ layer-rule {
             style "slide"
             edge "right"
             distance 28
-            opacity-to 0.55
+            opacity-to 0.82
             transform-duration-ms 140
             transform-curve "emphasized-accel"
             opacity-duration-ms 90
@@ -474,7 +474,7 @@ layer-rule {
             style "edge-reveal"
             edge "top"
             distance 14
-            opacity-to 0.55
+            opacity-to 0.82
             transform-duration-ms 120
             transform-curve "emphasized-accel"
             opacity-duration-ms 80
@@ -505,7 +505,7 @@ layer-rule {
             style "edge-reveal"
             edge "bottom"
             distance 14
-            opacity-to 0.55
+            opacity-to 0.86
             transform-duration-ms 120
             transform-curve "emphasized-accel"
             opacity-duration-ms 80
@@ -547,6 +547,8 @@ layer-rule {
     match namespace="^tahoe-menu-popup$"
     match namespace="^tahoe-application-menu$"
     match namespace="^tahoe-tray-menu$"
+    match namespace="^tahoe-dock-app-menu$"
+    match namespace="^tahoe-dock-window-menu$"
     match namespace="^tahoe-notification-toast$"
 
     geometry-corner-radius 18

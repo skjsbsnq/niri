@@ -120,7 +120,7 @@ ShellRoot {
         if (applicationMenuOpen)
             return 700;
         if (controlCenterOpen)
-            return 560;
+            return 380;
         if (notificationCenterOpen)
             return 560;
         if (batteryPopupOpen)
@@ -598,6 +598,7 @@ ShellRoot {
                 useSpring: shell.useSpring
                 darkMode: shell.darkMode
                 launchpadOpen: shell.launchpadOpen
+                menuOpen: shell.dockAppMenuOpenFor(modelData) || shell.dockWindowMenuOpenFor(modelData)
                 onToggleLaunchpad: {
                     shell.launchpadOpen = !shell.launchpadOpen;
                     shell.closeTopBarPopups("");
@@ -629,6 +630,8 @@ ShellRoot {
             }
 
             DockAppMenu {
+                id: dockAppMenu
+
                 screen: modelData
                 appsService: apps
                 app: shell.dockAppMenuApp
@@ -639,6 +642,8 @@ ShellRoot {
             }
 
             DockWindowMenu {
+                id: dockWindowMenu
+
                 screen: modelData
                 windowsService: niri
                 appsService: apps
@@ -647,6 +652,19 @@ ShellRoot {
                 open: shell.dockWindowMenuOpenFor(modelData)
                 settingsService: desktopSettings
                 onCloseRequested: shell.closeDockWindowMenu()
+            }
+
+            PopupDismissLayer {
+                screen: modelData
+                open: shell.dockAppMenuOpenFor(modelData) || shell.dockWindowMenuOpenFor(modelData)
+                usePopupCutout: true
+                useTopBarCutout: false
+                useCustomPopupGeometry: true
+                customPopupLeft: shell.dockAppMenuOpenFor(modelData) ? dockAppMenu.popupLeft : dockWindowMenu.popupLeft
+                customPopupTop: shell.dockAppMenuOpenFor(modelData) ? dockAppMenu.popupTop : dockWindowMenu.popupTop
+                popupWidth: shell.dockAppMenuOpenFor(modelData) ? dockAppMenu.panelWidth : dockWindowMenu.panelWidth
+                popupHeight: shell.dockAppMenuOpenFor(modelData) ? dockAppMenu.panelHeight : dockWindowMenu.panelHeight
+                onCloseRequested: shell.closeDockMenus()
             }
 
             ControlCenter {

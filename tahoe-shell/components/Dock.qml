@@ -16,6 +16,7 @@ PanelWindow {
     // VMware/software GPUs; NumberAnimation is safe. Default false.
     property bool useSpring: false
     property bool darkMode: false
+    property bool menuOpen: false
     property real dockMouseX: -10000
     property bool dockHovered: false
     property bool pointerDragActive: false
@@ -24,7 +25,7 @@ PanelWindow {
     readonly property bool dockAutoHide: settingsService && settingsService.dockAutoHide
     readonly property int dockHideDelay: settingsService ? settingsService.dockAutoHideDelayMs : 260
     readonly property int dockRevealZoneHeight: settingsService ? settingsService.dockRevealZoneHeight : 8
-    readonly property bool dockHidden: dockAutoHide && !dockHovered && !pointerDragActive && !launchpadOpen
+    readonly property bool dockHidden: dockAutoHide && !dockHovered && !pointerDragActive && !launchpadOpen && !menuOpen
     readonly property int dockOuterMargin: 28
     readonly property int dockSurfacePadding: 34
     readonly property int dockItemSpacing: 8
@@ -563,7 +564,7 @@ PanelWindow {
                                         if (mouse.button === Qt.RightButton) {
                                             if (modelData.shellAction !== "launchpad")
                                                 root.openPinnedAppMenu(modelData, root.anchorRectFor(pinnedButton));
-                                            root.resetDockHover();
+                                            root.markDockHovered();
                                             return;
                                         } else if (modelData.shellAction === "launchpad") {
                                             root.toggleLaunchpad();
@@ -689,7 +690,7 @@ PanelWindow {
                                 onDockPointerExited: root.scheduleDockHoverReset()
                                 onContextMenuRequested: function(window) {
                                     root.openWindowMenu(window, root.anchorRectFor(windowButton));
-                                    root.resetDockHover();
+                                    root.markDockHovered();
                                 }
                             }
                         }

@@ -38,7 +38,7 @@ PanelWindow {
     readonly property bool windowPinned: canPinWindow && appsService.isWindowPinned(window)
     readonly property int popupLeft: popupLeftFor()
     readonly property int popupTop: popupTopFor()
-    readonly property real popupOriginX: Math.max(0, Math.min(panel.width, anchorCenterX() - panel.x))
+    readonly property real popupOriginX: Math.max(0, Math.min(panel.width, anchorCenterX() - root.popupLeft))
     readonly property bool compositorLayerAnimations:
         root.settingsService && root.settingsService.compositorLayerAnimations
 
@@ -47,16 +47,19 @@ PanelWindow {
     visible: compositorLayerAnimations ? open : (open || panel.opacity > 0.01)
     aboveWindows: true
     exclusionMode: ExclusionMode.Ignore
-    implicitWidth: screenWidth
-    implicitHeight: screenHeight
+    implicitWidth: panelWidth
+    implicitHeight: panelHeight
     color: "transparent"
     WlrLayershell.namespace: "tahoe-dock-window-menu"
 
     anchors {
         left: true
-        right: true
         top: true
-        bottom: true
+    }
+
+    margins {
+        left: root.popupLeft
+        top: root.popupTop
     }
 
     function numberOr(value, fallback) {
@@ -73,12 +76,12 @@ PanelWindow {
     }
 
     function popupLeftFor() {
-        var maxLeft = Math.max(edgePadding, root.width - panelWidth - edgePadding);
+        var maxLeft = Math.max(edgePadding, root.screenWidth - panelWidth - edgePadding);
         return Math.round(Math.max(edgePadding, Math.min(maxLeft, anchorCenterX() - panelWidth / 2)));
     }
 
     function popupTopFor() {
-        var maxTop = Math.max(edgePadding, root.height - panelHeight - edgePadding);
+        var maxTop = Math.max(edgePadding, root.screenHeight - panelHeight - edgePadding);
         if (!anchorRect)
             return maxTop;
 
@@ -134,9 +137,9 @@ PanelWindow {
         property real contentScale: root.compositorLayerAnimations ? 1 : (root.open ? 1 : 0.98)
 
         z: 1
-        x: root.popupLeft
-        y: root.popupTop
-        width: root.panelWidth
+        x: 0
+        y: 0
+        width: parent.width
         implicitHeight: content.implicitHeight + 16
         height: implicitHeight
         radius: tahoeGlassRadius

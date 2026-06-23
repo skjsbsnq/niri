@@ -27,13 +27,10 @@ PanelWindow {
     readonly property real popupOriginX: anchorRect
         ? PopupGeometry.originX(anchorRect, popupLeftMargin, root.implicitWidth, screenWidth, 12)
         : 0
-    readonly property bool compositorLayerAnimations:
-        root.settingsService && root.settingsService.compositorLayerAnimations
-
     signal closeRequested()
     signal openSettingsRequested(string page)
 
-    visible: compositorLayerAnimations ? open : (open || menuSurface.opacity > 0.01)
+    visible: open
     aboveWindows: true
     exclusionMode: ExclusionMode.Ignore
     implicitWidth: 218
@@ -78,9 +75,9 @@ PanelWindow {
             blur: true
             shadow: true
             clip: true
-            interaction: root.compositorLayerAnimations ? 1 : menuSurface.opacity
-            materialAlpha: root.compositorLayerAnimations ? 1 : menuSurface.opacity
-            enabled: root.open || menuSurface.opacity > 0.01
+            interaction: 1
+            materialAlpha: 1
+            enabled: true
         }
     ]
 
@@ -88,25 +85,16 @@ PanelWindow {
         id: menuSurface
         readonly property string tahoeGlassMaterial: GlassStyle.MaterialMenu
         readonly property real tahoeGlassRadius: GlassStyle.RadiusMenu
-        property real contentScale: root.compositorLayerAnimations ? 1 : (root.open ? 1 : 0.98)
 
         x: 0
-        // menuSurface is the compositor-owned glass region item. Open/close
-        // keeps its region bounds fixed; opacity/scale and compositor material
-        // alpha carry the animation without moving blur geometry.
+        // menuSurface is the compositor-owned glass region item. niri owns the
+        // outer layer motion without QML opacity/scale changes.
         y: 0
         width: parent.width
         height: parent.height
         radius: tahoeGlassRadius
         color: GlassStyle.FillPanelBright
-        opacity: root.compositorLayerAnimations ? 1 : (root.open ? 1 : 0)
-
-        transform: Scale {
-            origin.x: root.popupOriginX
-            origin.y: 0
-            xScale: menuSurface.contentScale
-            yScale: menuSurface.contentScale
-        }
+        opacity: 1
 
         // NOTE: no `border.width` on the surface itself — a centered 1px
         // border antialiased against the outside pixels produces faint
@@ -119,14 +107,6 @@ PanelWindow {
             color: "transparent"
             border.color: GlassStyle.StrokePanelBright
             border.width: 1
-        }
-
-        Behavior on opacity {
-            NumberAnimation { duration: Motion.fadeFastDuration; easing.type: Motion.standardDecel }
-        }
-
-        Behavior on contentScale {
-            NumberAnimation { duration: Motion.menuEnterDuration; easing.type: Motion.emphasizedDecel }
         }
 
         ColumnLayout {

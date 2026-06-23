@@ -28,12 +28,9 @@ PanelWindow {
     readonly property int popupLeft: popupLeftFor()
     readonly property int popupTop: popupTopFor()
     readonly property real popupOriginX: Math.max(0, Math.min(panel.width, anchorCenterX() - root.popupLeft))
-    readonly property bool compositorLayerAnimations:
-        root.settingsService && root.settingsService.compositorLayerAnimations
-
     signal closeRequested()
 
-    visible: compositorLayerAnimations ? open : (open || panel.opacity > 0.01)
+    visible: open
     aboveWindows: true
     exclusionMode: ExclusionMode.Ignore
     implicitWidth: panelWidth
@@ -89,9 +86,9 @@ PanelWindow {
             blur: true
             shadow: true
             clip: true
-            interaction: root.compositorLayerAnimations ? 1 : panel.opacity
-            materialAlpha: root.compositorLayerAnimations ? 1 : panel.opacity
-            enabled: root.open || panel.opacity > 0.01
+            interaction: 1
+            materialAlpha: 1
+            enabled: true
         }
     ]
 
@@ -105,7 +102,6 @@ PanelWindow {
         id: panel
         readonly property string tahoeGlassMaterial: GlassStyle.MaterialMenu
         readonly property real tahoeGlassRadius: GlassStyle.RadiusMenu
-        property real contentScale: root.compositorLayerAnimations ? 1 : (root.open ? 1 : 0.98)
 
         z: 1
         x: 0
@@ -115,14 +111,7 @@ PanelWindow {
         height: implicitHeight
         radius: tahoeGlassRadius
         color: GlassStyle.FillPanelBright
-        opacity: root.compositorLayerAnimations ? 1 : (root.open ? 1 : 0)
-
-        transform: Scale {
-            origin.x: root.popupOriginX
-            origin.y: panel.height
-            xScale: panel.contentScale
-            yScale: panel.contentScale
-        }
+        opacity: 1
 
         Rectangle {
             anchors.fill: parent
@@ -131,14 +120,6 @@ PanelWindow {
             color: "transparent"
             border.color: GlassStyle.StrokePanelBright
             border.width: 1
-        }
-
-        Behavior on opacity {
-            NumberAnimation { duration: Motion.menuExitDuration; easing.type: Motion.standardDecel }
-        }
-
-        Behavior on contentScale {
-            NumberAnimation { duration: Motion.elementMoveDuration; easing.type: Motion.emphasizedDecel }
         }
 
         ColumnLayout {

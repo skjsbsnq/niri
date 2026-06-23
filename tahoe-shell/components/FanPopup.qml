@@ -27,12 +27,9 @@ PanelWindow {
     readonly property real popupOriginX: PopupGeometry.originX(anchorRect, popupLeftMargin, root.implicitWidth, screenWidth, fallbackRight)
     readonly property bool available: !!fanService && fanService.available
     readonly property int percent: fanService ? fanService.effectivePercent : 0
-    readonly property bool compositorLayerAnimations:
-        root.settingsService && root.settingsService.compositorLayerAnimations
-
     signal closeRequested()
 
-    visible: compositorLayerAnimations ? open : (open || panel.opacity > 0.01)
+    visible: open
     aboveWindows: true
     exclusionMode: ExclusionMode.Ignore
     implicitWidth: 328
@@ -61,9 +58,9 @@ PanelWindow {
             blur: true
             shadow: true
             clip: true
-            interaction: root.compositorLayerAnimations ? 1 : panel.opacity
-            materialAlpha: root.compositorLayerAnimations ? 1 : panel.opacity
-            enabled: root.open || panel.opacity > 0.01
+            interaction: 1
+            materialAlpha: 1
+            enabled: true
         }
     ]
 
@@ -71,7 +68,6 @@ PanelWindow {
         id: panel
         readonly property string tahoeGlassMaterial: GlassStyle.MaterialPanel
         readonly property real tahoeGlassRadius: GlassStyle.RadiusPopup
-        property real contentScale: root.compositorLayerAnimations ? 1 : (root.open ? 1 : 0.98)
 
         y: 0
         width: parent.width
@@ -79,14 +75,7 @@ PanelWindow {
         height: implicitHeight
         radius: tahoeGlassRadius
         color: GlassStyle.FillPanelBright
-        opacity: root.compositorLayerAnimations ? 1 : (root.open ? 1 : 0)
-
-        transform: Scale {
-            origin.x: root.popupOriginX
-            origin.y: 0
-            xScale: panel.contentScale
-            yScale: panel.contentScale
-        }
+        opacity: 1
 
         Rectangle {
             anchors.fill: parent
@@ -95,14 +84,6 @@ PanelWindow {
             color: "transparent"
             border.color: GlassStyle.StrokePanelBright
             border.width: 1
-        }
-
-        Behavior on opacity {
-            NumberAnimation { duration: Motion.fadeFastDuration; easing.type: Motion.standardDecel }
-        }
-
-        Behavior on contentScale {
-            NumberAnimation { duration: Motion.menuEnterDuration; easing.type: Motion.emphasizedDecel }
         }
 
         ColumnLayout {

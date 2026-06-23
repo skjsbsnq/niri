@@ -351,26 +351,26 @@ layer-rule {
         layer-close {
             style "edge-reveal"
             edge "top"
-            distance 20
-            opacity-to 0.86
-            transform-duration-ms 140
+            distance 24
+            opacity-to 0.84
+            transform-duration-ms 210
             transform-curve "emphasized-accel"
-            opacity-duration-ms 90
+            opacity-duration-ms 110
             opacity-curve "menu-accel"
         }
     }
 }
 
-// Layer animation Notification Center profile. This surface behaves like a
-// right-side drawer, so keep the motion directional rather than centered.
+// Layer animation Notification Center profile. Keep it consistent with other
+// top-bar panels: it opens from the top bar rather than sliding in sideways.
 layer-rule {
     match namespace="^tahoe-notification-center$"
 
     animations {
         layer-open {
-            style "slide"
-            edge "right"
-            distance 36
+            style "edge-reveal"
+            edge "top"
+            distance 24
             opacity-from 0.86
             transform-duration-ms 210
             transform-curve "emphasized-decel"
@@ -378,13 +378,13 @@ layer-rule {
             opacity-curve "standard-decel"
         }
         layer-close {
-            style "slide"
-            edge "right"
-            distance 28
-            opacity-to 0.82
-            transform-duration-ms 140
+            style "edge-reveal"
+            edge "top"
+            distance 24
+            opacity-to 0.86
+            transform-duration-ms 210
             transform-curve "emphasized-accel"
-            opacity-duration-ms 90
+            opacity-duration-ms 100
             opacity-curve "menu-accel"
         }
     }
@@ -473,11 +473,11 @@ layer-rule {
         layer-close {
             style "edge-reveal"
             edge "top"
-            distance 14
+            distance 18
             opacity-to 0.82
-            transform-duration-ms 120
+            transform-duration-ms 180
             transform-curve "emphasized-accel"
-            opacity-duration-ms 80
+            opacity-duration-ms 90
             opacity-curve "menu-accel"
         }
     }
@@ -504,11 +504,11 @@ layer-rule {
         layer-close {
             style "edge-reveal"
             edge "bottom"
-            distance 14
-            opacity-to 0.86
-            transform-duration-ms 120
+            distance 18
+            opacity-to 0.82
+            transform-duration-ms 180
             transform-curve "emphasized-accel"
-            opacity-duration-ms 80
+            opacity-duration-ms 90
             opacity-curve "menu-accel"
         }
     }

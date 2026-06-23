@@ -42,15 +42,12 @@ PanelWindow {
     readonly property color textSecondary: darkMode ? "#c8d0d8" : "#991d1d1f"
     readonly property color textTertiary: darkMode ? "#9da7b1" : "#731d1d1f"
     readonly property color sliderFill: darkMode ? "#d8e4f0" : "#f2ffffff" // ~0.95 white
-    readonly property bool compositorLayerAnimations:
-        root.settingsService && root.settingsService.compositorLayerAnimations
-
     // Material Icons font name registered once in shell.qml via FontLoader.
     readonly property string iconFont: "Material Icons"
 
     signal closeRequested()
 
-    visible: compositorLayerAnimations ? open : (open || panel.opacity > 0.01)
+    visible: open
     aboveWindows: true
     exclusionMode: ExclusionMode.Ignore
     implicitWidth: 360
@@ -79,9 +76,9 @@ PanelWindow {
             blur: true
             shadow: true
             clip: true
-            interaction: root.compositorLayerAnimations ? 1 : panel.opacity
-            materialAlpha: root.compositorLayerAnimations ? 1 : panel.opacity
-            enabled: root.open || panel.opacity > 0.01
+            interaction: 1
+            materialAlpha: 1
+            enabled: true
         }
     ]
 
@@ -89,27 +86,17 @@ PanelWindow {
         id: panel
         readonly property string tahoeGlassMaterial: GlassStyle.MaterialPanel
         readonly property real tahoeGlassRadius: GlassStyle.RadiusPanel
-        property real contentScale: root.compositorLayerAnimations ? 1 : (root.open ? 1 : 0.98)
 
         x: 0
         // panel is the compositor-owned glass region item. Its region geometry
-        // stays fixed during open/close; only content-layer opacity/scale and
-        // compositor material alpha ease. This keeps niri's blur bounds stable
-        // and avoids the old spring/overshoot crash class.
+        // stays fixed during open/close; niri owns the outer layer motion.
         y: 0
         width: parent.width
         implicitHeight: content.implicitHeight + 28
         height: implicitHeight
         radius: tahoeGlassRadius
         color: root.glassFill
-        opacity: root.compositorLayerAnimations ? 1 : (root.open ? 1 : 0)
-
-        transform: Scale {
-            origin.x: root.popupOriginX
-            origin.y: 0
-            xScale: panel.contentScale
-            yScale: panel.contentScale
-        }
+        opacity: 1
 
         // NOTE: no `border.width` on the panel itself. A centered 1px
         // border on a large-radius Rectangle is antialiased against the
@@ -125,14 +112,6 @@ PanelWindow {
             color: "transparent"
             border.color: root.glassStroke
             border.width: 1
-        }
-
-        Behavior on opacity {
-            NumberAnimation { duration: Motion.panelEnterDuration; easing.type: Motion.standardDecel }
-        }
-
-        Behavior on contentScale {
-            NumberAnimation { duration: Motion.panelEnterDuration; easing.type: Motion.emphasizedDecel }
         }
 
         ColumnLayout {

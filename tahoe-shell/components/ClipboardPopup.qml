@@ -15,6 +15,9 @@ PanelWindow {
     property var clipboardService
     property var anchorRect: null
     property var settingsService
+    property bool closeHold: false
+    property bool wasOpen: false
+    property real panelOffset: 0
 
     readonly property string iconFont: "Material Icons"
     readonly property var entries: clipboardService ? clipboardService.entries : []
@@ -27,9 +30,10 @@ PanelWindow {
     readonly property int popupLeftMargin: PopupGeometry.popupLeft(anchorRect, root.implicitWidth, screenWidth, edgePadding, fallbackRight)
     readonly property int popupTopMargin: PopupGeometry.popupTop(anchorRect, fallbackTop, popupGap)
     readonly property real popupOriginX: PopupGeometry.originX(anchorRect, popupLeftMargin, root.implicitWidth, screenWidth, fallbackRight)
+    readonly property int closeDistance: 18
     signal closeRequested()
 
-    visible: open
+    visible: open || closeHold
     aboveWindows: true
     focusable: false
     exclusionMode: ExclusionMode.Ignore
@@ -49,8 +53,37 @@ PanelWindow {
     }
 
     onOpenChanged: {
-        if (open && root.clipboardService)
-            root.clipboardService.refresh();
+        if (open) {
+            closeUnmapTimer.stop();
+            closeMotion.stop();
+            wasOpen = true;
+            closeHold = false;
+            panelOffset = 0;
+            if (root.clipboardService)
+                root.clipboardService.refresh();
+        } else if (wasOpen) {
+            wasOpen = false;
+            closeHold = true;
+            closeMotion.restart();
+            closeUnmapTimer.restart();
+        }
+    }
+
+    NumberAnimation {
+        id: closeMotion
+        target: root
+        property: "panelOffset"
+        from: 0
+        to: -root.closeDistance
+        duration: Motion.panelExitDuration
+        easing.type: Motion.emphasizedAccel
+    }
+
+    Timer {
+        id: closeUnmapTimer
+        interval: Motion.panelExitDuration
+        repeat: false
+        onTriggered: if (!root.open) root.closeHold = false
     }
 
     TahoeGlass.regions: [
@@ -75,7 +108,7 @@ PanelWindow {
         readonly property string tahoeGlassMaterial: GlassStyle.MaterialPanel
         readonly property real tahoeGlassRadius: GlassStyle.RadiusPopup
 
-        y: 0
+        y: root.panelOffset
         width: parent.width
         implicitHeight: content.implicitHeight + 24
         height: implicitHeight

@@ -18,6 +18,9 @@ PanelWindow {
     property var settingsService
     property var anchorRect: null
     property bool controlsExpanded: false
+    property bool closeHold: false
+    property bool wasOpen: false
+    property real panelOffset: 0
     readonly property bool darkMode: appearanceService && appearanceService.darkMode
 
     readonly property int edgePadding: 8
@@ -28,6 +31,7 @@ PanelWindow {
     readonly property int popupLeftMargin: PopupGeometry.popupLeft(anchorRect, root.implicitWidth, screenWidth, edgePadding, fallbackRight)
     readonly property int popupTopMargin: PopupGeometry.popupTop(anchorRect, fallbackTop, popupGap)
     readonly property real popupOriginX: PopupGeometry.originX(anchorRect, popupLeftMargin, root.implicitWidth, screenWidth, fallbackRight)
+    readonly property int closeDistance: 24
     readonly property color glassFill: darkMode ? "#d01d1f24" : GlassStyle.FillPanel
     readonly property color glassStroke: darkMode ? "#38ffffff" : GlassStyle.StrokePanel
     readonly property color glassInnerFill: darkMode ? "#1cffffff" : "#14ffffff"
@@ -47,7 +51,7 @@ PanelWindow {
 
     signal closeRequested()
 
-    visible: open
+    visible: open || closeHold
     aboveWindows: true
     exclusionMode: ExclusionMode.Ignore
     implicitWidth: 360
@@ -63,6 +67,38 @@ PanelWindow {
     margins {
         top: root.popupTopMargin
         left: root.popupLeftMargin
+    }
+
+    onOpenChanged: {
+        if (open) {
+            closeUnmapTimer.stop();
+            closeMotion.stop();
+            wasOpen = true;
+            closeHold = false;
+            panelOffset = 0;
+        } else if (wasOpen) {
+            wasOpen = false;
+            closeHold = true;
+            closeMotion.restart();
+            closeUnmapTimer.restart();
+        }
+    }
+
+    NumberAnimation {
+        id: closeMotion
+        target: root
+        property: "panelOffset"
+        from: 0
+        to: -root.closeDistance
+        duration: Motion.panelExitDuration
+        easing.type: Motion.emphasizedAccel
+    }
+
+    Timer {
+        id: closeUnmapTimer
+        interval: Motion.panelExitDuration
+        repeat: false
+        onTriggered: if (!root.open) root.closeHold = false
     }
 
     TahoeGlass.regions: [
@@ -88,9 +124,8 @@ PanelWindow {
         readonly property real tahoeGlassRadius: GlassStyle.RadiusPanel
 
         x: 0
-        // panel is the compositor-owned glass region item. Its region geometry
-        // stays fixed during open/close; niri owns the outer layer motion.
-        y: 0
+        // Keep TahoeGlass live during close; niri only owns the map/open motion.
+        y: root.panelOffset
         width: parent.width
         implicitHeight: content.implicitHeight + 28
         height: implicitHeight

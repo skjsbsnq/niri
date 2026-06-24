@@ -348,6 +348,16 @@ ShellRoot {
         function openAbout(): void { shell.openSettingsPanel("about"); }
         function openSystemHealth(): void { shell.openSettingsPanel("health"); }
         function closeSettings(): void { shell.closeSettingsPanel(); }
+        function dynamicIslandGetState(): string { return dynamicIsland.state; }
+        function dynamicIslandGetDebugSummary(): string { return dynamicIsland.debugSummary(); }
+        function dynamicIslandReset(): string { dynamicIsland.reset(); return dynamicIsland.state; }
+        function dynamicIslandShowTime(): string { dynamicIsland.showTime(); return dynamicIsland.state; }
+        function dynamicIslandShowMedia(): string { dynamicIsland.showMedia(); return dynamicIsland.state; }
+        function dynamicIslandShowExpandedMedia(): string { dynamicIsland.showExpandedMedia(); return dynamicIsland.state; }
+        function dynamicIslandShowExpandedSummary(): string { dynamicIsland.showExpandedSummary(); return dynamicIsland.state; }
+        function dynamicIslandShowOsd(text: string, progress: real): string { dynamicIsland.showTransientOsd(text, progress); return dynamicIsland.state; }
+        function dynamicIslandShowNotification(summary: string, body: string): string { dynamicIsland.showTransientNotification(summary, body); return dynamicIsland.state; }
+        function dynamicIslandShowWorkspace(label: string): string { dynamicIsland.showTransientWorkspace(label); return dynamicIsland.state; }
     }
 
     AppMenu {
@@ -428,6 +438,13 @@ ShellRoot {
         soundService: sound
     }
 
+    DynamicIsland {
+        id: dynamicIsland
+        controlsService: controls
+        notificationsService: notifications
+        windowsService: niri
+    }
+
     LockScreen {
         id: lockScreen
     }
@@ -466,6 +483,7 @@ ShellRoot {
                 clipboardService: clipboardHistory
                 screenshotService: screenshotService
                 inputMethodService: inputMethod
+                dynamicIslandService: dynamicIsland
                 appMenuOpen: shell.topBarPopupOpenFor(shell.appMenuOpen, modelData)
                 applicationMenuOpen: shell.topBarPopupOpenFor(shell.applicationMenuOpen, modelData)
                 spotlightOpen: shell.spotlightOpen
@@ -566,6 +584,12 @@ ShellRoot {
                     shell.launchpadOpen = false;
                     shell.spotlightOpen = false;
                 }
+            }
+
+            DynamicIslandOverlay {
+                screen: modelData
+                dynamicIslandService: dynamicIsland
+                darkMode: shell.darkMode
             }
 
             MenuPopup {

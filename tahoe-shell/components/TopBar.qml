@@ -20,6 +20,7 @@ PanelWindow {
     property var clipboardService
     property var screenshotService
     property var inputMethodService
+    property var dynamicIslandService
     property bool controlCenterOpen: false
     property bool launchpadOpen: false
     property bool appMenuOpen: false
@@ -31,7 +32,6 @@ PanelWindow {
     property bool fanPopupOpen: false
     property bool clipboardPopupOpen: false
     property bool darkMode: false
-    property date now: new Date()
     readonly property string activeApp: appsService && niriService ? appsService.toplevelLabel(niriService.focusedWindow || niriService.activeToplevel) : "桌面"
     // Number of retained notification history entries. Drives the bell
     // badge and lets DND-suppressed notifications remain visible.
@@ -75,10 +75,6 @@ PanelWindow {
         };
     }
 
-    function msecsToNextMinute() {
-        return Math.max(250, 60000 - (root.now.getSeconds() * 1000 + root.now.getMilliseconds()));
-    }
-
     visible: true
 
     anchors {
@@ -91,13 +87,6 @@ PanelWindow {
     implicitHeight: 34
     color: "transparent"
     WlrLayershell.namespace: "tahoe-topbar"
-
-    Timer {
-        interval: root.msecsToNextMinute()
-        running: true
-        repeat: true
-        onTriggered: root.now = new Date()
-    }
 
     // Floating, rounded glass bar — mirrors the Dock / ControlCenter form
     // so the top bar reads as "a piece of glass floating off the screen
@@ -159,138 +148,169 @@ PanelWindow {
             border.width: 1
         }
 
-        RowLayout {
+        Item {
+            id: topBarContent
+
             anchors.fill: parent
-            // Inset the row inside the floating bar surface so the end
+            // Inset content inside the floating bar surface so the end
             // children (status/control buttons and niri menu) clear the rounded
             // caps. The surface's radius is 18, so anything within ~14px
             // of the ends would clip under the arc.
             anchors.leftMargin: 14
             anchors.rightMargin: 14
-            spacing: 14
+            readonly property int centerReserveWidth: root.width < 1500 ? 168 : 184
 
             Item {
-                id: niriMenuButton
+                id: islandReserve
 
-                Layout.preferredWidth: 30
-                Layout.preferredHeight: 24
-                Layout.alignment: Qt.AlignVCenter
-
-                Rectangle {
-                    anchors.fill: parent
-                    radius: 12
-                    color: root.appMenuOpen ? "#32ffffff" : "transparent"
-                    border.color: root.appMenuOpen ? "#42ffffff" : "transparent"
-                }
-
-                Image {
-                    anchors.centerIn: parent
-                    width: 18
-                    height: 18
-                    source: Quickshell.shellPath("assets/icons/niri-icon-smol.png")
-                    fillMode: Image.PreserveAspectFit
-                    smooth: true
-                    mipmap: true
-                }
-
-                MouseArea {
-                    anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: root.toggleAppMenu(root.anchorRectFor(niriMenuButton))
-                }
-            }
-
-            Text {
-                text: root.activeApp
-                color: root.topTextSecondary
-                font.pixelSize: 13
-                elide: Text.ElideRight
-                verticalAlignment: Text.AlignVCenter
-                Layout.alignment: Qt.AlignVCenter
-                Layout.maximumWidth: 220
-            }
-
-            Item {
-                id: applicationMenuButton
-                Layout.preferredWidth: visible ? applicationMenuLabel.implicitWidth + 18 : 0
-                Layout.preferredHeight: 24
-                Layout.alignment: Qt.AlignVCenter
-                visible: !!root.appMenuService
-
-                Rectangle {
-                    anchors.fill: parent
-                    radius: 12
-                    color: root.applicationMenuOpen ? "#32ffffff" : (applicationMenuMouse.containsMouse ? "#24ffffff" : "transparent")
-                    border.color: root.applicationMenuOpen ? "#42ffffff" : "transparent"
-                }
-
-                Text {
-                    id: applicationMenuLabel
-                    anchors.centerIn: parent
-                    text: root.appMenuService ? root.appMenuService.menuTitle : "应用菜单"
-                    color: root.topText
-                    font.pixelSize: 12
-                    font.weight: Font.DemiBold
-                    elide: Text.ElideRight
-                    maximumLineCount: 1
-                }
-
-                MouseArea {
-                    id: applicationMenuMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: root.toggleApplicationMenu(root.anchorRectFor(applicationMenuButton))
-                }
+                anchors.centerIn: parent
+                width: topBarContent.centerReserveWidth
+                height: parent.height
             }
 
             Row {
-                Layout.alignment: Qt.AlignVCenter
-                spacing: 5
+                id: leftCluster
 
-                Repeater {
-                    model: ScriptModel {
-                        values: root.niriService ? root.niriService.visibleWindowsets : []
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
+                width: Math.max(0, islandReserve.x - 14)
+                height: 24
+                spacing: 14
+                clip: true
+
+                Item {
+                    id: niriMenuButton
+
+                    width: 30
+                    height: 24
+
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: 12
+                        color: root.appMenuOpen ? "#32ffffff" : "transparent"
+                        border.color: root.appMenuOpen ? "#42ffffff" : "transparent"
                     }
 
-                    delegate: Item {
-                        required property var modelData
-                        required property int index
+                    Image {
+                        anchors.centerIn: parent
+                        width: 18
+                        height: 18
+                        source: Quickshell.shellPath("assets/icons/niri-icon-smol.png")
+                        fillMode: Image.PreserveAspectFit
+                        smooth: true
+                        mipmap: true
+                    }
 
-                        width: 28
-                        height: 20
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.toggleAppMenu(root.anchorRectFor(niriMenuButton))
+                    }
+                }
 
-                        Rectangle {
-                            anchors.fill: parent
-                            radius: 10
-                            color: modelData.active ? "#32ffffff" : "#18ffffff"
-                            border.color: modelData.urgent ? "#ccff453a" : "#36ffffff"
-                            border.width: 1
+                Text {
+                    text: root.activeApp
+                    color: root.topTextSecondary
+                    font.pixelSize: 13
+                    elide: Text.ElideRight
+                    verticalAlignment: Text.AlignVCenter
+                    width: Math.min(implicitWidth, root.width < 1500 ? 168 : 220)
+                    height: 24
+                }
+
+                Item {
+                    id: applicationMenuButton
+                    width: visible ? Math.min(applicationMenuLabel.implicitWidth + 18, root.width < 1500 ? 112 : 152) : 0
+                    height: 24
+                    visible: !!root.appMenuService
+
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: 12
+                        color: root.applicationMenuOpen ? "#32ffffff" : (applicationMenuMouse.containsMouse ? "#24ffffff" : "transparent")
+                        border.color: root.applicationMenuOpen ? "#42ffffff" : "transparent"
+                    }
+
+                    Text {
+                        id: applicationMenuLabel
+                        anchors.centerIn: parent
+                        width: Math.max(0, parent.width - 18)
+                        text: root.appMenuService ? root.appMenuService.menuTitle : "应用菜单"
+                        color: root.topText
+                        font.pixelSize: 12
+                        font.weight: Font.DemiBold
+                        elide: Text.ElideRight
+                        maximumLineCount: 1
+                    }
+
+                    MouseArea {
+                        id: applicationMenuMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.toggleApplicationMenu(root.anchorRectFor(applicationMenuButton))
+                    }
+                }
+
+                Row {
+                    y: 2
+                    spacing: 5
+
+                    Repeater {
+                        model: ScriptModel {
+                            values: root.niriService ? root.niriService.visibleWindowsets : []
                         }
 
-                        Text {
-                            anchors.centerIn: parent
-                            text: root.niriService ? root.niriService.workspaceLabel(modelData, index) : String(index + 1)
-                            color: root.topText
-                            font.pixelSize: 11
-                            font.weight: modelData.active ? Font.DemiBold : Font.Normal
-                        }
+                        delegate: Item {
+                            required property var modelData
+                            required property int index
 
-                        MouseArea {
-                            anchors.fill: parent
-                            cursorShape: modelData.canActivate ? Qt.PointingHandCursor : Qt.ArrowCursor
-                            onClicked: {
-                                if (root.niriService)
-                                    root.niriService.activateWorkspace(modelData);
+                            width: 28
+                            height: 20
+
+                            Rectangle {
+                                anchors.fill: parent
+                                radius: 10
+                                color: modelData.active ? "#32ffffff" : "#18ffffff"
+                                border.color: modelData.urgent ? "#ccff453a" : "#36ffffff"
+                                border.width: 1
+                            }
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: root.niriService ? root.niriService.workspaceLabel(modelData, index) : String(index + 1)
+                                color: root.topText
+                                font.pixelSize: 11
+                                font.weight: modelData.active ? Font.DemiBold : Font.Normal
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: modelData.canActivate ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                onClicked: {
+                                    if (root.niriService)
+                                        root.niriService.activateWorkspace(modelData);
+                                }
                             }
                         }
                     }
                 }
             }
 
-            Item {
-                Layout.fillWidth: true
-            }
+            RowLayout {
+                id: rightCluster
+
+                anchors.left: islandReserve.right
+                anchors.leftMargin: 14
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                height: parent.height
+                spacing: 14
+                clip: true
+
+                Item {
+                    Layout.fillWidth: true
+                }
 
             Tray {
                 panelWindow: root
@@ -728,15 +748,22 @@ PanelWindow {
                     onClicked: root.toggleControlCenter(root.anchorRectFor(statusButton))
                 }
             }
-        }
+            }
 
-        Text {
-            anchors.centerIn: parent
-            text: Qt.formatDateTime(root.now, "ddd HH:mm")
-            color: root.topTextSecondary
-            font.pixelSize: 13
-            verticalAlignment: Text.AlignVCenter
-            z: 2
+            DynamicIslandChip {
+                id: islandChip
+
+                anchors.centerIn: islandReserve
+                width: implicitWidth
+                height: implicitHeight
+                displayText: root.dynamicIslandService ? root.dynamicIslandService.displayText : ""
+                darkMode: root.darkMode
+                z: 2
+                onClicked: function(button) {
+                    if (root.dynamicIslandService)
+                        root.dynamicIslandService.handleChipClick(button);
+                }
+            }
         }
     }
 }

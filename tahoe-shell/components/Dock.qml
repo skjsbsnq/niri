@@ -21,7 +21,12 @@ PanelWindow {
     property bool dockHovered: false
     property bool pointerDragActive: false
     property int dragTargetVisualIndex: -1
+    readonly property var dockWindowList: root.niriService && root.niriService.nonMinimizedWindowList ? root.niriService.nonMinimizedWindowList : []
+    readonly property var dockMinimizedWindowList: root.niriService && root.niriService.minimizedWindowList ? root.niriService.minimizedWindowList : []
     readonly property bool hasWindows: niriService && niriService.windowList && niriService.windowList.length > 0
+    readonly property bool hasNonMinimizedWindows: dockWindowList.length > 0
+    readonly property bool hasMinimizedWindows: dockMinimizedWindowList.length > 0
+    readonly property bool hasDockWindowSection: hasNonMinimizedWindows || hasMinimizedWindows
     readonly property bool dockAutoHide: settingsService && settingsService.dockAutoHide
     readonly property int dockHideDelay: settingsService ? settingsService.dockAutoHideDelayMs : 260
     readonly property int dockRevealZoneHeight: settingsService ? settingsService.dockRevealZoneHeight : 8
@@ -32,30 +37,38 @@ PanelWindow {
     readonly property int dockPinnedButtonWidth: 62
     readonly property int dockWindowTitleWidth: 132
     readonly property int dockWindowIconWidth: 56
+    readonly property int dockMinimizedThumbnailWidth: 112
+    readonly property int dockMinimizedMinimumWidth: 76
     readonly property int dockToolButtonWidth: 54
     readonly property int dockSeparatorWidth: 1
     readonly property int dockSurfaceMaxWidth: Math.max(1, root.width - dockOuterMargin)
     readonly property int dockContentMaxWidth: Math.max(1, dockSurfaceMaxWidth - dockSurfacePadding)
     readonly property int pinnedAppCount: root.appsService && root.appsService.pinnedApps ? root.appsService.pinnedApps.length : 0
-    readonly property int windowButtonCount: root.niriService && root.niriService.windowList ? root.niriService.windowList.length : 0
+    readonly property int windowButtonCount: dockWindowList.length
+    readonly property int minimizedWindowButtonCount: dockMinimizedWindowList.length
     readonly property int pinnedContentWidth: seriesWidth(pinnedAppCount, dockPinnedButtonWidth)
     readonly property int titledWindowContentWidth: seriesWidth(windowButtonCount, dockWindowTitleWidth)
     readonly property int iconWindowContentWidth: seriesWidth(windowButtonCount, dockWindowIconWidth)
-    readonly property int dockRowChildCount: hasWindows ? 6 : 4
+    readonly property int minimizedWindowContentWidth: seriesWidth(minimizedWindowButtonCount, dockMinimizedThumbnailWidth)
+    readonly property int dockRowChildCount: 4 + (hasDockWindowSection ? 1 : 0) + (hasNonMinimizedWindows ? 1 : 0) + (hasMinimizedWindows ? 1 : 0)
     readonly property int dockRowSpacingWidth: Math.max(0, dockRowChildCount - 1) * dockItemSpacing
     readonly property int dockRightToolsWidth: dockSeparatorWidth + dockToolButtonWidth * 2
-    readonly property int dockWindowDividerWidth: hasWindows ? dockSeparatorWidth : 0
+    readonly property int dockWindowDividerWidth: hasDockWindowSection ? dockSeparatorWidth : 0
     readonly property int dockFlexibleSectionsBudget: Math.max(0, dockContentMaxWidth - dockRightToolsWidth - dockWindowDividerWidth - dockRowSpacingWidth)
-    readonly property int minimumWindowViewportWidth: hasWindows ? Math.min(iconWindowContentWidth, dockWindowIconWidth) : 0
-    readonly property int pinnedViewportWidth: hasWindows
-        ? Math.min(pinnedContentWidth, Math.max(0, dockFlexibleSectionsBudget - minimumWindowViewportWidth))
+    readonly property int minimumWindowViewportWidth: hasNonMinimizedWindows ? Math.min(iconWindowContentWidth, dockWindowIconWidth) : 0
+    readonly property int minimumMinimizedViewportWidth: hasMinimizedWindows ? Math.min(minimizedWindowContentWidth, dockMinimizedMinimumWidth) : 0
+    readonly property int pinnedViewportWidth: hasNonMinimizedWindows || hasMinimizedWindows
+        ? Math.min(pinnedContentWidth, Math.max(0, dockFlexibleSectionsBudget - minimumWindowViewportWidth - minimumMinimizedViewportWidth))
         : Math.min(pinnedContentWidth, dockFlexibleSectionsBudget)
-    readonly property int availableWindowViewportWidth: hasWindows ? Math.max(0, dockFlexibleSectionsBudget - pinnedViewportWidth) : 0
-    readonly property bool dockWindowButtonsShowTitle: hasWindows
+    readonly property int dockRemainingFlexibleWidth: Math.max(0, dockFlexibleSectionsBudget - pinnedViewportWidth)
+    readonly property int availableWindowViewportWidth: hasNonMinimizedWindows ? Math.max(0, dockRemainingFlexibleWidth - minimumMinimizedViewportWidth) : 0
+    readonly property bool dockWindowButtonsShowTitle: hasNonMinimizedWindows
         && !(settingsService && settingsService.dockForceIconOnly)
         && titledWindowContentWidth <= availableWindowViewportWidth
     readonly property int activeWindowContentWidth: dockWindowButtonsShowTitle ? titledWindowContentWidth : iconWindowContentWidth
-    readonly property int windowViewportWidth: hasWindows ? Math.min(activeWindowContentWidth, availableWindowViewportWidth) : 0
+    readonly property int windowViewportWidth: hasNonMinimizedWindows ? Math.min(activeWindowContentWidth, availableWindowViewportWidth) : 0
+    readonly property int availableMinimizedViewportWidth: hasMinimizedWindows ? Math.max(0, dockRemainingFlexibleWidth - windowViewportWidth) : 0
+    readonly property int minimizedViewportWidth: hasMinimizedWindows ? Math.min(minimizedWindowContentWidth, availableMinimizedViewportWidth) : 0
     readonly property color glassFill: darkMode ? "#d01d1f24" : GlassStyle.FillDock
     readonly property color glassStroke: darkMode ? "#38ffffff" : GlassStyle.StrokeDock
     readonly property color dockText: darkMode ? "#f5f7fb" : "#202124"
@@ -635,14 +648,14 @@ PanelWindow {
                 height: 46
                 radius: 1
                 color: root.darkMode ? "#40ffffff" : "#3d000000"
-                visible: root.hasWindows
+                visible: root.hasDockWindowSection
                 anchors.verticalCenter: parent.verticalCenter
             }
 
             Item {
                 width: root.windowViewportWidth
                 height: 58
-                visible: root.hasWindows && width > 0
+                visible: root.hasNonMinimizedWindows && width > 0
 
                 Flickable {
                     id: windowViewport
@@ -666,7 +679,7 @@ PanelWindow {
                         Repeater {
                             model: ScriptModel {
                                 objectProp: "modelKey"
-                                values: root.niriService ? root.niriService.windowList : []
+                                values: root.dockWindowList
                             }
 
                             delegate: WindowButton {
@@ -695,6 +708,26 @@ PanelWindow {
                             }
                         }
                     }
+                }
+            }
+
+            DockMinimizedShelf {
+                width: root.minimizedViewportWidth
+                height: 64
+                visible: root.hasMinimizedWindows && width > 0
+                windowsService: root.niriService
+                appsService: root.appsService
+                dockWindow: root
+                dockSurfaceItem: dockSurface
+                thumbnailWidth: root.dockMinimizedThumbnailWidth
+                onDockPointerMoved: function(x, buttons) {
+                    root.updateDockHoverFromButtons(x, buttons === undefined ? Qt.NoButton : buttons);
+                }
+                onDockPointerEntered: root.markDockHovered()
+                onDockPointerExited: root.scheduleDockHoverReset()
+                onContextMenuRequested: function(window, anchorItem) {
+                    root.openWindowMenu(window, root.anchorRectFor(anchorItem));
+                    root.markDockHovered();
                 }
             }
 

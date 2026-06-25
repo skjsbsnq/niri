@@ -32,6 +32,9 @@ PanelWindow {
     property var settingsService
     property var current: notificationsService ? notificationsService.current : null
     property bool hasCurrent: !!current
+    readonly property bool suppressedByDynamicIsland: !!root.settingsService
+        && !!root.settingsService.dynamicIslandEnabled
+    readonly property bool shouldShowToast: hasCurrent && !suppressedByDynamicIsland
     // Kept for shell.qml compatibility. The card is a glass/blur region item,
     // so Phase 3 forbids springing its geometry even on real GPUs.
     property bool useSpring: false
@@ -51,7 +54,7 @@ PanelWindow {
         return isFinite(number) ? number : fallback;
     }
 
-    visible: compositorLayerAnimations ? hasCurrent : (hasCurrent || card.opacity > 0.01)
+    visible: compositorLayerAnimations ? shouldShowToast : (shouldShowToast || card.opacity > 0.01)
     aboveWindows: true
     exclusionMode: ExclusionMode.Ignore
     exclusiveZone: 0
@@ -93,7 +96,7 @@ PanelWindow {
             clip: true
             interaction: root.compositorLayerAnimations ? 1 : card.opacity
             materialAlpha: root.compositorLayerAnimations ? 1 : card.opacity
-            enabled: root.hasCurrent || card.opacity > 0.01
+            enabled: root.shouldShowToast || (!root.compositorLayerAnimations && card.opacity > 0.01)
         }
     ]
 
@@ -104,14 +107,14 @@ PanelWindow {
 
         // In compatibility mode QML keeps the legacy slide/fade. With
         // compositor layer animations enabled, niri owns the outer motion.
-        x: root.compositorLayerAnimations ? 0 : (root.hasCurrent ? 0 : root.width + 24)
+        x: root.compositorLayerAnimations ? 0 : (root.shouldShowToast ? 0 : root.width + 24)
         y: 0
         width: parent.width
         implicitHeight: 86
         height: Math.max(86, column.implicitHeight + 28)
         radius: tahoeGlassRadius
         color: GlassStyle.FillPanelBright
-        opacity: root.compositorLayerAnimations ? 1 : (root.hasCurrent ? 1 : 0)
+        opacity: root.compositorLayerAnimations ? 1 : (root.shouldShowToast ? 1 : 0)
 
         // NOTE: no `border.width` on the card itself. A centered 1px
         // border on a large-radius Rectangle is antialiased against the

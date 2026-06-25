@@ -238,26 +238,6 @@ PanelWindow {
         color: "#42000000"
         opacity: root.capsuleShown ? (root.darkMode ? 0.38 : 0.2) : 0
 
-        Behavior on x {
-            NumberAnimation { duration: root.swipeWidthDuration; easing.type: root.swipeWidthEasing }
-        }
-
-        Behavior on y {
-            NumberAnimation { duration: IslandMotion.overlayMorphDuration; easing.type: IslandMotion.overlayMorphEasing }
-        }
-
-        Behavior on width {
-            NumberAnimation { duration: root.swipeWidthDuration; easing.type: root.swipeWidthEasing }
-        }
-
-        Behavior on height {
-            NumberAnimation { duration: IslandMotion.overlayMorphDuration; easing.type: IslandMotion.overlayMorphEasing }
-        }
-
-        Behavior on radius {
-            NumberAnimation { duration: IslandMotion.overlayMorphDuration; easing.type: IslandMotion.overlayMorphEasing }
-        }
-
         Behavior on opacity {
             NumberAnimation { duration: IslandMotion.overlayContentDuration; easing.type: IslandMotion.overlayColorEasing }
         }

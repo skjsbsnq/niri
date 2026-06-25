@@ -19,6 +19,7 @@ Item {
     readonly property bool dockAutoHide: settingsAdapter.dockAutoHide
     readonly property int dockAutoHideDelayMs: settingsAdapter.dockAutoHideDelayMs
     readonly property int dockRevealZoneHeight: settingsAdapter.dockRevealZoneHeight
+    readonly property bool dockMinimizedShelfEnabled: settingsAdapter.dockMinimizedShelfEnabled
     readonly property string wallpaperMode: settingsAdapter.wallpaperMode
     readonly property string staticWallpaperPath: settingsAdapter.staticWallpaperPath
     readonly property string effectiveStaticWallpaper: normalizedPath(staticWallpaperPath)
@@ -152,6 +153,15 @@ Item {
             return;
 
         settingsAdapter.dockRevealZoneHeight = next;
+        settingsFile.writeAdapter();
+    }
+
+    function setDockMinimizedShelfEnabled(enabled) {
+        var next = !!enabled;
+        if (settingsAdapter.dockMinimizedShelfEnabled === next)
+            return;
+
+        settingsAdapter.dockMinimizedShelfEnabled = next;
         settingsFile.writeAdapter();
     }
 
@@ -396,6 +406,7 @@ Item {
             property bool dockAutoHide: false
             property int dockAutoHideDelayMs: 260
             property int dockRevealZoneHeight: 8
+            property bool dockMinimizedShelfEnabled: false
             property string wallpaperMode: "static"
             property string staticWallpaperPath: ""
             property string dynamicWallpaperCommand: ""

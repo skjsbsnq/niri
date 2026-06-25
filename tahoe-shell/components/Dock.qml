@@ -21,8 +21,13 @@ PanelWindow {
     property bool dockHovered: false
     property bool pointerDragActive: false
     property int dragTargetVisualIndex: -1
-    readonly property var dockWindowList: root.niriService && root.niriService.nonMinimizedWindowList ? root.niriService.nonMinimizedWindowList : []
-    readonly property var dockMinimizedWindowList: root.niriService && root.niriService.minimizedWindowList ? root.niriService.minimizedWindowList : []
+    readonly property bool dockMinimizedShelfEnabled: !!(settingsService && settingsService.dockMinimizedShelfEnabled)
+    readonly property var dockWindowList: root.niriService
+        ? (root.dockMinimizedShelfEnabled && root.niriService.nonMinimizedWindowList
+            ? root.niriService.nonMinimizedWindowList
+            : root.niriService.windowList || [])
+        : []
+    readonly property var dockMinimizedWindowList: root.dockMinimizedShelfEnabled && root.niriService && root.niriService.minimizedWindowList ? root.niriService.minimizedWindowList : []
     readonly property bool hasWindows: niriService && niriService.windowList && niriService.windowList.length > 0
     readonly property bool hasNonMinimizedWindows: dockWindowList.length > 0
     readonly property bool hasMinimizedWindows: dockMinimizedWindowList.length > 0

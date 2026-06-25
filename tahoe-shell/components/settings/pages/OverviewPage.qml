@@ -95,7 +95,9 @@ Flickable {
                 iconCode: "\ue8d0"
                 title: "Dock"
                 detail: page.panel && page.panel.settingsService
-                    ? (page.panel.settingsService.dockAutoHide ? "自动隐藏" : "始终显示") + " · " + page.panel.settingsService.modeLabel(page.panel.dockTitleMode())
+                    ? (page.panel.settingsService.dockAutoHide ? "自动隐藏" : "始终显示")
+                        + " · " + page.panel.settingsService.modeLabel(page.panel.dockTitleMode())
+                        + (page.panel.settingsService.dockMinimizedShelfEnabled ? " · 缩略栏" : " · 旧式最小化")
                     : "设置服务不可用"
                 accentColor: page.panel ? page.panel.categoryColor("dock") : "#0a84ff"
                 onActivated: page.panel.selectedPage = "dock"

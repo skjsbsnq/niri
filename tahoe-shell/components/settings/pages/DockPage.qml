@@ -107,6 +107,22 @@ Flickable {
                     }
                 }
             }
+
+            Controls.TahoeListRow {
+                theme: page.theme
+                label: "最小化缩略栏"
+                detail: page.panel && page.panel.settingsService && page.panel.settingsService.dockMinimizedShelfEnabled
+                    ? "最小化窗口显示为右侧缩略图"
+                    : "关闭，最小化窗口保留旧图标样式"
+                iconCode: "\ue8ff"
+                checkable: true
+                checked: page.panel && page.panel.settingsService && page.panel.settingsService.dockMinimizedShelfEnabled
+                enabled: !!(page.panel && page.panel.settingsService)
+                onToggled: function(checked) {
+                    if (page.panel.settingsService)
+                        page.panel.settingsService.setDockMinimizedShelfEnabled(checked);
+                }
+            }
         }
     }
 }

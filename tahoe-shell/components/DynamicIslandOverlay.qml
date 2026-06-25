@@ -29,9 +29,18 @@ PanelWindow {
     readonly property real progress: dynamicIslandService ? Number(dynamicIslandService.progress) : -1
     readonly property string ownScreenName: root.screen ? String(root.screen.name || "") : ""
     readonly property string targetScreenName: dynamicIslandService ? String(dynamicIslandService.targetScreenName || "") : ""
+    readonly property bool islandEnabled: dynamicIslandService ? !!dynamicIslandService.islandEnabled : true
+    readonly property bool dynamicIslandHideTopbarTime: dynamicIslandService ? !!dynamicIslandService.dynamicIslandHideTopbarTime : true
+    readonly property bool hoverExpandEnabled: dynamicIslandService ? !!dynamicIslandService.dynamicIslandHoverExpand : false
     readonly property bool activeForScreen: !!dynamicIslandService
         && (targetScreenName.length === 0 || ownScreenName.length === 0 || targetScreenName === ownScreenName)
     readonly property bool capsuleShown: activeForScreen
+        && islandEnabled
+        && (dynamicIslandHideTopbarTime
+            || !isRestingState(geometryState)
+            || exitingExpanded
+            || swipeInteractive
+            || swipeSettling)
     readonly property int screenWidth: Math.max(1, Number(root.screen && root.screen.width) || root.width)
     readonly property bool swipeInteractive: dynamicIslandService ? !!dynamicIslandService.swipeDragging : false
     readonly property bool swipeSettling: dynamicIslandService ? !!dynamicIslandService.swipeSettling : false
@@ -119,6 +128,10 @@ PanelWindow {
 
     function isExpandedState(stateName) {
         return stateName === "expanded_media" || stateName === "expanded_summary";
+    }
+
+    function isRestingState(stateName) {
+        return stateName === "resting_time" || stateName === "resting_media";
     }
 
     function rememberExpandedContent() {
@@ -355,14 +368,49 @@ PanelWindow {
            property bool armingSwipe: false
            property bool suppressClick: false
        
-            Timer {
-                id: swipeClickSuppress
-                interval: IslandMotion.swipeSuppressClickMs
+           Timer {
+               id: swipeClickSuppress
+               interval: IslandMotion.swipeSuppressClickMs
                repeat: false
                onTriggered: parent.suppressClick = false
            }
+
+            Timer {
+                id: hoverExpandDelay
+                interval: IslandMotion.hoverExpandDelayMs
+                repeat: false
+                onTriggered: {
+                    if (root.dynamicIslandService)
+                        root.dynamicIslandService.requestHoverExpand();
+                }
+            }
+
+            Timer {
+                id: hoverCollapseDelay
+                interval: IslandMotion.hoverCollapseDelayMs
+                repeat: false
+                onTriggered: {
+                    if (root.dynamicIslandService)
+                        root.dynamicIslandService.requestHoverCollapse();
+                }
+            }
+
+            onEntered: {
+                if (!root.hoverExpandEnabled || !root.dynamicIslandService)
+                    return;
+                hoverCollapseDelay.stop();
+                hoverExpandDelay.restart();
+            }
+
+            onExited: {
+                hoverExpandDelay.stop();
+                if (root.hoverExpandEnabled && root.dynamicIslandService)
+                    hoverCollapseDelay.restart();
+            }
        
            onPressed: function(mouse) {
+               hoverExpandDelay.stop();
+               hoverCollapseDelay.stop();
                if (root.dynamicIslandService)
                    root.dynamicIslandService.setUserInteracting(true);
                swipeStartX = mouse.x;

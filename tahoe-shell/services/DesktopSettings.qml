@@ -33,6 +33,12 @@ Item {
     readonly property bool screenshotOfferActions: settingsAdapter.screenshotOfferActions
     readonly property string startupNote: settingsAdapter.startupNote
     readonly property bool compositorLayerAnimations: settingsAdapter.compositorLayerAnimations
+    readonly property bool dynamicIslandEnabled: settingsAdapter.dynamicIslandEnabled
+    readonly property bool dynamicIslandHideTopbarTime: settingsAdapter.dynamicIslandHideTopbarTime
+    readonly property string dynamicIslandLeftClickAction: settingsAdapter.dynamicIslandLeftClickAction
+    readonly property string dynamicIslandRightClickAction: settingsAdapter.dynamicIslandRightClickAction
+    readonly property bool dynamicIslandAutoExpandMedia: settingsAdapter.dynamicIslandAutoExpandMedia
+    readonly property bool dynamicIslandHoverExpand: settingsAdapter.dynamicIslandHoverExpand
     property bool loaded: false
 
     function envString(name) {
@@ -70,6 +76,14 @@ Item {
         return value === "static" || value === "dynamic" || value === "external";
     }
 
+    function validDynamicIslandClickAction(value) {
+        return value === "toggle_media"
+            || value === "summary"
+            || value === "notifications"
+            || value === "control_center"
+            || value === "none";
+    }
+
     function clampInt(value, minimum, maximum, fallback) {
         var number = Math.round(Number(value));
         if (!isFinite(number))
@@ -91,6 +105,18 @@ Item {
         if (mode === "external")
             return "UX 管理";
         return "静态";
+    }
+
+    function dynamicIslandClickActionLabel(action) {
+        if (action === "summary")
+            return "摘要页";
+        if (action === "notifications")
+            return "通知中心";
+        if (action === "control_center")
+            return "控制中心";
+        if (action === "none")
+            return "无动作";
+        return "媒体/摘要";
     }
 
     function setDockWindowTitleMode(mode) {
@@ -224,6 +250,60 @@ Item {
         settingsFile.writeAdapter();
     }
 
+    function setDynamicIslandEnabled(enabled) {
+        var next = !!enabled;
+        if (settingsAdapter.dynamicIslandEnabled === next)
+            return;
+
+        settingsAdapter.dynamicIslandEnabled = next;
+        settingsFile.writeAdapter();
+    }
+
+    function setDynamicIslandHideTopbarTime(enabled) {
+        var next = !!enabled;
+        if (settingsAdapter.dynamicIslandHideTopbarTime === next)
+            return;
+
+        settingsAdapter.dynamicIslandHideTopbarTime = next;
+        settingsFile.writeAdapter();
+    }
+
+    function setDynamicIslandLeftClickAction(action) {
+        var next = validDynamicIslandClickAction(action) ? action : "toggle_media";
+        if (settingsAdapter.dynamicIslandLeftClickAction === next)
+            return;
+
+        settingsAdapter.dynamicIslandLeftClickAction = next;
+        settingsFile.writeAdapter();
+    }
+
+    function setDynamicIslandRightClickAction(action) {
+        var next = validDynamicIslandClickAction(action) ? action : "control_center";
+        if (settingsAdapter.dynamicIslandRightClickAction === next)
+            return;
+
+        settingsAdapter.dynamicIslandRightClickAction = next;
+        settingsFile.writeAdapter();
+    }
+
+    function setDynamicIslandAutoExpandMedia(enabled) {
+        var next = !!enabled;
+        if (settingsAdapter.dynamicIslandAutoExpandMedia === next)
+            return;
+
+        settingsAdapter.dynamicIslandAutoExpandMedia = next;
+        settingsFile.writeAdapter();
+    }
+
+    function setDynamicIslandHoverExpand(enabled) {
+        var next = !!enabled;
+        if (settingsAdapter.dynamicIslandHoverExpand === next)
+            return;
+
+        settingsAdapter.dynamicIslandHoverExpand = next;
+        settingsFile.writeAdapter();
+    }
+
     function openAutostartFolder() {
         var dir = homeDir.length > 0 ? homeDir + "/.config/autostart" : Quickshell.stateDir;
         Quickshell.execDetached({
@@ -282,6 +362,16 @@ Item {
             changed = true;
         }
 
+        if (!validDynamicIslandClickAction(settingsAdapter.dynamicIslandLeftClickAction)) {
+            settingsAdapter.dynamicIslandLeftClickAction = "toggle_media";
+            changed = true;
+        }
+
+        if (!validDynamicIslandClickAction(settingsAdapter.dynamicIslandRightClickAction)) {
+            settingsAdapter.dynamicIslandRightClickAction = "control_center";
+            changed = true;
+        }
+
         if (changed)
             settingsFile.writeAdapter();
     }
@@ -314,6 +404,12 @@ Item {
             property bool screenshotOfferActions: true
             property string startupNote: ""
             property bool compositorLayerAnimations: false
+            property bool dynamicIslandEnabled: true
+            property bool dynamicIslandHideTopbarTime: true
+            property string dynamicIslandLeftClickAction: "toggle_media"
+            property string dynamicIslandRightClickAction: "control_center"
+            property bool dynamicIslandAutoExpandMedia: false
+            property bool dynamicIslandHoverExpand: false
         }
     }
 }

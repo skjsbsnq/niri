@@ -18,6 +18,8 @@ Item {
     readonly property color textColor: darkMode ? "#f5f7fb" : "#1f2328"
 
     signal clicked(int button)
+    signal hoverEntered()
+    signal hoverExited()
 
     implicitWidth: Math.max(116, Math.min(156, timeLabel.implicitWidth + 44))
     implicitHeight: 24
@@ -91,6 +93,8 @@ Item {
         hoverEnabled: true
         acceptedButtons: Qt.LeftButton | Qt.RightButton
         cursorShape: Qt.PointingHandCursor
+        onEntered: root.hoverEntered()
+        onExited: root.hoverExited()
         onClicked: function(mouse) {
             root.clicked(mouse.button);
         }

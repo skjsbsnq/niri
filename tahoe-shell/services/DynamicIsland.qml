@@ -14,6 +14,7 @@ Item {
     property var notificationsService
     property var windowsService
     property var batteryService
+    property var settingsService
     property real swipeProgress: 0 // -1 = summary (left), +1 = media (right)
     property real swipeStartProgress: 0
     property bool swipeDragging: false
@@ -44,7 +45,14 @@ Item {
     property var pendingOsd: null
     property string lastWorkspaceName: ""
     property bool workspaceTrackingReady: false
+    property bool hoverExpanded: false
 
+    readonly property bool islandEnabled: settingsService ? !!settingsService.dynamicIslandEnabled : true
+    readonly property bool dynamicIslandHideTopbarTime: settingsService ? !!settingsService.dynamicIslandHideTopbarTime : true
+    readonly property string leftClickAction: settingsService ? String(settingsService.dynamicIslandLeftClickAction || "toggle_media") : "toggle_media"
+    readonly property string rightClickAction: settingsService ? String(settingsService.dynamicIslandRightClickAction || "control_center") : "control_center"
+    readonly property bool dynamicIslandAutoExpandMedia: settingsService ? !!settingsService.dynamicIslandAutoExpandMedia : false
+    readonly property bool dynamicIslandHoverExpand: settingsService ? !!settingsService.dynamicIslandHoverExpand : false
     readonly property bool hasMedia: controlsService ? controlsService.hasMedia : false
     readonly property bool expanded: state === "expanded_media" || state === "expanded_summary"
     readonly property string mediaArtUrl: controlsService ? String(controlsService.trackArtUrl || "") : ""
@@ -57,6 +65,7 @@ Item {
     readonly property bool canPlayPause: controlsService ? !!controlsService.canPlayPause : false
     readonly property bool canNext: controlsService ? !!controlsService.canNext : false
     readonly property bool canPrev: controlsService ? !!controlsService.canPrev : false
+    readonly property string fallbackTimeText: timeText()
     readonly property int summaryBatteryPercent: batteryService ? Number(batteryService.roundedPercentage) : 0
     readonly property bool summaryBatteryCharging: batteryService ? !!batteryService.charging : false
     readonly property real summaryVolume: controlsService ? Number(controlsService.volume) : 0
@@ -97,6 +106,9 @@ Item {
 
     state: normalizedState(root.forcedState)
 
+    signal openControlCenterRequested()
+    signal openNotificationCenterRequested()
+
     onStateChanged: {
         maybeShowPendingNotification();
         maybeShowPendingOsd();
@@ -106,6 +118,9 @@ Item {
         maybeShowPendingOsd();
     }
     onNotificationsServiceChanged: resetNotificationTracking()
+    onIslandEnabledChanged: handleIslandEnabledChanged()
+    onHasMediaChanged: handleMediaAvailabilityChanged()
+    onDynamicIslandAutoExpandMediaChanged: if (root.dynamicIslandAutoExpandMedia) handleMediaAvailabilityChanged()
 
     Component.onCompleted: {
         resetNotificationTracking();
@@ -122,10 +137,16 @@ Item {
     }
 
     function restingState() {
+        if (!root.islandEnabled)
+            return "resting_time";
+
         return root.preferMediaWhenAvailable && root.hasMedia ? "resting_media" : "resting_time";
     }
 
     function normalizedState(nextState) {
+        if (!root.islandEnabled)
+            return "resting_time";
+
         var candidate = String(nextState || "");
         if (!isValidState(candidate))
             return restingState();
@@ -269,15 +290,57 @@ Item {
         root.transientIconCode = "";
     }
 
+    function handleIslandEnabledChanged() {
+        if (root.islandEnabled) {
+            handleMediaAvailabilityChanged();
+            maybeShowPendingNotification();
+            maybeShowPendingOsd();
+            return;
+        }
+
+        transientTimer.stop();
+        swipeSettleTimer.stop();
+        root.pendingNotificationEntry = null;
+        root.pendingOsd = null;
+        root.hoverExpanded = false;
+        root.userInteracting = false;
+        root.swipeDragging = false;
+        root.swipeSettling = false;
+        root.swipeMoved = false;
+        root.swipeProgress = 0;
+        root.swipeStartProgress = 0;
+        clearTransientFields();
+        root.forcedState = "";
+    }
+
+    function handleMediaAvailabilityChanged() {
+        if (!root.islandEnabled)
+            return;
+
+        if (!root.hasMedia && root.state === "expanded_media") {
+            root.hoverExpanded = false;
+            root.forcedState = "";
+            return;
+        }
+
+        if (root.dynamicIslandAutoExpandMedia && root.hasMedia && !root.expanded && !root.userInteracting)
+            showExpandedMedia();
+    }
+
     function reset() {
         transientTimer.stop();
         root.pendingNotificationEntry = null;
+        root.pendingOsd = null;
+        root.hoverExpanded = false;
         root.preferMediaWhenAvailable = true;
         clearTransientFields();
         root.forcedState = "";
     }
 
     function showTime() {
+        if (!root.islandEnabled)
+            return;
+
         transientTimer.stop();
         root.preferMediaWhenAvailable = false;
         clearTransientFields();
@@ -286,6 +349,9 @@ Item {
     }
 
     function showMedia() {
+        if (!root.islandEnabled)
+            return;
+
         transientTimer.stop();
         root.preferMediaWhenAvailable = true;
         clearTransientFields();
@@ -294,6 +360,9 @@ Item {
     }
 
     function showExpandedMedia() {
+        if (!root.islandEnabled)
+            return;
+
         transientTimer.stop();
         root.preferMediaWhenAvailable = true;
         clearTransientFields();
@@ -301,12 +370,19 @@ Item {
     }
 
     function showExpandedSummary() {
+        if (!root.islandEnabled)
+            return;
+
         transientTimer.stop();
         clearTransientFields();
         root.forcedState = "expanded_summary";
     }
 
     function toggleExpanded() {
+        if (!root.islandEnabled)
+            return;
+
+        root.hoverExpanded = false;
         if (root.expanded) {
             root.forcedState = "";
             maybeShowPendingNotification();
@@ -320,6 +396,9 @@ Item {
     }
 
     function showTransient(nextState, text, secondary, progressValue, icon, hideMs) {
+        if (!root.islandEnabled)
+            return;
+
         var candidate = String(nextState || "");
         if (candidate !== "transient_osd"
                 && candidate !== "transient_notification"
@@ -369,6 +448,9 @@ Item {
     }
 
     function handleWorkspaceChange() {
+        if (!root.islandEnabled)
+            return;
+
         if (!root.windowsService)
             return;
 
@@ -420,6 +502,9 @@ Item {
     }
 
     function canSwipe() {
+        if (!root.islandEnabled)
+            return false;
+
         var s = root.state;
         return s === "resting_time"
             || s === "resting_media"
@@ -522,14 +607,71 @@ Item {
     }
 
 
-   function handleChipClick(button) {
-        if (button === Qt.LeftButton)
-            toggleExpanded();
-        else if (button === Qt.RightButton)
+    function requestHoverExpand() {
+        if (!root.islandEnabled || !root.dynamicIslandHoverExpand || root.expanded || root.userInteracting)
+            return;
+
+        root.hoverExpanded = true;
+        if (root.hasMedia)
+            showExpandedMedia();
+        else
             showExpandedSummary();
     }
 
+    function requestHoverCollapse() {
+        if (!root.hoverExpanded)
+            return;
+
+        root.hoverExpanded = false;
+        if (root.expanded) {
+            root.forcedState = "";
+            maybeShowPendingNotification();
+            maybeShowPendingOsd();
+        }
+    }
+
+    function performClickAction(action) {
+        if (!root.islandEnabled)
+            return;
+
+        root.hoverExpanded = false;
+        switch (String(action || "toggle_media")) {
+        case "summary":
+            if (root.state === "expanded_summary")
+                root.forcedState = "";
+            else
+                showExpandedSummary();
+            break;
+        case "notifications":
+            root.forcedState = "";
+            root.openNotificationCenterRequested();
+            break;
+        case "control_center":
+            root.forcedState = "";
+            root.openControlCenterRequested();
+            break;
+        case "none":
+            break;
+        case "toggle_media":
+        default:
+            toggleExpanded();
+            break;
+        }
+    }
+
+    function handleChipClick(button) {
+        if (button === Qt.LeftButton)
+            performClickAction(root.leftClickAction);
+        else if (button === Qt.RightButton)
+            performClickAction(root.rightClickAction);
+    }
+
     function setUserInteracting(active) {
+        if (!root.islandEnabled) {
+            root.userInteracting = false;
+            return;
+        }
+
         root.userInteracting = !!active;
         if (!root.userInteracting)
             maybeShowPendingNotification();
@@ -624,6 +766,11 @@ Item {
     }
 
    function presentOsdEntry(entry) {
+       if (!root.islandEnabled) {
+           root.pendingOsd = null;
+           return;
+       }
+
        if (!entry || blocksTransientOsd()) {
            if (entry)
                root.pendingOsd = entry;
@@ -642,6 +789,11 @@ Item {
    }
 
     function maybeShowPendingOsd() {
+        if (!root.islandEnabled) {
+            root.pendingOsd = null;
+            return;
+        }
+
         if (!root.pendingOsd || blocksTransientOsd())
             return;
         var entry = root.pendingOsd;
@@ -650,6 +802,9 @@ Item {
     }
 
     function handleVolumeChange() {
+        if (!root.islandEnabled)
+            return;
+
         if (!root.controlsService)
             return;
         var volume = Number(root.controlsService.volume) || 0;
@@ -665,6 +820,9 @@ Item {
     }
 
     function handleMuteChange() {
+        if (!root.islandEnabled)
+            return;
+
         if (!root.controlsService)
             return;
         var muted = !!root.controlsService.muted;
@@ -679,6 +837,9 @@ Item {
     }
 
     function handleBrightnessChange() {
+        if (!root.islandEnabled)
+            return;
+
         if (!root.controlsService)
             return;
         var brightness = Number(root.controlsService.brightness);
@@ -705,6 +866,11 @@ Item {
     }
 
    function queueOrShowNotificationEntry(entry) {
+        if (!root.islandEnabled) {
+            root.pendingNotificationEntry = null;
+            return;
+        }
+
         if (!entry || notificationsDndEnabled())
             return;
 
@@ -717,6 +883,11 @@ Item {
     }
 
     function maybeShowPendingNotification() {
+        if (!root.islandEnabled) {
+            root.pendingNotificationEntry = null;
+            return;
+        }
+
         if (!root.pendingNotificationEntry || blocksTransientNotification() || notificationsDndEnabled())
             return;
 
@@ -816,6 +987,12 @@ Item {
     function debugSummary() {
         return [
             "state=" + root.state,
+            "enabled=" + root.islandEnabled,
+            "hideTopbarTime=" + root.dynamicIslandHideTopbarTime,
+            "leftClickAction=" + root.leftClickAction,
+            "rightClickAction=" + root.rightClickAction,
+            "autoExpandMedia=" + root.dynamicIslandAutoExpandMedia,
+            "hoverExpand=" + root.dynamicIslandHoverExpand,
             "displayText=" + root.displayText,
             "secondaryText=" + root.secondaryText,
             "progress=" + root.progress,

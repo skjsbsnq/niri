@@ -187,6 +187,8 @@ function categoryColor(key, darkMode) {
         return "#30b0c8";     // teal
     case "notifications":
         return "#ff3b30";     // system red
+    case "dynamic-island":
+        return "#5e5ce6";     // system indigo (top-bar dynamic island)
     case "screenshot":
         return "#ff7a59";     // coral
     case "dock":

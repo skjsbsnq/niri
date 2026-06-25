@@ -119,6 +119,15 @@ Rectangle {
 
         Controls.TahoeSidebarButton {
             theme: sidebar.theme
+            label: "灵动岛"
+            iconCode: "\ueb81"
+            accentColor: sidebar.categoryColor("dynamic-island")
+            active: sidebar.panel && sidebar.panel.selectedPage === "dynamic-island"
+            onActivated: sidebar.panel.selectedPage = "dynamic-island"
+        }
+
+        Controls.TahoeSidebarButton {
+            theme: sidebar.theme
             label: "截图"
             iconCode: "\ue3b0"
             accentColor: sidebar.categoryColor("screenshot")

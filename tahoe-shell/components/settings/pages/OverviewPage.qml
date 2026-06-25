@@ -55,6 +55,21 @@ Flickable {
             Controls.TahoeSummaryTile {
                 theme: page.theme
                 Layout.fillWidth: true
+                iconCode: "\ueb81"
+                title: page.panel && page.panel.settingsService && page.panel.settingsService.dynamicIslandEnabled
+                    ? "灵动岛已启用"
+                    : "灵动岛已关闭"
+                detail: page.panel && page.panel.settingsService
+                    ? (page.panel.settingsService.dynamicIslandHideTopbarTime ? "隐藏旧时间" : "保留顶栏时间")
+                        + " · 左键 " + page.panel.settingsService.dynamicIslandClickActionLabel(page.panel.settingsService.dynamicIslandLeftClickAction)
+                    : "设置服务不可用"
+                accentColor: page.panel ? page.panel.categoryColor("dynamic-island") : "#5e5ce6"
+                onActivated: page.panel.selectedPage = "dynamic-island"
+            }
+
+            Controls.TahoeSummaryTile {
+                theme: page.theme
+                Layout.fillWidth: true
                 iconCode: "\ue3b0"
                 title: "截图"
                 detail: page.panel ? page.panel.screenshotPathText() : ""

@@ -119,6 +119,8 @@ PanelWindow {
             return "壁纸";
         if (selectedPage === "notifications")
             return "通知与输入";
+        if (selectedPage === "dynamic-island")
+            return "灵动岛";
         if (selectedPage === "screenshot")
             return "截图";
         if (selectedPage === "dock")
@@ -151,6 +153,8 @@ PanelWindow {
             return "静态图片和动态壁纸";
         if (selectedPage === "notifications")
             return "勿扰、通知历史和输入法状态";
+        if (selectedPage === "dynamic-island")
+            return "顶栏中心胶囊、点击行为和展开偏好";
         if (selectedPage === "screenshot")
             return "保存目录、复制和通知动作";
         if (selectedPage === "dock")
@@ -183,28 +187,30 @@ PanelWindow {
             return 2;
         if (name === "notifications")
             return 3;
-        if (name === "screenshot")
+        if (name === "dynamic-island")
             return 4;
-        if (name === "dock")
+        if (name === "screenshot")
             return 5;
-        if (name === "startup")
+        if (name === "dock")
             return 6;
-        if (name === "health")
+        if (name === "startup")
             return 7;
-        if (name === "about")
+        if (name === "health")
             return 8;
-        if (name === "niri")
+        if (name === "about")
             return 9;
-        if (name === "niri-layout")
+        if (name === "niri")
             return 10;
-        if (name === "niri-glass")
+        if (name === "niri-layout")
             return 11;
-        if (name === "niri-input")
+        if (name === "niri-glass")
             return 12;
-        if (name === "niri-animations")
+        if (name === "niri-input")
             return 13;
-        if (name === "niri-keyboard")
+        if (name === "niri-animations")
             return 14;
+        if (name === "niri-keyboard")
+            return 15;
         return 0;
     }
 
@@ -407,6 +413,11 @@ PanelWindow {
                         }
 
                         Pages.NotificationsPage {
+                            panel: root
+                            theme: root
+                        }
+
+                        Pages.DynamicIslandPage {
                             panel: root
                             theme: root
                         }

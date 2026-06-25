@@ -619,10 +619,19 @@ expanded_summary
 
 ### T09 设置入口和持久化配置
 
+状态：完成（2026-06-25）
+
+验收记录：`tahoe-shell/docs/dynamic-island-t09-acceptance-2026-06-25.md`
+
 范围：
 
 - `services/DesktopSettings.qml` 或新 island 设置状态
 - `SettingsPanel` 对应页面
+- `services/DynamicIsland.qml`
+- `components/TopBar.qml`
+- `components/DynamicIslandOverlay.qml`
+- `components/DynamicIslandMotion.js`
+- `shell.qml`
 - 不引入 Tide `UserConfigBackend`
 
 目标：

@@ -33,6 +33,13 @@ Item {
             "internalPage": "dock"
         },
         {
+            "id": "tahoe-dynamic-island",
+            "title": "灵动岛设置",
+            "subtitle": "顶栏胶囊、点击行为和 hover 展开",
+            "keywords": ["灵动岛", "dynamic island", "island", "胶囊", "顶栏", "时间", "hover", "媒体"],
+            "internalPage": "dynamic-island"
+        },
+        {
             "id": "tahoe-health",
             "title": "系统健康",
             "subtitle": "检查 portal、PipeWire、截图、剪贴板、托盘和兼容性",

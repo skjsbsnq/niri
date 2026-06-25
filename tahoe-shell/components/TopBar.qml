@@ -6,6 +6,7 @@ import Quickshell
 import Quickshell.Widgets
 import Quickshell.Wayland
 import "TahoeGlass.js" as GlassStyle
+import "DynamicIslandMotion.js" as IslandMotion
 
 PanelWindow {
     id: root
@@ -21,6 +22,7 @@ PanelWindow {
     property var screenshotService
     property var inputMethodService
     property var dynamicIslandService
+    property var settingsService
     property bool controlCenterOpen: false
     property bool launchpadOpen: false
     property bool appMenuOpen: false
@@ -38,6 +40,12 @@ PanelWindow {
     readonly property int notificationCount: notificationsService ? notificationsService.historyCount : 0
     readonly property int clipboardCount: clipboardService ? clipboardService.historyCount : 0
     readonly property bool dndEnabled: notificationsService ? notificationsService.dndEnabled : false
+    readonly property bool dynamicIslandEnabled: settingsService ? !!settingsService.dynamicIslandEnabled : true
+    readonly property bool dynamicIslandHideTopbarTime: settingsService ? !!settingsService.dynamicIslandHideTopbarTime : true
+    readonly property bool dynamicIslandHoverExpand: settingsService ? !!settingsService.dynamicIslandHoverExpand : false
+    readonly property bool dynamicIslandOverlayHandlesResting: dynamicIslandEnabled && dynamicIslandHideTopbarTime
+    readonly property bool showTopbarTimeFallback: !dynamicIslandOverlayHandlesResting
+    readonly property bool chipInteractive: dynamicIslandEnabled && !dynamicIslandOverlayHandlesResting
     readonly property bool batteryAvailable: batteryService && batteryService.available
     readonly property color glassFill: darkMode ? "#d01d1f24" : GlassStyle.FillTopBar
     readonly property color glassStroke: darkMode ? "#38ffffff" : GlassStyle.StrokeTopBar
@@ -756,10 +764,34 @@ PanelWindow {
                 anchors.centerIn: islandReserve
                 width: implicitWidth
                 height: implicitHeight
-                displayText: root.dynamicIslandService ? root.dynamicIslandService.displayText : ""
+                visible: root.showTopbarTimeFallback
+                displayText: root.dynamicIslandService ? root.dynamicIslandService.fallbackTimeText : ""
                 darkMode: root.darkMode
-                interactive: false
+                interactive: root.chipInteractive
                 z: 2
+                onClicked: function(button) {
+                    if (root.dynamicIslandService)
+                        root.dynamicIslandService.handleChipClick(button);
+                }
+                onHoverEntered: {
+                    if (!root.dynamicIslandHoverExpand || !root.dynamicIslandService)
+                        return;
+                    topbarIslandHoverExpand.restart();
+                }
+                onHoverExited: {
+                    topbarIslandHoverExpand.stop();
+                }
+
+                Timer {
+                    id: topbarIslandHoverExpand
+                    interval: IslandMotion.hoverExpandDelayMs
+                    repeat: false
+                    onTriggered: {
+                        if (root.dynamicIslandService)
+                            root.dynamicIslandService.requestHoverExpand();
+                    }
+                }
+
             }
         }
     }

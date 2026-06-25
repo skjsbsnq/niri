@@ -30,3 +30,7 @@ var swipeReturnThreshold = 0.44;
 var swipeVerticalTolerance = 24;
 var swipeSettleIdleMs = 150;
 var swipeSuppressClickMs = 180;
+
+// Hover expand (T09). Matches the Tide-derived hover timing guardrails.
+var hoverExpandDelayMs = 350;
+var hoverCollapseDelayMs = 250;

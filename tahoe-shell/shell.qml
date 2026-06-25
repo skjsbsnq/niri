@@ -80,6 +80,57 @@ ShellRoot {
         topBarPopupAnchorRect = anchorRect || null;
     }
 
+    function screenByName(name) {
+        var target = String(name || "");
+        var screens = [...Quickshell.screens];
+        for (var i = 0; i < screens.length; i++) {
+            if (screenName(screens[i]) === target)
+                return screens[i];
+        }
+        return screens.length > 0 ? screens[0] : null;
+    }
+
+    function dynamicIslandAnchorRect(screen) {
+        var width = Math.max(1, Number(screen && screen.width) || 1);
+        var islandWidth = dynamicIsland && dynamicIsland.state === "expanded_summary" ? 360
+            : dynamicIsland && dynamicIsland.state === "expanded_media" ? 400
+            : 140;
+        return {
+            "x": Math.round(Math.max(0, (width - islandWidth) / 2)),
+            "y": 0,
+            "width": Math.round(islandWidth),
+            "height": 38
+        };
+    }
+
+    function prepareDynamicIslandPopup() {
+        var screen = screenByName(dynamicIsland ? dynamicIsland.targetScreenName : navigationScreenName());
+        if (!screen)
+            return false;
+        prepareTopBarPopup(screen, dynamicIslandAnchorRect(screen));
+        return true;
+    }
+
+    function openDynamicIslandControlCenter() {
+        if (!prepareDynamicIslandPopup())
+            return;
+        var wasOpenHere = topBarPopupOpenFor(controlCenterOpen, screenByName(topBarPopupScreenName));
+        closeTopBarPopups("controlCenter");
+        controlCenterOpen = !wasOpenHere;
+        launchpadOpen = false;
+        spotlightOpen = false;
+    }
+
+    function openDynamicIslandNotificationCenter() {
+        if (!prepareDynamicIslandPopup())
+            return;
+        var wasOpenHere = topBarPopupOpenFor(notificationCenterOpen, screenByName(topBarPopupScreenName));
+        closeTopBarPopups("notificationCenter");
+        notificationCenterOpen = !wasOpenHere;
+        launchpadOpen = false;
+        spotlightOpen = false;
+    }
+
     function topBarPopupOpenFor(open, screen) {
         return open && topBarPopupScreenName === screenName(screen);
     }
@@ -347,9 +398,26 @@ ShellRoot {
         function openSettings(): void { shell.openSettingsPanel("settings"); }
         function openAbout(): void { shell.openSettingsPanel("about"); }
         function openSystemHealth(): void { shell.openSettingsPanel("health"); }
+        function openDynamicIslandSettings(): void { shell.openSettingsPanel("dynamic-island"); }
         function closeSettings(): void { shell.closeSettingsPanel(); }
         function dynamicIslandGetState(): string { return dynamicIsland.state; }
         function dynamicIslandGetDebugSummary(): string { return dynamicIsland.debugSummary(); }
+        function dynamicIslandGetSettingsSummary(): string {
+            return [
+                "enabled=" + desktopSettings.dynamicIslandEnabled,
+                "hideTopbarTime=" + desktopSettings.dynamicIslandHideTopbarTime,
+                "leftClickAction=" + desktopSettings.dynamicIslandLeftClickAction,
+                "rightClickAction=" + desktopSettings.dynamicIslandRightClickAction,
+                "autoExpandMedia=" + desktopSettings.dynamicIslandAutoExpandMedia,
+                "hoverExpand=" + desktopSettings.dynamicIslandHoverExpand
+            ].join("; ");
+        }
+        function dynamicIslandSetEnabled(enabled: bool): string { desktopSettings.setDynamicIslandEnabled(enabled); return dynamicIslandGetSettingsSummary(); }
+        function dynamicIslandSetHideTopbarTime(enabled: bool): string { desktopSettings.setDynamicIslandHideTopbarTime(enabled); return dynamicIslandGetSettingsSummary(); }
+        function dynamicIslandSetLeftClickAction(action: string): string { desktopSettings.setDynamicIslandLeftClickAction(action); return dynamicIslandGetSettingsSummary(); }
+        function dynamicIslandSetRightClickAction(action: string): string { desktopSettings.setDynamicIslandRightClickAction(action); return dynamicIslandGetSettingsSummary(); }
+        function dynamicIslandSetAutoExpandMedia(enabled: bool): string { desktopSettings.setDynamicIslandAutoExpandMedia(enabled); return dynamicIslandGetSettingsSummary(); }
+        function dynamicIslandSetHoverExpand(enabled: bool): string { desktopSettings.setDynamicIslandHoverExpand(enabled); return dynamicIslandGetSettingsSummary(); }
         function dynamicIslandReset(): string { dynamicIsland.reset(); return dynamicIsland.state; }
         function dynamicIslandShowTime(): string { dynamicIsland.showTime(); return dynamicIsland.state; }
         function dynamicIslandShowMedia(): string { dynamicIsland.showMedia(); return dynamicIsland.state; }
@@ -451,6 +519,9 @@ ShellRoot {
         notificationsService: notifications
         windowsService: niri
         batteryService: battery
+        settingsService: desktopSettings
+        onOpenControlCenterRequested: shell.openDynamicIslandControlCenter()
+        onOpenNotificationCenterRequested: shell.openDynamicIslandNotificationCenter()
     }
 
     LockScreen {
@@ -492,6 +563,7 @@ ShellRoot {
                 screenshotService: screenshotService
                 inputMethodService: inputMethod
                 dynamicIslandService: dynamicIsland
+                settingsService: desktopSettings
                 appMenuOpen: shell.topBarPopupOpenFor(shell.appMenuOpen, modelData)
                 applicationMenuOpen: shell.topBarPopupOpenFor(shell.applicationMenuOpen, modelData)
                 spotlightOpen: shell.spotlightOpen

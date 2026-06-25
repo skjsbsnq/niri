@@ -30,10 +30,12 @@ PanelWindow {
 
     property var notificationsService
     property var settingsService
+    property var dynamicIslandService
     property var current: notificationsService ? notificationsService.current : null
     property bool hasCurrent: !!current
-    readonly property bool suppressedByDynamicIsland: !!root.settingsService
-        && !!root.settingsService.dynamicIslandEnabled
+    readonly property bool suppressedByDynamicIsland: root.dynamicIslandService
+        ? !!root.dynamicIslandService.islandEnabled
+        : (!!root.settingsService && !!root.settingsService.dynamicIslandEnabled)
     readonly property bool shouldShowToast: hasCurrent && !suppressedByDynamicIsland
     // Kept for shell.qml compatibility. The card is a glass/blur region item,
     // so Phase 3 forbids springing its geometry even on real GPUs.

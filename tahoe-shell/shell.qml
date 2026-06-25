@@ -907,6 +907,7 @@ ShellRoot {
                 screen: modelData
                 notificationsService: notifications
                 settingsService: desktopSettings
+                dynamicIslandService: dynamicIsland
                 useSpring: shell.useSpring
             }
         }

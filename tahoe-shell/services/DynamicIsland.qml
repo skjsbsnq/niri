@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import Quickshell
+import "../components/DynamicIslandMotion.js" as IslandMotion
 
 // Dynamic Island state owner. The service owns transient arbitration so the
 // overlay can stay a pure renderer for chip/notification/OSD states.
@@ -12,6 +13,18 @@ Item {
     property var controlsService
     property var notificationsService
     property var windowsService
+    property var batteryService
+    property real swipeProgress: 0 // -1 = summary (left), +1 = media (right)
+    property real swipeStartProgress: 0
+    property bool swipeDragging: false
+    property bool swipeSettling: false
+    property bool swipeMoved: false
+    readonly property int swipeLeftWidth: 360
+    readonly property int swipeRightWidth: 400
+    readonly property int swipeRestingWidth: restingWidthForState(restingState())
+    readonly property real swipePreviewWidth: swipeDragging || swipeSettling
+        ? swipeRestingWidth + (swipeSideWidthForProgress(swipeProgress) - swipeRestingWidth) * Math.min(1, Math.abs(swipeProgress))
+        : -1
 
     property bool preferMediaWhenAvailable: true
     property date now: new Date()
@@ -24,9 +37,45 @@ Item {
     property int observedNotificationCount: 0
     property int lastSeenNotificationId: -1
     property var pendingNotificationEntry: null
+    property real lastVolume: 0
+    property bool lastMuted: false
+    property real lastBrightness: 1.0
+    property bool brightnessTrackingReady: false
+    property var pendingOsd: null
+    property string lastWorkspaceName: ""
+    property bool workspaceTrackingReady: false
 
     readonly property bool hasMedia: controlsService ? controlsService.hasMedia : false
     readonly property bool expanded: state === "expanded_media" || state === "expanded_summary"
+    readonly property string mediaArtUrl: controlsService ? String(controlsService.trackArtUrl || "") : ""
+    readonly property bool mediaPlaying: controlsService ? !!controlsService.isPlaying : false
+    readonly property real mediaPosition: controlsService ? Number(controlsService.trackPosition) : 0
+    readonly property real mediaLength: controlsService ? Number(controlsService.trackLength) : 0
+    readonly property real mediaProgress: controlsService ? Number(controlsService.trackProgress) : 0
+    readonly property bool mediaPositionSupported: controlsService ? !!controlsService.trackPositionSupported : false
+    readonly property bool mediaLengthSupported: controlsService ? !!controlsService.trackLengthSupported : false
+    readonly property bool canPlayPause: controlsService ? !!controlsService.canPlayPause : false
+    readonly property bool canNext: controlsService ? !!controlsService.canNext : false
+    readonly property bool canPrev: controlsService ? !!controlsService.canPrev : false
+    readonly property int summaryBatteryPercent: batteryService ? Number(batteryService.roundedPercentage) : 0
+    readonly property bool summaryBatteryCharging: batteryService ? !!batteryService.charging : false
+    readonly property real summaryVolume: controlsService ? Number(controlsService.volume) : 0
+    readonly property bool summaryMuted: controlsService ? !!controlsService.muted : false
+    readonly property real summaryBrightness: controlsService ? Number(controlsService.brightness) : 0
+    readonly property bool summaryBrightnessAvailable: controlsService ? !!controlsService.brightnessAvailable : false
+    readonly property string summaryWorkspaceLabel: activeWorkspaceText()
+    function mediaTogglePlayPause() {
+        if (root.controlsService)
+            root.controlsService.togglePlayPause();
+    }
+    function mediaNext() {
+        if (root.controlsService)
+            root.controlsService.next();
+    }
+    function mediaPrevious() {
+        if (root.controlsService)
+            root.controlsService.previous();
+    }
     readonly property string displayText: displayTextForState(state)
     readonly property string secondaryText: secondaryTextForState(state)
     readonly property real progress: progressForState(state)
@@ -35,6 +84,7 @@ Item {
     readonly property int smokeTransientHideMs: 1250
     readonly property int notificationHideMs: 4200
     readonly property int smokeNotificationHideMs: notificationHideMs
+    readonly property int osdHideMs: 1250
     readonly property var validStates: [
         "resting_time",
         "resting_media",
@@ -47,11 +97,21 @@ Item {
 
     state: normalizedState(root.forcedState)
 
-    onStateChanged: maybeShowPendingNotification()
-    onUserInteractingChanged: maybeShowPendingNotification()
+    onStateChanged: {
+        maybeShowPendingNotification();
+        maybeShowPendingOsd();
+    }
+    onUserInteractingChanged: {
+        maybeShowPendingNotification();
+        maybeShowPendingOsd();
+    }
     onNotificationsServiceChanged: resetNotificationTracking()
 
-    Component.onCompleted: resetNotificationTracking()
+    Component.onCompleted: {
+        resetNotificationTracking();
+        captureOsdBaselines();
+        captureWorkspaceBaseline();
+    }
 
     function msecsToNextMinute() {
         return Math.max(250, 60000 - (root.now.getSeconds() * 1000 + root.now.getMilliseconds()));
@@ -266,20 +326,26 @@ Item {
                 && candidate !== "transient_workspace")
             return;
 
-        root.forcedState = candidate;
         root.transientDisplayText = String(text || "");
         root.transientSecondaryText = String(secondary || "");
         root.transientProgress = Number(progressValue);
         root.transientIconCode = String(icon || "");
+        root.forcedState = candidate;
         transientTimer.interval = Math.max(250, Math.round(Number(hideMs) || root.smokeTransientHideMs));
         transientTimer.restart();
     }
 
-    function showTransientOsd(text, progressValue) {
-        showTransient("transient_osd", text, Math.round(Math.max(0, Math.min(1, Number(progressValue) || 0)) * 100) + "%", progressValue, "\ue050", root.smokeTransientHideMs);
+   function showTransientOsd(text, progressValue) {
+        showTransientOsdWithIcon(text, progressValue, "\ue050");
     }
 
-    function showTransientNotification(summary, body, appName) {
+    function showTransientOsdWithIcon(text, progressValue, icon) {
+        var progress = Math.max(0, Math.min(1, Number(progressValue) || 0));
+        showTransient("transient_osd", text, Math.round(progress * 100) + "%", progress,
+            String(icon || "\ue050"), root.osdHideMs);
+   }
+
+   function showTransientNotification(summary, body, appName) {
         queueOrShowNotificationEntry({
             "id": -1,
             "summary": sanitizeNotificationText(summary, ""),
@@ -292,8 +358,171 @@ Item {
         var text = String(label || "").trim();
         showTransient("transient_workspace", text.length > 0 ? text : activeWorkspaceText(), "", -1, "\ue1b1", root.smokeTransientHideMs);
     }
+    function captureWorkspaceBaseline() {
+        var label = root.windowsService ? String(root.windowsService.activeWorkspaceName || "") : "";
+        root.lastWorkspaceName = label;
+        root.workspaceTrackingReady = label.length > 0;
+    }
 
-    function handleChipClick(button) {
+    function blocksTransientWorkspace() {
+        return root.expanded || root.userInteracting;
+    }
+
+    function handleWorkspaceChange() {
+        if (!root.windowsService)
+            return;
+
+        var label = String(root.windowsService.activeWorkspaceName || "");
+        if (label.length === 0) {
+            root.lastWorkspaceName = label;
+            return;
+        }
+
+        if (!root.workspaceTrackingReady) {
+            root.lastWorkspaceName = label;
+            root.workspaceTrackingReady = true;
+            return;
+        }
+
+        if (label === root.lastWorkspaceName)
+            return;
+
+        root.lastWorkspaceName = label;
+        if (root.blocksTransientWorkspace())
+            return;
+
+        var display = activeWorkspaceText();
+        showTransient("transient_workspace", display, "", -1, "\ue1b1", root.smokeTransientHideMs);
+    }
+
+
+    function restingWidthForState(currentState) {
+        switch (currentState) {
+        case "resting_media":
+            return 190;
+        case "expanded_media":
+            return 400;
+        case "expanded_summary":
+            return 360;
+        case "transient_notification":
+            return 320;
+        case "transient_osd":
+        case "transient_workspace":
+            return 220;
+        case "resting_time":
+        default:
+            return 140;
+        }
+    }
+
+    function swipeSideWidthForProgress(progressValue) {
+        return progressValue >= 0 ? root.swipeRightWidth : root.swipeLeftWidth;
+    }
+
+    function canSwipe() {
+        var s = root.state;
+        return s === "resting_time"
+            || s === "resting_media"
+            || s === "expanded_media"
+            || s === "expanded_summary";
+    }
+
+    function beginSwipe() {
+        if (!root.canSwipe())
+            return false;
+        swipeSettleTimer.stop();
+        root.swipeDragging = true;
+        root.swipeSettling = false;
+        root.swipeMoved = false;
+        if (root.state === "expanded_media")
+            root.swipeStartProgress = 1;
+        else if (root.state === "expanded_summary")
+            root.swipeStartProgress = -1;
+        else
+            root.swipeStartProgress = 0;
+        root.swipeProgress = root.swipeStartProgress;
+        root.setUserInteracting(true);
+        return true;
+    }
+
+    function advanceSwipe(deltaX, deltaY) {
+        if (!root.swipeDragging)
+            return;
+
+        var vertical = Math.abs(Number(deltaY) || 0);
+        var horizontal = vertical > 220 ? 0 : (Number(deltaX) || 0);
+        // vertical drift beyond the tolerance degrades the horizontal pull,
+        // matching Tide's sideSwipeVerticalTolerance behaviour.
+        if (vertical > IslandMotion.swipeVerticalTolerance)
+            horizontal = horizontal * Math.max(0, 1 - (vertical - IslandMotion.swipeVerticalTolerance) / 36);
+
+        var sideWidth = Math.max(1, root.swipeSideWidthForProgress(root.swipeProgress || horizontal));
+        var next = root.swipeProgress + horizontal / sideWidth;
+        next = Math.max(-1, Math.min(1, next));
+        if (Math.abs(next - root.swipeProgress) > 0.01)
+            root.swipeMoved = true;
+        root.swipeProgress = next;
+    }
+
+    function resolveSwipe() {
+        if (!root.swipeDragging)
+            return;
+
+        root.swipeDragging = false;
+        root.setUserInteracting(false);
+        var progress = root.swipeProgress;
+        var startProgress = root.swipeStartProgress;
+        var entered = false;
+
+        if (progress >= IslandMotion.swipeEnterThreshold) {
+            root.swipeSettling = true;
+            root.swipeProgress = 0;
+            root.forcedState = root.hasMedia ? "expanded_media" : "expanded_summary";
+            entered = true;
+        } else if (progress <= -IslandMotion.swipeEnterThreshold) {
+            root.swipeSettling = true;
+            root.swipeProgress = 0;
+            root.forcedState = "expanded_summary";
+            entered = true;
+        } else if (startProgress >= 0.5 && progress <= IslandMotion.swipeReturnThreshold) {
+            root.swipeSettling = true;
+            root.swipeProgress = 0;
+            root.forcedState = "";
+        } else if (startProgress <= -0.5 && progress >= -IslandMotion.swipeReturnThreshold) {
+            root.swipeSettling = true;
+            root.swipeProgress = 0;
+            root.forcedState = "";
+        } else {
+            root.swipeSettling = true;
+            root.swipeProgress = 0;
+        }
+
+        swipeSettleTimer.restart();
+        root.swipeMoved = false;
+        if (entered)
+            root.maybeShowPendingNotification();
+    }
+
+    function cancelSwipe() {
+        if (!root.swipeDragging)
+            return;
+
+        root.swipeDragging = false;
+        root.swipeSettling = true;
+        root.swipeStartProgress = 0;
+        root.swipeProgress = 0;
+        root.setUserInteracting(false);
+        swipeSettleTimer.restart();
+    }
+
+    function consumeSwipeMoved() {
+        var moved = root.swipeMoved;
+        root.swipeMoved = false;
+        return moved;
+    }
+
+
+   function handleChipClick(button) {
         if (button === Qt.LeftButton)
             toggleExpanded();
         else if (button === Qt.RightButton)
@@ -375,11 +604,107 @@ Item {
         return !!(root.notificationsService && root.notificationsService.dndEnabled);
     }
 
-    function blocksTransientNotification() {
+   function blocksTransientNotification() {
+       return root.expanded || root.userInteracting;
+   }
+
+    function blocksTransientOsd() {
         return root.expanded || root.userInteracting;
     }
 
-    function queueOrShowNotificationEntry(entry) {
+    function captureOsdBaselines() {
+        if (!root.controlsService)
+            return;
+        root.lastVolume = Number(root.controlsService.volume) || 0;
+        root.lastMuted = !!root.controlsService.muted;
+        root.lastBrightness = Number(root.controlsService.brightness);
+        if (!(root.lastBrightness > 0))
+            root.lastBrightness = 1.0;
+        root.brightnessTrackingReady = !!root.controlsService.brightnessAvailable;
+    }
+
+   function presentOsdEntry(entry) {
+       if (!entry || blocksTransientOsd()) {
+           if (entry)
+               root.pendingOsd = entry;
+           return;
+       }
+       root.pendingOsd = null;
+       var icon = String(entry.icon || "\ue050");
+       if (entry.kind === "volume") {
+           var muted = !!entry.muted;
+           var progress = muted ? 0 : Math.max(0, Math.min(1, Number(entry.progress)));
+            showTransientOsdWithIcon(muted ? "静音" : "音量", progress,
+                muted ? "\ue04f" : "\ue050");
+       } else {
+            showTransientOsdWithIcon("亮度", Number(entry.progress), "\ue518");
+       }
+   }
+
+    function maybeShowPendingOsd() {
+        if (!root.pendingOsd || blocksTransientOsd())
+            return;
+        var entry = root.pendingOsd;
+        root.pendingOsd = null;
+        presentOsdEntry(entry);
+    }
+
+    function handleVolumeChange() {
+        if (!root.controlsService)
+            return;
+        var volume = Number(root.controlsService.volume) || 0;
+        var muted = !!root.controlsService.muted;
+        root.lastVolume = volume;
+        root.lastMuted = muted;
+        presentOsdEntry({
+            "kind": "volume",
+            "progress": muted ? 0 : volume,
+            "muted": muted,
+            "icon": muted ? "\ue04f" : "\ue050"
+        });
+    }
+
+    function handleMuteChange() {
+        if (!root.controlsService)
+            return;
+        var muted = !!root.controlsService.muted;
+        root.lastMuted = muted;
+        var volume = Number(root.controlsService.volume) || 0;
+        presentOsdEntry({
+            "kind": "volume",
+            "progress": muted ? 0 : volume,
+            "muted": muted,
+            "icon": muted ? "\ue04f" : "\ue050"
+        });
+    }
+
+    function handleBrightnessChange() {
+        if (!root.controlsService)
+            return;
+        var brightness = Number(root.controlsService.brightness);
+        if (!(brightness > 0))
+            return;
+        if (!root.controlsService.brightnessAvailable) {
+            root.lastBrightness = brightness;
+            root.brightnessTrackingReady = false;
+            return;
+        }
+        if (!root.brightnessTrackingReady) {
+            root.lastBrightness = brightness;
+            root.brightnessTrackingReady = true;
+            return;
+        }
+        if (Math.abs(brightness - root.lastBrightness) < 0.005)
+            return;
+        root.lastBrightness = brightness;
+        presentOsdEntry({
+            "kind": "brightness",
+            "progress": brightness,
+            "icon": "\ue518"
+        });
+    }
+
+   function queueOrShowNotificationEntry(entry) {
         if (!entry || notificationsDndEnabled())
             return;
 
@@ -497,7 +822,12 @@ Item {
             "iconCode=" + root.iconCode,
             "targetScreenName=" + root.targetScreenName,
             "expanded=" + root.expanded,
-            "pendingNotification=" + !!root.pendingNotificationEntry
+            "pendingNotification=" + !!root.pendingNotificationEntry,
+            "swipeStartProgress=" + root.swipeStartProgress,
+            "swipeProgress=" + root.swipeProgress,
+            "swipePreviewWidth=" + root.swipePreviewWidth,
+            "swipeDragging=" + root.swipeDragging,
+            "swipeSettling=" + root.swipeSettling
         ].join("; ");
     }
 
@@ -511,6 +841,36 @@ Item {
 
         function onDndEnabledChanged() {
             root.handleDndChanged();
+        }
+    }
+
+    Connections {
+        target: root.controlsService
+        ignoreUnknownSignals: true
+
+        function onVolumeChanged() {
+            root.handleVolumeChange();
+        }
+
+        function onMutedChanged() {
+            root.handleMuteChange();
+        }
+
+        function onBrightnessChanged() {
+            root.handleBrightnessChange();
+        }
+
+       function onBrightnessAvailableChanged() {
+           root.captureOsdBaselines();
+       }
+   }
+
+    Connections {
+        target: root.windowsService
+        ignoreUnknownSignals: true
+
+        function onActiveWorkspaceNameChanged() {
+            root.handleWorkspaceChange();
         }
     }
 
@@ -529,6 +889,16 @@ Item {
         onTriggered: {
             root.clearTransientFields();
             root.forcedState = "";
+        }
+    }
+
+    Timer {
+        id: swipeSettleTimer
+        interval: IslandMotion.swipeSettleDuration
+        repeat: false
+        onTriggered: {
+            root.swipeSettling = false;
+            root.swipeStartProgress = 0;
         }
     }
 

@@ -758,11 +758,8 @@ PanelWindow {
                 height: implicitHeight
                 displayText: root.dynamicIslandService ? root.dynamicIslandService.displayText : ""
                 darkMode: root.darkMode
+                interactive: false
                 z: 2
-                onClicked: function(button) {
-                    if (root.dynamicIslandService)
-                        root.dynamicIslandService.handleChipClick(button);
-                }
             }
         }
     }

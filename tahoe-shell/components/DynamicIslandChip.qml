@@ -9,8 +9,8 @@ Item {
     property string displayText: ""
     property bool darkMode: false
     property bool interactive: true
-    readonly property bool hovered: chipMouse.containsMouse
-    readonly property bool pressed: chipMouse.pressed
+    readonly property bool hovered: interactive && chipMouse.containsMouse
+    readonly property bool pressed: interactive && chipMouse.pressed
     readonly property color surfaceColor: darkMode ? "#e61d1f24" : "#ecf8fbff"
     readonly property color hoverSurfaceColor: darkMode ? "#f0252830" : "#f6ffffff"
     readonly property color pressSurfaceColor: darkMode ? "#fa15171d" : "#ffffffff"

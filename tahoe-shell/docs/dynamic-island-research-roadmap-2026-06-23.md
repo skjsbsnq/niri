@@ -485,6 +485,10 @@ expanded_summary
 
 ### T05 音量/亮度 OSD 胶囊
 
+状态：完成（2026-06-24）
+
+验收记录：`tahoe-shell/docs/dynamic-island-t05-acceptance-2026-06-24.md`
+
 范围：
 
 - `services/DynamicIsland.qml`
@@ -513,6 +517,10 @@ expanded_summary
 完成后才能开始 T06。
 
 ### T06 媒体展开态
+
+状态：完成（2026-06-24）
+
+验收记录：`tahoe-shell/docs/dynamic-island-t06-acceptance-2026-06-24.md`
 
 范围：
 
@@ -543,6 +551,10 @@ expanded_summary
 完成后才能开始 T07。
 
 ### T07 左右滑动页面
+
+状态：完成（2026-06-24）
+
+验收记录：`tahoe-shell/docs/dynamic-island-t07-acceptance-2026-06-24.md`
 
 范围：
 
@@ -575,6 +587,10 @@ expanded_summary
 完成后才能开始 T08。
 
 ### T08 niri 工作区胶囊
+
+状态：完成（2026-06-24）
+
+验收记录：`tahoe-shell/docs/dynamic-island-t08-acceptance-2026-06-24.md`
 
 范围：
 

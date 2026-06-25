@@ -112,6 +112,25 @@ Item {
     property real brightness: 1.0
     property bool brightnessAvailable: false
     property bool brightnessUpdating: false
+    readonly property string brightnessMonitorScript: [
+        "last='__unset__'",
+        "while :; do",
+        "  line=''",
+        "  for d in /sys/class/backlight/*; do",
+        "    [ -r \"$d/brightness\" ] && [ -r \"$d/max_brightness\" ] || continue",
+        "    name=${d##*/}",
+        "    cur=$(cat \"$d/brightness\" 2>/dev/null) || continue",
+        "    max=$(cat \"$d/max_brightness\" 2>/dev/null) || continue",
+        "    line=\"$name,$cur,$max\"",
+        "    break",
+        "  done",
+        "  if [ \"$line\" != \"$last\" ]; then",
+        "    printf '%s\\n' \"$line\"",
+        "    last=\"$line\"",
+        "  fi",
+        "  sleep 0.2",
+        "done"
+    ].join("\n")
 
     function setBrightnessValue(value) {
         var clamped = Math.max(0, Math.min(1, Number(value) || 0));
@@ -127,6 +146,26 @@ Item {
 
     function refreshBrightness() {
         brightnessProbe.running = true;
+    }
+
+    function parseBrightnessMonitorLine(line) {
+        var text = String(line || "").trim();
+        if (text.length === 0) {
+            root.setBrightnessAvailable(false);
+            return;
+        }
+
+        var parts = text.split(",");
+        if (parts.length < 3)
+            return;
+
+        var current = parseFloat(parts[1]);
+        var max = parseFloat(parts[2]);
+        if (!isFinite(current) || !isFinite(max) || max <= 0)
+            return;
+
+        root.setBrightnessValue(current / max);
+        root.setBrightnessAvailable(true);
     }
 
     function setBrightness(value) {
@@ -188,8 +227,34 @@ Item {
         }
     }
 
+    Process {
+        id: brightnessMonitor
+        running: true
+        command: ["sh", "-lc", root.brightnessMonitorScript]
+        stdout: SplitParser {
+            splitMarker: "\n"
+            onRead: function(line) {
+                root.parseBrightnessMonitorLine(line);
+            }
+        }
+        onRunningChanged: {
+            if (!running)
+                brightnessMonitorRestart.restart();
+        }
+    }
+
+    Timer {
+        id: brightnessMonitorRestart
+        interval: 1000
+        repeat: false
+        onTriggered: {
+            if (!brightnessMonitor.running)
+                brightnessMonitor.running = true;
+        }
+    }
+
     // Poll brightness every 4s so external changes (Fn keys, other tools)
-    // are reflected. Cheap one-shot process, not worth a longer-lived channel.
+    // are reflected even if sysfs monitoring is unavailable.
     Timer {
         interval: 4000
         running: true
@@ -653,8 +718,29 @@ Item {
     readonly property var activePlayer: {
         try {
             var players = Mpris.players;
-            if (players && players.values && players.values.length > 0)
-                return players.values[0];
+            if (!players || !players.values || players.values.length === 0)
+                return null;
+
+            var first = null;
+            var pausedWithTrack = null;
+            for (var i = 0; i < players.values.length; i++) {
+                var p = players.values[i];
+                if (!p)
+                    continue;
+
+                if (!first)
+                    first = p;
+
+                if (p.playbackState === MprisPlaybackState.Playing)
+                    return p;
+
+                if (!pausedWithTrack
+                        && p.playbackState === MprisPlaybackState.Paused
+                        && String(p.trackTitle || "").trim().length > 0)
+                    pausedWithTrack = p;
+            }
+
+            return pausedWithTrack || first;
         } catch (e) {}
         return null;
     }
@@ -666,11 +752,55 @@ Item {
         if (!p)
             return false;
         try {
-            return p.playbackState === MprisPlaybackState.Playing;
+            return !!p.isPlaying || p.playbackState === MprisPlaybackState.Playing;
         } catch (e) {
             return false;
         }
     }
+
+    readonly property real trackPosition: {
+        var p = root.activePlayer;
+        if (!p)
+            return 0;
+        try {
+            return Math.max(0, Number(p.position) || 0);
+        } catch (e) {
+            return 0;
+        }
+    }
+
+    readonly property real trackLength: {
+        var p = root.activePlayer;
+        if (!p)
+            return 0;
+        try {
+            return Math.max(0, Number(p.length) || 0);
+        } catch (e) {
+            return 0;
+        }
+    }
+
+    readonly property bool trackPositionSupported: {
+        var p = root.activePlayer;
+        try {
+            return !!(p && p.positionSupported);
+        } catch (e) {
+            return false;
+        }
+    }
+
+    readonly property bool trackLengthSupported: {
+        var p = root.activePlayer;
+        try {
+            return !!(p && p.lengthSupported);
+        } catch (e) {
+            return false;
+        }
+    }
+
+    readonly property real trackProgress: trackLength > 0
+        ? Math.max(0, Math.min(1, trackPosition / trackLength))
+        : 0
 
     readonly property string trackTitle: {
         var p = root.activePlayer;
@@ -746,5 +876,20 @@ Item {
         if (!p || !p.canGoPrevious)
             return;
         try { p.previous(); } catch (e) {}
+    }
+
+    Timer {
+        interval: 1000
+        running: root.activePlayer && root.isPlaying && root.trackPositionSupported
+        repeat: true
+        triggeredOnStart: true
+        onTriggered: {
+            var p = root.activePlayer;
+            if (!p)
+                return;
+            try {
+                p.positionChanged();
+            } catch (e) {}
+        }
     }
 }

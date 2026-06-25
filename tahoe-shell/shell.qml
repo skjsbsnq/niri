@@ -358,6 +358,13 @@ ShellRoot {
         function dynamicIslandShowOsd(text: string, progress: real): string { dynamicIsland.showTransientOsd(text, progress); return dynamicIsland.state; }
         function dynamicIslandShowNotification(summary: string, body: string): string { dynamicIsland.showTransientNotification(summary, body); return dynamicIsland.state; }
         function dynamicIslandShowWorkspace(label: string): string { dynamicIsland.showTransientWorkspace(label); return dynamicIsland.state; }
+        function dynamicIslandMediaNext(): string { dynamicIsland.mediaNext(); return dynamicIsland.state; }
+        function dynamicIslandMediaPrevious(): string { dynamicIsland.mediaPrevious(); return dynamicIsland.state; }
+        function dynamicIslandMediaToggle(): string { dynamicIsland.mediaTogglePlayPause(); return dynamicIsland.state; }
+        function dynamicIslandSwipeBegin(): string { dynamicIsland.beginSwipe(); return dynamicIsland.debugSummary(); }
+        function dynamicIslandSwipeAdvance(deltaX: real, deltaY: real): string { dynamicIsland.advanceSwipe(deltaX, deltaY); return dynamicIsland.debugSummary(); }
+        function dynamicIslandSwipeResolve(): string { dynamicIsland.resolveSwipe(); return dynamicIsland.debugSummary(); }
+        function dynamicIslandSwipeCancel(): string { dynamicIsland.cancelSwipe(); return dynamicIsland.debugSummary(); }
     }
 
     AppMenu {
@@ -443,6 +450,7 @@ ShellRoot {
         controlsService: controls
         notificationsService: notifications
         windowsService: niri
+        batteryService: battery
     }
 
     LockScreen {

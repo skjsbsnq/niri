@@ -307,6 +307,7 @@ window-rule {
 layer-rule {
     match namespace="^tahoe-control-center$"
     match namespace="^tahoe-notification-center$"
+    match namespace="^tahoe-left-sidebar$"
 
     geometry-corner-radius 28
 
@@ -382,6 +383,32 @@ layer-rule {
             distance 24
             opacity-to 1
             transform-duration-ms 210
+            transform-curve "emphasized-accel"
+            opacity-duration-ms 0
+        }
+    }
+}
+
+// Layer animation Left Sidebar profile. This is a full-height, left-anchored
+// surface, so use compositor edge reveal with no opacity fade: the glass is
+// already blurred from the first visible frame instead of fading in late.
+layer-rule {
+    match namespace="^tahoe-left-sidebar$"
+
+    animations {
+        layer-open {
+            style "edge-reveal"
+            edge "left"
+            opacity-from 1
+            transform-duration-ms 210
+            transform-curve "emphasized-decel"
+            opacity-duration-ms 0
+        }
+        layer-close {
+            style "edge-reveal"
+            edge "left"
+            opacity-to 1
+            transform-duration-ms 180
             transform-curve "emphasized-accel"
             opacity-duration-ms 0
         }
@@ -510,6 +537,35 @@ layer-rule {
     }
 }
 
+// Layer animation Process Menu profile. It is a small context menu with dynamic
+// margins, so avoid edge motion and use a tight pop animation.
+layer-rule {
+    match namespace="^tahoe-process-menu$"
+
+    animations {
+        layer-open {
+            style "popin"
+            scale-from 0.985
+            opacity-from 0.88
+            transform-duration-ms 120
+            transform-curve "emphasized-decel"
+            opacity-duration-ms 80
+            opacity-curve "standard-decel"
+            origin "center"
+        }
+        layer-close {
+            style "popout"
+            scale-to 0.992
+            opacity-to 0.3
+            transform-duration-ms 90
+            transform-curve "menu-accel"
+            opacity-duration-ms 70
+            opacity-curve "menu-accel"
+            origin "center"
+        }
+    }
+}
+
 // Layer animation Toast profile. Toasts slide from the right with a short
 // fade so they register without pulling focus from the current work.
 layer-rule {
@@ -545,6 +601,7 @@ layer-rule {
     match namespace="^tahoe-tray-menu$"
     match namespace="^tahoe-dock-app-menu$"
     match namespace="^tahoe-dock-window-menu$"
+    match namespace="^tahoe-process-menu$"
     match namespace="^tahoe-notification-toast$"
 
     geometry-corner-radius 18

@@ -34,6 +34,9 @@ PanelWindow {
     readonly property color textTertiary: darkMode ? "#9da7b1" : "#731d1d1f"
     readonly property color accentBlue: darkMode ? "#2c9cf2" : "#0b6bd3"
     readonly property string iconFont: "Material Icons"
+    readonly property bool compositorLayerAnimations: !!(settingsService && settingsService.compositorLayerAnimations)
+    readonly property real closedSlideX: -(panelWidth + 24)
+    readonly property bool qmlSlideActive: !compositorLayerAnimations && slideTransform.x > closedSlideX + 0.5
 
     signal closeRequested()
     // LS07：透传系统页右键请求给 shell（shell 实例化 ProcessMenu + PopupDismissLayer）。
@@ -41,7 +44,7 @@ PanelWindow {
     signal openProcessMenuRequested(var proc, var anchorRect)
     property bool processMenuOpen: false
 
-    visible: open || panel.opacity > 0.01
+    visible: compositorLayerAnimations ? open : (open || qmlSlideActive)
     aboveWindows: true
     exclusionMode: ExclusionMode.Ignore
     exclusiveZone: 0
@@ -70,15 +73,21 @@ PanelWindow {
 
     TahoeGlass.regions: [
         TahoeGlassRegion {
-            item: panel
+            // Explicit geometry includes the QML Translate fallback. Binding
+            // through `item: panel` does not include item transforms, which makes
+            // the blur stay at the final position while the painted panel slides.
+            x: Math.round(panel.x + slideTransform.x)
+            y: Math.round(panel.y)
+            width: panel.width
+            height: panel.height
             material: panel.tahoeGlassMaterial
             radius: panel.tahoeGlassRadius
             blur: true
             shadow: true
             clip: true
-            interaction: panel.opacity
-            materialAlpha: panel.opacity
-            enabled: root.visible && panel.opacity > 0.01
+            interaction: 1
+            materialAlpha: 1
+            enabled: root.compositorLayerAnimations || root.open || root.qmlSlideActive
         }
     ]
 
@@ -103,25 +112,19 @@ PanelWindow {
         height: root.height
         radius: tahoeGlassRadius
         color: root.glassFill
-        opacity: root.open ? 1 : 0
+        opacity: 1
 
         transform: Translate {
             id: slideTransform
 
-            x: root.open ? 0 : -(panel.width + 24)
+            x: root.compositorLayerAnimations ? 0 : (root.open ? 0 : root.closedSlideX)
 
             Behavior on x {
+                enabled: !root.compositorLayerAnimations
                 NumberAnimation {
                     duration: root.open ? Motion.panelEnterDuration : Motion.panelExitDuration
                     easing.type: root.open ? Motion.emphasizedDecel : Motion.standardDecel
                 }
-            }
-        }
-
-        Behavior on opacity {
-            NumberAnimation {
-                duration: root.open ? Motion.panelEnterDuration : Motion.panelExitDuration
-                easing.type: root.open ? Motion.emphasizedDecel : Motion.standardDecel
             }
         }
 

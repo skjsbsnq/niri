@@ -384,7 +384,7 @@ ShellRoot {
             closeProcessMenu();
         if (except !== "settings")
             closeSettingsPanel();
-        if (except !== "leftSidebar")
+        if (except !== "leftSidebar" && except !== "processMenu")
             closeLeftSidebar();
         closeWindowNavigation(except);
     }

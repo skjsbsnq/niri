@@ -453,6 +453,10 @@ ShellRoot {
         id: systemStatus
     }
 
+    SystemStats {
+        id: systemStats
+    }
+
     Appearance {
         id: appearance
     }

@@ -10,6 +10,8 @@ Item {
     id: root
     visible: false
 
+    property bool backendAvailable: false
+    property bool controlEnabled: false
     property bool available: false
     property bool updating: false
     property bool autoMode: true
@@ -42,22 +44,43 @@ Item {
     }
 
     function refresh() {
-        if (!root.available) {
+        if (!root.backendAvailable) {
             root.detectBackend();
+            return;
+        }
+        if (!root.controlEnabled) {
+            root.refreshServiceState();
             return;
         }
         if (!statusProbe.running)
             statusProbe.running = true;
     }
 
+    function refreshServiceState() {
+        if (!serviceProbe.running)
+            serviceProbe.running = true;
+    }
+
     function parseBackend(path) {
         var value = String(path || "").trim();
         var detected = value.length > 0;
-        root.setValue("available", detected);
+        root.setValue("backendAvailable", detected);
+        root.setValue("controlEnabled", false);
+        root.setValue("available", false);
         root.setValue("backendName", detected ? "NBFC" : "");
         root.setValue("errorText", detected ? "" : "需要安装并配置 nbfc-linux");
-        root.setValue("statusText", detected ? "已连接 NBFC" : "未检测到 NBFC");
-        if (root.available)
+        root.setValue("statusText", detected ? "NBFC 已安装" : "未检测到 NBFC");
+        if (detected)
+            Qt.callLater(root.refreshServiceState);
+    }
+
+    function parseServiceState(text) {
+        var active = String(text || "").trim() === "active";
+        root.setValue("controlEnabled", active);
+        root.setValue("available", root.backendAvailable && active);
+        root.setValue("errorText", "");
+        root.setValue("statusText", active ? "NBFC 控制中" : "BIOS 接管");
+        if (active)
             Qt.callLater(root.refresh);
     }
 
@@ -136,6 +159,22 @@ Item {
         root.setManualSpeed(root.effectivePercent > 0 ? root.effectivePercent : root.manualPercent);
     }
 
+    function setControlEnabled(enabled) {
+        if (!root.backendAvailable || root.updating)
+            return;
+
+        root.setValue("updating", true);
+        root.setValue("errorText", "");
+        if (enabled) {
+            root.setValue("statusText", "正在启动 NBFC");
+            serviceSetter.command = ["pkexec", "/usr/bin/nbfc", "start"];
+        } else {
+            root.setValue("statusText", "正在交还 BIOS");
+            serviceSetter.command = ["pkexec", "/usr/bin/nbfc", "stop"];
+        }
+        serviceSetter.running = true;
+    }
+
     function setManualSpeed(percent) {
         if (!root.available)
             return;
@@ -174,11 +213,27 @@ Item {
         }
         onExited: function(code, exitStatus) {
             if (code !== 0) {
+                root.setValue("backendAvailable", false);
+                root.setValue("controlEnabled", false);
                 root.setValue("available", false);
                 root.setValue("backendName", "");
                 root.setValue("errorText", "需要安装并配置 nbfc-linux");
                 root.setValue("statusText", "未检测到 NBFC");
             }
+        }
+    }
+
+    Process {
+        id: serviceProbe
+        running: false
+        command: ["systemctl", "is-active", "nbfc_service.service"]
+        stdout: StdioCollector {
+            id: serviceProbeOut
+            onStreamFinished: root.parseServiceState(serviceProbeOut.text)
+        }
+        onExited: function(code, exitStatus) {
+            if (code !== 0 && String(serviceProbeOut.text || "").trim().length === 0)
+                root.parseServiceState("inactive");
         }
     }
 
@@ -208,6 +263,17 @@ Item {
             if (root.pendingManualPercent >= 0)
                 manualCommitTimer.restart();
             root.refresh();
+        }
+    }
+
+    Process {
+        id: serviceSetter
+        running: false
+        onExited: function(code, exitStatus) {
+            root.setValue("updating", false);
+            if (code !== 0)
+                root.setValue("errorText", "NBFC 服务切换失败，请检查权限或服务状态");
+            root.refreshServiceState();
         }
     }
 

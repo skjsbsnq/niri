@@ -25,6 +25,8 @@ PanelWindow {
     readonly property int popupLeftMargin: PopupGeometry.popupLeft(anchorRect, root.implicitWidth, screenWidth, edgePadding, fallbackRight)
     readonly property int popupTopMargin: PopupGeometry.popupTop(anchorRect, fallbackTop, popupGap)
     readonly property real popupOriginX: PopupGeometry.originX(anchorRect, popupLeftMargin, root.implicitWidth, screenWidth, fallbackRight)
+    readonly property bool backendAvailable: !!fanService && fanService.backendAvailable
+    readonly property bool controlEnabled: !!fanService && fanService.controlEnabled
     readonly property bool available: !!fanService && fanService.available
     readonly property int percent: fanService ? fanService.effectivePercent : 0
     signal closeRequested()
@@ -155,7 +157,7 @@ PanelWindow {
                             Layout.fillWidth: true
                             text: root.available
                                 ? (root.fanService.autoMode ? "自动控制" : "手动 " + root.percent + "%")
-                                : "未连接"
+                                : (root.backendAvailable ? "BIOS 接管" : "未连接")
                             color: "#1d1d1f"
                             font.pixelSize: 18
                             font.weight: Font.DemiBold
@@ -185,6 +187,27 @@ PanelWindow {
                 font.weight: Font.DemiBold
                 wrapMode: Text.WordWrap
                 visible: text.length > 0
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                spacing: 8
+
+                Text {
+                    text: "NBFC 控制"
+                    color: "#991d1d1f"
+                    font.pixelSize: 12
+                    Layout.fillWidth: true
+                }
+
+                ToggleSwitch {
+                    checked: root.controlEnabled
+                    enabled: root.backendAvailable && root.fanService && !root.fanService.updating
+                    onToggled: {
+                        if (root.fanService)
+                            root.fanService.setControlEnabled(!root.fanService.controlEnabled);
+                    }
+                }
             }
 
             RowLayout {

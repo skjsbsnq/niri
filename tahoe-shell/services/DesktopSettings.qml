@@ -40,6 +40,11 @@ Item {
     readonly property string dynamicIslandRightClickAction: settingsAdapter.dynamicIslandRightClickAction
     readonly property bool dynamicIslandAutoExpandMedia: settingsAdapter.dynamicIslandAutoExpandMedia
     readonly property bool dynamicIslandHoverExpand: settingsAdapter.dynamicIslandHoverExpand
+    readonly property real weatherLatitude: settingsAdapter.weatherLatitude
+    readonly property real weatherLongitude: settingsAdapter.weatherLongitude
+    readonly property string weatherLocationName: settingsAdapter.weatherLocationName
+    readonly property bool weatherManualOverride: settingsAdapter.weatherManualOverride
+    readonly property string weatherTempUnit: settingsAdapter.weatherTempUnit
     property bool loaded: false
 
     function envString(name) {
@@ -85,8 +90,26 @@ Item {
             || value === "none";
     }
 
+    function normalizedWeatherTempUnit(value) {
+        var text = String(value || "").trim().toLowerCase();
+        if (text === "f" || text === "fahrenheit" || text === "°f")
+            return "f";
+        return "c";
+    }
+
+    function cleanWeatherLocationName(value) {
+        return String(value || "").trim();
+    }
+
     function clampInt(value, minimum, maximum, fallback) {
         var number = Math.round(Number(value));
+        if (!isFinite(number))
+            number = fallback;
+        return Math.max(minimum, Math.min(maximum, number));
+    }
+
+    function clampNumber(value, minimum, maximum, fallback) {
+        var number = Number(value);
         if (!isFinite(number))
             number = fallback;
         return Math.max(minimum, Math.min(maximum, number));
@@ -314,6 +337,49 @@ Item {
         settingsFile.writeAdapter();
     }
 
+    function setWeatherLocation(lat, lon, name) {
+        var nextLat = clampNumber(lat, -90, 90, 0);
+        var nextLon = clampNumber(lon, -180, 180, 0);
+        var nextName = cleanWeatherLocationName(name);
+        if (nextName.length === 0)
+            nextName = "手动位置";
+
+        if (settingsAdapter.weatherManualOverride
+                && settingsAdapter.weatherLatitude === nextLat
+                && settingsAdapter.weatherLongitude === nextLon
+                && settingsAdapter.weatherLocationName === nextName)
+            return;
+
+        settingsAdapter.weatherLatitude = nextLat;
+        settingsAdapter.weatherLongitude = nextLon;
+        settingsAdapter.weatherLocationName = nextName;
+        settingsAdapter.weatherManualOverride = true;
+        settingsFile.writeAdapter();
+    }
+
+    function clearWeatherLocation() {
+        if (!settingsAdapter.weatherManualOverride
+                && settingsAdapter.weatherLatitude === 0
+                && settingsAdapter.weatherLongitude === 0
+                && settingsAdapter.weatherLocationName === "")
+            return;
+
+        settingsAdapter.weatherLatitude = 0;
+        settingsAdapter.weatherLongitude = 0;
+        settingsAdapter.weatherLocationName = "";
+        settingsAdapter.weatherManualOverride = false;
+        settingsFile.writeAdapter();
+    }
+
+    function setWeatherTempUnit(unit) {
+        var next = normalizedWeatherTempUnit(unit);
+        if (settingsAdapter.weatherTempUnit === next)
+            return;
+
+        settingsAdapter.weatherTempUnit = next;
+        settingsFile.writeAdapter();
+    }
+
     function openAutostartFolder() {
         var dir = homeDir.length > 0 ? homeDir + "/.config/autostart" : Quickshell.stateDir;
         Quickshell.execDetached({
@@ -382,6 +448,34 @@ Item {
             changed = true;
         }
 
+        var weatherLat = clampNumber(settingsAdapter.weatherLatitude, -90, 90, 0);
+        if (settingsAdapter.weatherLatitude !== weatherLat) {
+            settingsAdapter.weatherLatitude = weatherLat;
+            changed = true;
+        }
+
+        var weatherLon = clampNumber(settingsAdapter.weatherLongitude, -180, 180, 0);
+        if (settingsAdapter.weatherLongitude !== weatherLon) {
+            settingsAdapter.weatherLongitude = weatherLon;
+            changed = true;
+        }
+
+        var weatherName = cleanWeatherLocationName(settingsAdapter.weatherLocationName);
+        if (settingsAdapter.weatherManualOverride && weatherName.length === 0)
+            weatherName = "手动位置";
+        if (!settingsAdapter.weatherManualOverride)
+            weatherName = "";
+        if (settingsAdapter.weatherLocationName !== weatherName) {
+            settingsAdapter.weatherLocationName = weatherName;
+            changed = true;
+        }
+
+        var tempUnit = normalizedWeatherTempUnit(settingsAdapter.weatherTempUnit);
+        if (settingsAdapter.weatherTempUnit !== tempUnit) {
+            settingsAdapter.weatherTempUnit = tempUnit;
+            changed = true;
+        }
+
         if (changed)
             settingsFile.writeAdapter();
     }
@@ -421,6 +515,11 @@ Item {
             property string dynamicIslandRightClickAction: "control_center"
             property bool dynamicIslandAutoExpandMedia: false
             property bool dynamicIslandHoverExpand: false
+            property real weatherLatitude: 0
+            property real weatherLongitude: 0
+            property string weatherLocationName: ""
+            property bool weatherManualOverride: false
+            property string weatherTempUnit: "c"
         }
     }
 }

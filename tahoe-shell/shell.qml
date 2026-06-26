@@ -41,6 +41,13 @@ ShellRoot {
     property bool settingsPanelOpen: false
     property string settingsPanelScreenName: ""
     property string settingsPanelPage: "settings"
+    property bool leftSidebarOpen: false
+    property string leftSidebarScreenName: ""
+    // LS07 ProcessMenu state（照 dockWindowMenu 模式：open/screen/anchorRect/data 四件套）。
+    property bool processMenuOpen: false
+    property string processMenuScreenName: ""
+    property var processMenuAnchorRect: null
+    property var processMenuProc: null
     // Global default font. Noto Sans CJK SC covers Chinese and Latin; the
     // fontconfig fallback installed by arch-zh-setup handles emoji/edge cases.
     property string baseFontFamily: "Noto Sans CJK SC"
@@ -238,6 +245,21 @@ ShellRoot {
         closeDockWindowMenu();
     }
 
+    // LS07 ProcessMenu：进程行右键菜单的状态协调，照 dockWindowMenu 模式。
+    function prepareProcessMenu(screen, proc, anchorRect) {
+        processMenuScreenName = screenName(screen);
+        processMenuProc = proc || null;
+        processMenuAnchorRect = anchorRect || null;
+    }
+
+    function processMenuOpenFor(screen) {
+        return processMenuOpen && processMenuScreenName === screenName(screen);
+    }
+
+    function closeProcessMenu() {
+        processMenuOpen = false;
+    }
+
     function closeTaskSwitcher() {
         taskSwitcherOpen = false;
     }
@@ -248,6 +270,12 @@ ShellRoot {
 
     function closeSettingsPanel() {
         settingsPanelOpen = false;
+    }
+
+    function closeLeftSidebar() {
+        leftSidebarOpen = false;
+        // 关侧边栏时一并收起进程右键菜单（否则菜单会悬空）。
+        closeProcessMenu();
     }
 
     function closeWindowNavigation(except) {
@@ -316,6 +344,17 @@ ShellRoot {
         settingsPanelOpen = true;
     }
 
+    function toggleLeftSidebar(screen) {
+        var target = screenName(screen);
+        var wasOpenHere = leftSidebarOpen
+            && (leftSidebarScreenName.length === 0 || leftSidebarScreenName === target);
+        leftSidebarScreenName = target;
+        closeTopBarPopups("leftSidebar");
+        leftSidebarOpen = !wasOpenHere;
+        launchpadOpen = false;
+        spotlightOpen = false;
+    }
+
     function closeTopBarPopups(except) {
         if (except !== "appMenu")
             appMenuOpen = false;
@@ -341,8 +380,12 @@ ShellRoot {
             closeDockAppMenu();
         if (except !== "dockWindowMenu")
             closeDockWindowMenu();
+        if (except !== "processMenu")
+            closeProcessMenu();
         if (except !== "settings")
             closeSettingsPanel();
+        if (except !== "leftSidebar")
+            closeLeftSidebar();
         closeWindowNavigation(except);
     }
 
@@ -360,6 +403,7 @@ ShellRoot {
         closeDockMenus();
         closeWindowNavigation("");
         closeSettingsPanel();
+        closeLeftSidebar();
     }
 
     // Register the Material Icons font once for the whole shell. Used by the
@@ -400,6 +444,15 @@ ShellRoot {
         function openSystemHealth(): void { shell.openSettingsPanel("health"); }
         function openDynamicIslandSettings(): void { shell.openSettingsPanel("dynamic-island"); }
         function closeSettings(): void { shell.closeSettingsPanel(); }
+        function toggleLeftSidebar(): void { shell.toggleLeftSidebar(shell.screenByName(shell.navigationScreenName())); }
+        function openLeftSidebar(): void {
+            shell.leftSidebarScreenName = shell.navigationScreenName();
+            shell.closeTopBarPopups("leftSidebar");
+            shell.leftSidebarOpen = true;
+            shell.launchpadOpen = false;
+            shell.spotlightOpen = false;
+        }
+        function closeLeftSidebar(): void { shell.closeLeftSidebar(); }
         function dynamicIslandGetState(): string { return dynamicIsland.state; }
         function dynamicIslandGetDebugSummary(): string { return dynamicIsland.debugSummary(); }
         function dynamicIslandGetSettingsSummary(): string {
@@ -455,6 +508,11 @@ ShellRoot {
 
     SystemStats {
         id: systemStats
+    }
+
+    Weather {
+        id: weather
+        settingsService: desktopSettings
     }
 
     Appearance {
@@ -578,6 +636,7 @@ ShellRoot {
                 wifiPopupOpen: shell.topBarPopupOpenFor(shell.wifiPopupOpen, modelData)
                 fanPopupOpen: shell.topBarPopupOpenFor(shell.fanPopupOpen, modelData)
                 clipboardPopupOpen: shell.topBarPopupOpenFor(shell.clipboardPopupOpen, modelData)
+                leftSidebarOpen: shell.navigationOpenFor(shell.leftSidebarOpen, shell.leftSidebarScreenName, modelData)
                 darkMode: shell.darkMode
                 onToggleAppMenu: function(anchorRect) {
                     var wasOpenHere = shell.topBarPopupOpenFor(shell.appMenuOpen, modelData);
@@ -613,6 +672,7 @@ ShellRoot {
                     shell.closeTopBarPopups("");
                     shell.spotlightOpen = false;
                 }
+                onToggleLeftSidebar: shell.toggleLeftSidebar(modelData)
                 onToggleNotifications: function(anchorRect) {
                     var wasOpenHere = shell.topBarPopupOpenFor(shell.notificationCenterOpen, modelData);
                     shell.prepareTopBarPopup(modelData, anchorRect);
@@ -674,6 +734,55 @@ ShellRoot {
                 screen: modelData
                 dynamicIslandService: dynamicIsland
                 darkMode: shell.darkMode
+            }
+
+            LeftSidebar {
+                id: leftSidebar
+
+                screen: modelData
+                open: shell.navigationOpenFor(shell.leftSidebarOpen, shell.leftSidebarScreenName, modelData)
+                systemStatsService: systemStats
+                weatherService: weather
+                settingsService: desktopSettings
+                batteryService: battery
+                darkMode: shell.darkMode
+                monoFontFamily: shell.monoFontFamily
+                processMenuOpen: shell.processMenuOpenFor(modelData)
+                onCloseRequested: shell.closeLeftSidebar()
+                onOpenProcessMenuRequested: function(proc, anchorRect) {
+                    // 系统页右键进程行 → 实例化 ProcessMenu。先登记屏幕/proc/锚点，
+                    // 再关其它弹层、开菜单（开菜单会回灌 processMenuOpen 暂停刷新）。
+                    shell.prepareProcessMenu(modelData, proc, anchorRect);
+                    shell.closeTopBarPopups("processMenu");
+                    shell.processMenuOpen = true;
+                }
+            }
+
+            // LS07 进程右键菜单（照 dockWindowMenu 模式：PanelWindow + margins 定位）。
+            ProcessMenu {
+                id: processMenu
+
+                screen: modelData
+                proc: shell.processMenuProc
+                anchorRect: shell.processMenuAnchorRect
+                darkMode: shell.darkMode
+                monoFontFamily: shell.monoFontFamily
+                open: shell.processMenuOpenFor(modelData)
+                onCloseRequested: shell.closeProcessMenu()
+            }
+
+            // 点外部关闭层（照 dockWindowMenu 配对：全屏点击遮罩，挖空菜单区）。
+            PopupDismissLayer {
+                screen: modelData
+                open: shell.processMenuOpenFor(modelData)
+                usePopupCutout: true
+                useTopBarCutout: false
+                useCustomPopupGeometry: true
+                customPopupLeft: processMenu.popupLeft
+                customPopupTop: processMenu.popupTop
+                popupWidth: processMenu.panelWidth
+                popupHeight: processMenu.panelHeight
+                onCloseRequested: shell.closeProcessMenu()
             }
 
             MenuPopup {

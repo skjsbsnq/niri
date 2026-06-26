@@ -33,6 +33,7 @@ PanelWindow {
     property bool wifiPopupOpen: false
     property bool fanPopupOpen: false
     property bool clipboardPopupOpen: false
+    property bool leftSidebarOpen: false
     property bool darkMode: false
     readonly property string activeApp: appsService && niriService ? appsService.toplevelLabel(niriService.focusedWindow || niriService.activeToplevel) : "桌面"
     // Number of retained notification history entries. Drives the bell
@@ -61,6 +62,7 @@ PanelWindow {
     signal toggleControlCenter(var anchorRect)
     signal toggleSpotlight()
     signal toggleLaunchpad()
+    signal toggleLeftSidebar()
     signal toggleNotifications(var anchorRect)
     signal toggleBattery(var anchorRect)
     signal toggleWifi(var anchorRect)
@@ -213,6 +215,38 @@ PanelWindow {
                         anchors.fill: parent
                         cursorShape: Qt.PointingHandCursor
                         onClicked: root.toggleAppMenu(root.anchorRectFor(niriMenuButton))
+                    }
+                }
+
+                Item {
+                    id: leftSidebarButton
+
+                    width: 30
+                    height: 24
+
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: 12
+                        color: root.leftSidebarOpen ? root.buttonOpen : (leftSidebarMouse.containsMouse ? root.buttonHover : "transparent")
+                        border.color: root.leftSidebarOpen ? root.buttonBorder : "transparent"
+                        border.width: 1
+                    }
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: "\ue2bd" // wb_cloudy
+                        color: root.leftSidebarOpen ? "#0b6bd3" : root.topTextSecondary
+                        font.family: "Material Icons"
+                        font.pixelSize: 16
+                    }
+
+                    MouseArea {
+                        id: leftSidebarMouse
+
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.toggleLeftSidebar()
                     }
                 }
 

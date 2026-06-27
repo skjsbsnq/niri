@@ -100,11 +100,11 @@ tahoe-glass {
     }
     material "dock" {
         xray false
-        edge-highlight 0.24
-        refraction 0.018
+        edge-highlight 0.20
+        refraction 0.014
         inner-shadow 0.08
         chromatic 0.0
-        lens-depth 0.025
+        lens-depth 0.018
     }
     // menu/toast read clearer: controlled edge light, gentler lens distortion.
     material "menu" {

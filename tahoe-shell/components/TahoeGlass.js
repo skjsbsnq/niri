@@ -25,7 +25,7 @@ var RadiusPopup = 24;
 // refraction, shadow, and depth belong to the compositor material.
 var FillPanel = "#14ffffff";
 var FillPanelBright = "#18f7f8fb";
-var FillDock = "#34f7fbff";
+var FillDock = "#2af7fbff";
 var FillTopBar = "#22f7fbff";
 var FillPill = "#80f7fbff";
 var FillBackdrop = "#12eef2f7";

@@ -36,6 +36,8 @@ PanelWindow {
     readonly property int dockHideDelay: settingsService ? settingsService.dockAutoHideDelayMs : 260
     readonly property int dockRevealZoneHeight: settingsService ? settingsService.dockRevealZoneHeight : 8
     readonly property bool dockHidden: dockAutoHide && !dockHovered && !pointerDragActive && !launchpadOpen && !menuOpen
+    property real dockSlideOffset: dockHidden ? 88 : 0
+    readonly property real dockVisibleAmount: 1 - Math.min(1, Math.max(0, dockSlideOffset / 88))
     readonly property int dockOuterMargin: 28
     readonly property int dockSurfacePadding: 34
     readonly property int dockItemSpacing: 8
@@ -255,9 +257,9 @@ PanelWindow {
     mask: Region {
         Region {
             x: Math.round(dockSurface.x)
-            y: root.dockHidden ? 0 : Math.max(0, root.height - dockSurface.height)
+            y: Math.round(root.height - dockSurface.height + root.dockSlideOffset)
             width: dockSurface.width
-            height: root.dockHidden ? 0 : dockSurface.height
+            height: (!root.dockHidden || root.dockVisibleAmount > 0.001) ? dockSurface.height : 0
             radius: dockSurface.radius
         }
 
@@ -272,7 +274,7 @@ PanelWindow {
     TahoeGlass.regions: [
         TahoeGlassRegion {
             x: Math.round(dockSurface.x)
-            y: Math.max(0, root.height - dockSurface.height)
+            y: Math.round(root.height - dockSurface.height + root.dockSlideOffset)
             width: Math.round(dockSurface.width)
             height: Math.round(dockSurface.height)
             material: dockSurface.tahoeGlassMaterial
@@ -282,9 +284,13 @@ PanelWindow {
             clip: true
             interaction: 0.0
             materialAlpha: 1.0
-            enabled: !root.dockHidden
+            enabled: !root.dockHidden || root.dockVisibleAmount > 0.001
         }
     ]
+
+    Behavior on dockSlideOffset {
+        NumberAnimation { duration: 190; easing.type: Easing.OutCubic }
+    }
 
     MouseArea {
         anchors {
@@ -313,18 +319,9 @@ PanelWindow {
         height: 84
         radius: tahoeGlassRadius
         color: root.glassFill
-        opacity: root.dockHidden ? 0 : 1
 
         transform: Translate {
-            y: root.dockHidden ? 88 : 0
-
-            Behavior on y {
-                NumberAnimation { duration: 180; easing.type: Easing.OutCubic }
-            }
-        }
-
-        Behavior on opacity {
-            NumberAnimation { duration: 170; easing.type: Easing.OutCubic }
+            y: root.dockSlideOffset
         }
 
         // NOTE: no `border.width` on the surface itself — a centered 1px

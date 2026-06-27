@@ -493,6 +493,7 @@ PanelWindow {
 
                                 Rectangle {
                                     id: hoverLabel
+                                    readonly property real labelMaxWidth: Math.max(42, Math.min(280, pinnedViewport.width - 12))
                                     z: 10
                                     x: Math.max(
                                         pinnedViewport.contentX - pinnedButton.x + 6,
@@ -502,7 +503,7 @@ PanelWindow {
                                         )
                                     )
                                     y: pinnedButton.hovered ? -34 : -24
-                                    width: Math.max(labelText.implicitWidth + 18, 42)
+                                    width: Math.min(Math.max(labelText.implicitWidth + 18, 42), labelMaxWidth)
                                     height: 24
                                     radius: 7
                                     color: "#d9f7f8fb"
@@ -512,7 +513,11 @@ PanelWindow {
 
                                     Text {
                                         id: labelText
-                                        anchors.centerIn: parent
+                                        anchors.left: parent.left
+                                        anchors.right: parent.right
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        anchors.leftMargin: 9
+                                        anchors.rightMargin: 9
                                         text: root.appsService ? root.appsService.appLabel(pinnedButton.appModel || pinnedButton.appId) : ""
                                         color: root.dockText
                                         font.pixelSize: 11
@@ -808,6 +813,7 @@ PanelWindow {
 
         Rectangle {
             id: toolLabel
+            readonly property real labelMaxWidth: Math.max(42, Math.min(280, dockSurface.width - 12))
             x: Math.max(
                 -tool.mapToItem(dockSurface, 0, 0).x + 6,
                 Math.min(
@@ -816,7 +822,7 @@ PanelWindow {
                 )
             )
             y: toolMouse.containsMouse ? -32 : -22
-            width: Math.max(toolLabelText.implicitWidth + 18, 42)
+            width: Math.min(Math.max(toolLabelText.implicitWidth + 18, 42), labelMaxWidth)
             height: 24
             radius: 7
             color: "#d9f7f8fb"
@@ -826,7 +832,11 @@ PanelWindow {
 
             Text {
                 id: toolLabelText
-                anchors.centerIn: parent
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.leftMargin: 9
+                anchors.rightMargin: 9
                 text: tool.label
                 color: root.dockText
                 font.pixelSize: 11

@@ -175,6 +175,7 @@ Item {
 
     Rectangle {
         id: hoverLabel
+        readonly property real labelMaxWidth: Math.max(48, Math.min(280, (root.labelClipItem ? root.labelClipItem.width : root.width) - 12))
 
         z: 10
         x: {
@@ -187,7 +188,7 @@ Item {
             return Math.max(left, Math.min(right, centered));
         }
         y: root.showHoverLabel ? -30 : -20
-        width: Math.max(hoverLabelText.implicitWidth + 18, 48)
+        width: Math.min(Math.max(hoverLabelText.implicitWidth + 18, 48), labelMaxWidth)
         height: 24
         radius: 7
         color: "#d9f7f8fb"
@@ -198,7 +199,11 @@ Item {
         Text {
             id: hoverLabelText
 
-            anchors.centerIn: parent
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.leftMargin: 9
+            anchors.rightMargin: 9
             text: root.label
             color: "#202124"
             font.pixelSize: 11

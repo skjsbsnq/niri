@@ -190,6 +190,10 @@ PanelWindow {
             Item {
                 id: tabBar
 
+                property string hoveredTab: tabMouse.containsMouse
+                    ? (tabMouse.mouseX < tabBar.width / 2 ? "system" : "weather")
+                    : ""
+
                 Layout.fillWidth: true
                 Layout.preferredHeight: 38
                 z: 2
@@ -204,7 +208,7 @@ PanelWindow {
                         label: "系统"
                         iconCode: "\ue8b8" // settings
                         active: root.currentTab === "system"
-                        onActivated: root.currentTab = "system"
+                        hovered: tabBar.hoveredTab === "system"
                     }
 
                     TabButton {
@@ -213,7 +217,19 @@ PanelWindow {
                         label: "天气"
                         iconCode: "\ue2bd" // wb_cloudy
                         active: root.currentTab === "weather"
-                        onActivated: root.currentTab = "weather"
+                        hovered: tabBar.hoveredTab === "weather"
+                    }
+                }
+
+                MouseArea {
+                    id: tabMouse
+
+                    anchors.fill: parent
+                    z: 10
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: function(mouse) {
+                        root.currentTab = mouse.x < width / 2 ? "system" : "weather";
                     }
                 }
             }
@@ -268,14 +284,13 @@ PanelWindow {
         property string label: ""
         property string iconCode: ""
         property bool active: false
-
-        signal activated()
+        property bool hovered: false
 
         implicitWidth: 120
         implicitHeight: 38
         radius: 14
-        color: active ? (root.darkMode ? "#344b62cc" : "#d8ecff") : (tabMouse.containsMouse ? root.cardFill : "transparent")
-        border.color: active ? root.accentBlue : (tabMouse.containsMouse ? root.cardStroke : "transparent")
+        color: active ? (root.darkMode ? "#344b62cc" : "#d8ecff") : (hovered ? root.cardFill : "transparent")
+        border.color: active ? root.accentBlue : (hovered ? root.cardStroke : "transparent")
         border.width: 1
 
         Row {
@@ -299,14 +314,6 @@ PanelWindow {
             }
         }
 
-        MouseArea {
-            id: tabMouse
-
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            onClicked: tab.activated()
-        }
     }
 
 }

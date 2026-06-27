@@ -187,25 +187,34 @@ PanelWindow {
                 }
             }
 
-            RowLayout {
+            Item {
+                id: tabBar
+
                 Layout.fillWidth: true
                 Layout.preferredHeight: 38
-                spacing: 8
+                z: 2
 
-                TabButton {
-                    Layout.fillWidth: true
-                    label: "系统"
-                    iconCode: "\ue8b8" // settings
-                    active: root.currentTab === "system"
-                    onActivated: root.currentTab = "system"
-                }
+                Row {
+                    anchors.fill: parent
+                    spacing: 8
 
-                TabButton {
-                    Layout.fillWidth: true
-                    label: "天气"
-                    iconCode: "\ue2bd" // wb_cloudy
-                    active: root.currentTab === "weather"
-                    onActivated: root.currentTab = "weather"
+                    TabButton {
+                        width: Math.max(0, (tabBar.width - 8) / 2)
+                        height: tabBar.height
+                        label: "系统"
+                        iconCode: "\ue8b8" // settings
+                        active: root.currentTab === "system"
+                        onActivated: root.currentTab = "system"
+                    }
+
+                    TabButton {
+                        width: Math.max(0, (tabBar.width - 8) / 2)
+                        height: tabBar.height
+                        label: "天气"
+                        iconCode: "\ue2bd" // wb_cloudy
+                        active: root.currentTab === "weather"
+                        onActivated: root.currentTab = "weather"
+                    }
                 }
             }
 
@@ -264,9 +273,6 @@ PanelWindow {
 
         implicitWidth: 120
         implicitHeight: 38
-        Layout.fillHeight: true
-        Layout.minimumHeight: 34
-        Layout.preferredHeight: 38
         radius: 14
         color: active ? (root.darkMode ? "#344b62cc" : "#d8ecff") : (tabMouse.containsMouse ? root.cardFill : "transparent")
         border.color: active ? root.accentBlue : (tabMouse.containsMouse ? root.cardStroke : "transparent")

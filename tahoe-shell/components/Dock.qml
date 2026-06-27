@@ -271,15 +271,18 @@ PanelWindow {
 
     TahoeGlass.regions: [
         TahoeGlassRegion {
-            item: dockSurface
+            x: Math.round(dockSurface.x)
+            y: Math.max(0, root.height - dockSurface.height)
+            width: Math.round(dockSurface.width)
+            height: Math.round(dockSurface.height)
             material: dockSurface.tahoeGlassMaterial
             radius: dockSurface.tahoeGlassRadius
             blur: true
             shadow: true
             clip: true
-            interaction: root.dockHovered ? 0.10 : 0.0
-            materialAlpha: dockSurface.opacity
-            enabled: dockSurface.opacity > 0.01
+            interaction: 0.0
+            materialAlpha: 1.0
+            enabled: !root.dockHidden
         }
     ]
 

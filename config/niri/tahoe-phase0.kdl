@@ -56,10 +56,10 @@ layout {
 
 blur {
     on
-    passes 5
-    offset 5
-    noise 0.006
-    saturation 1.28
+    passes 4
+    offset 4
+    noise 0.004
+    saturation 1.22
 }
 
 tahoe-glass {

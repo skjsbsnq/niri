@@ -443,6 +443,7 @@ ShellRoot {
         function openAbout(): void { shell.openSettingsPanel("about"); }
         function openSystemHealth(): void { shell.openSettingsPanel("health"); }
         function openDynamicIslandSettings(): void { shell.openSettingsPanel("dynamic-island"); }
+        function openWeatherSettings(): void { shell.openSettingsPanel("weather"); }
         function closeSettings(): void { shell.closeSettingsPanel(); }
         function toggleLeftSidebar(): void { shell.toggleLeftSidebar(shell.screenByName(shell.navigationScreenName())); }
         function openLeftSidebar(): void {
@@ -756,6 +757,7 @@ ShellRoot {
                     shell.closeTopBarPopups("processMenu");
                     shell.processMenuOpen = true;
                 }
+                onOpenWeatherSettingsRequested: shell.openSettingsPanel("weather")
             }
 
             // LS07 进程右键菜单（照 dockWindowMenu 模式：PanelWindow + margins 定位）。
@@ -954,6 +956,7 @@ ShellRoot {
                 notificationsService: notifications
                 inputMethodService: inputMethod
                 niriSettingsService: niriSettings
+                weatherService: weather
                 open: shell.navigationOpenFor(shell.settingsPanelOpen, shell.settingsPanelScreenName, modelData)
                 onCloseRequested: shell.closeSettingsPanel()
             }

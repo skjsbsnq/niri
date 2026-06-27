@@ -7,8 +7,8 @@ import Quickshell.Wayland
 import "TahoeGlass.js" as GlassStyle
 import "Motion.js" as Motion
 
-// LS05: left-edge shell container. The system/weather pages are placeholders
-// here and get replaced by LeftSidebarSystem/LeftSidebarWeather in later tasks.
+// LS05/LS11: left-edge shell container. It owns the glass shell and tab
+// switching; System/Weather pages own their own content and data presentation.
 PanelWindow {
     id: root
 
@@ -39,6 +39,7 @@ PanelWindow {
     readonly property bool qmlSlideActive: !compositorLayerAnimations && slideTransform.x > closedSlideX + 0.5
 
     signal closeRequested()
+    signal openWeatherSettingsRequested()
     // LS07：透传系统页右键请求给 shell（shell 实例化 ProcessMenu + PopupDismissLayer）。
     // processMenuOpen 由 shell 驱动，回灌到系统页暂停进程刷新。
     signal openProcessMenuRequested(var proc, var anchorRect)
@@ -228,17 +229,16 @@ PanelWindow {
                     }
                 }
 
-                PlaceholderPane {
+                LeftSidebarWeather {
                     anchors.fill: parent
                     visible: root.currentTab === "weather"
-                    iconCode: "\ue2bd"
-                    title: "天气"
-                    primary: root.weatherService
-                        ? (root.weatherService.locationName || "自动定位中")
-                        : "天气服务准备中"
-                    secondary: root.weatherService
-                        ? weatherSummary()
-                        : ""
+                    weatherService: root.weatherService
+                    settingsService: root.settingsService
+                    sidebarOpen: root.open
+                    active: root.currentTab === "weather"
+                    darkMode: root.darkMode
+                    monoFontFamily: root.monoFontFamily
+                    onOpenWeatherSettingsRequested: root.openWeatherSettingsRequested()
                 }
             }
         }
@@ -250,16 +250,6 @@ PanelWindow {
             focus: root.open
             Keys.onEscapePressed: root.closeRequested()
         }
-    }
-
-    function weatherSummary() {
-        if (!weatherService)
-            return "";
-
-        var status = String(weatherService.status || "");
-        var temp = Number(weatherService.currentTemperatureC);
-        var tempText = isFinite(temp) ? Math.round(temp) + "°C" : "--";
-        return status.length > 0 ? tempText + " · " + status : tempText;
     }
 
     component TabButton: Rectangle {
@@ -307,60 +297,4 @@ PanelWindow {
         }
     }
 
-    component PlaceholderPane: Rectangle {
-        id: pane
-
-        property string iconCode: ""
-        property string title: ""
-        property string primary: ""
-        property string secondary: ""
-
-        radius: 18
-        color: root.cardFill
-        border.color: root.cardStroke
-        border.width: 1
-
-        Column {
-            anchors.centerIn: parent
-            width: Math.min(parent.width - 40, 320)
-            spacing: 10
-
-            Text {
-                anchors.horizontalCenter: parent.horizontalCenter
-                text: pane.iconCode
-                color: root.accentBlue
-                font.family: root.iconFont
-                font.pixelSize: 44
-            }
-
-            Text {
-                width: parent.width
-                text: pane.title
-                color: root.textPrimary
-                horizontalAlignment: Text.AlignHCenter
-                font.pixelSize: 20
-                font.weight: Font.DemiBold
-                elide: Text.ElideRight
-            }
-
-            Text {
-                width: parent.width
-                text: pane.primary
-                color: root.textSecondary
-                horizontalAlignment: Text.AlignHCenter
-                font.pixelSize: 14
-                wrapMode: Text.Wrap
-            }
-
-            Text {
-                width: parent.width
-                text: pane.secondary
-                color: root.textTertiary
-                horizontalAlignment: Text.AlignHCenter
-                font.pixelSize: 12
-                wrapMode: Text.Wrap
-                visible: text.length > 0
-            }
-        }
-    }
 }

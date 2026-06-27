@@ -146,6 +146,15 @@ Rectangle {
 
         Controls.TahoeSidebarButton {
             theme: sidebar.theme
+            label: "天气"
+            iconCode: "\ue2bd"
+            accentColor: sidebar.categoryColor("weather")
+            active: sidebar.panel && sidebar.panel.selectedPage === "weather"
+            onActivated: sidebar.panel.selectedPage = "weather"
+        }
+
+        Controls.TahoeSidebarButton {
+            theme: sidebar.theme
             label: "启动项"
             iconCode: "\ue89e"
             accentColor: sidebar.categoryColor("startup")

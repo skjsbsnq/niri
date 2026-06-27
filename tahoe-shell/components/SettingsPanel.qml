@@ -22,6 +22,7 @@ PanelWindow {
     property var notificationsService
     property var inputMethodService
     property var niriSettingsService
+    property var weatherService
 
     readonly property bool darkMode: appearanceService && appearanceService.darkMode
     readonly property int screenWidth: Math.max(1, numberOr(root.screen && root.screen.width, root.width))
@@ -125,6 +126,8 @@ PanelWindow {
             return "截图";
         if (selectedPage === "dock")
             return "Dock";
+        if (selectedPage === "weather")
+            return "天气";
         if (selectedPage === "niri")
             return "布局与窗口";
         if (selectedPage === "niri-layout")
@@ -159,6 +162,8 @@ PanelWindow {
             return "保存目录、复制和通知动作";
         if (selectedPage === "dock")
             return "窗口按钮显示偏好";
+        if (selectedPage === "weather")
+            return "定位、手动覆盖和温度单位";
         if (selectedPage === "niri")
             return "niri 间距、焦点环、边框、阴影与 snap 助手";
         if (selectedPage === "niri-layout")
@@ -211,6 +216,8 @@ PanelWindow {
             return 14;
         if (name === "niri-keyboard")
             return 15;
+        if (name === "weather")
+            return 16;
         return 0;
     }
 
@@ -473,6 +480,11 @@ PanelWindow {
                         }
 
                         Pages.NiriKeyboardPage {
+                            panel: root
+                            theme: root
+                        }
+
+                        Pages.WeatherPage {
                             panel: root
                             theme: root
                         }

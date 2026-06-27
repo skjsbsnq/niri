@@ -193,6 +193,8 @@ function categoryColor(key, darkMode) {
         return "#ff7a59";     // coral
     case "dock":
         return "#0a84ff";     // system blue
+    case "weather":
+        return "#32ade6";     // system light blue (weather)
     case "niri":
         return "#30b0c8";     // teal (niri layout & window appearance)
     case "niri-glass":

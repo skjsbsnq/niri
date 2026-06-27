@@ -247,6 +247,7 @@ PanelWindow {
             id: focusCatcher
 
             anchors.fill: parent
+            z: -1
             focus: root.open
             Keys.onEscapePressed: root.closeRequested()
         }
@@ -261,6 +262,11 @@ PanelWindow {
 
         signal activated()
 
+        implicitWidth: 120
+        implicitHeight: 38
+        Layout.fillHeight: true
+        Layout.minimumHeight: 34
+        Layout.preferredHeight: 38
         radius: 14
         color: active ? (root.darkMode ? "#344b62cc" : "#d8ecff") : (tabMouse.containsMouse ? root.cardFill : "transparent")
         border.color: active ? root.accentBlue : (tabMouse.containsMouse ? root.cardStroke : "transparent")

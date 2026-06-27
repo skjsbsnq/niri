@@ -21,6 +21,8 @@ Item {
     property real bounceOffset: 0
     property var dockWindow
     property var dockSurfaceItem
+    property var labelClipItem: null
+    property real labelClipContentX: 0
     readonly property bool hovered: windowMouse.containsMouse
     readonly property bool active: windowModel ? !!windowModel.isFocused : !!(toplevel && toplevel.activated)
     readonly property bool minimized: windowModel ? !!windowModel.isMinimized : !!(toplevel && toplevel.minimized)
@@ -174,8 +176,16 @@ Item {
     Rectangle {
         id: hoverLabel
 
-        anchors.horizontalCenter: icon.horizontalCenter
         z: 10
+        x: {
+            var centered = icon.x + icon.width / 2 - width / 2;
+            if (!root.labelClipItem)
+                return centered;
+
+            var left = root.labelClipContentX - root.x + 6;
+            var right = root.labelClipContentX + root.labelClipItem.width - width - root.x - 6;
+            return Math.max(left, Math.min(right, centered));
+        }
         y: root.showHoverLabel ? -30 : -20
         width: Math.max(hoverLabelText.implicitWidth + 18, 48)
         height: 24

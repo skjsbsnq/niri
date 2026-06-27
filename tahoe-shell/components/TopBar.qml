@@ -93,8 +93,8 @@ PanelWindow {
         top: true
     }
 
-    exclusiveZone: 34
-    implicitHeight: 34
+    exclusiveZone: 40
+    implicitHeight: 40
     color: "transparent"
     WlrLayershell.namespace: "tahoe-topbar"
 
@@ -105,12 +105,8 @@ PanelWindow {
     // window layout doesn't shift; only the inner barSurface floats with
     // insets. See glass-consistency-fix-plan.md §2.3.
     //
-    // The insets are 8px left/right and 5px top/bottom rather than a flat
-    // 8 all around: a flat 8 on implicitHeight 34 would leave barSurface
-    // only 18px tall, which cannot fit the 24px-tall RowLayout children
-    // (they'd be clipped — violating §2.6 acceptance). 5/5 vertically
-    // yields a 24px-tall surface that just fits the content while still
-    // floating off every edge.
+    // Keep the surface thick enough to read as glass after the shared panel
+    // material was made more restrained for bright backgrounds.
     TahoeGlass.regions: [
         TahoeGlassRegion {
             item: barSurface
@@ -132,8 +128,8 @@ PanelWindow {
         anchors.fill: parent
         anchors.leftMargin: 8
         anchors.rightMargin: 8
-        anchors.topMargin: 5
-        anchors.bottomMargin: 5
+        anchors.topMargin: 4
+        anchors.bottomMargin: 4
         radius: tahoeGlassRadius
         color: root.glassFill
         opacity: 1

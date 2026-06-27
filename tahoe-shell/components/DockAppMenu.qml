@@ -13,6 +13,7 @@ PanelWindow {
     property bool open: false
     property var appsService
     property var app: null
+    property string appId: ""
     property var anchorRect: null
     property var settingsService
     readonly property int edgePadding: 8
@@ -21,10 +22,12 @@ PanelWindow {
     readonly property int screenHeight: Math.max(1, numberOr(root.screen && root.screen.height, root.height))
     readonly property int panelWidth: 224
     readonly property int panelHeight: Math.max(1, panel.implicitHeight)
-    readonly property bool hasApp: !!app
-    readonly property bool canUnpin: hasApp && app.shellAction !== "launchpad" && !!appsService
-    readonly property string appTitle: appsService && hasApp ? appsService.appLabel(app) : "应用"
-    readonly property string appIcon: appsService && hasApp ? appsService.iconForApp(app) : ""
+    readonly property string resolvedAppId: resolvedPinnedId()
+    readonly property var resolvedApp: appsService ? appsService.resolveApplication(resolvedAppId, app) : app
+    readonly property bool hasApp: !!resolvedApp || resolvedAppId.length > 0
+    readonly property bool canUnpin: hasApp && resolvedAppId !== "launchpad" && !!appsService
+    readonly property string appTitle: appsService && hasApp ? appsService.appLabel(resolvedApp || resolvedAppId) : "应用"
+    readonly property string appIcon: appsService && hasApp ? appsService.iconForApp(resolvedApp || resolvedAppId) : ""
     readonly property int popupLeft: popupLeftFor()
     readonly property int popupTop: popupTopFor()
     readonly property real popupOriginX: Math.max(0, Math.min(panel.width, anchorCenterX() - root.popupLeft))
@@ -73,6 +76,15 @@ PanelWindow {
 
         var y = numberOr(anchorRect.y, root.height - 96);
         return Math.round(Math.max(edgePadding, Math.min(maxTop, y - panelHeight - popupGap)));
+    }
+
+    function resolvedPinnedId() {
+        var stable = String(appId || "").trim();
+        if (stable.length > 0)
+            return stable;
+        if (appsService && app)
+            return appsService.appStableId(app);
+        return "";
     }
 
     TahoeGlass.regions: [
@@ -188,8 +200,8 @@ PanelWindow {
                 icon: "\ue89e"
                 enabledRow: root.hasApp && !!root.appsService
                 onActivated: {
-                    if (root.appsService && root.app)
-                        root.appsService.launchApp(root.app);
+                    if (root.appsService && root.hasApp)
+                        root.appsService.launchPinnedApp(root.resolvedApp, root.resolvedAppId);
                     root.closeRequested();
                 }
             }
@@ -201,7 +213,7 @@ PanelWindow {
                 enabledRow: root.canUnpin
                 onActivated: {
                     if (root.canUnpin)
-                        root.appsService.unpinApp(root.app);
+                        root.appsService.unpinAppId(root.resolvedAppId);
                     root.closeRequested();
                 }
             }

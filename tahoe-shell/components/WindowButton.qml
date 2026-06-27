@@ -139,6 +139,7 @@ Item {
         source: root.appsService ? root.appsService.iconForToplevel(root.windowModel || root.toplevel) : ""
         fillMode: Image.PreserveAspectFit
         smooth: true
+        mipmap: false
         opacity: root.minimized ? 0.58 : 1.0
         transformOrigin: Item.Center
     }

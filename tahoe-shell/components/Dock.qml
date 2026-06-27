@@ -46,6 +46,8 @@ PanelWindow {
     readonly property int dockMinimizedMinimumWidth: 76
     readonly property int dockToolButtonWidth: 54
     readonly property int dockSeparatorWidth: 1
+    readonly property int dockIconSourceSize: 160
+    readonly property int dockToolIconSourceSize: 128
     readonly property int dockSurfaceMaxWidth: Math.max(1, root.width - dockOuterMargin)
     readonly property int dockContentMaxWidth: Math.max(1, dockSurfaceMaxWidth - dockSurfacePadding)
     readonly property int pinnedAppCount: root.appsService && root.appsService.pinnedApps ? root.appsService.pinnedApps.length : 0
@@ -79,7 +81,7 @@ PanelWindow {
     readonly property color dockText: darkMode ? "#f5f7fb" : "#202124"
 
     signal toggleLaunchpad()
-    signal openPinnedAppMenu(var app, var anchorRect)
+    signal openPinnedAppMenu(var app, string appId, var anchorRect)
     signal openWindowMenu(var window, var anchorRect)
 
     visible: true
@@ -398,13 +400,15 @@ PanelWindow {
                                 // intercepts binding updates.
                                 property real magnification: root.proximityScale(pinnedButton)
                                 readonly property int pinnedIndex: pinnedButton.index
+                                readonly property string appId: root.appsService ? root.appsService.pinnedIdForVisualIndex(pinnedButton.pinnedIndex, modelData) : ""
+                                readonly property var appModel: root.appsService ? root.appsService.resolveApplication(pinnedButton.appId, modelData) : modelData
                                 property real bounceOffset: 0
                                 property bool suppressNextClick: false
                                 readonly property bool hovered: !root.pointerDragActive && iconMouse.containsMouse
-                                readonly property bool running: modelData.shellAction !== "launchpad"
+                                readonly property bool running: (!appModel || appModel.shellAction !== "launchpad")
                                     && root.appsService
                                     && root.niriService
-                                    && root.appsService.appHasRunningWindow(modelData, root.niriService.windowList)
+                                    && root.appsService.appHasRunningWindow(appModel, root.niriService.windowList)
                                 readonly property real lift: (magnification - 1.0) * 22 + (hovered ? 3 : 0)
 
                                 // Fixed width. NOTE: width must NOT depend on
@@ -438,7 +442,7 @@ PanelWindow {
 
                                         try {
                                             if (drop.urls && drop.urls.length > 0) {
-                                                root.appsService.openFilesWithApp(pinnedButton.modelData, drop.urls);
+                                                root.appsService.openFilesWithApp(pinnedButton.appModel, drop.urls);
                                                 drop.acceptProposedAction();
                                             }
                                         } catch (e) {}
@@ -451,7 +455,7 @@ PanelWindow {
                                     width: 54
                                     height: 54
                                     radius: 16
-                                    color: root.launchpadOpen && modelData.id === "launchpad" ? "#70ffffff" : "transparent"
+                                    color: root.launchpadOpen && pinnedButton.appId === "launchpad" ? "#70ffffff" : "transparent"
                                 }
 
                                 Rectangle {
@@ -471,12 +475,12 @@ PanelWindow {
                                     height: 48
                                     scale: pinnedButton.magnification
                                     opacity: pinnedButton.reorderActive ? 0.58 : 1
-                                    source: root.appsService ? root.appsService.iconForApp(modelData) : ""
+                                    source: root.appsService ? root.appsService.iconForApp(pinnedButton.appModel || pinnedButton.appId) : ""
                                     fillMode: Image.PreserveAspectFit
                                     smooth: true
-                                    mipmap: true
-                                    sourceSize.width: 96
-                                    sourceSize.height: 96
+                                    mipmap: false
+                                    sourceSize.width: root.dockIconSourceSize
+                                    sourceSize.height: root.dockIconSourceSize
                                     asynchronous: true
                                     transformOrigin: Item.Center
                                 }
@@ -506,7 +510,7 @@ PanelWindow {
                                     Text {
                                         id: labelText
                                         anchors.centerIn: parent
-                                        text: root.appsService ? root.appsService.appLabel(modelData) : ""
+                                        text: root.appsService ? root.appsService.appLabel(pinnedButton.appModel || pinnedButton.appId) : ""
                                         color: root.dockText
                                         font.pixelSize: 11
                                         elide: Text.ElideRight
@@ -529,7 +533,7 @@ PanelWindow {
                                     acceptedButtons: Qt.LeftButton | Qt.RightButton
                                     cursorShape: Qt.PointingHandCursor
                                     onPositionChanged: function(mouse) {
-                                        if (pinnedButton.reorderPressed && modelData.shellAction !== "launchpad" && (mouse.buttons & Qt.LeftButton)) {
+                                        if (pinnedButton.reorderPressed && pinnedButton.appId !== "launchpad" && (mouse.buttons & Qt.LeftButton)) {
                                             var dx = mouse.x - pinnedButton.reorderPressX;
                                             var dy = mouse.y - pinnedButton.reorderPressY;
                                             if (!pinnedButton.reorderActive && Math.sqrt(dx * dx + dy * dy) > 8) {
@@ -551,7 +555,7 @@ PanelWindow {
                                     onEntered: root.markDockHovered()
                                     onExited: root.scheduleDockHoverReset()
                                     onPressed: function(mouse) {
-                                        if (mouse.button === Qt.LeftButton && modelData.shellAction !== "launchpad") {
+                                        if (mouse.button === Qt.LeftButton && pinnedButton.appId !== "launchpad") {
                                             pinnedButton.reorderPressed = true;
                                             pinnedButton.reorderPressX = mouse.x;
                                             pinnedButton.reorderPressY = mouse.y;
@@ -580,14 +584,14 @@ PanelWindow {
 
                                         pinnedButton.bounce();
                                         if (mouse.button === Qt.RightButton) {
-                                            if (modelData.shellAction !== "launchpad")
-                                                root.openPinnedAppMenu(modelData, root.anchorRectFor(pinnedButton));
+                                            if (pinnedButton.appId !== "launchpad")
+                                                root.openPinnedAppMenu(pinnedButton.appModel, pinnedButton.appId, root.anchorRectFor(pinnedButton));
                                             root.markDockHovered();
                                             return;
-                                        } else if (modelData.shellAction === "launchpad") {
+                                        } else if (pinnedButton.appId === "launchpad") {
                                             root.toggleLaunchpad();
                                         } else if (root.appsService) {
-                                            root.appsService.launchApp(modelData);
+                                            root.appsService.launchPinnedApp(pinnedButton.appModel, pinnedButton.appId);
                                         }
                                     }
                                 }
@@ -791,6 +795,9 @@ PanelWindow {
             source: tool.iconSource
             fillMode: Image.PreserveAspectFit
             smooth: true
+            mipmap: false
+            sourceSize.width: root.dockToolIconSourceSize
+            sourceSize.height: root.dockToolIconSourceSize
         }
 
         Rectangle {

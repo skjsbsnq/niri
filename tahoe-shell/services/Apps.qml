@@ -21,13 +21,15 @@ Item {
     // source now.
     readonly property string legacyPinnedPath: configHome() + "/quickshell/tahoe/pinned-apps.json"
 
-    readonly property var realApplications: [...DesktopEntries.applications.values].filter(isLaunchableApplication).sort(compareApplications)
+    readonly property var realApplications: buildApplications(desktopEntriesRevision)
     property bool pinnedInitialized: false
     property bool migratedLegacyConfig: false
     property bool loadingPinnedState: false
     property var pinnedIds: []
     property int pinnedRevision: 0
-    readonly property var pinnedApps: buildPinnedApps(pinnedRevision)
+    property int desktopEntriesRevision: 0
+    property int desktopEntriesCount: -1
+    readonly property var pinnedApps: buildPinnedApps(pinnedRevision, desktopEntriesRevision)
     readonly property var launchpadApps: realApplications
 
     FileView {
@@ -54,7 +56,18 @@ Item {
         onLoadFailed: root.loadPinnedState()
     }
 
-    Component.onCompleted: loadPinnedState()
+    Timer {
+        id: desktopEntriesRefreshTimer
+        interval: 2000
+        repeat: true
+        running: true
+        onTriggered: root.refreshDesktopEntries(false)
+    }
+
+    Component.onCompleted: {
+        refreshDesktopEntries(true);
+        loadPinnedState();
+    }
 
     function envString(name) {
         var value = Quickshell.env(name);
@@ -68,6 +81,28 @@ Item {
 
         var home = envString("HOME").trim();
         return home.length > 0 ? home + "/.config" : Quickshell.stateDir;
+    }
+
+    function desktopEntryValues() {
+        try {
+            return [...DesktopEntries.applications.values];
+        } catch (e) {
+            return [];
+        }
+    }
+
+    function buildApplications(revision) {
+        return desktopEntryValues().filter(isLaunchableApplication).sort(compareApplications);
+    }
+
+    function refreshDesktopEntries(force) {
+        var count = desktopEntryValues().length;
+        if (!force && count === desktopEntriesCount)
+            return;
+
+        desktopEntriesCount = count;
+        desktopEntriesRevision += 1;
+        bumpPinnedRevision();
     }
 
     function iconPath(iconSet, fileName) {
@@ -98,6 +133,9 @@ Item {
         if (!app)
             return "";
 
+        if (typeof app === "string")
+            return themedIconPath(app);
+
         if (app.desktopEntry)
             app = app.desktopEntry;
 
@@ -107,6 +145,9 @@ Item {
     function iconForApp(app) {
         if (!app)
             return defaultWindowIcon;
+
+        if (typeof app === "string")
+            return iconForAppId(app);
 
         if (app.desktopEntry)
             app = app.desktopEntry;
@@ -118,12 +159,42 @@ Item {
         if (app.iconSet)
             return iconPath(app.iconSet, app.icon || "");
 
-        return iconForAppId(app.id || app.startupClass || app.name || "");
+        return iconForAppId(appStableId(app));
+    }
+
+    function labelForAppId(id) {
+        var raw = String(id || "").trim();
+        if (raw.length === 0)
+            return "应用";
+
+        var normalized = normalizedAppToken(raw);
+        if (normalized === "qq" || normalized === "linuxqq")
+            return "QQ";
+        if (normalized === "wechat" || normalized === "weixin")
+            return "微信";
+        if (normalized.indexOf("telegram") !== -1)
+            return "Telegram";
+        if (normalized.indexOf("steam") !== -1)
+            return "Steam";
+
+        var basename = raw.replace(/\\/g, "/");
+        var slashIndex = basename.lastIndexOf("/");
+        if (slashIndex !== -1)
+            basename = basename.substring(slashIndex + 1);
+        basename = basename.replace(/\.desktop$/, "");
+        basename = basename.replace(/[-_.]+/g, " ").trim();
+        if (basename.length === 0)
+            return raw;
+
+        return basename.charAt(0).toUpperCase() + basename.substring(1);
     }
 
     function appLabel(app) {
         if (!app)
             return "应用";
+
+        if (typeof app === "string")
+            return labelForAppId(app);
 
         if (app.desktopEntry)
             app = app.desktopEntry;
@@ -141,8 +212,8 @@ Item {
         if (generic.length > 0)
             return generic;
 
-        var id = String(app.id || "").trim();
-        return id.length > 0 ? id : "应用";
+        var id = appStableId(app);
+        return id.length > 0 ? labelForAppId(id) : "应用";
     }
 
     function appSearchText(app) {
@@ -288,6 +359,9 @@ Item {
         if (!app)
             return;
 
+        if (typeof app === "string")
+            app = resolveApplication(app, null);
+
         if (app.desktopEntry)
             app = app.desktopEntry;
 
@@ -308,15 +382,30 @@ Item {
     function appStableId(app) {
         if (!app)
             return "";
+
+        if (typeof app === "string")
+            return String(app || "").trim();
+
         if (app.desktopEntry)
             app = app.desktopEntry;
 
+        var pinned = String(app.pinnedId || app.fallbackId || app.desktopId || "").trim();
+        if (pinned.length > 0)
+            return pinned;
         var id = String(app.id || "").trim();
         if (id.length > 0)
             return id;
         var startup = String(app.startupClass || "").trim();
         if (startup.length > 0)
             return startup;
+        if (app.command && app.command.length > 0) {
+            var command = String(app.command[0] || "").trim();
+            if (command.length > 0)
+                return command;
+        }
+        var exec = firstExecToken(app.execString || "");
+        if (exec.length > 0)
+            return exec;
         var name = String(app.name || "").trim();
         return name;
     }
@@ -578,6 +667,60 @@ Item {
 
     function unpinApp(app) {
         unpinAppId(appStableId(app));
+    }
+
+    function pinnedIdForVisualIndex(visualIndex, app) {
+        var index = Number(visualIndex);
+        if (!isFinite(index))
+            index = -1;
+        if (index === 0)
+            return "launchpad";
+
+        var ids = configuredPinnedIds();
+        var persistedIndex = Math.round(index) - 1;
+        if (persistedIndex >= 0 && persistedIndex < ids.length)
+            return ids[persistedIndex];
+
+        return appStableId(app);
+    }
+
+    function fallbackApplication(id) {
+        id = String(id || "").trim();
+        return {
+            "id": id,
+            "pinnedId": id,
+            "fallbackId": id,
+            "name": labelForAppId(id),
+            "startupClass": id,
+            "icon": id,
+            "command": [id]
+        };
+    }
+
+    function resolveApplication(id, app) {
+        if (app && app.shellAction)
+            return app;
+
+        var stable = String(id || "").trim();
+        if (stable.length === 0)
+            stable = appStableId(app);
+
+        var found = findApplication([
+            stable,
+            normalizedAppToken(stable),
+            stable + ".desktop"
+        ]);
+        if (found)
+            return found;
+
+        if (app && appStableId(app).length > 0)
+            return app;
+
+        return stable.length > 0 ? fallbackApplication(stable) : (app || null);
+    }
+
+    function launchPinnedApp(app, id) {
+        launchApp(resolveApplication(id, app));
     }
 
     function togglePinnedApp(app) {
@@ -893,13 +1036,7 @@ Item {
             return;
 
         seen[key] = true;
-        target.push({
-            "id": id,
-            "name": id,
-            "startupClass": id,
-            "icon": id,
-            "command": [id]
-        });
+        target.push(fallbackApplication(id));
     }
 
     function appendPinnedId(target, seen, id) {
@@ -910,7 +1047,7 @@ Item {
             appendFallbackPinnedApplication(target, seen, id);
     }
 
-    function buildPinnedApps(revision) {
+    function buildPinnedApps(revision, desktopRevision) {
         var result = [
             { "id": "launchpad", "name": "启动台", "iconSet": "dock", "icon": "launchpad.png", "shellAction": "launchpad" }
         ];

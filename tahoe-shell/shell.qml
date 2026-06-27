@@ -28,6 +28,7 @@ ShellRoot {
     property string topBarPopupScreenName: ""
     property bool dockAppMenuOpen: false
     property var dockAppMenuApp: null
+    property string dockAppMenuAppId: ""
     property var dockAppMenuAnchorRect: null
     property string dockAppMenuScreenName: ""
     property bool dockWindowMenuOpen: false
@@ -212,9 +213,10 @@ ShellRoot {
         return 12;
     }
 
-    function prepareDockAppMenu(screen, app, anchorRect) {
+    function prepareDockAppMenu(screen, app, appId, anchorRect) {
         dockAppMenuScreenName = screenName(screen);
         dockAppMenuApp = app || null;
+        dockAppMenuAppId = String(appId || "");
         dockAppMenuAnchorRect = anchorRect || null;
     }
 
@@ -823,10 +825,10 @@ ShellRoot {
                     shell.closeTopBarPopups("");
                     shell.spotlightOpen = false;
                 }
-                onOpenPinnedAppMenu: function(app, anchorRect) {
+                onOpenPinnedAppMenu: function(app, appId, anchorRect) {
                     var wasOpenHere = shell.dockAppMenuOpenFor(modelData);
-                    var wasSameApp = wasOpenHere && shell.dockAppMenuApp === app;
-                    shell.prepareDockAppMenu(modelData, app, anchorRect);
+                    var wasSameApp = wasOpenHere && shell.dockAppMenuAppId === String(appId || "");
+                    shell.prepareDockAppMenu(modelData, app, appId, anchorRect);
                     shell.closeTopBarPopups("dockAppMenu");
                     shell.dockAppMenuOpen = !wasSameApp;
                     shell.launchpadOpen = false;
@@ -854,6 +856,7 @@ ShellRoot {
                 screen: modelData
                 appsService: apps
                 app: shell.dockAppMenuApp
+                appId: shell.dockAppMenuAppId
                 anchorRect: shell.dockAppMenuAnchorRect
                 open: shell.dockAppMenuOpenFor(modelData)
                 settingsService: desktopSettings

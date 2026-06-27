@@ -57,9 +57,9 @@ layout {
 blur {
     on
     passes 5
-    offset 7
-    noise 0.012
-    saturation 1.6
+    offset 5
+    noise 0.006
+    saturation 1.28
 }
 
 tahoe-glass {
@@ -84,52 +84,52 @@ tahoe-glass {
     // BackgroundEffect.blurRegion fallback path.
     material "panel" {
         xray false
-        edge-highlight 0.34
-        refraction 0.04
-        inner-shadow 0.12
+        edge-highlight 0.20
+        refraction 0.018
+        inner-shadow 0.08
         chromatic 0.0
-        lens-depth 0.04
+        lens-depth 0.02
     }
     material "pill" {
         xray false
-        edge-highlight 0.38
-        refraction 0.045
-        inner-shadow 0.10
-        chromatic 0.008
-        lens-depth 0.06
+        edge-highlight 0.24
+        refraction 0.02
+        inner-shadow 0.08
+        chromatic 0.0
+        lens-depth 0.03
     }
     material "dock" {
         xray false
-        edge-highlight 0.40
-        refraction 0.05
-        inner-shadow 0.14
-        chromatic 0.006
-        lens-depth 0.05
+        edge-highlight 0.24
+        refraction 0.018
+        inner-shadow 0.08
+        chromatic 0.0
+        lens-depth 0.025
     }
-    // menu/toast read clearer: stronger edge light, gentler lens distortion.
+    // menu/toast read clearer: controlled edge light, gentler lens distortion.
     material "menu" {
         xray false
-        edge-highlight 0.42
-        refraction 0.02
-        inner-shadow 0.16
+        edge-highlight 0.24
+        refraction 0.014
+        inner-shadow 0.10
         chromatic 0.0
-        lens-depth 0.04
+        lens-depth 0.018
     }
     material "toast" {
         xray false
-        edge-highlight 0.42
-        refraction 0.02
-        inner-shadow 0.14
+        edge-highlight 0.24
+        refraction 0.014
+        inner-shadow 0.10
         chromatic 0.0
-        lens-depth 0.04
+        lens-depth 0.018
     }
     // backdrop is fullscreen (Launchpad); keep refraction/lens low so the
     // whole screen does not visibly warp, and keep shadow off (set in code
     // default). glass_surface_detail() also fades these out on big surfaces.
     material "backdrop" {
         xray false
-        edge-highlight 0.22
-        refraction 0.02
+        edge-highlight 0.14
+        refraction 0.012
         inner-shadow 0.0
         chromatic 0.0
         lens-depth 0.0

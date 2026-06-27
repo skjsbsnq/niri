@@ -39,15 +39,15 @@ PanelWindow {
     readonly property int dockOuterMargin: 28
     readonly property int dockSurfacePadding: 34
     readonly property int dockItemSpacing: 8
-    readonly property int dockPinnedButtonWidth: 62
+    readonly property int dockPinnedButtonWidth: 60
     readonly property int dockWindowTitleWidth: 132
-    readonly property int dockWindowIconWidth: 56
+    readonly property int dockWindowIconWidth: 54
     readonly property int dockMinimizedThumbnailWidth: 112
     readonly property int dockMinimizedMinimumWidth: 76
-    readonly property int dockToolButtonWidth: 54
+    readonly property int dockToolButtonWidth: 50
     readonly property int dockSeparatorWidth: 1
-    readonly property int dockIconSourceSize: 160
-    readonly property int dockToolIconSourceSize: 128
+    readonly property int dockIconSourceSize: 96
+    readonly property int dockToolIconSourceSize: 96
     readonly property int dockSurfaceMaxWidth: Math.max(1, root.width - dockOuterMargin)
     readonly property int dockContentMaxWidth: Math.max(1, dockSurfaceMaxWidth - dockSurfacePadding)
     readonly property int pinnedAppCount: root.appsService && root.appsService.pinnedApps ? root.appsService.pinnedApps.length : 0
@@ -95,16 +95,16 @@ PanelWindow {
     // same thing with requestAnimationFrame + exponential lerp (script.js
     // 358-404); here the spring plays the role of the lerp.
     //
-    // Range ~150px (web uses 195), peak scale 1.5 (web uses 1.7). Wider
-    // range + bigger peak is what makes the neighbor-coupling wave visible.
+    // Range ~130px (web uses 195), peak scale 1.32. This keeps the wave
+    // visible without pushing icons into the dock viewport clip.
     function proximityScale(item) {
         if (pointerDragActive || !dockHovered || !item || !dockSurface)
             return 1.0;
 
         var point = item.mapToItem(dockSurface, item.width / 2, item.height / 2);
         var distance = Math.abs(dockMouseX - point.x);
-        var influence = Math.max(0, 1 - distance / 150);
-        return 1.0 + influence * 0.5;
+        var influence = Math.max(0, 1 - distance / 130);
+        return 1.0 + influence * 0.32;
     }
 
     function markDockHovered() {
@@ -173,7 +173,7 @@ PanelWindow {
         if (count <= 1)
             return -1;
 
-        var itemWidth = 62;
+        var itemWidth = root.dockPinnedButtonWidth;
         var step = itemWidth + root.dockItemSpacing;
         for (var i = 1; i < count; i++) {
             var center = i * step + itemWidth / 2;
@@ -274,14 +274,11 @@ PanelWindow {
             item: dockSurface
             material: dockSurface.tahoeGlassMaterial
             radius: dockSurface.tahoeGlassRadius
-            blur: false
-            shadow: false
+            blur: true
+            shadow: true
             clip: true
-            // Keep the dock in its quiet QML-painted resting surface. Any
-            // compositor-owned dock material becomes the heavy full-width bar
-            // after a click/drag-triggered repaint.
-            interaction: 0.0
-            materialAlpha: 0.0
+            interaction: root.dockHovered ? 0.10 : 0.0
+            materialAlpha: dockSurface.opacity
             enabled: dockSurface.opacity > 0.01
         }
     ]
@@ -409,7 +406,7 @@ PanelWindow {
                                     && root.appsService
                                     && root.niriService
                                     && root.appsService.appHasRunningWindow(appModel, root.niriService.windowList)
-                                readonly property real lift: (magnification - 1.0) * 22 + (hovered ? 3 : 0)
+                                readonly property real lift: (magnification - 1.0) * 16 + (hovered ? 2 : 0)
 
                                 // Fixed width. NOTE: width must NOT depend on
                                 // magnification — proximityScale() reads this delegate's
@@ -470,9 +467,9 @@ PanelWindow {
                                 Image {
                                     id: appIcon
                                     anchors.horizontalCenter: parent.horizontalCenter
-                                    y: 8 - pinnedButton.lift - pinnedButton.bounceOffset
-                                    width: 48
-                                    height: 48
+                                    y: 11 - pinnedButton.lift - pinnedButton.bounceOffset
+                                    width: 42
+                                    height: 42
                                     scale: pinnedButton.magnification
                                     opacity: pinnedButton.reorderActive ? 0.58 : 1
                                     source: root.appsService ? root.appsService.iconForApp(pinnedButton.appModel || pinnedButton.appId) : ""
@@ -701,6 +698,7 @@ PanelWindow {
                                 windowsService: root.niriService
                                 appsService: root.appsService
                                 useSpring: root.useSpring
+                                iconSize: root.dockWindowButtonsShowTitle ? 34 : 36
                                 showTitle: root.dockWindowButtonsShowTitle
                                 magnification: root.proximityScale(windowButton)
                                 dockWindow: root
@@ -776,7 +774,7 @@ PanelWindow {
         signal activated()
         signal urlsDropped(var urls)
 
-        width: 54
+        width: 50
         height: 64
 
         Rectangle {
@@ -789,9 +787,9 @@ PanelWindow {
 
         Image {
             anchors.horizontalCenter: parent.horizontalCenter
-            y: 7
-            width: 42
-            height: 42
+            y: 10
+            width: 36
+            height: 36
             source: tool.iconSource
             fillMode: Image.PreserveAspectFit
             smooth: true

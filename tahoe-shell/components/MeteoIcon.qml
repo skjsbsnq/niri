@@ -12,9 +12,8 @@ import "WeatherCodes.js" as WeatherCodes
 // 见路线图 §5）；Tahoe 用 Material Icons 字体字形替代，无素材依赖、无 Qt5Compat。
 // 日夜区分由字形本身承担（晴日 `sunny`/晴夜 `nights_stay`），不靠颜色。
 //
-// 接入：LS09 WeatherBackground（场景分类用 slug，不用本组件）/ LS10 WeatherCards
-// / LS11 LeftSidebarWeather（主温度旁的大图标、逐时格小图标）。颜色由父级传入，
-// 默认走浅色友好值，深色调用方自行覆盖 `color`（照 TahoeCategoryIcon 由父级传色）。
+// 接入：LeftSidebarWeather 的主天气图标、逐时 chip 和每日预报行。颜色由父级传入，
+// 默认走浅色友好值，深色调用方自行覆盖 `color`。
 Item {
     id: root
 

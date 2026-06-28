@@ -34,6 +34,10 @@ two things:
    `xdg_toplevel.set_minimized()`.
 2. Refreshes stale Wayland clipboard offers while preserving X11-owned
    selections until the compositor cancels them.
+3. Exposes X11 `UTF8_STRING` selections as Wayland `text/plain;charset=utf-8`
+   and `text/plain` aliases. This fixes apps such as Linux QQ, which can copy
+   valid text through X11 targets that GTK terminals do not treat as pasteable
+   Wayland text.
 
 Do not split these responsibilities casually: Tahoe's niri config points at the
 single patched binary through the glamor wrapper.

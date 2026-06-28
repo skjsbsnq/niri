@@ -31,6 +31,7 @@ Item {
     readonly property int pinnedCount: pinnedEntries ? pinnedEntries.length : 0
     readonly property int maxPinnedEntries: 40
     readonly property int maxPinnedTextChars: 131072
+    readonly property string textMimeType: "text/plain;charset=utf-8"
     readonly property string pinnedStatePath: Quickshell.stateDir + "/clipboard-pins.json"
 
     function setValue(name, value) {
@@ -352,9 +353,14 @@ Item {
         if (!entry || !entry.raw || !root.available)
             return;
 
+        if (entry.binary || entry.pinnable === false) {
+            root.statusText = "只能复制文本项";
+            return;
+        }
+
         root.statusText = "已复制";
         Quickshell.execDetached({
-            command: ["sh", "-c", "printf %s \"$1\" | cliphist decode | wl-copy", "sh", entry.raw],
+            command: ["sh", "-c", "printf %s \"$1\" | cliphist decode | wl-copy --type '" + root.textMimeType + "'", "sh", entry.raw],
             workingDirectory: ""
         });
     }
@@ -365,7 +371,7 @@ Item {
 
         root.statusText = "已复制固定项";
         Quickshell.execDetached({
-            command: ["sh", "-c", "printf %s \"$1\" | wl-copy", "sh", String(pin.text || "")],
+            command: ["sh", "-c", "printf %s \"$1\" | wl-copy --type '" + root.textMimeType + "'", "sh", String(pin.text || "")],
             workingDirectory: ""
         });
     }

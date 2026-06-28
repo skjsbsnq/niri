@@ -480,7 +480,7 @@ Item {
             return false;
 
         Quickshell.execDetached({
-            command: ["sh", "-c", "printf %s \"$1\" | wl-copy", "sh", value],
+            command: ["sh", "-c", "printf %s \"$1\" | wl-copy --type 'text/plain;charset=utf-8'", "sh", value],
             workingDirectory: ""
         });
         return true;

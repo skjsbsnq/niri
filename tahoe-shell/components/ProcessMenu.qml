@@ -246,9 +246,9 @@ PanelWindow {
         }
     }
 
-    // 复制到剪贴板：照 Search.qml 的 wl-copy 模式（shell 包一层 printf，转义更稳）。
+    // 复制到剪贴板：显式使用文本 MIME，避免文本目标误判格式。
     function copyToClipboard(text) {
-        Quickshell.execDetached(["sh", "-c", "printf %s \"$1\" | wl-copy", "sh", String(text)]);
+        Quickshell.execDetached(["sh", "-c", "printf %s \"$1\" | wl-copy --type 'text/plain;charset=utf-8'", "sh", String(text)]);
     }
 
     component Separator: Rectangle {

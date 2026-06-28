@@ -160,6 +160,66 @@ index bd32aaa..a6df77b 100644
                  let mime_types = T::get_mimes(&offer);
                  let foreign = ForeignSelection {
                      mime_types,
+diff --git a/src/xstate/selection.rs b/src/xstate/selection.rs
+index 8500a79..30cbcc9 100644
+--- a/src/xstate/selection.rs
++++ b/src/xstate/selection.rs
+@@ -477,12 +477,21 @@ impl<T: SelectionType> SelectionDataImpl for SelectionData<T> {
+         }
+ 
+         let selection = get_atom_name(connection, self.atom);
+-        let mimes = targets
++        let mut utf8_x11 = false;
++        let mut text_plain = false;
++        let mut text_plain_utf8 = false;
++        let mut mimes: Vec<SelectionTargetId> = targets
+             .iter()
+             .copied()
+             .filter(|atom| ![atoms.targets, atoms.multiple, atoms.save_targets].contains(atom))
+             .map(|target| {
+                 let name = get_atom_name(connection, target);
++                match name.as_str() {
++                    "UTF8_STRING" => utf8_x11 = true,
++                    "text/plain" => text_plain = true,
++                    "text/plain;charset=utf-8" => text_plain_utf8 = true,
++                    _ => {}
++                }
+                 let property = connection
+                     .wait_for_reply(connection.send_request(&x::InternAtom {
+                         only_if_exists: false,
+@@ -499,6 +508,32 @@ impl<T: SelectionType> SelectionDataImpl for SelectionData<T> {
+             })
+             .collect();
+ 
++        if utf8_x11 {
++            for (name, already_present) in [
++                ("text/plain;charset=utf-8", text_plain_utf8),
++                ("text/plain", text_plain),
++            ] {
++                if already_present {
++                    continue;
++                }
++
++                let property = connection
++                    .wait_for_reply(connection.send_request(&x::InternAtom {
++                        only_if_exists: false,
++                        name: &[name.as_bytes(), b"_", selection.as_bytes()].concat(),
++                    }))
++                    .unwrap()
++                    .atom();
++
++                mimes.push(SelectionTargetId {
++                    name: name.to_string(),
++                    target: atoms.utf8_string,
++                    property,
++                    source: None,
++                });
++            }
++        }
++
+         let selection = Rc::new(Selection {
+             mimes,
+             connection: connection.clone(),
 diff --git a/src/server/tests.rs b/src/server/tests.rs
 index 13492cd..453fb1f 100644
 --- a/src/server/tests.rs

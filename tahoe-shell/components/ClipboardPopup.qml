@@ -259,7 +259,7 @@ PanelWindow {
         property bool pinnable: true
         readonly property bool copyEnabled: pinnedRow
             ? !!(root.clipboardService && root.clipboardService.wlCopyAvailable)
-            : !!(root.clipboardService && root.clipboardService.available)
+            : !!(root.clipboardService && root.clipboardService.available && row.pinnable)
         signal copyRequested(var entry)
         signal pinRequested(var entry)
         signal unpinRequested(var entry)

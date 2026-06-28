@@ -307,7 +307,7 @@ xwayland_satellite_build_is_current() {
 }
 
 remove_xwayland_satellite_worktree() {
-  [[ -e "$XWAYLAND_SATELLITE_WORK_DIR" ]] || return
+  [[ -e "$XWAYLAND_SATELLITE_WORK_DIR" ]] || return 0
 
   if [[ -f "$XWAYLAND_SATELLITE_WORK_DIR/.git" || -d "$XWAYLAND_SATELLITE_WORK_DIR/.git" ]]; then
     git -C "$XWAYLAND_SATELLITE_UPSTREAM_DIR" worktree remove --force "$XWAYLAND_SATELLITE_WORK_DIR" >/dev/null 2>&1 \

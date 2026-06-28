@@ -51,48 +51,58 @@ function danger(darkMode) {
     return darkMode ? "#ff6961" : "#ff453a";
 }
 
-// --- Grouping surfaces (sections / rows) ----------------------------------
+// --- Panel and grouping surfaces -------------------------------------------
+
+function panelFill(darkMode) {
+    // Settings carries dense text, so its light material needs a readable
+    // baseline even when the wallpaper or compositor fallback is dark.
+    return darkMode ? "#d01d1f24" : "#b8f7f8fb";
+}
+
+function panelStroke(darkMode) {
+    return darkMode ? "#44ffffff" : "#90ffffff";
+}
 
 function sectionFill(darkMode) {
-    return darkMode ? "#1cffffff" : "#24ffffff";
+    return darkMode ? "#1cffffff" : "#5effffff";
 }
 
 function sectionStroke(darkMode) {
-    return darkMode ? "#2effffff" : "#38ffffff";
+    return darkMode ? "#2effffff" : "#80ffffff";
 }
 
 function rowFill(darkMode) {
-    return darkMode ? "#1affffff" : "#28ffffff";
+    return darkMode ? "#1affffff" : "#66ffffff";
 }
 
 function rowFillHover(darkMode) {
-    return darkMode ? "#2affffff" : "#48ffffff";
+    return darkMode ? "#2affffff" : "#86ffffff";
 }
 
 function rowStroke(darkMode) {
-    return darkMode ? "#22ffffff" : "#32ffffff";
+    return darkMode ? "#22ffffff" : "#72ffffff";
 }
 
 // --- Sidebar --------------------------------------------------------------
 
 function sidebarFill(darkMode) {
-    return darkMode ? "#16ffffff" : "#20ffffff";
+    return darkMode ? "#16ffffff" : "#58ffffff";
 }
 
 function sidebarStroke(darkMode) {
-    return darkMode ? "#26ffffff" : "#34ffffff";
+    return darkMode ? "#26ffffff" : "#80ffffff";
 }
 
 function sidebarActiveFill(darkMode) {
-    return darkMode ? "#3affffff" : "#64ffffff";
+    return darkMode ? "#3affffff" : "#a6ffffff";
 }
 
 function sidebarActiveStroke(darkMode) {
-    return darkMode ? "#30ffffff" : "#5cffffff";
+    return darkMode ? "#30ffffff" : "#96ffffff";
 }
 
 function sidebarHoverFill(darkMode) {
-    return darkMode ? "#26ffffff" : "#42ffffff";
+    return darkMode ? "#26ffffff" : "#80ffffff";
 }
 
 // --- Buttons --------------------------------------------------------------
@@ -142,29 +152,29 @@ function switchOff(darkMode) {
 // --- Summary tile ---------------------------------------------------------
 
 function tileFill(darkMode) {
-    return darkMode ? "#1cffffff" : "#30ffffff";
+    return darkMode ? "#1cffffff" : "#6affffff";
 }
 
 function tileFillHover(darkMode) {
-    return darkMode ? "#28ffffff" : "#4cffffff";
+    return darkMode ? "#28ffffff" : "#88ffffff";
 }
 
 function tileStroke(darkMode) {
-    return darkMode ? "#26ffffff" : "#42ffffff";
+    return darkMode ? "#26ffffff" : "#82ffffff";
 }
 
 function tileStrokeHover(darkMode) {
-    return darkMode ? "#34ffffff" : "#66ffffff";
+    return darkMode ? "#34ffffff" : "#a0ffffff";
 }
 
 // --- Health / About hero strip -------------------------------------------
 
 function heroFill(darkMode) {
-    return darkMode ? "#1cffffff" : "#2affffff";
+    return darkMode ? "#1cffffff" : "#70ffffff";
 }
 
 function heroStroke(darkMode) {
-    return darkMode ? "#2effffff" : "#42ffffff";
+    return darkMode ? "#2effffff" : "#86ffffff";
 }
 
 // --- Overlay scrim --------------------------------------------------------

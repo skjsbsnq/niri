@@ -40,6 +40,8 @@ PanelWindow {
     readonly property color textSecondary: SettingsTheme.textSecondary(darkMode)
     readonly property color textMuted: SettingsTheme.textMuted(darkMode)
     readonly property color accentBlue: SettingsTheme.accentBlue(darkMode)
+    readonly property color panelFill: SettingsTheme.panelFill(darkMode)
+    readonly property color panelStroke: SettingsTheme.panelStroke(darkMode)
     readonly property color sectionFill: SettingsTheme.sectionFill(darkMode)
     readonly property color sectionStroke: SettingsTheme.sectionStroke(darkMode)
     readonly property color rowFill: SettingsTheme.rowFill(darkMode)
@@ -321,7 +323,7 @@ PanelWindow {
 
             anchors.fill: parent
             radius: tahoeGlassRadius
-            color: GlassStyle.FillPanelBright
+            color: root.panelFill
         }
 
         Rectangle {
@@ -329,7 +331,7 @@ PanelWindow {
             anchors.margins: 1
             radius: panelSurface.radius - 1
             color: "transparent"
-            border.color: GlassStyle.StrokePanelBright
+            border.color: root.panelStroke
             border.width: 1
         }
 

@@ -19,7 +19,8 @@ Item {
     property string nativeMenuStatus: "尚未检测"
     property string nativeMenuDetail: ""
     readonly property var focusedWindow: windowsService ? windowsService.focusedWindow : null
-    readonly property string activeTitle: appsService ? appsService.toplevelLabel(focusedWindow) : "桌面"
+    readonly property string activeTitle: appsService ? appsService.windowAppLabel(focusedWindow) : "桌面"
+    readonly property string activeWindowTitle: appsService ? appsService.toplevelLabel(focusedWindow) : "桌面"
     readonly property string activeAppId: focusedWindow ? String(focusedWindow.appId || "") : ""
     readonly property string activePid: focusedWindow && focusedWindow.pid !== undefined && focusedWindow.pid !== null ? String(focusedWindow.pid) : ""
     readonly property string activeWindowId: focusedWindow && focusedWindow.id !== undefined && focusedWindow.id !== null ? String(focusedWindow.id) : ""
@@ -117,7 +118,7 @@ Item {
             root.activeWindowId,
             root.activePid,
             root.activeAppId,
-            root.activeTitle
+            root.activeWindowTitle
         ]
         stdout: StdioCollector {
             id: probeOut

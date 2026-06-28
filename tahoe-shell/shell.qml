@@ -793,7 +793,7 @@ ShellRoot {
                 screen: modelData
                 anchorRect: shell.topBarPopupAnchorRect
                 open: shell.topBarPopupOpenFor(shell.appMenuOpen, modelData)
-                activeApp: apps.toplevelLabel(niri.focusedWindow || niri.activeToplevel)
+                activeApp: apps.windowAppLabel(niri.focusedWindow || niri.activeToplevel)
                 powerService: power
                 settingsService: desktopSettings
                 onCloseRequested: shell.appMenuOpen = false

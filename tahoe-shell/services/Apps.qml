@@ -199,14 +199,8 @@ Item {
         if (app.desktopEntry)
             app = app.desktopEntry;
 
-        function hasCJK(text) {
-            return /[\u4e00-\u9fff]/.test(String(text || ""));
-        }
-
         var primary = String(app.name || "").trim();
         var generic = String(app.genericName || "").trim();
-        if (hasCJK(generic) && !hasCJK(primary))
-            return generic;
         if (primary.length > 0)
             return primary;
         if (generic.length > 0)
@@ -341,6 +335,27 @@ Item {
             return defaultWindowIcon;
 
         return iconForAppId(toplevel.appId || "");
+    }
+
+    function windowAppLabel(window) {
+        if (!window)
+            return "桌面";
+
+        var appId = windowAppId(window);
+        if (appId.length > 0) {
+            var app = findApplication([
+                appId,
+                normalizedAppToken(appId),
+                appId + ".desktop"
+            ]);
+            if (app)
+                return appLabel(app);
+
+            return labelForAppId(appId);
+        }
+
+        var title = windowTitle(window);
+        return title.length > 0 ? title : "窗口";
     }
 
     function toplevelLabel(toplevel) {

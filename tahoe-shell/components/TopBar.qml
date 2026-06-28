@@ -35,7 +35,7 @@ PanelWindow {
     property bool clipboardPopupOpen: false
     property bool leftSidebarOpen: false
     property bool darkMode: false
-    readonly property string activeApp: appsService && niriService ? appsService.toplevelLabel(niriService.focusedWindow || niriService.activeToplevel) : "桌面"
+    readonly property string activeApp: appsService && niriService ? appsService.windowAppLabel(niriService.focusedWindow || niriService.activeToplevel) : "桌面"
     // Number of retained notification history entries. Drives the bell
     // badge and lets DND-suppressed notifications remain visible.
     readonly property int notificationCount: notificationsService ? notificationsService.historyCount : 0

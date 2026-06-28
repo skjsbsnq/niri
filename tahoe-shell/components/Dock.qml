@@ -36,8 +36,11 @@ PanelWindow {
     readonly property int dockHideDelay: settingsService ? settingsService.dockAutoHideDelayMs : 260
     readonly property int dockRevealZoneHeight: settingsService ? settingsService.dockRevealZoneHeight : 8
     readonly property bool dockHidden: dockAutoHide && !dockHovered && !pointerDragActive && !launchpadOpen && !menuOpen
-    property real dockSlideOffset: dockHidden ? 88 : 0
+    property bool dockVisualHidden: dockHidden
+    property bool dockGlassActive: !dockHidden
+    property real dockSlideOffset: dockVisualHidden ? 88 : 0
     readonly property real dockVisibleAmount: 1 - Math.min(1, Math.max(0, dockSlideOffset / 88))
+    readonly property real dockVisibleHeight: Math.max(0, Math.min(dockSurface.height, dockSurface.height - dockSlideOffset))
     readonly property int dockOuterMargin: 28
     readonly property int dockSurfacePadding: 34
     readonly property int dockItemSpacing: 8
@@ -87,6 +90,18 @@ PanelWindow {
     signal openWindowMenu(var window, var anchorRect)
 
     visible: true
+
+    onDockHiddenChanged: {
+        dockRevealPrepareTimer.stop();
+
+        if (dockHidden) {
+            dockGlassActive = false;
+            dockVisualHidden = true;
+        } else {
+            dockGlassActive = true;
+            dockRevealPrepareTimer.restart();
+        }
+    }
 
     // Spring-smoothed dock magnification.
     //
@@ -242,6 +257,13 @@ PanelWindow {
         onTriggered: root.resetDockHover()
     }
 
+    Timer {
+        id: dockRevealPrepareTimer
+        interval: 34
+        repeat: false
+        onTriggered: if (!root.dockHidden) root.dockVisualHidden = false
+    }
+
     anchors {
         left: true
         right: true
@@ -259,7 +281,7 @@ PanelWindow {
             x: Math.round(dockSurface.x)
             y: Math.round(root.height - dockSurface.height + root.dockSlideOffset)
             width: dockSurface.width
-            height: (!root.dockHidden || root.dockVisibleAmount > 0.001) ? dockSurface.height : 0
+            height: (!root.dockHidden || root.dockVisibleAmount > 0.001) ? Math.round(root.dockVisibleHeight) : 0
             radius: dockSurface.radius
         }
 
@@ -274,9 +296,12 @@ PanelWindow {
     TahoeGlass.regions: [
         TahoeGlassRegion {
             x: Math.round(dockSurface.x)
-            y: Math.round(root.height - dockSurface.height + root.dockSlideOffset)
+            // niri rejects glass regions that extend outside the layer surface.
+            // While the Dock slides in from below, expose only the visible
+            // portion so the compositor keeps blur active throughout reveal.
+            y: Math.round(root.height - root.dockVisibleHeight)
             width: Math.round(dockSurface.width)
-            height: Math.round(dockSurface.height)
+            height: Math.round(root.dockVisibleHeight)
             material: dockSurface.tahoeGlassMaterial
             radius: dockSurface.tahoeGlassRadius
             blur: true
@@ -284,7 +309,7 @@ PanelWindow {
             clip: true
             interaction: 0.0
             materialAlpha: 1.0
-            enabled: !root.dockHidden || root.dockVisibleAmount > 0.001
+            enabled: root.dockGlassActive && root.dockVisibleHeight > 0.001
         }
     ]
 

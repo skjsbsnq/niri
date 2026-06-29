@@ -157,35 +157,25 @@ PanelWindow {
         }
     }
 
-    TahoeGlass.regions: [
-        TahoeGlassRegion {
-            item: islandSurface
-            material: islandSurface.tahoeGlassMaterial
-            radius: islandSurface.tahoeGlassRadius
-            blur: true
-            shadow: true
-            clip: true
-            interaction: islandSurface.opacity
-            materialAlpha: islandSurface.opacity
-            enabled: islandSurface.opacity > 0.01
-        }
-    ]
+    TahoeGlass.regions: [islandSurface.region]
 
-    Rectangle {
+    GlassPanel {
         id: islandSurface
-
-        readonly property string tahoeGlassMaterial: GlassStyle.MaterialPill
-        readonly property real tahoeGlassRadius: radius
 
         x: root.capsuleTargetLeft
         y: root.capsuleTargetTop
         width: root.capsuleTargetWidth
         height: root.capsuleTargetHeight
-        radius: root.radiusForState(root.geometryState, height)
+        material: GlassStyle.MaterialPill
+        radius: GlassStyle.RadiusPill + (root.radiusForState(root.geometryState, height) - GlassStyle.RadiusPill)
         clip: true
-        color: root.geometryState === "expanded_media" || root.geometryState === "expanded_summary"
+        fillColor: root.geometryState === "expanded_media" || root.geometryState === "expanded_summary"
             ? root.glassFillExpanded
             : root.glassFill
+        strokeWidth: 0
+        interaction: islandSurface.opacity
+        materialAlpha: islandSurface.opacity
+        regionEnabled: islandSurface.opacity > 0.01
         opacity: root.capsuleShown ? 1 : 0
 
         Behavior on x {
@@ -208,7 +198,7 @@ PanelWindow {
             NumberAnimation { duration: IslandMotion.overlayMorphDuration; easing.type: IslandMotion.overlayMorphEasing }
         }
 
-        Behavior on color {
+        Behavior on fillColor {
             ColorAnimation { duration: IslandMotion.overlayColorDuration; easing.type: IslandMotion.overlayColorEasing }
         }
 

@@ -252,22 +252,7 @@ PanelWindow {
             settingsService.setDockWindowTitleMode(mode);
     }
 
-    TahoeGlass.regions: [
-        TahoeGlassRegion {
-            x: panel.x + panelSurface.x
-            y: panel.y + panelSurface.y
-            width: panelSurface.width
-            height: panelSurface.height
-            material: panelSurface.tahoeGlassMaterial
-            radius: panelSurface.tahoeGlassRadius
-            blur: true
-            shadow: true
-            clip: true
-            interaction: panel.opacity
-            materialAlpha: panel.opacity
-            enabled: root.open || panel.opacity > 0.01
-        }
-    ]
+    TahoeGlass.regions: [panelSurface.region]
 
     Rectangle {
         anchors.fill: parent
@@ -316,23 +301,22 @@ PanelWindow {
             onClicked: function(mouse) { mouse.accepted = true; }
         }
 
-        Rectangle {
+        GlassPanel {
             id: panelSurface
-            readonly property string tahoeGlassMaterial: GlassStyle.MaterialPanel
-            readonly property real tahoeGlassRadius: GlassStyle.RadiusPanel
 
             anchors.fill: parent
-            radius: tahoeGlassRadius
-            color: root.panelFill
-        }
-
-        Rectangle {
-            anchors.fill: parent
-            anchors.margins: 1
-            radius: panelSurface.radius - 1
-            color: "transparent"
-            border.color: root.panelStroke
-            border.width: 1
+            material: GlassStyle.MaterialPanel
+            radius: GlassStyle.RadiusPanel
+            fillColor: root.panelFill
+            strokeColor: root.panelStroke
+            useItemRegion: false
+            regionX: Math.round(panel.x + panelSurface.x)
+            regionY: Math.round(panel.y + panelSurface.y)
+            regionWidth: Math.round(panelSurface.width)
+            regionHeight: Math.round(panelSurface.height)
+            interaction: panel.opacity
+            materialAlpha: panel.opacity
+            regionEnabled: root.open || panel.opacity > 0.01
         }
 
         RowLayout {

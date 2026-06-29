@@ -14,6 +14,9 @@ Rectangle {
     property real materialAlpha: 1
     property bool glassClip: true
     property bool glassEnabled: true
+    property bool regionClip: glassClip
+    property bool regionEnabled: glassEnabled
+    property Item regionItem: root
     property bool useItemRegion: true
     property int regionX: Math.round(x)
     property int regionY: Math.round(y)
@@ -30,7 +33,7 @@ Rectangle {
     TahoeGlassRegion {
         id: glassRegion
 
-        item: root.useItemRegion ? root : null
+        item: root.useItemRegion ? root.regionItem : null
         x: root.regionX
         y: root.regionY
         width: root.regionWidth
@@ -39,10 +42,10 @@ Rectangle {
         radius: root.radius
         blur: root.blur
         shadow: root.shadow
-        clip: root.glassClip
+        clip: root.regionClip
         interaction: root.interaction
         materialAlpha: root.materialAlpha
-        enabled: root.glassEnabled
+        enabled: root.regionEnabled
     }
 
     Rectangle {

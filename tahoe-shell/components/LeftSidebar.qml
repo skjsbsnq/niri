@@ -24,7 +24,6 @@ PanelWindow {
     readonly property int screenWidth: Math.max(1, Number(root.screen && root.screen.width) || root.width)
     readonly property int screenHeight: Math.max(1, Number(root.screen && root.screen.height) || root.height)
     readonly property int panelWidth: Math.max(320, Math.min(540, screenWidth - 24))
-    readonly property int panelRadius: GlassStyle.RadiusPanel
     readonly property color glassFill: darkMode ? "#d01d1f24" : GlassStyle.FillPanel
     readonly property color glassStroke: darkMode ? "#38ffffff" : GlassStyle.StrokePanel
     readonly property color cardFill: darkMode ? "#24ffffff" : "#58ffffff"
@@ -72,25 +71,7 @@ PanelWindow {
         }
     }
 
-    TahoeGlass.regions: [
-        TahoeGlassRegion {
-            // Explicit geometry includes the QML Translate fallback. Binding
-            // through `item: panel` does not include item transforms, which makes
-            // the blur stay at the final position while the painted panel slides.
-            x: Math.round(panel.x + slideTransform.x)
-            y: Math.round(panel.y)
-            width: panel.width
-            height: panel.height
-            material: panel.tahoeGlassMaterial
-            radius: panel.tahoeGlassRadius
-            blur: true
-            shadow: true
-            clip: true
-            interaction: 1
-            materialAlpha: 1
-            enabled: root.compositorLayerAnimations || root.open || root.qmlSlideActive
-        }
-    ]
+    TahoeGlass.regions: [panel.region]
 
     onOpenChanged: {
         if (open) {
@@ -101,18 +82,26 @@ PanelWindow {
         }
     }
 
-    Rectangle {
+    GlassPanel {
         id: panel
-
-        readonly property string tahoeGlassMaterial: GlassStyle.MaterialPanel
-        readonly property real tahoeGlassRadius: root.panelRadius
 
         x: 0
         y: 0
         width: root.panelWidth
         height: root.height
-        radius: tahoeGlassRadius
-        color: root.glassFill
+        material: GlassStyle.MaterialPanel
+        radius: GlassStyle.RadiusPanel
+        fillColor: root.glassFill
+        strokeColor: root.glassStroke
+        useItemRegion: false
+        // Explicit geometry includes the QML Translate fallback. Binding
+        // through `item: panel` does not include item transforms, which makes
+        // the blur stay at the final position while the painted panel slides.
+        regionX: Math.round(panel.x + slideTransform.x)
+        regionY: Math.round(panel.y)
+        regionWidth: panel.width
+        regionHeight: panel.height
+        regionEnabled: root.compositorLayerAnimations || root.open || root.qmlSlideActive
         opacity: 1
 
         transform: Translate {
@@ -127,17 +116,6 @@ PanelWindow {
                     easing.type: root.open ? Motion.emphasizedDecel : Motion.standardDecel
                 }
             }
-        }
-
-        // Inset border only. A centered Rectangle border leaks near-square
-        // corner pixels on large glass radii.
-        Rectangle {
-            anchors.fill: parent
-            anchors.margins: 1
-            radius: parent.radius - 1
-            color: "transparent"
-            border.color: root.glassStroke
-            border.width: 1
         }
 
         ColumnLayout {

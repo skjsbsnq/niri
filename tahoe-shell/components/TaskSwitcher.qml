@@ -236,22 +236,7 @@ PanelWindow {
         }
     }
 
-    TahoeGlass.regions: [
-        TahoeGlassRegion {
-            x: switcher.x + switcherSurface.x
-            y: switcher.y + switcherSurface.y
-            width: switcherSurface.width
-            height: switcherSurface.height
-            material: switcherSurface.tahoeGlassMaterial
-            radius: switcherSurface.tahoeGlassRadius
-            blur: true
-            shadow: true
-            clip: true
-            interaction: switcher.opacity
-            materialAlpha: switcher.opacity
-            enabled: root.open || switcher.opacity > 0.01
-        }
-    ]
+    TahoeGlass.regions: [switcherSurface.region]
 
     MouseArea {
         anchors.fill: parent
@@ -315,23 +300,22 @@ PanelWindow {
             }
         }
 
-        Rectangle {
+        GlassPanel {
             id: switcherSurface
-            readonly property string tahoeGlassMaterial: GlassStyle.MaterialMenu
-            readonly property real tahoeGlassRadius: GlassStyle.RadiusMenu
 
             anchors.fill: parent
-            radius: tahoeGlassRadius
-            color: GlassStyle.FillPanelBright
-        }
-
-        Rectangle {
-            anchors.fill: parent
-            anchors.margins: 1
-            radius: switcherSurface.radius - 1
-            color: "transparent"
-            border.color: GlassStyle.StrokePanelBright
-            border.width: 1
+            material: GlassStyle.MaterialMenu
+            radius: GlassStyle.RadiusMenu
+            fillColor: GlassStyle.FillPanelBright
+            strokeColor: GlassStyle.StrokePanelBright
+            useItemRegion: false
+            regionX: Math.round(switcher.x + switcherSurface.x)
+            regionY: Math.round(switcher.y + switcherSurface.y)
+            regionWidth: Math.round(switcherSurface.width)
+            regionHeight: Math.round(switcherSurface.height)
+            interaction: switcher.opacity
+            materialAlpha: switcher.opacity
+            regionEnabled: root.open || switcher.opacity > 0.01
         }
 
         Text {

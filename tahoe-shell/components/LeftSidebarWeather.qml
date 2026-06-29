@@ -6,7 +6,7 @@ import QtQuick.Layouts
 // 左侧边栏天气页。
 //
 // 重构目标：天气页只做侧栏内的信息布局，玻璃、模糊、阴影继续由
-// LeftSidebar.qml 的 TahoeGlassRegion 统一拥有。这里不再绘制独立天气背景或
+// LeftSidebar.qml 的玻璃 region 统一拥有。这里不再绘制独立天气背景或
 // 大型图表卡，避免在一个系统侧栏里嵌入第二套天气 App 视觉语言。
 Item {
     id: root

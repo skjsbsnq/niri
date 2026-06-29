@@ -88,24 +88,10 @@ PanelWindow {
         }
     }
 
-    TahoeGlass.regions: [
-        TahoeGlassRegion {
-            item: card
-            material: card.tahoeGlassMaterial
-            radius: card.tahoeGlassRadius
-            blur: true
-            shadow: true
-            clip: true
-            interaction: root.compositorLayerAnimations ? 1 : card.opacity
-            materialAlpha: root.compositorLayerAnimations ? 1 : card.opacity
-            enabled: root.shouldShowToast || (!root.compositorLayerAnimations && card.opacity > 0.01)
-        }
-    ]
+    TahoeGlass.regions: [card.region]
 
-    Rectangle {
+    GlassPanel {
         id: card
-        readonly property string tahoeGlassMaterial: GlassStyle.MaterialToast
-        readonly property real tahoeGlassRadius: GlassStyle.RadiusToast
 
         // In compatibility mode QML keeps the legacy slide/fade. With
         // compositor layer animations enabled, niri owns the outer motion.
@@ -114,8 +100,13 @@ PanelWindow {
         width: parent.width
         implicitHeight: 86
         height: Math.max(86, column.implicitHeight + 28)
-        radius: tahoeGlassRadius
-        color: GlassStyle.FillPanelBright
+        material: GlassStyle.MaterialToast
+        radius: GlassStyle.RadiusToast
+        fillColor: GlassStyle.FillPanelBright
+        strokeWidth: 0
+        interaction: root.compositorLayerAnimations ? 1 : card.opacity
+        materialAlpha: root.compositorLayerAnimations ? 1 : card.opacity
+        regionEnabled: root.shouldShowToast || (!root.compositorLayerAnimations && card.opacity > 0.01)
         opacity: root.compositorLayerAnimations ? 1 : (root.shouldShowToast ? 1 : 0)
 
         // NOTE: no `border.width` on the card itself. A centered 1px

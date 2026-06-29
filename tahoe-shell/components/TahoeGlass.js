@@ -1,6 +1,6 @@
 .pragma library
 
-// Shared material/radius constants for compositor-owned TahoeGlassRegion
+// Shared material/radius constants for compositor-owned glass region
 // declarations. TahoeGlass handles the ext-background-effect fallback when
 // the private protocol is not available.
 

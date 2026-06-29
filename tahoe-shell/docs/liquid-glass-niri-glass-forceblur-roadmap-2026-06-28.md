@@ -504,6 +504,12 @@ Tahoe 可行方向：
 - 先有性能测量和风险文档。
 - 没有测量前不实现。
 
+完成记录：
+
+- 2026-06-29 已完成 T5 研究，见 `tahoe-shell/docs/liquid-glass-t5-static-glass-research-2026-06-29.md`。
+- 当前结论是不实现 static blur；已有测量被动态壁纸和当前窗口负载污染，只作为起始数据。
+- static blur 仅保留为 T14 的有条件研究方向，必须先通过干净场景性能测量。
+
 ### T6：Tahoe shell 覆盖清单与缺口确认
 
 目标：先确认自己的 UI 哪些应该是玻璃，哪些不应该是玻璃，避免后续边做边改范围。
@@ -536,6 +542,13 @@ Tahoe 可行方向：
 - 每个可见 launcher/panel/menu/toast 都有明确 material。
 - 每个非目标 surface 都有原因。
 - 不新增代码行为。
+
+完成记录：
+
+- 2026-06-29 已完成 T6 覆盖清单与缺口确认，见 `tahoe-shell/docs/liquid-glass-t6-shell-coverage-2026-06-29.md`。
+- 当前 `TahoeGlass.regions` 覆盖 22 个组件、23 个 compositor-owned region；`Spotlight.qml` 是唯一双 region 组件。
+- `Wallpaper.qml`、`PopupDismissLayer.qml`、`Screenshot.qml` 已明确为非目标；`LockScreen.qml` 仍按安全界面单独评估。
+- `Launchpad.qml` 当前 `MaterialPanel` 已记录为待验证项；若后续视觉转向 fullscreen/backdrop，再改为 `backdrop` 或新增 `launcher` material。
 
 ### T7：QML 玻璃封装落地与组件迁移
 
@@ -574,6 +587,13 @@ Tahoe 可行方向：
 - 迁移后 `TahoeGlass.regions` 数量和原来一致，除非任务明确说明要拆分 region。
 - `scripts/check-tahoe-glass-guardrails.sh` 通过。
 - 业务组件不出现新的 `BackgroundEffect` import。
+
+完成记录：
+
+- 2026-06-29 已完成 T7 QML 玻璃封装落地与组件迁移，见 `tahoe-shell/docs/liquid-glass-t7-qml-glass-migration-2026-06-29.md`。
+- 业务组件不再直接声明 `TahoeGlassRegion`；该声明只保留在 `GlassPanel.qml` 内部。
+- `TahoeGlass.regions` 覆盖仍为 22 个组件、23 个 compositor-owned region；`Spotlight.qml` 仍是唯一双 region 组件。
+- `scripts/check-tahoe-glass-guardrails.sh` 已通过；当前环境缺少 `quickshell`/`qmllint` 和可用图形会话，截图验证留给 T13 视觉基线流程补采。
 
 ### T8：启动器玻璃路线
 

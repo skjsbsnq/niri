@@ -54,43 +54,19 @@ PanelWindow {
         left: root.popupLeftMargin
     }
 
-    TahoeGlass.regions: [
-        TahoeGlassRegion {
-            x: panel.x
-            y: panel.y
-            width: panel.width
-            height: panel.height
-            material: panel.tahoeGlassMaterial
-            radius: panel.tahoeGlassRadius
-            blur: true
-            shadow: true
-            clip: true
-            interaction: 1
-            materialAlpha: 1
-            enabled: true
-        }
-    ]
+    TahoeGlass.regions: [panel.region]
 
-    Rectangle {
+    GlassPanel {
         id: panel
-        readonly property string tahoeGlassMaterial: GlassStyle.MaterialMenu
-        readonly property real tahoeGlassRadius: GlassStyle.RadiusMenu
 
         width: parent.width
         implicitHeight: Math.min(root.maxPanelHeight, content.implicitHeight + 16)
         height: implicitHeight
-        radius: tahoeGlassRadius
-        color: GlassStyle.FillPanelBright
+        material: GlassStyle.MaterialMenu
+        radius: GlassStyle.RadiusMenu
+        fillColor: GlassStyle.FillPanelBright
+        strokeColor: GlassStyle.StrokePanelBright
         opacity: 1
-
-        Rectangle {
-            anchors.fill: parent
-            anchors.margins: 1
-            radius: parent.radius - 1
-            color: "transparent"
-            border.color: GlassStyle.StrokePanelBright
-            border.width: 1
-        }
 
         Flickable {
             anchors.fill: parent

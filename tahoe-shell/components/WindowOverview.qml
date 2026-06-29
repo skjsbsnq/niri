@@ -292,22 +292,7 @@ PanelWindow {
         };
     }
 
-    TahoeGlass.regions: [
-        TahoeGlassRegion {
-            x: overview.x + overviewSurface.x
-            y: overview.y + overviewSurface.y
-            width: overviewSurface.width
-            height: overviewSurface.height
-            material: overviewSurface.tahoeGlassMaterial
-            radius: overviewSurface.tahoeGlassRadius
-            blur: true
-            shadow: true
-            clip: true
-            interaction: overview.opacity
-            materialAlpha: overview.opacity
-            enabled: root.open || overview.opacity > 0.01
-        }
-    ]
+    TahoeGlass.regions: [overviewSurface.region]
 
     Rectangle {
         anchors.fill: parent
@@ -372,23 +357,22 @@ PanelWindow {
             }
         }
 
-        Rectangle {
+        GlassPanel {
             id: overviewSurface
-            readonly property string tahoeGlassMaterial: GlassStyle.MaterialPanel
-            readonly property real tahoeGlassRadius: GlassStyle.RadiusPanel
 
             anchors.fill: parent
-            radius: tahoeGlassRadius
-            color: GlassStyle.FillPanelBright
-        }
-
-        Rectangle {
-            anchors.fill: parent
-            anchors.margins: 1
-            radius: overviewSurface.radius - 1
-            color: "transparent"
-            border.color: GlassStyle.StrokePanelBright
-            border.width: 1
+            material: GlassStyle.MaterialPanel
+            radius: GlassStyle.RadiusPanel
+            fillColor: GlassStyle.FillPanelBright
+            strokeColor: GlassStyle.StrokePanelBright
+            useItemRegion: false
+            regionX: Math.round(overview.x + overviewSurface.x)
+            regionY: Math.round(overview.y + overviewSurface.y)
+            regionWidth: Math.round(overviewSurface.width)
+            regionHeight: Math.round(overviewSurface.height)
+            interaction: overview.opacity
+            materialAlpha: overview.opacity
+            regionEnabled: root.open || overview.opacity > 0.01
         }
 
         Row {

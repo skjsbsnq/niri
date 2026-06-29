@@ -434,12 +434,12 @@ def update_layout_text(text: str, field: str, raw_value: str) -> str:
 GLASS_MATERIAL_NAMES = ["panel", "pill", "launcher", "dock", "menu", "toast", "backdrop"]
 GLASS_MATERIAL_FIELDS = ["edge-highlight", "refraction", "inner-shadow", "chromatic", "lens-depth"]
 GLASS_MATERIAL_DEFAULTS = {
-    "panel": {"edge-highlight": 0.10, "refraction": 0.003, "inner-shadow": 0.12, "chromatic": 0.0, "lens-depth": 0.0},
-    "pill": {"edge-highlight": 0.24, "refraction": 0.009, "inner-shadow": 0.10, "chromatic": 0.0, "lens-depth": 0.006},
-    "launcher": {"edge-highlight": 0.11, "refraction": 0.003, "inner-shadow": 0.12, "chromatic": 0.0, "lens-depth": 0.001},
-    "dock": {"edge-highlight": 0.13, "refraction": 0.005, "inner-shadow": 0.12, "chromatic": 0.0, "lens-depth": 0.003},
-    "menu": {"edge-highlight": 0.18, "refraction": 0.003, "inner-shadow": 0.13, "chromatic": 0.0, "lens-depth": 0.0},
-    "toast": {"edge-highlight": 0.18, "refraction": 0.004, "inner-shadow": 0.12, "chromatic": 0.0, "lens-depth": 0.0},
+    "panel": {"edge-highlight": 0.14, "refraction": 0.004, "inner-shadow": 0.06, "chromatic": 0.0, "lens-depth": 0.0},
+    "pill": {"edge-highlight": 0.32, "refraction": 0.013, "inner-shadow": 0.07, "chromatic": 0.0, "lens-depth": 0.010},
+    "launcher": {"edge-highlight": 0.15, "refraction": 0.004, "inner-shadow": 0.055, "chromatic": 0.0, "lens-depth": 0.003},
+    "dock": {"edge-highlight": 0.18, "refraction": 0.007, "inner-shadow": 0.07, "chromatic": 0.0, "lens-depth": 0.006},
+    "menu": {"edge-highlight": 0.26, "refraction": 0.004, "inner-shadow": 0.10, "chromatic": 0.0, "lens-depth": 0.0},
+    "toast": {"edge-highlight": 0.24, "refraction": 0.005, "inner-shadow": 0.09, "chromatic": 0.0, "lens-depth": 0.0},
     "backdrop": {"edge-highlight": 0.05, "refraction": 0.002, "inner-shadow": 0.0, "chromatic": 0.0, "lens-depth": 0.0},
 }
 

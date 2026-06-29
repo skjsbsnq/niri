@@ -24,24 +24,21 @@ var RadiusPopup = 24;
 
 // Phase 3: QML only provides tint/fallback weight. Edge highlight,
 // refraction, shadow, and depth belong to the compositor material.
-//
-// Keep light-mode glass readable over high-key white apps: pure white fill
-// and white strokes vanish on Chrome/new-tab style backgrounds.
-var FillPanel = "#66edf2f8";
-var FillPanelBright = "#78f2f5fa";
-var FillDock = "#68edf2f8";
-var FillTopBar = "#5cedf2f8";
-var FillPill = "#a8f4f7fb";
-var FillLauncher = "#76edf2f8";
-var FillBackdrop = "#18eef2f7";
+var FillPanel = "#14ffffff";
+var FillPanelBright = "#18f7f8fb";
+var FillDock = "#2af7fbff";
+var FillTopBar = "#22f7fbff";
+var FillPill = "#80f7fbff";
+var FillLauncher = "#1cf7f8fb";
+var FillBackdrop = "#12eef2f7";
 
-var StrokePanel = "#24000000";
-var StrokePanelBright = "#26000000";
-var StrokeDock = "#2c000000";
-var StrokeTopBar = "#22000000";
-var StrokePill = "#24000000";
-var StrokeLauncher = "#2a000000";
-var StrokeToast = "#26000000";
+var StrokePanel = "#24ffffff";
+var StrokePanelBright = "#34ffffff";
+var StrokeDock = "#44ffffff";
+var StrokeTopBar = "#34ffffff";
+var StrokePill = "#48ffffff";
+var StrokeLauncher = "#32ffffff";
+var StrokeToast = "#34ffffff";
 
 function radiusForMaterial(material) {
     switch (material) {

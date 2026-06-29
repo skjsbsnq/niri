@@ -91,79 +91,79 @@ tahoe-glass {
     material "panel" {
         xray false
         noise 0.005
-        saturation 1.08
-        tint-color "#edf2f8"
-        tint-amount 0.145
-        contrast 1.07
-        edge-highlight 0.10
-        refraction 0.003
-        inner-shadow 0.12
+        saturation 1.10
+        tint-color "#ffffff"
+        tint-amount 0.105
+        contrast 1.10
+        edge-highlight 0.14
+        refraction 0.004
+        inner-shadow 0.06
         chromatic 0.0
         lens-depth 0.0
     }
     material "pill" {
         xray false
         noise 0.005
-        saturation 1.09
-        tint-color "#f2f6fb"
-        tint-amount 0.115
-        contrast 1.04
-        edge-highlight 0.24
-        refraction 0.009
-        inner-shadow 0.10
+        saturation 1.12
+        tint-color "#ffffff"
+        tint-amount 0.052
+        contrast 1.05
+        edge-highlight 0.32
+        refraction 0.013
+        inner-shadow 0.07
         chromatic 0.0
-        lens-depth 0.006
+        lens-depth 0.010
     }
     material "launcher" {
         xray false
         noise 0.005
-        saturation 1.07
-        tint-color "#edf2f8"
-        tint-amount 0.165
-        contrast 1.06
-        edge-highlight 0.11
-        refraction 0.003
-        inner-shadow 0.12
+        saturation 1.08
+        tint-color "#ffffff"
+        tint-amount 0.085
+        contrast 1.08
+        edge-highlight 0.15
+        refraction 0.004
+        inner-shadow 0.055
         chromatic 0.0
-        lens-depth 0.001
+        lens-depth 0.003
     }
     material "dock" {
         xray false
         noise 0.005
-        saturation 1.08
-        tint-color "#edf2f8"
-        tint-amount 0.145
+        saturation 1.10
+        tint-color "#ffffff"
+        tint-amount 0.060
         contrast 1.06
-        edge-highlight 0.13
-        refraction 0.005
-        inner-shadow 0.12
+        edge-highlight 0.18
+        refraction 0.007
+        inner-shadow 0.07
         chromatic 0.0
-        lens-depth 0.003
+        lens-depth 0.006
     }
     // menu/toast read clearer: controlled edge light, gentler lens distortion.
     material "menu" {
         xray false
         noise 0.004
-        saturation 1.07
-        tint-color "#f1f4f9"
-        tint-amount 0.145
-        contrast 1.08
-        edge-highlight 0.18
-        refraction 0.003
-        inner-shadow 0.13
+        saturation 1.08
+        tint-color "#ffffff"
+        tint-amount 0.110
+        contrast 1.11
+        edge-highlight 0.26
+        refraction 0.004
+        inner-shadow 0.10
         chromatic 0.0
         lens-depth 0.0
     }
     material "toast" {
         xray false
         noise 0.005
-        saturation 1.08
-        tint-color "#f1f4f9"
-        tint-amount 0.130
-        contrast 1.08
-        edge-highlight 0.18
-        refraction 0.004
-        inner-shadow 0.12
+        saturation 1.09
+        tint-color "#ffffff"
+        tint-amount 0.100
+        contrast 1.10
+        edge-highlight 0.24
+        refraction 0.005
+        inner-shadow 0.09
         chromatic 0.0
         lens-depth 0.0
     }
@@ -378,13 +378,13 @@ layer-rule {
         xray false
         blur true
         noise 0.005
-        saturation 1.08
-        tint-color "#edf2f8"
-        tint-amount 0.145
-        contrast 1.07
-        edge-highlight 0.10
-        refraction 0.003
-        inner-shadow 0.12
+        saturation 1.10
+        tint-color "#ffffff"
+        tint-amount 0.105
+        contrast 1.10
+        edge-highlight 0.14
+        refraction 0.004
+        inner-shadow 0.06
         chromatic 0.0
         lens-depth 0.0
     }
@@ -522,13 +522,13 @@ layer-rule {
         xray false
         blur true
         noise 0.005
-        saturation 1.08
-        tint-color "#edf2f8"
-        tint-amount 0.145
-        contrast 1.07
-        edge-highlight 0.10
-        refraction 0.003
-        inner-shadow 0.12
+        saturation 1.10
+        tint-color "#ffffff"
+        tint-amount 0.105
+        contrast 1.10
+        edge-highlight 0.14
+        refraction 0.004
+        inner-shadow 0.06
         chromatic 0.0
         lens-depth 0.0
     }
@@ -680,13 +680,13 @@ layer-rule {
         xray false
         blur true
         noise 0.004
-        saturation 1.07
-        tint-color "#f1f4f9"
-        tint-amount 0.145
-        contrast 1.08
-        edge-highlight 0.18
-        refraction 0.003
-        inner-shadow 0.13
+        saturation 1.08
+        tint-color "#ffffff"
+        tint-amount 0.110
+        contrast 1.11
+        edge-highlight 0.26
+        refraction 0.004
+        inner-shadow 0.10
         chromatic 0.0
         lens-depth 0.0
     }
@@ -710,13 +710,13 @@ layer-rule {
         xray false
         blur true
         noise 0.005
-        saturation 1.08
-        tint-color "#f1f4f9"
-        tint-amount 0.130
-        contrast 1.08
-        edge-highlight 0.18
-        refraction 0.004
-        inner-shadow 0.12
+        saturation 1.09
+        tint-color "#ffffff"
+        tint-amount 0.100
+        contrast 1.10
+        edge-highlight 0.24
+        refraction 0.005
+        inner-shadow 0.09
         chromatic 0.0
         lens-depth 0.0
     }

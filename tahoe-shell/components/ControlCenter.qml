@@ -81,6 +81,7 @@ PanelWindow {
         radius: GlassStyle.RadiusPanel
         fillColor: root.glassFill
         strokeColor: root.glassStroke
+        interaction: 0.0
         opacity: 1
 
         ColumnLayout {

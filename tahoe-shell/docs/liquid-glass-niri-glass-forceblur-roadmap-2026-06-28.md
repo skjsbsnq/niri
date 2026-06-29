@@ -684,6 +684,14 @@ Tahoe 可行方向：
 - Control Center 和 Settings 文字可读。
 - Overview 帧率可接受，无持续 texture realloc。
 
+完成记录：
+
+- 2026-06-29 已完成 T9 常驻面板玻璃路线，见 `tahoe-shell/docs/liquid-glass-t9-persistent-panels-2026-06-29.md`。
+- `GlassPanel.qml` 默认 `interaction` 从 `1` 收敛为 at-rest `0`；TopBar、Control Center、Notification Center、LeftSidebar、Settings、WindowOverview 显式保持 `interaction: 0.0`。
+- `Dock.qml` 保留 visible-height 裁剪逻辑；hover/reveal 只驱动 `dockGlassInteraction`，不改 region 几何。
+- `panel` material 进一步偏向可读性：提高 tint/contrast，降低 refraction/lens/inner-shadow，并同步 panel fallback blocks。
+- 已通过 guardrail、`niri validate`、`niri_settings_tool.py read`、`cargo test -p niri-config tahoe_glass --quiet` 和本轮 QML lint；live 截图未覆盖，因为当前部署目录与仓库不同且 niri live config 旧于仓库配置，避免覆盖用户会话，截图留给 T13。
+
 ### T10：菜单、toast、dynamic island 路线
 
 目标：把小面积 shell UI 做得更“液态”，但不牺牲文字清晰度。

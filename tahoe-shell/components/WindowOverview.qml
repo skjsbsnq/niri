@@ -370,7 +370,7 @@ PanelWindow {
             regionY: Math.round(overview.y + overviewSurface.y)
             regionWidth: Math.round(overviewSurface.width)
             regionHeight: Math.round(overviewSurface.height)
-            interaction: overview.opacity
+            interaction: 0.0
             materialAlpha: overview.opacity
             regionEnabled: root.open || overview.opacity > 0.01
         }

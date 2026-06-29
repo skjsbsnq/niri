@@ -63,6 +63,7 @@ PanelWindow {
         radius: GlassStyle.RadiusPanel
         fillColor: GlassStyle.FillPanelBright
         strokeColor: GlassStyle.StrokePanelBright
+        interaction: 0.0
         opacity: 1
 
         ColumnLayout {

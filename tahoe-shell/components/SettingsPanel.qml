@@ -314,7 +314,7 @@ PanelWindow {
             regionY: Math.round(panel.y + panelSurface.y)
             regionWidth: Math.round(panelSurface.width)
             regionHeight: Math.round(panelSurface.height)
-            interaction: panel.opacity
+            interaction: 0.0
             materialAlpha: panel.opacity
             regionEnabled: root.open || panel.opacity > 0.01
         }

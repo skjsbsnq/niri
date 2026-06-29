@@ -101,6 +101,7 @@ PanelWindow {
         regionY: Math.round(panel.y)
         regionWidth: panel.width
         regionHeight: panel.height
+        interaction: 0.0
         regionEnabled: root.compositorLayerAnimations || root.open || root.qmlSlideActive
         opacity: 1
 

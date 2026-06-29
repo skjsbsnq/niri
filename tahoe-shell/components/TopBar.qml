@@ -121,6 +121,7 @@ PanelWindow {
         radius: GlassStyle.RadiusTopBar
         fillColor: root.glassFill
         strokeColor: root.glassStroke
+        interaction: 0.0
         materialAlpha: opacity
         glassEnabled: opacity > 0.01
         opacity: 1

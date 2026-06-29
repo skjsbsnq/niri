@@ -10,7 +10,7 @@ Rectangle {
     property string material: GlassStyle.MaterialPanel
     property bool blur: true
     property bool shadow: true
-    property real interaction: 1
+    property real interaction: 0
     property real materialAlpha: 1
     property bool glassClip: true
     property bool glassEnabled: true

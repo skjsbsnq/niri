@@ -40,6 +40,7 @@ PanelWindow {
     property bool dockGlassActive: !dockHidden
     property real dockSlideOffset: dockVisualHidden ? 88 : 0
     readonly property real dockVisibleAmount: 1 - Math.min(1, Math.max(0, dockSlideOffset / 88))
+    readonly property real dockGlassInteraction: dockHovered ? dockVisibleAmount : 0.0
     readonly property real dockVisibleHeight: Math.max(0, Math.min(dockSurface.height, dockSurface.height - dockSlideOffset))
     readonly property int dockOuterMargin: 28
     readonly property int dockSurfacePadding: 34
@@ -334,7 +335,7 @@ PanelWindow {
         regionY: Math.round(root.height - root.dockVisibleHeight)
         regionWidth: Math.round(dockSurface.width)
         regionHeight: Math.round(root.dockVisibleHeight)
-        interaction: 0.0
+        interaction: root.dockGlassInteraction
         materialAlpha: 1.0
         glassEnabled: root.dockGlassActive && root.dockVisibleHeight > 0.001
 

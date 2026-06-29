@@ -117,13 +117,13 @@ tahoe-glass {
         xray false
         saturation 1.10
         tint-color "#ffffff"
-        tint-amount 0.09
-        contrast 1.09
-        edge-highlight 0.18
-        refraction 0.006
-        inner-shadow 0.07
+        tint-amount 0.10
+        contrast 1.10
+        edge-highlight 0.16
+        refraction 0.004
+        inner-shadow 0.06
         chromatic 0.0
-        lens-depth 0.004
+        lens-depth 0.0
     }
     material "pill" {
         xray false
@@ -395,13 +395,13 @@ layer-rule {
         noise 0.006
         saturation 1.10
         tint-color "#ffffff"
-        tint-amount 0.09
-        contrast 1.09
-        edge-highlight 0.18
-        refraction 0.006
-        inner-shadow 0.07
+        tint-amount 0.10
+        contrast 1.10
+        edge-highlight 0.16
+        refraction 0.004
+        inner-shadow 0.06
         chromatic 0.0
-        lens-depth 0.004
+        lens-depth 0.0
     }
 }
 
@@ -539,13 +539,13 @@ layer-rule {
         noise 0.006
         saturation 1.10
         tint-color "#ffffff"
-        tint-amount 0.09
-        contrast 1.09
-        edge-highlight 0.18
-        refraction 0.006
-        inner-shadow 0.07
+        tint-amount 0.10
+        contrast 1.10
+        edge-highlight 0.16
+        refraction 0.004
+        inner-shadow 0.06
         chromatic 0.0
-        lens-depth 0.004
+        lens-depth 0.0
     }
 }
 

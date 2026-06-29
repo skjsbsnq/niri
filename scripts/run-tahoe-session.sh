@@ -17,6 +17,8 @@ INSTALL_PREFIX="${INSTALL_PREFIX:-"$HOME/.local"}"
 NIRI_BIN="${NIRI_BIN:-"$INSTALL_PREFIX/bin/niri"}"
 QUICKSHELL_BIN="${QUICKSHELL_BIN:-quickshell}"
 TAHOE_CONFIG_DIR="${TAHOE_CONFIG_DIR:-"$HOME/.config/quickshell/tahoe"}"
+TAHOE_STATE_DIR="${TAHOE_STATE_DIR:-"${XDG_STATE_HOME:-"$HOME/.local/state"}/quickshell/by-shell/tahoe"}"
+TAHOE_SETTINGS_FILE="${TAHOE_SETTINGS_FILE:-"$TAHOE_STATE_DIR/desktop-settings.json"}"
 NIRI_CONFIG="${NIRI_CONFIG:-"$HOME/.config/niri/tahoe/config.kdl"}"
 NIRI_MODE="${NIRI_MODE:-auto}"
 TAHOE_SHELL_LAUNCH_MODE="${TAHOE_SHELL_LAUNCH_MODE:-auto}"
@@ -28,6 +30,69 @@ TAHOE_POWER_PROFILE_CHANGED=false
 
 require_cmd() {
   command -v "$1" >/dev/null 2>&1 || die "missing required command: $1"
+}
+
+json_string_setting() {
+  local key="$1"
+  local file="$2"
+
+  awk -v needle="\"$key\"" '
+    index($0, needle) {
+      split($0, parts, "\"")
+      if (length(parts) >= 4) {
+        print parts[4]
+        exit
+      }
+    }
+  ' "$file"
+}
+
+sanitize_icon_theme() {
+  local value="$1"
+  local cleaned
+
+  value="${value//$'\n'/}"
+  value="${value//$'\r'/}"
+  value="${value//$'\t'/}"
+  value="${value//\//}"
+  value="${value//\\/}"
+  value="${value//:/}"
+  value="${value#"${value%%[![:space:]]*}"}"
+  value="${value%"${value##*[![:space:]]}"}"
+  cleaned="$(printf '%s' "$value" | tr -cd '[:alnum:]. _-')"
+  printf '%s\n' "$cleaned"
+}
+
+resolve_icon_theme_setting() {
+  local mode custom theme
+
+  [[ -n "${QS_ICON_THEME:-}" ]] && return 0
+  [[ -r "$TAHOE_SETTINGS_FILE" ]] || return 0
+
+  mode="$(json_string_setting iconThemeMode "$TAHOE_SETTINGS_FILE")"
+  custom="$(json_string_setting customIconTheme "$TAHOE_SETTINGS_FILE")"
+
+  case "$mode" in
+    papirus)
+      theme="Papirus"
+      ;;
+    papirus-dark)
+      theme="Papirus-Dark"
+      ;;
+    papirus-light)
+      theme="Papirus-Light"
+      ;;
+    custom)
+      theme="$custom"
+      ;;
+    *)
+      theme=""
+      ;;
+  esac
+
+  theme="$(sanitize_icon_theme "$theme")"
+  [[ -n "$theme" ]] && export QS_ICON_THEME="$theme"
+  return 0
 }
 
 resolve_niri_bin() {
@@ -228,12 +293,14 @@ main() {
   shell_args=("$QUICKSHELL_BIN" "-p" "$TAHOE_CONFIG_DIR")
 
   export __GLX_VENDOR_LIBRARY_NAME="${__GLX_VENDOR_LIBRARY_NAME:-nvidia}"
+  resolve_icon_theme_setting
 
   log "repo: $REPO_DIR"
   log "niri: $niri_bin"
   log "mode: $resolved_mode"
   log "shell launch: $shell_launch_mode"
   log "Tahoe shell: $TAHOE_CONFIG_DIR"
+  log "icon theme: ${QS_ICON_THEME:-system default}"
   log "glx vendor: ${__GLX_VENDOR_LIBRARY_NAME:-}"
   log "requested power profile: $TAHOE_POWER_PROFILE"
 

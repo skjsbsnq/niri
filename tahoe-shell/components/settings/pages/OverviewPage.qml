@@ -35,7 +35,9 @@ Flickable {
                 title: page.panel && page.panel.appearanceService && page.panel.appearanceService.darkMode ? "深色模式" : "浅色模式"
                 detail: page.panel && page.panel.appearanceService && page.panel.appearanceService.nightMode
                     ? "夜览 " + page.panel.appearanceService.colorTemperature + "K"
-                    : "夜览关闭"
+                    : (page.panel && page.panel.settingsService
+                        ? "图标 " + page.panel.settingsService.iconThemeLabel(page.panel.settingsService.iconThemeMode)
+                        : "夜览关闭")
                 accentColor: page.panel ? page.panel.categoryColor("appearance") : "#5856d6"
                 onActivated: page.panel.selectedPage = "appearance"
             }

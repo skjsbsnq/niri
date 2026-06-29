@@ -153,7 +153,7 @@ PanelWindow {
 
     function pageSubtitle() {
         if (selectedPage === "appearance")
-            return "深浅色、夜览和色温";
+            return "深浅色、夜览、色温和图标主题";
         if (selectedPage === "wallpaper")
             return "静态图片和动态壁纸";
         if (selectedPage === "notifications")

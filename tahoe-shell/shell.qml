@@ -424,6 +424,7 @@ ShellRoot {
 
     Apps {
         id: apps
+        settingsService: desktopSettings
     }
 
     Windows {

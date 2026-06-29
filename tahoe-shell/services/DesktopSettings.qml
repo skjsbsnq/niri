@@ -40,6 +40,11 @@ Item {
     readonly property string dynamicIslandRightClickAction: settingsAdapter.dynamicIslandRightClickAction
     readonly property bool dynamicIslandAutoExpandMedia: settingsAdapter.dynamicIslandAutoExpandMedia
     readonly property bool dynamicIslandHoverExpand: settingsAdapter.dynamicIslandHoverExpand
+    readonly property string iconThemeMode: settingsAdapter.iconThemeMode
+    readonly property string customIconTheme: settingsAdapter.customIconTheme
+    readonly property string effectiveIconTheme: iconThemeName(iconThemeMode, customIconTheme)
+    readonly property string currentIconTheme: envString("QS_ICON_THEME").trim()
+    readonly property bool iconThemeRestartRequired: iconThemeMode !== "builtin" && effectiveIconTheme !== currentIconTheme
     readonly property real weatherLatitude: settingsAdapter.weatherLatitude
     readonly property real weatherLongitude: settingsAdapter.weatherLongitude
     readonly property string weatherLocationName: settingsAdapter.weatherLocationName
@@ -97,6 +102,31 @@ Item {
         return "c";
     }
 
+    function validIconThemeMode(value) {
+        return value === "system"
+            || value === "builtin"
+            || value === "papirus"
+            || value === "papirus-dark"
+            || value === "papirus-light"
+            || value === "custom";
+    }
+
+    function cleanIconThemeName(value) {
+        return String(value || "").replace(/[\/\\:\n\r\t]/g, "").trim();
+    }
+
+    function iconThemeName(mode, customName) {
+        if (mode === "papirus")
+            return "Papirus";
+        if (mode === "papirus-dark")
+            return "Papirus-Dark";
+        if (mode === "papirus-light")
+            return "Papirus-Light";
+        if (mode === "custom")
+            return cleanIconThemeName(customName);
+        return "";
+    }
+
     function cleanWeatherLocationName(value) {
         return String(value || "").trim();
     }
@@ -129,6 +159,30 @@ Item {
         if (mode === "external")
             return "UX 管理";
         return "静态";
+    }
+
+    function iconThemeLabel(mode) {
+        if (mode === "papirus")
+            return "Papirus";
+        if (mode === "papirus-dark")
+            return "Papirus Dark";
+        if (mode === "papirus-light")
+            return "Papirus Light";
+        if (mode === "builtin")
+            return "内置默认";
+        if (mode === "custom")
+            return customIconTheme.length > 0 ? customIconTheme : "自定义";
+        return "系统默认";
+    }
+
+    function iconThemeStatusText() {
+        if (iconThemeMode === "builtin")
+            return "内置默认 · 当前生效";
+        var wanted = effectiveIconTheme.length > 0 ? effectiveIconTheme : "系统默认";
+        if (!iconThemeRestartRequired)
+            return wanted + " · 当前生效";
+        var current = currentIconTheme.length > 0 ? currentIconTheme : "系统默认";
+        return wanted + " · 重启 Tahoe Shell 后生效，当前 " + current;
     }
 
     function dynamicIslandClickActionLabel(action) {
@@ -337,6 +391,25 @@ Item {
         settingsFile.writeAdapter();
     }
 
+    function setIconThemeMode(mode) {
+        var next = validIconThemeMode(mode) ? mode : "system";
+        if (settingsAdapter.iconThemeMode === next)
+            return;
+
+        settingsAdapter.iconThemeMode = next;
+        settingsFile.writeAdapter();
+    }
+
+    function setCustomIconTheme(name) {
+        var next = cleanIconThemeName(name);
+        if (settingsAdapter.customIconTheme === next && settingsAdapter.iconThemeMode === "custom")
+            return;
+
+        settingsAdapter.customIconTheme = next;
+        settingsAdapter.iconThemeMode = next.length > 0 ? "custom" : "system";
+        settingsFile.writeAdapter();
+    }
+
     function setWeatherLocation(lat, lon, name) {
         var nextLat = clampNumber(lat, -90, 90, 0);
         var nextLon = clampNumber(lon, -180, 180, 0);
@@ -417,6 +490,22 @@ Item {
 
         if (!validWallpaperMode(settingsAdapter.wallpaperMode)) {
             settingsAdapter.wallpaperMode = "static";
+            changed = true;
+        }
+
+        if (!validIconThemeMode(settingsAdapter.iconThemeMode)) {
+            settingsAdapter.iconThemeMode = "system";
+            changed = true;
+        }
+
+        var iconTheme = cleanIconThemeName(settingsAdapter.customIconTheme);
+        if (settingsAdapter.customIconTheme !== iconTheme) {
+            settingsAdapter.customIconTheme = iconTheme;
+            changed = true;
+        }
+
+        if (settingsAdapter.iconThemeMode === "custom" && settingsAdapter.customIconTheme.length === 0) {
+            settingsAdapter.iconThemeMode = "system";
             changed = true;
         }
 
@@ -515,6 +604,8 @@ Item {
             property string dynamicIslandRightClickAction: "control_center"
             property bool dynamicIslandAutoExpandMedia: false
             property bool dynamicIslandHoverExpand: false
+            property string iconThemeMode: "system"
+            property string customIconTheme: ""
             property real weatherLatitude: 0
             property real weatherLongitude: 0
             property string weatherLocationName: ""

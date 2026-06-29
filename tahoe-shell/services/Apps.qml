@@ -8,6 +8,8 @@ Item {
     id: root
     visible: false
 
+    property var settingsService
+
     readonly property string assetRoot: Quickshell.shellPath("assets")
     readonly property string backgroundRoot: assetRoot + "/backgrounds/"
     readonly property string dockIconRoot: assetRoot + "/icons/dock/"
@@ -27,6 +29,7 @@ Item {
     property bool loadingPinnedState: false
     property var pinnedIds: []
     property int pinnedRevision: 0
+    property int iconRevision: 0
     property int desktopEntriesRevision: 0
     property int desktopEntriesCount: -1
     readonly property var pinnedApps: buildPinnedApps(pinnedRevision, desktopEntriesRevision)
@@ -37,6 +40,18 @@ Item {
         path: root.legacyPinnedPath
         blockLoading: true
         printErrors: false
+    }
+
+    Connections {
+        target: root.settingsService
+
+        function onIconThemeModeChanged() {
+            root.iconRevision += 1;
+        }
+
+        function onCustomIconThemeChanged() {
+            root.iconRevision += 1;
+        }
     }
 
     FileView {
@@ -142,9 +157,111 @@ Item {
         return themedIconPath(app.icon || "");
     }
 
-    function iconForApp(app) {
+    function useBuiltInIcons() {
+        return !!(settingsService && settingsService.iconThemeMode === "builtin");
+    }
+
+    function builtInIconFileForText(text) {
+        var normalized = String(text || "").toLowerCase();
+        if (normalized.length === 0)
+            return "";
+
+        if (normalized.indexOf("code") !== -1 || normalized.indexOf("vscodium") !== -1)
+            return "vscode.png";
+        if (normalized.indexOf("terminal") !== -1
+                || normalized.indexOf("alacritty") !== -1
+                || normalized.indexOf("kitty") !== -1
+                || normalized.indexOf("foot") !== -1
+                || normalized.indexOf("wezterm") !== -1
+                || normalized.indexOf("konsole") !== -1
+                || normalized.indexOf("kgx") !== -1)
+            return "terminal.png";
+        if (normalized.indexOf("nautilus") !== -1
+                || normalized.indexOf("thunar") !== -1
+                || normalized.indexOf("dolphin") !== -1
+                || normalized.indexOf("pcmanfm") !== -1
+                || normalized.indexOf("files") !== -1
+                || normalized.indexOf("folder") !== -1)
+            return "finder.png";
+        if (normalized.indexOf("settings") !== -1
+                || normalized.indexOf("preferences") !== -1
+                || normalized.indexOf("control") !== -1
+                || normalized.indexOf("systemsettings") !== -1)
+            return "preferences.png";
+        if (normalized.indexOf("firefox") !== -1
+                || normalized.indexOf("chromium") !== -1
+                || normalized.indexOf("chrome") !== -1
+                || normalized.indexOf("brave") !== -1
+                || normalized.indexOf("browser") !== -1)
+            return "safari.png";
+        if (normalized.indexOf("telegram") !== -1
+                || normalized.indexOf("discord") !== -1
+                || normalized.indexOf("message") !== -1
+                || normalized.indexOf("chat") !== -1)
+            return "message.png";
+        if (normalized.indexOf("mail") !== -1 || normalized.indexOf("thunderbird") !== -1)
+            return "mail.png";
+        if (normalized.indexOf("calendar") !== -1)
+            return "calendar.png";
+        if (normalized.indexOf("calculator") !== -1)
+            return "calculator.png";
+        if (normalized.indexOf("contact") !== -1)
+            return "contacts.png";
+        if (normalized.indexOf("music") !== -1 || normalized.indexOf("spotify") !== -1)
+            return "music.png";
+        if (normalized.indexOf("photo") !== -1 || normalized.indexOf("image") !== -1)
+            return "photos.png";
+        if (normalized.indexOf("map") !== -1)
+            return "maps.png";
+        if (normalized.indexOf("book") !== -1 || normalized.indexOf("document") !== -1)
+            return "books.png";
+        if (normalized.indexOf("reminder") !== -1 || normalized.indexOf("todo") !== -1)
+            return "reminders.png";
+        if (normalized.indexOf("software") !== -1 || normalized.indexOf("appstore") !== -1)
+            return "appstore.png";
+        if (normalized.indexOf("zoom") !== -1)
+            return "zoom.png";
+
+        return "";
+    }
+
+    function builtInIconForApp(app) {
         if (!app)
             return defaultWindowIcon;
+
+        if (typeof app === "string")
+            return builtInIconForAppId(app);
+
+        if (app.desktopEntry)
+            app = app.desktopEntry;
+
+        if (app.iconSet)
+            return iconPath(app.iconSet, app.icon || "");
+
+        var text = [
+            appStableId(app),
+            app.id || "",
+            app.name || "",
+            app.genericName || "",
+            app.startupClass || "",
+            app.execString || ""
+        ].join(" ");
+        var file = builtInIconFileForText(text);
+        return file.length > 0 ? dockIconRoot + file : defaultWindowIcon;
+    }
+
+    function builtInIconForAppId(appId) {
+        var file = builtInIconFileForText(appId);
+        return file.length > 0 ? dockIconRoot + file : defaultWindowIcon;
+    }
+
+    function iconForApp(app) {
+        var revision = iconRevision;
+        if (!app)
+            return defaultWindowIcon;
+
+        if (useBuiltInIcons())
+            return builtInIconForApp(app);
 
         if (typeof app === "string")
             return iconForAppId(app);
@@ -302,8 +419,12 @@ Item {
     }
 
     function iconForAppId(appId) {
+        var revision = iconRevision;
         var raw = String(appId || "").trim();
         var normalized = raw.toLowerCase();
+
+        if (useBuiltInIcons())
+            return builtInIconForAppId(raw);
 
         var app = findApplication([
             raw,

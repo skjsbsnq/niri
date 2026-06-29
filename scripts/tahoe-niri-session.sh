@@ -17,6 +17,8 @@ NIRI_SESSION_BIN="${NIRI_SESSION_BIN:-niri-session}"
 NIRI_CONFIG="${NIRI_CONFIG:-"$HOME/.config/niri/tahoe/config.kdl"}"
 QUICKSHELL_BIN="${QUICKSHELL_BIN:-quickshell}"
 TAHOE_CONFIG_DIR="${TAHOE_CONFIG_DIR:-"$HOME/.config/quickshell/tahoe"}"
+TAHOE_STATE_DIR="${TAHOE_STATE_DIR:-"${XDG_STATE_HOME:-"$HOME/.local/state"}/quickshell/by-shell/tahoe"}"
+TAHOE_SETTINGS_FILE="${TAHOE_SETTINGS_FILE:-"$TAHOE_STATE_DIR/desktop-settings.json"}"
 TAHOE_USE_NIRI_SESSION_WRAPPER="${TAHOE_USE_NIRI_SESSION_WRAPPER:-auto}"
 TAHOE_SESSION_LOG_DIR="${TAHOE_SESSION_LOG_DIR:-"${XDG_STATE_HOME:-"$HOME/.local/state"}/tahoe-niri"}"
 TAHOE_SESSION_LOG_FILE="${TAHOE_SESSION_LOG_FILE:-"$TAHOE_SESSION_LOG_DIR/session.log"}"
@@ -38,6 +40,7 @@ init_logging() {
   log "path: $PATH"
   log "display: DISPLAY=${DISPLAY:-} WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-}"
   log "session: XDG_SESSION_TYPE=${XDG_SESSION_TYPE:-} XDG_CURRENT_DESKTOP=${XDG_CURRENT_DESKTOP:-} DESKTOP_SESSION=${DESKTOP_SESSION:-}"
+  log "icon theme: ${QS_ICON_THEME:-system default}"
   log "electron: ELECTRON_OZONE_PLATFORM_HINT=${ELECTRON_OZONE_PLATFORM_HINT:-}"
   log "glx: __GLX_VENDOR_LIBRARY_NAME=${__GLX_VENDOR_LIBRARY_NAME:-}"
   log "runtime: XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR:-} XDG_SEAT=${XDG_SEAT:-} XDG_VTNR=${XDG_VTNR:-}"
@@ -88,6 +91,69 @@ resolve_niri_bin() {
   fi
 
   die "niri binary not found; run scripts/arch-update.sh first"
+}
+
+json_string_setting() {
+  local key="$1"
+  local file="$2"
+
+  awk -v needle="\"$key\"" '
+    index($0, needle) {
+      split($0, parts, "\"")
+      if (length(parts) >= 4) {
+        print parts[4]
+        exit
+      }
+    }
+  ' "$file"
+}
+
+sanitize_icon_theme() {
+  local value="$1"
+  local cleaned
+
+  value="${value//$'\n'/}"
+  value="${value//$'\r'/}"
+  value="${value//$'\t'/}"
+  value="${value//\//}"
+  value="${value//\\/}"
+  value="${value//:/}"
+  value="${value#"${value%%[![:space:]]*}"}"
+  value="${value%"${value##*[![:space:]]}"}"
+  cleaned="$(printf '%s' "$value" | tr -cd '[:alnum:]. _-')"
+  printf '%s\n' "$cleaned"
+}
+
+resolve_icon_theme_setting() {
+  local mode custom theme
+
+  [[ -n "${QS_ICON_THEME:-}" ]] && return 0
+  [[ -r "$TAHOE_SETTINGS_FILE" ]] || return 0
+
+  mode="$(json_string_setting iconThemeMode "$TAHOE_SETTINGS_FILE")"
+  custom="$(json_string_setting customIconTheme "$TAHOE_SETTINGS_FILE")"
+
+  case "$mode" in
+    papirus)
+      theme="Papirus"
+      ;;
+    papirus-dark)
+      theme="Papirus-Dark"
+      ;;
+    papirus-light)
+      theme="Papirus-Light"
+      ;;
+    custom)
+      theme="$custom"
+      ;;
+    *)
+      theme=""
+      ;;
+  esac
+
+  theme="$(sanitize_icon_theme "$theme")"
+  [[ -n "$theme" ]] && export QS_ICON_THEME="$theme"
+  return 0
 }
 
 has_battery() {
@@ -239,7 +305,7 @@ activate_graphical_session_target() {
   systemctl --user import-environment \
     WAYLAND_DISPLAY DISPLAY XAUTHORITY \
     XDG_CURRENT_DESKTOP XDG_SESSION_TYPE XDG_SESSION_DESKTOP \
-    ELECTRON_OZONE_PLATFORM_HINT __GLX_VENDOR_LIBRARY_NAME 2>/dev/null || true
+    ELECTRON_OZONE_PLATFORM_HINT __GLX_VENDOR_LIBRARY_NAME QS_ICON_THEME 2>/dev/null || true
 }
 
 main() {
@@ -255,6 +321,7 @@ main() {
   # Keep Xwayland GLX clients on the NVIDIA vendor path. Without this, GLVND can
   # select Mesa llvmpipe for Proton launchers even when Xwayland glamor is on.
   export __GLX_VENDOR_LIBRARY_NAME="${__GLX_VENDOR_LIBRARY_NAME:-nvidia}"
+  resolve_icon_theme_setting
 
   init_logging
 

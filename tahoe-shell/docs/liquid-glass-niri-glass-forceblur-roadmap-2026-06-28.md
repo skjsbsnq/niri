@@ -120,7 +120,7 @@ Quickshell 侧：
 
 - `tahoe-shell/components/TahoeGlass.js`
   - 统一 material 名称、radius、QML fallback fill/stroke。
-  - 当前 material：`panel`、`pill`、`dock`、`menu`、`toast`、`backdrop`。
+  - 当前 material：`panel`、`pill`、`launcher`、`dock`、`menu`、`toast`、`backdrop`。
 - `tahoe-shell/components/*.qml`
   - 具体 `PanelWindow` 和 `TahoeGlass.regions` 声明。
   - 目标是让所有 launcher/panel/menu 的玻璃声明都走同一套小封装或同一套约定。
@@ -168,7 +168,7 @@ niri 侧：
 
 当前发现的具体改进点：
 
-- `TahoeGlass.js` 已定义 `MaterialBackdrop`，但 `Launchpad.qml` 的主面板当前使用 `MaterialPanel`。如果 Launchpad 是大面积启动器，应评估是否改为 `MaterialBackdrop` 或新增 `launcher` material，避免 fullscreen/大面板出现过强 lens/rim。
+- `Launchpad.qml` 的主面板曾使用 `MaterialPanel`；T8 已新增 `launcher` material，避免大 launcher card 吃全局 panel profile 后出现过强 lens/rim。
 - 多数组件重复写 `TahoeGlassRegion` + `Rectangle` fill/stroke + `tahoeGlassMaterial/tahoeGlassRadius`。这适合抽一个很薄的 `GlassPanel`/`GlassSurface` QML 封装，但不能把 shader 参数暴露到 QML。
 - `TopBar.qml`、`Dock.qml` 已经避免把整个 layer surface 当玻璃，只给内部 surface 建 region；这个方向必须保持。
 
@@ -472,7 +472,7 @@ niri 侧：
    - ControlCenter
    - Spotlight
    - NotificationToast
-   - Launchpad/backdrop
+   - Launchpad/launcher
 
 验收：
 
@@ -548,7 +548,7 @@ Tahoe 可行方向：
 - 2026-06-29 已完成 T6 覆盖清单与缺口确认，见 `tahoe-shell/docs/liquid-glass-t6-shell-coverage-2026-06-29.md`。
 - 当前 `TahoeGlass.regions` 覆盖 22 个组件、23 个 compositor-owned region；`Spotlight.qml` 是唯一双 region 组件。
 - `Wallpaper.qml`、`PopupDismissLayer.qml`、`Screenshot.qml` 已明确为非目标；`LockScreen.qml` 仍按安全界面单独评估。
-- `Launchpad.qml` 当前 `MaterialPanel` 已记录为待验证项；若后续视觉转向 fullscreen/backdrop，再改为 `backdrop` 或新增 `launcher` material。
+- `Launchpad.qml` 的 `MaterialPanel` 待验证项已由 T8 关闭：当前使用 `launcher` material；若后续视觉转向 fullscreen/backdrop，再改为 `backdrop`。
 
 ### T7：QML 玻璃封装落地与组件迁移
 
@@ -623,7 +623,7 @@ Tahoe 可行方向：
 `Launchpad.qml` 当前状态：
 
 - 已有一个 TahoeGlass region。
-- 当前主 surface 使用 `MaterialPanel`。
+- T8 完成后，当前主 surface 使用 `MaterialLauncher`。
 
 `Launchpad` 任务：
 
@@ -645,6 +645,14 @@ Tahoe 可行方向：
 - Spotlight results panel 滚动时无 shader artifact。
 - Launchpad 不出现整屏水波、大 halo 或巨大 rim。
 - 启动器关闭后没有残留 damage/blur。
+
+完成记录：
+
+- 2026-06-29 已完成 T8 启动器玻璃路线，见 `tahoe-shell/docs/liquid-glass-t8-launcher-glass-2026-06-29.md`。
+- `Spotlight.qml` 保持 search pill + results panel 两 region；`pill` material edge highlight 更明显、lens-depth 更轻，`panel` material 更偏可读。
+- `Launchpad.qml` 判定为居中大 launcher card，新增并使用 `launcher` material：比 `panel` 更克制，比 fullscreen `backdrop` 更有边缘。
+- 未改协议、未改 shader、未新增 raw shader 参数；`interaction` / `materialAlpha` 仍只影响材质强度，不改 region geometry。
+- `scripts/check-tahoe-glass-guardrails.sh`、`niri validate -c config/niri/tahoe-phase0.kdl`、`cargo test -p niri-config tahoe_glass --quiet` 已通过；当前环境缺少 `quickshell`/`qmllint` 和可用图形会话，视觉截图留给 T13。
 
 ### T9：常驻面板玻璃路线
 
@@ -818,7 +826,7 @@ Tahoe 可行方向：
 
 - T13 显示大面积 glass 在真实硬件上持续超预算。
 - 降低 refraction/lens/blur 后仍不可接受。
-- 问题集中在大面积、低动态 surface，例如 Launchpad backdrop。
+- 问题集中在大面积、低动态 surface，例如 Launchpad launcher card 或后续 fullscreen backdrop。
 
 如果进入研究：
 

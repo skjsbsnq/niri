@@ -76,7 +76,7 @@ Flickable {
                 Layout.fillWidth: true
                 iconCode: "\ue3a3"
                 title: "玻璃材质"
-                detail: page.svc ? "全局模糊 + 6 种材质的折射/边缘光" : "tahoe-glass 材质"
+                detail: page.svc ? "全局模糊 + 7 种材质的折射/边缘光" : "tahoe-glass 材质"
                 accentColor: page.panel ? page.panel.categoryColor("niri-glass") : "#5e5ce6"
                 onActivated: page.panel.selectedPage = "niri-glass"
             }

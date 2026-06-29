@@ -431,7 +431,7 @@ def update_layout_text(text: str, field: str, raw_value: str) -> str:
 # block. All glass/blur writes reuse the same atomic_write path (guardrails +
 # niri validate) as layout.
 
-GLASS_MATERIAL_NAMES = ["panel", "pill", "dock", "menu", "toast", "backdrop"]
+GLASS_MATERIAL_NAMES = ["panel", "pill", "launcher", "dock", "menu", "toast", "backdrop"]
 GLASS_MATERIAL_FIELDS = ["edge-highlight", "refraction", "inner-shadow", "chromatic", "lens-depth"]
 
 

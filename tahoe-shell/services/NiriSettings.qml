@@ -37,12 +37,13 @@ Item {
     // the first read reconciles. setGlassField rebuilds the top-level object
     // (QML does not observe nested mutation) and queues a glass.<m>.<f> write.
     property var glassMaterials: ({
-        "panel":    { edge_highlight: 0.34, refraction: 0.04,  inner_shadow: 0.12, chromatic: 0.0,   lens_depth: 0.04 },
-        "pill":     { edge_highlight: 0.38, refraction: 0.045, inner_shadow: 0.10, chromatic: 0.008, lens_depth: 0.06 },
-        "dock":     { edge_highlight: 0.40, refraction: 0.05,  inner_shadow: 0.14, chromatic: 0.006, lens_depth: 0.05 },
-        "menu":     { edge_highlight: 0.42, refraction: 0.02,  inner_shadow: 0.16, chromatic: 0.0,   lens_depth: 0.04 },
-        "toast":    { edge_highlight: 0.42, refraction: 0.02,  inner_shadow: 0.14, chromatic: 0.0,   lens_depth: 0.04 },
-        "backdrop": { edge_highlight: 0.22, refraction: 0.02,  inner_shadow: 0.0,  chromatic: 0.0,   lens_depth: 0.0 }
+        "panel":    { edge_highlight: 0.18, refraction: 0.006, inner_shadow: 0.07, chromatic: 0.0, lens_depth: 0.004 },
+        "pill":     { edge_highlight: 0.30, refraction: 0.014, inner_shadow: 0.07, chromatic: 0.0, lens_depth: 0.010 },
+        "launcher": { edge_highlight: 0.16, refraction: 0.005, inner_shadow: 0.06, chromatic: 0.0, lens_depth: 0.004 },
+        "dock":     { edge_highlight: 0.20, refraction: 0.010, inner_shadow: 0.08, chromatic: 0.0, lens_depth: 0.012 },
+        "menu":     { edge_highlight: 0.24, refraction: 0.006, inner_shadow: 0.10, chromatic: 0.0, lens_depth: 0.0 },
+        "toast":    { edge_highlight: 0.24, refraction: 0.006, inner_shadow: 0.10, chromatic: 0.0, lens_depth: 0.0 },
+        "backdrop": { edge_highlight: 0.08, refraction: 0.004, inner_shadow: 0.0,  chromatic: 0.0, lens_depth: 0.0 }
     })
     property bool blurEnabled: true
     property int blurPasses: 5

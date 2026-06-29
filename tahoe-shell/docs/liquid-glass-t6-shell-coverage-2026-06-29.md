@@ -58,7 +58,7 @@ tahoe-shell/components/WindowOverview.qml
 | `NotificationCenter.qml` | `tahoe-notification-center` | 1 | `panel` | 中型面板 | 是，panel 组 | 目标内。 |
 | `LeftSidebar.qml` | `tahoe-left-sidebar` | 1 | `panel` | full-height side panel | 是，panel 组 | 目标内；注意可读性。 |
 | `Spotlight.qml` | `tahoe-spotlight` | 2 | `pill` + `panel` | fullscreen overlay，内部 search/results regions | 否 | 目标内；两 region 模型正确。 |
-| `Launchpad.qml` | `tahoe-launchpad` | 1 | `panel` | fullscreen overlay，内部 launcher panel | 否 | 目标内，高风险；`panel` material 保留为待验证项。 |
+| `Launchpad.qml` | `tahoe-launchpad` | 1 | `launcher` | fullscreen overlay，内部 launcher panel | 否 | 目标内，高风险；T8 已改为 `launcher` material。 |
 | `SettingsPanel.qml` | `tahoe-settings` | 1 | `panel` | fullscreen overlay，内部 settings panel | 否 | 目标内，高风险；文本和控件密度最高。 |
 | `TaskSwitcher.qml` | `tahoe-task-switcher` | 1 | `menu` | fullscreen overlay，内部 switcher panel | 否 | 目标内；窗口列表变化时注意 region 稳定。 |
 | `WindowOverview.qml` | `tahoe-window-overview` | 1 | `panel` | fullscreen overlay，内部 overview panel | 否 | 目标内，高风险；不要把每个窗口缩略图做成 region。 |
@@ -91,7 +91,7 @@ tahoe-shell/components/WindowOverview.qml
 
 | 组件 | 风险 | 当前记录 |
 | --- | --- | --- |
-| `Launchpad.qml` | fullscreen overlay + 大 launcher panel；容易出现大 halo、整屏水波或巨大 rim。 | 当前 material 是 `GlassStyle.MaterialPanel`。如果继续是居中 launcher card，可继续用 `panel`；如果视觉转向 fullscreen/backdrop，应改 `backdrop` 或新增 `launcher` material。 |
+| `Launchpad.qml` | fullscreen overlay + 大 launcher panel；容易出现大 halo、整屏水波或巨大 rim。 | T8 后当前 material 是 `GlassStyle.MaterialLauncher`。如果后续视觉转向 fullscreen/backdrop，应改 `backdrop`。 |
 | `WindowOverview.qml` | fullscreen overlay 内含大量窗口缩略图；性能和可读性敏感。 | 只有 overview 主 panel 是 region；缩略图不是 region，保持此边界。 |
 | `SettingsPanel.qml` | 文本和控件密度最高，是可读性下限。 | 当前 `panel` material；后续先降 refraction/提高 tint，不加 chromatic。 |
 | `DynamicIslandOverlay.qml` | capsule 尺寸和内容状态频繁变化。 | 当前 `pill` material；region 跟随 `islandSurface`，后续继续优先动画内容和 `materialAlpha`，避免无界 geometry。 |
@@ -122,6 +122,6 @@ tahoe-shell/components/WindowOverview.qml
 - `rg -l "TahoeGlass\\.regions" tahoe-shell/components | sort` 的 22 个组件已全部列入覆盖清单。
 - 每个可见 launcher/panel/menu/toast/popup 都有明确 material。
 - `Wallpaper.qml`、`PopupDismissLayer.qml`、`Screenshot.qml` 已列为非目标并说明原因。
-- `Launchpad.qml` 的 `MaterialPanel` 已记录为待验证项。
+- `Launchpad.qml` 的 `MaterialPanel` 待验证项已由 T8 关闭，当前使用 `MaterialLauncher`。
 - `scripts/check-tahoe-glass-guardrails.sh` 通过。
 - 本轮没有新增代码行为。

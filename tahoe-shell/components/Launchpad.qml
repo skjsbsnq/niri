@@ -115,10 +115,10 @@ PanelWindow {
             id: panelSurface
 
             anchors.fill: parent
-            material: GlassStyle.MaterialPanel
+            material: GlassStyle.MaterialLauncher
             radius: GlassStyle.RadiusPanel
-            fillColor: GlassStyle.FillPanelBright
-            strokeColor: GlassStyle.StrokePanelBright
+            fillColor: GlassStyle.FillLauncher
+            strokeColor: GlassStyle.StrokeLauncher
             useItemRegion: false
             regionX: Math.round(launcher.x + panelSurface.x)
             regionY: Math.round(launcher.y + panelSurface.y)

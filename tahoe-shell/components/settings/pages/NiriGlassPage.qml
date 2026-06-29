@@ -137,6 +137,7 @@ Flickable {
                 model: [
                     { value: "panel", label: "面板" },
                     { value: "pill", label: "胶囊" },
+                    { value: "launcher", label: "启动器" },
                     { value: "dock", label: "Dock" },
                     { value: "menu", label: "菜单" },
                     { value: "toast", label: "通知" },

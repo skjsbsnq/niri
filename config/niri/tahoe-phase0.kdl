@@ -87,6 +87,8 @@ tahoe-glass {
     // T3 keeps the user-facing material vocabulary small:
     // - clear: low tint, low contrast, light refraction.
     // - tinted: higher tint and contrast, lower refraction for dense text.
+    // - launcher: centered Launchpad card, calmer than panel but not flat like
+    //   fullscreen backdrop.
     material "clear" {
         xray false
         saturation 1.10
@@ -115,25 +117,37 @@ tahoe-glass {
         xray false
         saturation 1.10
         tint-color "#ffffff"
-        tint-amount 0.07
-        contrast 1.08
-        edge-highlight 0.20
-        refraction 0.012
-        inner-shadow 0.08
+        tint-amount 0.09
+        contrast 1.09
+        edge-highlight 0.18
+        refraction 0.006
+        inner-shadow 0.07
         chromatic 0.0
-        lens-depth 0.012
+        lens-depth 0.004
     }
     material "pill" {
         xray false
         saturation 1.12
         tint-color "#ffffff"
-        tint-amount 0.045
+        tint-amount 0.05
         contrast 1.05
-        edge-highlight 0.24
-        refraction 0.018
-        inner-shadow 0.08
+        edge-highlight 0.30
+        refraction 0.014
+        inner-shadow 0.07
         chromatic 0.0
-        lens-depth 0.025
+        lens-depth 0.010
+    }
+    material "launcher" {
+        xray false
+        saturation 1.08
+        tint-color "#ffffff"
+        tint-amount 0.085
+        contrast 1.07
+        edge-highlight 0.16
+        refraction 0.005
+        inner-shadow 0.06
+        chromatic 0.0
+        lens-depth 0.004
     }
     material "dock" {
         xray false
@@ -172,9 +186,10 @@ tahoe-glass {
         chromatic 0.0
         lens-depth 0.0
     }
-    // backdrop is fullscreen (Launchpad); keep refraction/lens low so the
-    // whole screen does not visibly warp, and keep shadow off (set in code
-    // default). glass_surface_detail() also fades these out on big surfaces.
+    // backdrop is for fullscreen scrims/backdrops; keep refraction/lens low
+    // so the whole screen does not visibly warp, and keep shadow off (set in
+    // code default). glass_surface_detail() also fades these out on big
+    // surfaces.
     material "backdrop" {
         xray false
         saturation 1.06
@@ -380,13 +395,13 @@ layer-rule {
         noise 0.006
         saturation 1.10
         tint-color "#ffffff"
-        tint-amount 0.07
-        contrast 1.08
-        edge-highlight 0.20
-        refraction 0.012
-        inner-shadow 0.08
+        tint-amount 0.09
+        contrast 1.09
+        edge-highlight 0.18
+        refraction 0.006
+        inner-shadow 0.07
         chromatic 0.0
-        lens-depth 0.012
+        lens-depth 0.004
     }
 }
 
@@ -524,13 +539,13 @@ layer-rule {
         noise 0.006
         saturation 1.10
         tint-color "#ffffff"
-        tint-amount 0.07
-        contrast 1.08
-        edge-highlight 0.20
-        refraction 0.012
-        inner-shadow 0.08
+        tint-amount 0.09
+        contrast 1.09
+        edge-highlight 0.18
+        refraction 0.006
+        inner-shadow 0.07
         chromatic 0.0
-        lens-depth 0.012
+        lens-depth 0.004
     }
 }
 

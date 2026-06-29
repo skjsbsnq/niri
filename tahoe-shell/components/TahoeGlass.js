@@ -9,6 +9,7 @@ var MaterialPill = "pill";
 var MaterialDock = "dock";
 var MaterialMenu = "menu";
 var MaterialToast = "toast";
+var MaterialLauncher = "launcher";
 var MaterialBackdrop = "backdrop";
 
 var RadiusPanel = 28;
@@ -28,6 +29,7 @@ var FillPanelBright = "#18f7f8fb";
 var FillDock = "#2af7fbff";
 var FillTopBar = "#22f7fbff";
 var FillPill = "#80f7fbff";
+var FillLauncher = "#1cf7f8fb";
 var FillBackdrop = "#12eef2f7";
 
 var StrokePanel = "#24ffffff";
@@ -35,6 +37,7 @@ var StrokePanelBright = "#34ffffff";
 var StrokeDock = "#44ffffff";
 var StrokeTopBar = "#34ffffff";
 var StrokePill = "#48ffffff";
+var StrokeLauncher = "#32ffffff";
 var StrokeToast = "#34ffffff";
 
 function radiusForMaterial(material) {
@@ -47,6 +50,8 @@ function radiusForMaterial(material) {
         return RadiusMenu;
     case MaterialToast:
         return RadiusToast;
+    case MaterialLauncher:
+        return RadiusPanel;
     case MaterialBackdrop:
         return RadiusBackdrop;
     case MaterialPanel:
@@ -61,6 +66,8 @@ function fillForMaterial(material) {
         return FillPill;
     case MaterialDock:
         return FillDock;
+    case MaterialLauncher:
+        return FillLauncher;
     case MaterialBackdrop:
         return FillBackdrop;
     case MaterialMenu:
@@ -80,6 +87,8 @@ function strokeForMaterial(material) {
         return StrokeDock;
     case MaterialMenu:
         return StrokePanelBright;
+    case MaterialLauncher:
+        return StrokeLauncher;
     case MaterialToast:
         return StrokeToast;
     case MaterialPanel:

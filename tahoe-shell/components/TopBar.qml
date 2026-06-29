@@ -52,10 +52,10 @@ PanelWindow {
     readonly property color glassStroke: darkMode ? "#38ffffff" : GlassStyle.StrokeTopBar
     readonly property color topText: darkMode ? "#f5f7fb" : "#202124"
     readonly property color topTextSecondary: darkMode ? "#d6dde5" : "#2c2d30"
-    readonly property color buttonFill: darkMode ? "#24ffffff" : "#22ffffff"
-    readonly property color buttonHover: darkMode ? "#36ffffff" : "#30ffffff"
-    readonly property color buttonOpen: darkMode ? "#42ffffff" : "#38ffffff"
-    readonly property color buttonBorder: darkMode ? "#52ffffff" : "#40ffffff"
+    readonly property color buttonFill: darkMode ? "#24ffffff" : "#10000000"
+    readonly property color buttonHover: darkMode ? "#36ffffff" : "#18000000"
+    readonly property color buttonOpen: darkMode ? "#42ffffff" : "#22000000"
+    readonly property color buttonBorder: darkMode ? "#52ffffff" : "#24000000"
 
     signal toggleAppMenu(var anchorRect)
     signal toggleApplicationMenu(var anchorRect)
@@ -169,8 +169,8 @@ PanelWindow {
                     Rectangle {
                         anchors.fill: parent
                         radius: 12
-                        color: root.appMenuOpen ? "#32ffffff" : "transparent"
-                        border.color: root.appMenuOpen ? "#42ffffff" : "transparent"
+                        color: root.appMenuOpen ? root.buttonOpen : "transparent"
+                        border.color: root.appMenuOpen ? root.buttonBorder : "transparent"
                     }
 
                     Image {
@@ -241,8 +241,8 @@ PanelWindow {
                     Rectangle {
                         anchors.fill: parent
                         radius: 12
-                        color: root.applicationMenuOpen ? "#32ffffff" : (applicationMenuMouse.containsMouse ? "#24ffffff" : "transparent")
-                        border.color: root.applicationMenuOpen ? "#42ffffff" : "transparent"
+                        color: root.applicationMenuOpen ? root.buttonOpen : (applicationMenuMouse.containsMouse ? root.buttonHover : "transparent")
+                        border.color: root.applicationMenuOpen ? root.buttonBorder : "transparent"
                     }
 
                     Text {
@@ -285,8 +285,8 @@ PanelWindow {
                             Rectangle {
                                 anchors.fill: parent
                                 radius: 10
-                                color: modelData.active ? "#32ffffff" : "#18ffffff"
-                                border.color: modelData.urgent ? "#ccff453a" : "#36ffffff"
+                                color: modelData.active ? root.buttonOpen : root.buttonFill
+                                border.color: modelData.urgent ? "#ccff453a" : root.buttonBorder
                                 border.width: 1
                             }
 

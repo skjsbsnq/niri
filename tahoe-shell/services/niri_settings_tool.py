@@ -426,13 +426,22 @@ def update_layout_text(text: str, field: str, raw_value: str) -> str:
 # --- tahoe-glass + blur (S5.1) -------------------------------------------
 # tahoe-glass materials are keyed by a string argument (material "panel" {}),
 # one level deeper than the layout child blocks, so they need a dedicated
-# string-arg finder. The per-field readers default to 0.0 / niri defaults
-# when a block or field is absent so the GUI never hard-fails on an optional
-# block. All glass/blur writes reuse the same atomic_write path (guardrails +
-# niri validate) as layout.
+# string-arg finder. The per-field readers default to the compositor scene
+# defaults when a block or field is absent so the GUI never hard-fails on an
+# optional block. All glass/blur writes reuse the same atomic_write path
+# (guardrails + niri validate) as layout.
 
 GLASS_MATERIAL_NAMES = ["panel", "pill", "launcher", "dock", "menu", "toast", "backdrop"]
 GLASS_MATERIAL_FIELDS = ["edge-highlight", "refraction", "inner-shadow", "chromatic", "lens-depth"]
+GLASS_MATERIAL_DEFAULTS = {
+    "panel": {"edge-highlight": 0.14, "refraction": 0.004, "inner-shadow": 0.06, "chromatic": 0.0, "lens-depth": 0.0},
+    "pill": {"edge-highlight": 0.32, "refraction": 0.013, "inner-shadow": 0.07, "chromatic": 0.0, "lens-depth": 0.010},
+    "launcher": {"edge-highlight": 0.15, "refraction": 0.004, "inner-shadow": 0.055, "chromatic": 0.0, "lens-depth": 0.003},
+    "dock": {"edge-highlight": 0.18, "refraction": 0.007, "inner-shadow": 0.07, "chromatic": 0.0, "lens-depth": 0.006},
+    "menu": {"edge-highlight": 0.26, "refraction": 0.004, "inner-shadow": 0.10, "chromatic": 0.0, "lens-depth": 0.0},
+    "toast": {"edge-highlight": 0.24, "refraction": 0.005, "inner-shadow": 0.09, "chromatic": 0.0, "lens-depth": 0.0},
+    "backdrop": {"edge-highlight": 0.05, "refraction": 0.002, "inner-shadow": 0.0, "chromatic": 0.0, "lens-depth": 0.0},
+}
 
 
 def find_top_level_block_or_none(lines: list[str], name: str) -> tuple[int, int] | None:
@@ -525,8 +534,9 @@ def read_glass_text(text: str) -> dict[str, Any]:
         material: dict[str, Any] = {}
         block = find_material_block(lines, glass, name) if glass else None
         for field in GLASS_MATERIAL_FIELDS:
+            default = GLASS_MATERIAL_DEFAULTS[name][field]
             material[field.replace("-", "_")] = (
-                normalize_number(child_field_number(lines, block, field, 0.0)) if block else 0.0
+                normalize_number(child_field_number(lines, block, field, default)) if block else default
             )
         materials[name] = material
     return {"materials": materials}

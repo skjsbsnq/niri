@@ -38,12 +38,19 @@ PanelWindow {
     readonly property bool swipeInteractive: dynamicIslandService ? !!dynamicIslandService.swipeDragging : false
     readonly property bool swipeSettling: dynamicIslandService ? !!dynamicIslandService.swipeSettling : false
     readonly property real swipePreviewWidth: dynamicIslandService ? Number(dynamicIslandService.swipePreviewWidth) : -1
-   readonly property int capsuleTargetWidth: swipePreviewWidth > 0 ? Math.round(swipePreviewWidth) : widthForState(geometryState)
+    readonly property int maxCapsuleWidth: Math.max(1, screenWidth)
+    readonly property int maxCapsuleHeight: 220
+    readonly property int requestedCapsuleWidth: swipePreviewWidth > 0 ? Math.round(swipePreviewWidth) : widthForState(geometryState)
+    readonly property int capsuleTargetWidth: clampInt(requestedCapsuleWidth, 1, maxCapsuleWidth)
     readonly property int swipeWidthDuration: swipeInteractive ? 0 : (swipeSettling ? IslandMotion.swipeSettleDuration : IslandMotion.overlayMorphDuration)
     readonly property int swipeWidthEasing: swipeInteractive ? IslandMotion.overlayColorEasing : (swipeSettling ? IslandMotion.swipeSettleEasing : IslandMotion.overlayMorphEasing)
-    readonly property int capsuleTargetHeight: heightForState(geometryState)
-    readonly property int capsuleTargetLeft: Math.round(Math.max(0, (screenWidth - capsuleTargetWidth) / 2))
+    readonly property int capsuleTargetHeight: clampInt(heightForState(geometryState), 1, maxCapsuleHeight)
+    readonly property int capsuleTargetLeft: clampInt(Math.round((screenWidth - capsuleTargetWidth) / 2), 0, Math.max(0, screenWidth - capsuleTargetWidth))
     readonly property int capsuleTargetTop: 0
+    readonly property real capsuleTargetRadius: Math.min(
+        radiusForState(geometryState, capsuleTargetHeight),
+        capsuleTargetWidth / 2,
+        capsuleTargetHeight / 2)
     readonly property bool compactResting: contentState === "resting_time" || contentState === "resting_media"
     readonly property bool compactContentVisible: compactResting
     readonly property bool mediaContentVisible: contentState === "expanded_media"
@@ -53,7 +60,7 @@ PanelWindow {
     readonly property color glassFill: "#f00b0c10"
     readonly property color glassFillExpanded: "#f2131419"
     readonly property color textPrimary: "#f7f9fc"
-   readonly property color textSecondary: "#b9c0cc"
+    readonly property color textSecondary: "#b9c0cc"
     readonly property string mediaArtUrl: dynamicIslandService ? String(dynamicIslandService.mediaArtUrl || "") : ""
     readonly property string mediaTrackTitle: contentDisplayText
     readonly property string mediaTrackArtist: contentSecondaryText
@@ -109,6 +116,14 @@ PanelWindow {
         default:
             return 38;
         }
+    }
+
+    function clampInt(value, minValue, maxValue) {
+        var number = Number(value);
+        if (!isFinite(number))
+            number = minValue;
+
+        return Math.round(Math.max(minValue, Math.min(maxValue, number)));
     }
 
     function radiusForState(stateName, itemHeight) {
@@ -167,7 +182,7 @@ PanelWindow {
         width: root.capsuleTargetWidth
         height: root.capsuleTargetHeight
         material: GlassStyle.MaterialPill
-        radius: GlassStyle.RadiusPill + (root.radiusForState(root.geometryState, height) - GlassStyle.RadiusPill)
+        radius: GlassStyle.RadiusPill + (root.capsuleTargetRadius - GlassStyle.RadiusPill)
         clip: true
         fillColor: root.geometryState === "expanded_media" || root.geometryState === "expanded_summary"
             ? root.glassFillExpanded
@@ -175,7 +190,7 @@ PanelWindow {
         strokeWidth: 0
         interaction: islandSurface.opacity
         materialAlpha: islandSurface.opacity
-        regionEnabled: islandSurface.opacity > 0.01
+        regionEnabled: root.capsuleShown || islandSurface.opacity > 0.01
         opacity: root.capsuleShown ? 1 : 0
 
         Behavior on x {

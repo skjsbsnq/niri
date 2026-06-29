@@ -726,6 +726,14 @@ Tahoe 可行方向：
 - Dynamic Island 变形时 region 不越界、不产生大面积 damage。
 - 小 popup 不需要单独 raw shader 参数。
 
+完成记录：
+
+- 2026-06-29 已完成 T10 菜单、toast、dynamic island 路线，见 `tahoe-shell/docs/liquid-glass-t10-menu-toast-dynamic-island-2026-06-29.md`。
+- 菜单类统一 `MaterialMenu` / `RadiusMenu`；小弹窗继续 `MaterialPanel` 并统一 `RadiusPopup`。
+- `NotificationToast.qml` 新增独立 `toastMaterialAlpha`，驱动 card opacity、`interaction`、`materialAlpha` 和 region 生命周期，关闭时不再保持满强度玻璃。
+- `DynamicIslandOverlay.qml` 保持 `MaterialPill`，并对 swipe preview width、height、left、radius 做 surface 内 clamp，快速变形时 region 不越界。
+- 未改协议、shader、material 名称或 raw shader 参数；已通过 guardrail、`niri validate`、`niri_settings_tool.py read`、`cargo test -p niri-config tahoe_glass --quiet` 和本轮 QML lint；live 截图留给 T13。
+
 ### T11：shell 场景 material profile 细化
 
 目标：把 macOS 风格“透明、折射、边缘光、可读性”的调节集中在 niri material，而不是散落在 QML。
@@ -772,6 +780,14 @@ Tahoe 可行方向：
 - material 调参不需要改 QML 业务组件。
 - `niri validate -c config/niri/tahoe-phase0.kdl` 通过。
 
+完成记录：
+
+- 2026-06-29 已完成 T11 shell 场景 material profile 细化，见 `tahoe-shell/docs/liquid-glass-t11-material-profiles-2026-06-29.md`。
+- `tahoe-glass` material vocabulary 收敛为 `panel`、`pill`、`launcher`、`dock`、`menu`、`toast`、`backdrop`；旧 `clear` / `tinted` profile 已从部署配置和 niri 默认 map 移除。
+- 各 profile 继续只使用现有 `BackgroundEffect` / `GlassOptions` 字段；`chromatic` 默认保持 `0.0`，未新增 raw shader knob、协议字段或业务 QML 调参。
+- `NiriSettings.qml` 和 `niri_settings_tool.py` 已同步 scene material 默认值，缺失 material 字段时按 profile 默认值回退。
+- 已通过 guardrail、`niri validate`、`niri_settings_tool.py read`、`python3 -m py_compile`、本轮 QML lint、完整 `cargo test -p niri-config --quiet` 和 `git diff --check`；live 视觉基线仍留给 T13。
+
 ### T12：TahoeGlass fallback 与生命周期收敛
 
 目标：协议可用时走 TahoeGlass，协议不可用时 fallback 一致，但业务 QML 不知道 fallback 细节。
@@ -789,6 +805,15 @@ Tahoe 可行方向：
 - 没有重复 attach。
 - guardrail 阻止业务 QML 直接 import/use BackgroundEffect。
 - niri log 没有 protocol/render error。
+
+完成记录：
+
+- 2026-06-29 已完成 T12 TahoeGlass fallback 与生命周期收敛，见 `tahoe-shell/docs/liquid-glass-t12-fallback-lifecycle-2026-06-29.md`。
+- `AttachedSurfaceLifecycle` 已补齐 backing `QWindow` 替换清理、旧 event filter 解绑、`QWaylandWindow` 切换清理，以及 surface create/destroy 回调去重。
+- `BackgroundEffect` 和 `TahoeGlass` 的 reload protocol surface stealing 已收敛：新 attached object 接管 protocol surface 后，旧对象停止 pending 状态，并在脱离 `ProxyWindowBase` 后释放。
+- TahoeGlass 协议可用时会清掉旧 fallback；协议不可用时 fallback 仍只在 TahoeGlass client 内部创建 `BackgroundEffect.blurRegion`，业务 QML 不知道 fallback 细节。
+- `config/niri/tahoe-phase0.kdl` 的 layer-rule fallback 已继续对齐 scene material：`panel` 对齐 `panel`，菜单对齐 `menu`，`NotificationToast` 单独对齐 `toast`。
+- 已通过 guardrail、Quickshell 受影响 Wayland 目标编译和仓库内 niri validate；live 热加载截图和 niri log 观察留给 T13 图形会话补采。
 
 ### T13：视觉基线与性能验收
 

@@ -76,50 +76,26 @@ tahoe-glass {
     //   inner-shadow — SDF-normal inner edge darkening (clamped 0.5);
     //   chromatic    — RGB-split on the refraction sample (clamped 0.1);
     //   lens-depth   — center radial lens bulge (clamped 0.3).
-    // Together these move the glass from "frosted white card" to "refractive
-    // lens with edge light, inner shadow and a hint of chromatic fringe".
-    // Code defaults are 0.0, so without these overrides the compositor-owned
-    // glass renders as plain blur+tint. When a surface commits TahoeGlass
-    // regions, niri renders through these materials and SKIPS the layer-rule
-    // background-effect blocks below, which only serve the
+    // Together these move the glass from "frosted white card" to a controlled
+    // scene material with edge light, inner shadow and optional lens depth.
+    // Built-in defaults mirror this scene vocabulary, while this file is the
+    // deployed tuning source. When a surface commits TahoeGlass regions, niri
+    // renders through these materials and SKIPS the layer-rule background-effect
+    // blocks below, which only serve the
     // BackgroundEffect.blurRegion fallback path.
     //
-    // T3 keeps the user-facing material vocabulary small:
-    // - clear: low tint, low contrast, light refraction.
-    // - tinted: higher tint and contrast, lower refraction for dense text.
-    // - launcher: centered Launchpad card, calmer than panel but not flat like
-    //   fullscreen backdrop.
-    material "clear" {
-        xray false
-        saturation 1.10
-        tint-color "#ffffff"
-        tint-amount 0.03
-        contrast 1.03
-        edge-highlight 0.18
-        refraction 0.012
-        inner-shadow 0.06
-        chromatic 0.0
-        lens-depth 0.010
-    }
-    material "tinted" {
-        xray false
-        saturation 1.10
-        tint-color "#ffffff"
-        tint-amount 0.10
-        contrast 1.10
-        edge-highlight 0.18
-        refraction 0.006
-        inner-shadow 0.10
-        chromatic 0.0
-        lens-depth 0.0
-    }
+    // T11 keeps the compositor material vocabulary aligned with
+    // TahoeGlass.js and the settings helper:
+    // panel, pill, launcher, dock, menu, toast, backdrop.
+    // chromatic stays at 0.0 by default so text does not pick up color fringes.
     material "panel" {
         xray false
+        noise 0.005
         saturation 1.10
         tint-color "#ffffff"
-        tint-amount 0.10
+        tint-amount 0.105
         contrast 1.10
-        edge-highlight 0.16
+        edge-highlight 0.14
         refraction 0.004
         inner-shadow 0.06
         chromatic 0.0
@@ -127,62 +103,67 @@ tahoe-glass {
     }
     material "pill" {
         xray false
+        noise 0.005
         saturation 1.12
         tint-color "#ffffff"
-        tint-amount 0.05
+        tint-amount 0.052
         contrast 1.05
-        edge-highlight 0.30
-        refraction 0.014
+        edge-highlight 0.32
+        refraction 0.013
         inner-shadow 0.07
         chromatic 0.0
         lens-depth 0.010
     }
     material "launcher" {
         xray false
+        noise 0.005
         saturation 1.08
         tint-color "#ffffff"
         tint-amount 0.085
-        contrast 1.07
-        edge-highlight 0.16
-        refraction 0.005
-        inner-shadow 0.06
+        contrast 1.08
+        edge-highlight 0.15
+        refraction 0.004
+        inner-shadow 0.055
         chromatic 0.0
-        lens-depth 0.004
+        lens-depth 0.003
     }
     material "dock" {
         xray false
+        noise 0.005
         saturation 1.10
         tint-color "#ffffff"
-        tint-amount 0.055
+        tint-amount 0.060
         contrast 1.06
-        edge-highlight 0.20
-        refraction 0.010
-        inner-shadow 0.08
+        edge-highlight 0.18
+        refraction 0.007
+        inner-shadow 0.07
         chromatic 0.0
-        lens-depth 0.012
+        lens-depth 0.006
     }
     // menu/toast read clearer: controlled edge light, gentler lens distortion.
     material "menu" {
         xray false
+        noise 0.004
         saturation 1.08
         tint-color "#ffffff"
-        tint-amount 0.10
-        contrast 1.10
-        edge-highlight 0.24
-        refraction 0.006
+        tint-amount 0.110
+        contrast 1.11
+        edge-highlight 0.26
+        refraction 0.004
         inner-shadow 0.10
         chromatic 0.0
         lens-depth 0.0
     }
     material "toast" {
         xray false
-        saturation 1.08
+        noise 0.005
+        saturation 1.09
         tint-color "#ffffff"
-        tint-amount 0.09
-        contrast 1.09
+        tint-amount 0.100
+        contrast 1.10
         edge-highlight 0.24
-        refraction 0.006
-        inner-shadow 0.10
+        refraction 0.005
+        inner-shadow 0.09
         chromatic 0.0
         lens-depth 0.0
     }
@@ -192,15 +173,19 @@ tahoe-glass {
     // surfaces.
     material "backdrop" {
         xray false
-        saturation 1.06
+        noise 0.003
+        saturation 1.04
         tint-color "#ffffff"
-        tint-amount 0.08
-        contrast 1.04
-        edge-highlight 0.08
-        refraction 0.004
+        tint-amount 0.070
+        contrast 1.03
+        edge-highlight 0.05
+        refraction 0.002
         inner-shadow 0.0
         chromatic 0.0
         lens-depth 0.0
+        shadow {
+            off
+        }
     }
 }
 
@@ -392,12 +377,12 @@ layer-rule {
     background-effect {
         xray false
         blur true
-        noise 0.006
+        noise 0.005
         saturation 1.10
         tint-color "#ffffff"
-        tint-amount 0.10
+        tint-amount 0.105
         contrast 1.10
-        edge-highlight 0.16
+        edge-highlight 0.14
         refraction 0.004
         inner-shadow 0.06
         chromatic 0.0
@@ -536,12 +521,12 @@ layer-rule {
     background-effect {
         xray false
         blur true
-        noise 0.006
+        noise 0.005
         saturation 1.10
         tint-color "#ffffff"
-        tint-amount 0.10
+        tint-amount 0.105
         contrast 1.10
-        edge-highlight 0.16
+        edge-highlight 0.14
         refraction 0.004
         inner-shadow 0.06
         chromatic 0.0
@@ -678,6 +663,36 @@ layer-rule {
     match namespace="^tahoe-dock-app-menu$"
     match namespace="^tahoe-dock-window-menu$"
     match namespace="^tahoe-process-menu$"
+
+    geometry-corner-radius 18
+
+    shadow {
+        on
+        softness 28
+        spread 2
+        offset x=0 y=8
+        color "#0004"
+    }
+
+    // Fallback path. Keep in sync with the tahoe-glass "menu" material:
+    // stronger edge light, gentler refraction so text stays crisp.
+    background-effect {
+        xray false
+        blur true
+        noise 0.004
+        saturation 1.08
+        tint-color "#ffffff"
+        tint-amount 0.110
+        contrast 1.11
+        edge-highlight 0.26
+        refraction 0.004
+        inner-shadow 0.10
+        chromatic 0.0
+        lens-depth 0.0
+    }
+}
+
+layer-rule {
     match namespace="^tahoe-notification-toast$"
 
     geometry-corner-radius 18
@@ -690,19 +705,18 @@ layer-rule {
         color "#0004"
     }
 
-    // Fallback path. Keep in sync with the tahoe-glass "menu"/"toast"
-    // materials: stronger edge light, gentler refraction so text stays crisp.
+    // Fallback path. Keep in sync with the tahoe-glass "toast" material.
     background-effect {
         xray false
         blur true
-        noise 0.006
-        saturation 1.08
+        noise 0.005
+        saturation 1.09
         tint-color "#ffffff"
-        tint-amount 0.10
+        tint-amount 0.100
         contrast 1.10
         edge-highlight 0.24
-        refraction 0.006
-        inner-shadow 0.10
+        refraction 0.005
+        inner-shadow 0.09
         chromatic 0.0
         lens-depth 0.0
     }

@@ -50,13 +50,15 @@ PanelWindow {
     readonly property int toastLeftMargin: Math.round(Math.max(8, root.screenWidth - root.implicitWidth - 16))
     readonly property bool compositorLayerAnimations:
         root.settingsService && root.settingsService.compositorLayerAnimations
+    property real toastMaterialAlpha: shouldShowToast ? 1 : 0
+    readonly property bool toastGlassActive: shouldShowToast || toastMaterialAlpha > 0.01
 
     function numberOr(value, fallback) {
         var number = Number(value);
         return isFinite(number) ? number : fallback;
     }
 
-    visible: compositorLayerAnimations ? shouldShowToast : (shouldShowToast || card.opacity > 0.01)
+    visible: toastGlassActive
     aboveWindows: true
     exclusionMode: ExclusionMode.Ignore
     exclusiveZone: 0
@@ -74,6 +76,10 @@ PanelWindow {
     margins {
         top: 48
         left: root.toastLeftMargin
+    }
+
+    Behavior on toastMaterialAlpha {
+        NumberAnimation { duration: Motion.fadeFastDuration; easing.type: Motion.standardDecel }
     }
 
     // Urgency accent. Normal = neutral hairline; Critical gets a warm red
@@ -104,10 +110,10 @@ PanelWindow {
         radius: GlassStyle.RadiusToast
         fillColor: GlassStyle.FillPanelBright
         strokeWidth: 0
-        interaction: root.compositorLayerAnimations ? 1 : card.opacity
-        materialAlpha: root.compositorLayerAnimations ? 1 : card.opacity
-        regionEnabled: root.shouldShowToast || (!root.compositorLayerAnimations && card.opacity > 0.01)
-        opacity: root.compositorLayerAnimations ? 1 : (root.shouldShowToast ? 1 : 0)
+        interaction: root.toastMaterialAlpha
+        materialAlpha: root.toastMaterialAlpha
+        regionEnabled: root.toastGlassActive
+        opacity: root.toastMaterialAlpha
 
         // NOTE: no `border.width` on the card itself. A centered 1px
         // border on a large-radius Rectangle is antialiased against the
@@ -133,10 +139,6 @@ PanelWindow {
 
         Behavior on height {
             NumberAnimation { duration: Motion.elementResizeDuration; easing.type: Motion.emphasizedDecel }
-        }
-
-        Behavior on opacity {
-            NumberAnimation { duration: Motion.fadeFastDuration; easing.type: Motion.standardDecel }
         }
 
         Column {

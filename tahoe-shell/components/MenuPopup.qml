@@ -64,27 +64,10 @@ PanelWindow {
             root.closeRequested();
     }
 
-    TahoeGlass.regions: [
-        TahoeGlassRegion {
-            x: menuSurface.x
-            y: menuSurface.y
-            width: menuSurface.width
-            height: menuSurface.height
-            material: menuSurface.tahoeGlassMaterial
-            radius: menuSurface.tahoeGlassRadius
-            blur: true
-            shadow: true
-            clip: true
-            interaction: 1
-            materialAlpha: 1
-            enabled: true
-        }
-    ]
+    TahoeGlass.regions: [menuSurface.region]
 
-    Rectangle {
+    GlassPanel {
         id: menuSurface
-        readonly property string tahoeGlassMaterial: GlassStyle.MaterialMenu
-        readonly property real tahoeGlassRadius: GlassStyle.RadiusMenu
 
         x: 0
         // menuSurface is the compositor-owned glass region item. niri owns the
@@ -92,22 +75,11 @@ PanelWindow {
         y: 0
         width: parent.width
         height: parent.height
-        radius: tahoeGlassRadius
-        color: GlassStyle.FillPanelBright
+        material: GlassStyle.MaterialMenu
+        radius: GlassStyle.RadiusMenu
+        fillColor: GlassStyle.FillPanelBright
+        strokeColor: GlassStyle.StrokePanelBright
         opacity: 1
-
-        // NOTE: no `border.width` on the surface itself — a centered 1px
-        // border antialiased against the outside pixels produces faint
-        // near-square corners at the arc tangents. Draw the glass edges
-        // with inset Rectangles instead, whose borders sit fully inside.
-        Rectangle {
-            anchors.fill: parent
-            anchors.margins: 1
-            radius: parent.radius - 1
-            color: "transparent"
-            border.color: GlassStyle.StrokePanelBright
-            border.width: 1
-        }
 
         ColumnLayout {
             anchors.fill: parent

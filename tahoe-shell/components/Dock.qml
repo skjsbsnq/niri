@@ -293,25 +293,7 @@ PanelWindow {
         }
     }
 
-    TahoeGlass.regions: [
-        TahoeGlassRegion {
-            x: Math.round(dockSurface.x)
-            // niri rejects glass regions that extend outside the layer surface.
-            // While the Dock slides in from below, expose only the visible
-            // portion so the compositor keeps blur active throughout reveal.
-            y: Math.round(root.height - root.dockVisibleHeight)
-            width: Math.round(dockSurface.width)
-            height: Math.round(root.dockVisibleHeight)
-            material: dockSurface.tahoeGlassMaterial
-            radius: dockSurface.tahoeGlassRadius
-            blur: true
-            shadow: true
-            clip: true
-            interaction: 0.0
-            materialAlpha: 1.0
-            enabled: root.dockGlassActive && root.dockVisibleHeight > 0.001
-        }
-    ]
+    TahoeGlass.regions: [dockSurface.region]
 
     Behavior on dockSlideOffset {
         NumberAnimation { duration: 190; easing.type: Easing.OutCubic }
@@ -332,27 +314,34 @@ PanelWindow {
         onExited: root.scheduleDockHoverReset()
     }
 
-    Rectangle {
+    GlassPanel {
         id: dockSurface
-        readonly property string tahoeGlassMaterial: GlassStyle.MaterialDock
-        readonly property real tahoeGlassRadius: GlassStyle.RadiusDock
 
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.bottom: parent.bottom
         anchors.bottomMargin: 0
         width: Math.min(root.dockSurfaceMaxWidth, dockRow.implicitWidth + root.dockSurfacePadding)
         height: 84
-        radius: tahoeGlassRadius
-        color: root.glassFill
+        material: GlassStyle.MaterialDock
+        radius: GlassStyle.RadiusDock
+        fillColor: root.glassFill
+        strokeColor: root.glassStroke
+        useItemRegion: false
+        regionX: Math.round(dockSurface.x)
+        // niri rejects glass regions that extend outside the layer surface.
+        // While the Dock slides in from below, expose only the visible
+        // portion so the compositor keeps blur active throughout reveal.
+        regionY: Math.round(root.height - root.dockVisibleHeight)
+        regionWidth: Math.round(dockSurface.width)
+        regionHeight: Math.round(root.dockVisibleHeight)
+        interaction: 0.0
+        materialAlpha: 1.0
+        glassEnabled: root.dockGlassActive && root.dockVisibleHeight > 0.001
 
         transform: Translate {
             y: root.dockSlideOffset
         }
 
-        // NOTE: no `border.width` on the surface itself — a centered 1px
-        // border antialiased against the outside pixels produces faint
-        // near-square corners at the arc tangents. Draw the glass edges
-        // with inset Rectangles instead, whose borders sit fully inside.
         MouseArea {
             anchors.fill: parent
             acceptedButtons: Qt.NoButton
@@ -362,16 +351,6 @@ PanelWindow {
             }
             onEntered: root.markDockHovered()
             onExited: root.scheduleDockHoverReset()
-        }
-
-        Rectangle {
-            // Top-left light edge (the Tahoe glass highlight).
-            anchors.fill: parent
-            anchors.margins: 1
-            radius: parent.radius - 1
-            color: "transparent"
-            border.color: root.glassStroke
-            border.width: 1
         }
 
         Row {

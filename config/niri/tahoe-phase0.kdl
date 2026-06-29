@@ -68,10 +68,11 @@ tahoe-glass {
     // ordinary window moves do not update the frosted glass until overview or
     // another backdrop change invalidates that buffer.
     //
-    // Phase 2/4: enable real liquid material. edge-highlight drives the
+    // Phase 2/3/4: enable real liquid material. edge-highlight drives the
     // shader's rim/specular light (postprocess.frag glass_light_strength,
     // clamped to 2.0); refraction drives the rounded-SDF-normal sample offset
-    // (niri_refraction_offset, clamped to 0.12). Phase 4 adds:
+    // (niri_refraction_offset, clamped to 0.12). contrast is a readability
+    // token with 1.0 as no-op, applied after tint. Phase 4 adds:
     //   inner-shadow — SDF-normal inner edge darkening (clamped 0.5);
     //   chromatic    — RGB-split on the refraction sample (clamped 0.1);
     //   lens-depth   — center radial lens bulge (clamped 0.3).
@@ -82,54 +83,106 @@ tahoe-glass {
     // regions, niri renders through these materials and SKIPS the layer-rule
     // background-effect blocks below, which only serve the
     // BackgroundEffect.blurRegion fallback path.
+    //
+    // T3 keeps the user-facing material vocabulary small:
+    // - clear: low tint, low contrast, light refraction.
+    // - tinted: higher tint and contrast, lower refraction for dense text.
+    material "clear" {
+        xray false
+        saturation 1.10
+        tint-color "#ffffff"
+        tint-amount 0.03
+        contrast 1.03
+        edge-highlight 0.18
+        refraction 0.012
+        inner-shadow 0.06
+        chromatic 0.0
+        lens-depth 0.010
+    }
+    material "tinted" {
+        xray false
+        saturation 1.10
+        tint-color "#ffffff"
+        tint-amount 0.10
+        contrast 1.10
+        edge-highlight 0.18
+        refraction 0.006
+        inner-shadow 0.10
+        chromatic 0.0
+        lens-depth 0.0
+    }
     material "panel" {
         xray false
+        saturation 1.10
+        tint-color "#ffffff"
+        tint-amount 0.07
+        contrast 1.08
         edge-highlight 0.20
-        refraction 0.018
+        refraction 0.012
         inner-shadow 0.08
         chromatic 0.0
-        lens-depth 0.02
+        lens-depth 0.012
     }
     material "pill" {
         xray false
+        saturation 1.12
+        tint-color "#ffffff"
+        tint-amount 0.045
+        contrast 1.05
         edge-highlight 0.24
-        refraction 0.02
+        refraction 0.018
         inner-shadow 0.08
         chromatic 0.0
-        lens-depth 0.03
+        lens-depth 0.025
     }
     material "dock" {
         xray false
+        saturation 1.10
+        tint-color "#ffffff"
+        tint-amount 0.055
+        contrast 1.06
         edge-highlight 0.20
-        refraction 0.014
+        refraction 0.010
         inner-shadow 0.08
         chromatic 0.0
-        lens-depth 0.018
+        lens-depth 0.012
     }
     // menu/toast read clearer: controlled edge light, gentler lens distortion.
     material "menu" {
         xray false
+        saturation 1.08
+        tint-color "#ffffff"
+        tint-amount 0.10
+        contrast 1.10
         edge-highlight 0.24
-        refraction 0.014
+        refraction 0.006
         inner-shadow 0.10
         chromatic 0.0
-        lens-depth 0.018
+        lens-depth 0.0
     }
     material "toast" {
         xray false
+        saturation 1.08
+        tint-color "#ffffff"
+        tint-amount 0.09
+        contrast 1.09
         edge-highlight 0.24
-        refraction 0.014
+        refraction 0.006
         inner-shadow 0.10
         chromatic 0.0
-        lens-depth 0.018
+        lens-depth 0.0
     }
     // backdrop is fullscreen (Launchpad); keep refraction/lens low so the
     // whole screen does not visibly warp, and keep shadow off (set in code
     // default). glass_surface_detail() also fades these out on big surfaces.
     material "backdrop" {
         xray false
-        edge-highlight 0.14
-        refraction 0.012
+        saturation 1.06
+        tint-color "#ffffff"
+        tint-amount 0.08
+        contrast 1.04
+        edge-highlight 0.08
+        refraction 0.004
         inner-shadow 0.0
         chromatic 0.0
         lens-depth 0.0
@@ -325,11 +378,15 @@ layer-rule {
         xray false
         blur true
         noise 0.006
-        saturation 1.16
+        saturation 1.10
         tint-color "#ffffff"
-        tint-amount 0.04
-        edge-highlight 0.34
-        refraction 0.04
+        tint-amount 0.07
+        contrast 1.08
+        edge-highlight 0.20
+        refraction 0.012
+        inner-shadow 0.08
+        chromatic 0.0
+        lens-depth 0.012
     }
 }
 
@@ -465,11 +522,15 @@ layer-rule {
         xray false
         blur true
         noise 0.006
-        saturation 1.16
+        saturation 1.10
         tint-color "#ffffff"
-        tint-amount 0.04
-        edge-highlight 0.34
-        refraction 0.04
+        tint-amount 0.07
+        contrast 1.08
+        edge-highlight 0.20
+        refraction 0.012
+        inner-shadow 0.08
+        chromatic 0.0
+        lens-depth 0.012
     }
 }
 
@@ -620,11 +681,15 @@ layer-rule {
         xray false
         blur true
         noise 0.006
-        saturation 1.16
+        saturation 1.08
         tint-color "#ffffff"
-        tint-amount 0.04
-        edge-highlight 0.42
-        refraction 0.02
+        tint-amount 0.10
+        contrast 1.10
+        edge-highlight 0.24
+        refraction 0.006
+        inner-shadow 0.10
+        chromatic 0.0
+        lens-depth 0.0
     }
 }
 

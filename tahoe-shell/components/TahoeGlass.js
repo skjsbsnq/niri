@@ -36,3 +36,55 @@ var StrokeDock = "#44ffffff";
 var StrokeTopBar = "#34ffffff";
 var StrokePill = "#48ffffff";
 var StrokeToast = "#34ffffff";
+
+function radiusForMaterial(material) {
+    switch (material) {
+    case MaterialPill:
+        return RadiusPill;
+    case MaterialDock:
+        return RadiusDock;
+    case MaterialMenu:
+        return RadiusMenu;
+    case MaterialToast:
+        return RadiusToast;
+    case MaterialBackdrop:
+        return RadiusBackdrop;
+    case MaterialPanel:
+    default:
+        return RadiusPanel;
+    }
+}
+
+function fillForMaterial(material) {
+    switch (material) {
+    case MaterialPill:
+        return FillPill;
+    case MaterialDock:
+        return FillDock;
+    case MaterialBackdrop:
+        return FillBackdrop;
+    case MaterialMenu:
+        return FillPanelBright;
+    case MaterialPanel:
+    case MaterialToast:
+    default:
+        return FillPanel;
+    }
+}
+
+function strokeForMaterial(material) {
+    switch (material) {
+    case MaterialPill:
+        return StrokePill;
+    case MaterialDock:
+        return StrokeDock;
+    case MaterialMenu:
+        return StrokePanelBright;
+    case MaterialToast:
+        return StrokeToast;
+    case MaterialPanel:
+    case MaterialBackdrop:
+    default:
+        return StrokePanel;
+    }
+}

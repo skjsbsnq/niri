@@ -71,22 +71,7 @@ PanelWindow {
         }
     }
 
-    TahoeGlass.regions: [
-        TahoeGlassRegion {
-            x: launcher.x + panelSurface.x
-            y: launcher.y + panelSurface.y
-            width: panelSurface.width
-            height: panelSurface.height
-            material: panelSurface.tahoeGlassMaterial
-            radius: panelSurface.tahoeGlassRadius
-            blur: true
-            shadow: true
-            clip: true
-            interaction: root.compositorLayerAnimations ? 1 : launcher.opacity
-            materialAlpha: root.compositorLayerAnimations ? 1 : launcher.opacity
-            enabled: root.open || launcher.opacity > 0.01
-        }
-    ]
+    TahoeGlass.regions: [panelSurface.region]
 
     MouseArea {
         anchors.fill: parent
@@ -126,23 +111,22 @@ PanelWindow {
             }
         }
 
-        Rectangle {
+        GlassPanel {
             id: panelSurface
-            readonly property string tahoeGlassMaterial: GlassStyle.MaterialPanel
-            readonly property real tahoeGlassRadius: GlassStyle.RadiusPanel
 
             anchors.fill: parent
-            radius: tahoeGlassRadius
-            color: GlassStyle.FillPanelBright
-        }
-
-        Rectangle {
-            anchors.fill: parent
-            anchors.margins: 1
-            radius: panelSurface.radius - 1
-            color: "transparent"
-            border.color: GlassStyle.StrokePanelBright
-            border.width: 1
+            material: GlassStyle.MaterialPanel
+            radius: GlassStyle.RadiusPanel
+            fillColor: GlassStyle.FillPanelBright
+            strokeColor: GlassStyle.StrokePanelBright
+            useItemRegion: false
+            regionX: Math.round(launcher.x + panelSurface.x)
+            regionY: Math.round(launcher.y + panelSurface.y)
+            regionWidth: Math.round(panelSurface.width)
+            regionHeight: Math.round(panelSurface.height)
+            interaction: root.compositorLayerAnimations ? 1 : launcher.opacity
+            materialAlpha: root.compositorLayerAnimations ? 1 : launcher.opacity
+            glassEnabled: root.open || launcher.opacity > 0.01
         }
 
         Item {

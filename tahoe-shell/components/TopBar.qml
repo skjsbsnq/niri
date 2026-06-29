@@ -107,51 +107,26 @@ PanelWindow {
     //
     // Keep the surface thick enough to read as glass after the shared panel
     // material was made more restrained for bright backgrounds.
-    TahoeGlass.regions: [
-        TahoeGlassRegion {
-            item: barSurface
-            material: barSurface.tahoeGlassMaterial
-            radius: barSurface.tahoeGlassRadius
-            blur: true
-            shadow: true
-            clip: true
-            materialAlpha: barSurface.opacity
-            enabled: barSurface.opacity > 0.01
-        }
-    ]
+    TahoeGlass.regions: [barSurface.region]
 
-    Rectangle {
+    GlassPanel {
         id: barSurface
-        readonly property string tahoeGlassMaterial: GlassStyle.MaterialPanel
-        readonly property real tahoeGlassRadius: GlassStyle.RadiusTopBar
 
         anchors.fill: parent
         anchors.leftMargin: 8
         anchors.rightMargin: 8
         anchors.topMargin: 4
         anchors.bottomMargin: 4
-        radius: tahoeGlassRadius
-        color: root.glassFill
+        material: GlassStyle.MaterialPanel
+        radius: GlassStyle.RadiusTopBar
+        fillColor: root.glassFill
+        strokeColor: root.glassStroke
+        materialAlpha: opacity
+        glassEnabled: opacity > 0.01
         opacity: 1
 
         Behavior on opacity {
             NumberAnimation { duration: 170; easing.type: Easing.OutCubic }
-        }
-
-        // NOTE: no `border.width` on the surface itself — a centered 1px
-        // border is antialiased against the pixels OUTSIDE the rect and
-        // produces faint near-square corners where the arc is tangent to
-        // the straight edges. Draw the glass edges with inset Rectangles
-        // instead, whose borders sit fully inside the surface and never
-        // overshoot (same convention as Dock.qml / NotificationToast.qml).
-        Rectangle {
-            // Top-left light edge (the Tahoe glass highlight).
-            anchors.fill: parent
-            anchors.margins: 1
-            radius: parent.radius - 1
-            color: "transparent"
-            border.color: root.glassStroke
-            border.width: 1
         }
 
         Item {

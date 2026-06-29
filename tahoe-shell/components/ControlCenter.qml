@@ -65,27 +65,10 @@ PanelWindow {
         left: root.popupLeftMargin
     }
 
-    TahoeGlass.regions: [
-        TahoeGlassRegion {
-            x: panel.x
-            y: panel.y
-            width: panel.width
-            height: panel.height
-            material: panel.tahoeGlassMaterial
-            radius: panel.tahoeGlassRadius
-            blur: true
-            shadow: true
-            clip: true
-            interaction: 1
-            materialAlpha: 1
-            enabled: true
-        }
-    ]
+    TahoeGlass.regions: [panel.region]
 
-    Rectangle {
+    GlassPanel {
         id: panel
-        readonly property string tahoeGlassMaterial: GlassStyle.MaterialPanel
-        readonly property real tahoeGlassRadius: GlassStyle.RadiusPanel
 
         x: 0
         // panel is the compositor-owned glass region item. Its region geometry
@@ -94,25 +77,11 @@ PanelWindow {
         width: parent.width
         implicitHeight: content.implicitHeight + 28
         height: implicitHeight
-        radius: tahoeGlassRadius
-        color: root.glassFill
+        material: GlassStyle.MaterialPanel
+        radius: GlassStyle.RadiusPanel
+        fillColor: root.glassFill
+        strokeColor: root.glassStroke
         opacity: 1
-
-        // NOTE: no `border.width` on the panel itself. A centered 1px
-        // border on a large-radius Rectangle is antialiased against the
-        // pixels OUTSIDE the rect, leaving faint near-square corners
-        // where the arc is tangent to the straight edges. The glass
-        // edges are drawn instead by the two inset Rectangles below,
-        // whose borders sit fully inside the panel and never overshoot.
-        Rectangle {
-            // Top-left light edge (the Tahoe glass highlight).
-            anchors.fill: parent
-            anchors.margins: 1
-            radius: parent.radius - 1
-            color: "transparent"
-            border.color: root.glassStroke
-            border.width: 1
-        }
 
         ColumnLayout {
             id: content

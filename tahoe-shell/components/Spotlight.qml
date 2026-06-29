@@ -85,38 +85,7 @@ PanelWindow {
         }
     }
 
-    TahoeGlass.regions: [
-        TahoeGlassRegion {
-            // Keep the glass region bounds independent from spotlightPanel's
-            // content-layer scale animation.
-            x: spotlightPanel.x + spotlightSurface.x
-            y: spotlightPanel.y + spotlightSurface.y
-            width: spotlightSurface.width
-            height: spotlightSurface.height
-            material: spotlightSurface.tahoeGlassMaterial
-            radius: spotlightSurface.tahoeGlassRadius
-            blur: true
-            shadow: true
-            clip: true
-            interaction: root.compositorLayerAnimations ? 1 : spotlightPanel.opacity
-            materialAlpha: root.compositorLayerAnimations ? 1 : spotlightPanel.opacity
-            enabled: root.open || spotlightPanel.opacity > 0.01
-        },
-        TahoeGlassRegion {
-            x: spotlightPanel.x + resultsSurface.x
-            y: spotlightPanel.y + resultsSurface.y
-            width: resultsSurface.width
-            height: resultsSurface.height
-            material: resultsSurface.tahoeGlassMaterial
-            radius: resultsSurface.tahoeGlassRadius
-            blur: true
-            shadow: true
-            clip: true
-            interaction: resultsSurface.opacity
-            materialAlpha: resultsSurface.opacity
-            enabled: (root.open || spotlightPanel.opacity > 0.01) && resultsSurface.visible
-        }
-    ]
+    TahoeGlass.regions: [spotlightSurface.region, resultsSurface.region]
 
     MouseArea {
         anchors.fill: parent
@@ -148,19 +117,27 @@ PanelWindow {
             }
         }
 
-        Rectangle {
+        GlassPanel {
             id: spotlightSurface
-            readonly property string tahoeGlassMaterial: GlassStyle.MaterialPill
-            readonly property real tahoeGlassRadius: GlassStyle.RadiusPill
 
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.top: parent.top
             height: 66
-            radius: tahoeGlassRadius
-            color: GlassStyle.FillPill
-            border.color: GlassStyle.StrokePill
-            border.width: 1
+            material: GlassStyle.MaterialPill
+            radius: GlassStyle.RadiusPill
+            fillColor: GlassStyle.FillPill
+            strokeColor: GlassStyle.StrokePill
+            useItemRegion: false
+            // Keep the glass region bounds independent from spotlightPanel's
+            // content-layer scale animation.
+            regionX: Math.round(spotlightPanel.x + spotlightSurface.x)
+            regionY: Math.round(spotlightPanel.y + spotlightSurface.y)
+            regionWidth: Math.round(spotlightSurface.width)
+            regionHeight: Math.round(spotlightSurface.height)
+            interaction: root.compositorLayerAnimations ? 1 : spotlightPanel.opacity
+            materialAlpha: root.compositorLayerAnimations ? 1 : spotlightPanel.opacity
+            glassEnabled: root.open || spotlightPanel.opacity > 0.01
 
             Text {
                 anchors.left: parent.left
@@ -257,20 +234,26 @@ PanelWindow {
             }
         }
 
-        Rectangle {
+        GlassPanel {
             id: resultsSurface
-            readonly property string tahoeGlassMaterial: GlassStyle.MaterialPanel
-            readonly property real tahoeGlassRadius: GlassStyle.RadiusPanelCompact
 
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.top: spotlightSurface.bottom
             anchors.topMargin: 10
             height: resultsColumn.implicitHeight + 12
-            radius: tahoeGlassRadius
-            color: GlassStyle.FillPanelBright
-            border.color: GlassStyle.StrokePanelBright
-            border.width: 1
+            material: GlassStyle.MaterialPanel
+            radius: GlassStyle.RadiusPanelCompact
+            fillColor: GlassStyle.FillPanelBright
+            strokeColor: GlassStyle.StrokePanelBright
+            useItemRegion: false
+            regionX: Math.round(spotlightPanel.x + resultsSurface.x)
+            regionY: Math.round(spotlightPanel.y + resultsSurface.y)
+            regionWidth: Math.round(resultsSurface.width)
+            regionHeight: Math.round(resultsSurface.height)
+            interaction: resultsSurface.opacity
+            materialAlpha: resultsSurface.opacity
+            glassEnabled: (root.open || spotlightPanel.opacity > 0.01) && resultsSurface.visible
             opacity: root.open && root.query.trim().length > 0 ? 1 : 0
             visible: opacity > 0.01
 

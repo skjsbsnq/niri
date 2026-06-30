@@ -17,6 +17,9 @@ Item {
     property string pendingMessage: ""
     property string lastAction: ""
     property var lockService: null
+    property var commandRunner
+    property var lastResult: null
+    property string lastError: ""
 
     readonly property bool hasPending: pendingAction.length > 0
 
@@ -75,6 +78,9 @@ Item {
     }
 
     function commandFor(action) {
+        if (commandRunner && commandRunner.powerCommandForAction)
+            return commandRunner.powerCommandForAction(action);
+
         if (action === "lock") {
             return ["loginctl", "lock-session"];
         }
@@ -113,9 +119,23 @@ Item {
             return;
 
         lastAction = action;
+        if (commandRunner && commandRunner.runPowerAction) {
+            var result = commandRunner.runPowerAction(action);
+            lastResult = result;
+            lastError = result && result.success ? "" : String(result && (result.detail || result.message) || "");
+            return;
+        }
+
         Quickshell.execDetached({
             command: command,
             workingDirectory: ""
         });
+        lastResult = {
+            "action": "power." + String(action || ""),
+            "status": "success",
+            "success": true,
+            "message": "已请求电源操作"
+        };
+        lastError = "";
     }
 }

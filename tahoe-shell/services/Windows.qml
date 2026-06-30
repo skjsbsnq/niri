@@ -51,8 +51,6 @@ Item {
     readonly property var recentWindowList: sortedRecentWindows(windowList)
     readonly property var focusedWindow: findFocusedWindow(windowList)
     readonly property var workspaceList: sortedWorkspaceList(ipcWorkspaces)
-    readonly property string thumbnailDirectory: runtimeDirectory() + "/tahoe/window-thumbnails"
-
     function setValue(name, value) {
         if (root[name] !== value)
             root[name] = value;
@@ -287,7 +285,6 @@ Item {
             return;
 
         delete root.ipcWindowsById[key];
-        cleanupThumbnailFileForId(key);
         var nextOrder = [];
         for (var i = 0; i < root.eventWindowOrder.length; i++) {
             if (String(root.eventWindowOrder[i]) !== key)
@@ -770,33 +767,6 @@ Item {
             return "";
 
         return String(value);
-    }
-
-    function runtimeDirectory() {
-        var dir = String(Quickshell.env("XDG_RUNTIME_DIR") || "").trim();
-        return dir.length > 0 ? dir : "/tmp";
-    }
-
-    function thumbnailPathForId(id) {
-        var key = String(id === undefined || id === null ? "" : id).trim();
-        if (key.length === 0)
-            return "";
-        return root.thumbnailDirectory + "/window-" + key + ".png";
-    }
-
-    function thumbnailPathForWindow(idOrWindow) {
-        var window = windowFromIdOrObject(idOrWindow);
-        if (!window || window.id === undefined || window.id === null)
-            return "";
-        return thumbnailPathForId(window.id);
-    }
-
-    function cleanupThumbnailFileForId(id) {
-        var path = thumbnailPathForId(id);
-        if (path.length === 0)
-            return;
-
-        Quickshell.execDetached({ command: ["rm", "-f", path] });
     }
 
     function asOptionalNumber(value) {

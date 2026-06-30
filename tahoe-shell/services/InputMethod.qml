@@ -13,9 +13,11 @@ Item {
     property int stateCode: 0
     property string currentName: ""
     property bool updating: false
+    property string errorText: ""
+    property var commandRunner
     readonly property string displayText: !available ? "--" : (active ? languageLabel(currentName) : "EN")
     readonly property string tooltipText: !available
-        ? "输入法不可用"
+        ? (errorText.length > 0 ? errorText : "输入法不可用")
         : (active ? (currentName.length > 0 ? currentName : "中文输入") : "英文输入")
 
     function languageLabel(name) {
@@ -28,6 +30,8 @@ Item {
     }
 
     function refresh() {
+        if (commandRunner && commandRunner.revision === 0)
+            commandRunner.refreshDependencies();
         if (!probe.running)
             probe.running = true;
     }
@@ -36,7 +40,15 @@ Item {
         if (!available)
             return;
 
+        if (commandRunner && commandRunner.revision > 0 && commandRunner.missingCommands && commandRunner.missingCommands(["fcitx5-remote"]).length > 0) {
+            available = false;
+            active = false;
+            errorText = "缺少 fcitx5-remote";
+            return;
+        }
+
         updating = true;
+        toggleProcess.command = commandRunner && commandRunner.inputMethodToggleCommand ? commandRunner.inputMethodToggleCommand() : ["fcitx5-remote", "-t"];
         toggleProcess.running = true;
     }
 
@@ -47,6 +59,7 @@ Item {
             active = false;
             stateCode = 0;
             currentName = "";
+            errorText = commandRunner && commandRunner.dependencyDetail ? commandRunner.dependencyDetail("fcitx") : "输入法不可用";
             return;
         }
 
@@ -56,12 +69,13 @@ Item {
         available = code > 0;
         active = code === 2;
         currentName = parts.length > 1 ? parts.slice(1).join("|").trim() : "";
+        errorText = available ? "" : (commandRunner && commandRunner.dependencyDetail ? commandRunner.dependencyDetail("fcitx") : "输入法不可用");
     }
 
     Process {
         id: probe
         running: false
-        command: [
+        command: root.commandRunner && root.commandRunner.inputMethodProbeCommand ? root.commandRunner.inputMethodProbeCommand() : [
             "sh",
             "-lc",
             "if ! command -v fcitx5-remote >/dev/null 2>&1; then echo '0|'; exit 0; fi; " +
@@ -101,6 +115,19 @@ Item {
         running: true
         repeat: true
         onTriggered: root.refresh()
+    }
+
+    Connections {
+        target: root.commandRunner
+        ignoreUnknownSignals: true
+
+        function onRevisionChanged() {
+            if (!root.commandRunner.commandAvailable("fcitx5-remote")) {
+                root.available = false;
+                root.active = false;
+                root.errorText = "缺少 fcitx5-remote";
+            }
+        }
     }
 
     Component.onCompleted: root.refresh()

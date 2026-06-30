@@ -8,15 +8,20 @@ Item {
     id: root
     visible: false
 
+    property var commandRunner
     property var statusItems: []
+    property var localStatusItems: []
     property var aboutItems: []
-    property bool refreshing: false
+    property bool localRefreshing: false
     property string lastUpdatedText: "尚未检测"
     property string lastError: ""
 
+    readonly property bool refreshing: localRefreshing || (!!commandRunner && commandRunner.refreshing)
     readonly property int okCount: countByState("ok")
-    readonly property int warnCount: countByState("warn")
-    readonly property int missingCount: countByState("missing")
+    readonly property int staleCount: countByState("stale")
+    readonly property int brokenCount: countByState("broken")
+    readonly property int warnCount: countByState("warn") + staleCount
+    readonly property int missingCount: countByState("missing") + brokenCount
 
     function countByState(state) {
         var count = 0;
@@ -28,12 +33,43 @@ Item {
     }
 
     function refresh() {
+        if (commandRunner && commandRunner.refreshDependencies)
+            commandRunner.refreshDependencies();
+
         if (probe.running)
             return;
 
-        refreshing = true;
+        localRefreshing = true;
         lastError = "";
         probe.running = true;
+    }
+
+    function mergeStatusItems(commandItems, localItems) {
+        var out = [];
+        var seen = {};
+        var groups = [commandItems || [], localItems || []];
+        for (var g = 0; g < groups.length; g++) {
+            var values = Array.isArray(groups[g]) ? groups[g] : [];
+            for (var i = 0; i < values.length; i++) {
+                var item = values[i];
+                if (!item)
+                    continue;
+
+                var id = String(item.id || "");
+                if (id.length > 0 && seen[id])
+                    continue;
+                if (id.length > 0)
+                    seen[id] = true;
+                out.push(item);
+            }
+        }
+        return out;
+    }
+
+    function rebuildStatusItems() {
+        statusItems = mergeStatusItems(commandRunner ? commandRunner.statusItems : [], localStatusItems);
+        if (commandRunner && commandRunner.lastUpdatedText && commandRunner.lastUpdatedText !== "尚未检测")
+            lastUpdatedText = commandRunner.lastUpdatedText;
     }
 
     function parseProbe(text) {
@@ -65,9 +101,10 @@ Item {
             }
         }
 
-        statusItems = statuses;
+        localStatusItems = statuses;
         aboutItems = about;
         lastUpdatedText = Qt.formatDateTime(new Date(), "HH:mm:ss");
+        rebuildStatusItems();
     }
 
     function probeScript() {
@@ -94,58 +131,38 @@ Item {
             "else",
             "  emit_status pipewire missing PipeWire '未检测到 PipeWire' '音频控制、录屏和 portal screencast 会受影响' '安装并启动 pipewire 与 pipewire-pulse'",
             "fi",
-            "if (have nmcli && [ \"$(nmcli -t -f RUNNING general 2>/dev/null)\" = running ]) || system_bus_name org.freedesktop.NetworkManager || is_system_active NetworkManager.service; then",
-            "  emit_status network ok NetworkManager 'NetworkManager 在线' 'Wi-Fi 和网络状态可用' ''",
-            "else",
-            "  emit_status network missing NetworkManager '未检测到 NetworkManager' 'Wi-Fi 列表、连接和网络状态不可用' '安装并启动 NetworkManager'",
-            "fi",
-            "if have bluetoothctl && bluetoothctl show >/dev/null 2>&1; then",
-            "  emit_status bluetooth ok Bluetooth '蓝牙控制器可用' '蓝牙开关和设备状态可用' ''",
-            "elif have bluetoothctl; then",
-            "  emit_status bluetooth warn Bluetooth '未检测到蓝牙控制器或 bluetoothd 未就绪' '蓝牙开关会显示不可用' '确认蓝牙硬件、rfkill 和 bluetooth.service'",
-            "else",
-            "  emit_status bluetooth missing Bluetooth '缺少 bluetoothctl' '蓝牙诊断和控制不可用' '安装 bluez'",
-            "fi",
             "if system_bus_name org.freedesktop.UPower || (have upower && upower -e >/dev/null 2>&1); then",
             "  emit_status upower ok UPower 'UPower 在线' '电池、电源和健康状态可用' ''",
             "else",
             "  emit_status upower missing UPower '未检测到 UPower' '电池百分比、电源来源和电源页不可用' '安装并启动 upower'",
             "fi",
-            "if have fcitx5-remote; then",
-            "  fcitx_state=\"$(fcitx5-remote 2>/dev/null || echo 0)\"",
-            "  if [ \"$fcitx_state\" = 1 ] || [ \"$fcitx_state\" = 2 ]; then",
-            "    emit_status fcitx ok fcitx5 \"fcitx5-remote 状态 $fcitx_state\" '输入法状态和切换可用' ''",
-            "  else",
-            "    emit_status fcitx warn fcitx5 'fcitx5-remote 存在但 daemon 未响应' '输入法状态可能不可用' '启动 fcitx5 或检查 DBus 环境'",
-            "  fi",
+            "lock_ui=\"$shell_dir/components/LockScreen.qml\"",
+            "lock_script=\"$shell_dir/scripts/tahoe-lock.sh\"",
+            "shell_qml=\"$shell_dir/shell.qml\"",
+            "lock_ui_ok=0",
+            "[ -r \"$lock_ui\" ] && grep -q 'WlSessionLock' \"$lock_ui\" && lock_ui_ok=1",
+            "lock_ipc_ok=0",
+            "[ -r \"$shell_qml\" ] && grep -q 'function lock()' \"$shell_qml\" && grep -q 'function lockFrom' \"$shell_qml\" && lock_ipc_ok=1",
+            "idle_lock_ok=0",
+            "[ -r \"$shell_qml\" ] && grep -q 'IdleMonitor' \"$shell_qml\" && grep -q 'requestLock(\"idle\")' \"$shell_qml\" && idle_lock_ok=1",
+            "lock_helper_ok=0",
+            "[ -x \"$lock_script\" ] && lock_helper_ok=1",
+            "fallback_detail='swaylock emergency fallback 不可用'",
+            "have swaylock && fallback_detail='swaylock emergency fallback 可用'",
+            "if [ \"$lock_ui_ok\" = 1 ] && [ \"$lock_ipc_ok\" = 1 ] && [ \"$idle_lock_ok\" = 1 ] && [ \"$lock_helper_ok\" = 1 ]; then",
+            "  emit_status lockpath ok 'Tahoe 锁屏路径' \"LockScreen、IPC lock、idle monitor 与快捷键 helper 可用；$fallback_detail\" '快捷键、电源菜单和 idle 都进入 Tahoe lock path' ''",
+            "elif [ \"$lock_ui_ok\" = 1 ] && [ \"$lock_ipc_ok\" = 1 ]; then",
+            "  emit_status lockpath warn 'Tahoe 锁屏路径' \"Tahoe LockScreen 和 IPC 可用，但 idle/helper 不完整；$fallback_detail\" '电源菜单可用，快捷键或 idle 可能没有完全统一' '确认 shell.qml IdleMonitor 和 scripts/tahoe-lock.sh 已部署且可执行'",
             "else",
-            "  emit_status fcitx missing fcitx5 '缺少 fcitx5-remote' '顶栏输入法状态和切换不可用' '安装 fcitx5'",
+            "  emit_status lockpath missing 'Tahoe 锁屏路径' \"Tahoe LockScreen 或 IPC lock 不完整；$fallback_detail\" '快捷键、电源菜单和 idle 可能继续分裂或无法锁屏' '确认 LockScreen.qml 加载，并且 tahoe IPC 暴露 lock/lockFrom'",
             "fi",
-            "shot_missing=\"$(missing_commands grim slurp)\"",
-            "if [ -z \"$shot_missing\" ]; then",
-            "  if have swappy; then",
-            "    emit_status screenshot ok '截图工具' 'grim、slurp、swappy 均可用' '选区截图、复制和标注可用' ''",
-            "  else",
-            "    emit_status screenshot warn '截图工具' 'grim 和 slurp 可用，缺少 swappy' '截图可保存和复制，但标注动作不可用' '安装 swappy 以启用标注'",
-            "  fi",
-            "else",
-            "  emit_status screenshot missing '截图工具' \"缺少 $shot_missing\" '截图入口不可用' '安装 grim 和 slurp'",
-            "fi",
-            "clip_missing=\"$(missing_commands cliphist wl-copy wl-paste)\"",
-            "if [ -z \"$clip_missing\" ]; then",
-            "  emit_status clipboard ok '剪贴板工具' 'cliphist 与 wl-clipboard 可用' '剪贴板历史可用' ''",
-            "else",
-            "  emit_status clipboard missing '剪贴板工具' \"缺少 $clip_missing\" '剪贴板历史不可用或只能部分工作' '安装 cliphist 与 wl-clipboard'",
-            "fi",
+            "repo=\"$shell_dir\"",
+            "while [ \"$repo\" != / ] && [ ! -d \"$repo/.git\" ] && [ ! -f \"$repo/.git\" ]; do repo=\"$(dirname \"$repo\")\"; done",
+            "[ -d \"$repo/.git\" ] || [ -f \"$repo/.git\" ] || repo=\"$shell_dir\"",
             "if user_bus_name org.kde.StatusNotifierWatcher; then",
             "  emit_status sni ok 'SNI 托盘' 'StatusNotifierWatcher 已注册' '现代托盘图标可显示菜单' ''",
             "else",
             "  emit_status sni warn 'SNI 托盘' '未在 session bus 上看到 StatusNotifierWatcher' '现代托盘图标可能不显示' '确认 Tahoe Shell 正在运行并拥有托盘服务'",
-            "fi",
-            "if user_bus_name com.canonical.AppMenu.Registrar; then",
-            "  emit_status appmenu ok 'AppMenu registrar' 'com.canonical.AppMenu.Registrar 在线' '支持 appmenu 的应用可把原生菜单发布给 Tahoe 顶栏' ''",
-            "else",
-            "  emit_status appmenu warn 'AppMenu registrar' '未检测到 com.canonical.AppMenu.Registrar' '支持全局菜单的应用不会通过 registrar 暴露菜单；Tahoe 会尝试 focused app /MenuBar 降级探测' '安装或启动 appmenu registrar/bridge'",
             "fi",
             "legacy_autostart=0",
             "[ -n \"${HOME:-}\" ] && [ -f \"$HOME/.config/autostart/xembedsniproxy.desktop\" ] && legacy_autostart=1",
@@ -159,26 +176,42 @@ Item {
             "else",
             "  emit_status legacytray missing 'legacy tray bridge' '缺少 xembedsniproxy' '旧 XEmbed 托盘应用不会出现在顶栏；Steam、同步盘等可能看起来消失' '安装 xembedsniproxy，并配置会话自启动'",
             "fi",
-            "if pgrep -x xwayland-satellite >/dev/null 2>&1; then",
-            "  emit_status xwayland ok xwayland-satellite 'xwayland-satellite 正在运行' 'X11 应用兼容路径可用' ''",
+            "xwayland_check=\"$repo/scripts/check-xwayland-satellite-compat.sh\"",
+            "[ -x \"$xwayland_check\" ] || xwayland_check=\"$shell_dir/scripts/check-xwayland-satellite-compat.sh\"",
+            "if [ -x \"$xwayland_check\" ]; then",
+            "  \"$xwayland_check\" --status 2>/dev/null || true",
+            "elif pgrep -x xwayland-satellite >/dev/null 2>&1; then",
+            "  emit_status xwayland ok 'XWayland patched path' 'xwayland-satellite 正在运行，但缺少 Tahoe 兼容诊断脚本' 'X11 应用兼容路径可用；patch/ref/wrapper 状态未知' '部署 scripts/check-xwayland-satellite-compat.sh'",
             "elif have xwayland-satellite; then",
-            "  emit_status xwayland warn xwayland-satellite '已安装但未运行' 'X11 应用可能无法显示' '按需启动 xwayland-satellite'",
+            "  emit_status xwayland stale 'XWayland patched path' '已安装 xwayland-satellite 但未运行，且缺少 Tahoe 兼容诊断脚本' 'X11 应用可能无法显示；patch/ref/wrapper 状态未知' '部署 scripts/check-xwayland-satellite-compat.sh 并运行 arch-update.sh'",
             "else",
-            "  emit_status xwayland missing xwayland-satellite '缺少 xwayland-satellite' '依赖 XWayland 的应用可能无法使用' '安装 xwayland-satellite'",
+            "  emit_status xwayland missing 'XWayland patched path' '缺少 xwayland-satellite，且缺少 Tahoe 兼容诊断脚本' '依赖 XWayland 的应用可能无法使用' '运行 BUILD_XWAYLAND_SATELLITE=auto bash scripts/arch-update.sh'",
             "fi",
             "if have niri && niri msg --json outputs >/dev/null 2>&1; then",
             "  emit_status niri ok 'niri IPC' 'niri msg 可用' '窗口总览、Dock 窗口菜单和工作区状态可用' ''",
             "else",
             "  emit_status niri warn 'niri IPC' 'niri msg 当前不可用' '窗口模型可能只能使用 Quickshell toplevel 降级路径' '确认当前会话运行在 niri 下'",
             "fi",
-            "repo=\"$shell_dir\"",
-            "while [ \"$repo\" != / ] && [ ! -d \"$repo/.git\" ] && [ ! -f \"$repo/.git\" ]; do repo=\"$(dirname \"$repo\")\"; done",
-            "[ -d \"$repo/.git\" ] || [ -f \"$repo/.git\" ] || repo=\"$shell_dir\"",
             "repo_commit=\"$(git -C \"$repo\" rev-parse --short HEAD 2>/dev/null || echo unknown)\"",
             "dirty_count=\"$(git -C \"$repo\" status --short 2>/dev/null | wc -l | tr -d ' ')\"",
             "[ \"$dirty_count\" != 0 ] && repo_commit=\"$repo_commit (+$dirty_count)\"",
             "niri_sub=\"$(git -C \"$repo/niri\" rev-parse --short HEAD 2>/dev/null || echo missing)\"",
             "qs_sub=\"$(git -C \"$repo/quickshell\" rev-parse --short HEAD 2>/dev/null || echo missing)\"",
+            "thumbnail_provider=\"$shell_dir/services/ThumbnailProvider.qml\"",
+            "thumbnail_dir=\"${XDG_RUNTIME_DIR:-/tmp}/tahoe/window-thumbnails\"",
+            "thumbnail_provider_ok=0",
+            "[ -r \"$thumbnail_provider\" ] && grep -q 'requestThumbnail' \"$thumbnail_provider\" && grep -q 'maxQueueLength' \"$thumbnail_provider\" && thumbnail_provider_ok=1",
+            "thumbnail_ipc_boundary_ok=0",
+            "[ -r \"$repo/niri/src/ipc/server.rs\" ] && grep -q 'validate_tahoe_thumbnail_path' \"$repo/niri/src/ipc/server.rs\" && thumbnail_ipc_boundary_ok=1",
+            "thumbnail_cli_ok=0",
+            "have niri && niri msg window-thumbnail --help >/dev/null 2>&1 && thumbnail_cli_ok=1",
+            "if [ \"$thumbnail_provider_ok\" = 1 ] && [ \"$thumbnail_ipc_boundary_ok\" = 1 ] && [ \"$thumbnail_cli_ok\" = 1 ]; then",
+            "  emit_status thumbnails ok '窗口缩略图 provider' \"provider 队列、niri window-thumbnail CLI 和 runtime 路径边界可用；目录 $thumbnail_dir\" 'Dock、任务切换器和窗口总览共用同一缩略图路径' ''",
+            "elif [ \"$thumbnail_provider_ok\" = 1 ] && [ \"$thumbnail_cli_ok\" = 1 ]; then",
+            "  emit_status thumbnails warn '窗口缩略图 provider' \"provider 和 CLI 可用，但未确认 niri IPC 路径边界；目录 $thumbnail_dir\" '缩略图可用，但 compositor 写入边界需要确认' '确认 niri IPC 限制到 XDG_RUNTIME_DIR/tahoe/window-thumbnails'",
+            "else",
+            "  emit_status thumbnails missing '窗口缩略图 provider' \"provider、CLI 或路径边界不完整；目录 $thumbnail_dir\" 'Dock 最小化缩略栏、任务切换器或窗口总览会退回图标/几何 fallback' '确认 ThumbnailProvider.qml 和 niri msg window-thumbnail 已部署'",
+            "fi",
             "niri_runtime=\"$(niri --version 2>/dev/null | head -n 1 || echo unavailable)\"",
             "qs_runtime=\"$(quickshell --version 2>/dev/null | head -n 1 || echo unavailable)\"",
             "gpu=\"$(lspci 2>/dev/null | grep -Ei 'VGA|3D|Display' | sed -E 's/^[^:]+: //' | head -n 2 | paste -sd '; ' -)\"",
@@ -207,9 +240,18 @@ Item {
             onStreamFinished: root.parseProbe(probeOut.text)
         }
         onExited: function(code, exitStatus) {
-            root.refreshing = false;
+            root.localRefreshing = false;
             if (code !== 0)
                 root.lastError = "系统状态检测失败，退出码 " + String(code);
+        }
+    }
+
+    Connections {
+        target: root.commandRunner
+        ignoreUnknownSignals: true
+
+        function onRevisionChanged() {
+            root.rebuildStatusItems();
         }
     }
 

@@ -10,6 +10,7 @@ PanelWindow {
 
     property bool open: false
     property var windowsService
+    property var thumbnailProvider
     property var appsService
     property string selectedWindowKey: ""
     property var selectedCardItem: null
@@ -45,6 +46,7 @@ PanelWindow {
     onOpenChanged: {
         if (open) {
             selectFocusedOrFirst();
+            requestVisibleThumbnails(false);
             Qt.callLater(function() {
                 if (root.open)
                     focusCatcher.forceActiveFocus();
@@ -52,7 +54,10 @@ PanelWindow {
         }
     }
 
-    onWindowChoicesChanged: if (open) syncSelectionAfterModelChange()
+    onWindowChoicesChanged: if (open) {
+        syncSelectionAfterModelChange();
+        requestVisibleThumbnails(false);
+    }
 
     function numberOr(value, fallback) {
         var number = Number(value);
@@ -266,6 +271,18 @@ PanelWindow {
         var width = Math.round(Number(rect.width || rect.w) || 0);
         var height = Math.round(Number(rect.height || rect.h) || 0);
         return String(x) + "," + String(y) + " " + String(width) + "x" + String(height);
+    }
+
+    function requestThumbnailFor(window, force) {
+        if (!root.thumbnailProvider || !window)
+            return;
+        root.thumbnailProvider.requestThumbnail(window, 480, 300, "window-overview", !!force);
+    }
+
+    function requestVisibleThumbnails(force) {
+        if (!root.thumbnailProvider)
+            return;
+        root.thumbnailProvider.requestThumbnails(root.windowChoices, 480, 300, "window-overview", !!force);
     }
 
     function previewRect(window, bounds, canvasWidth, canvasHeight) {
@@ -523,13 +540,25 @@ PanelWindow {
                                     readonly property bool minimized: !!(modelData && modelData.isMinimized)
                                     readonly property string iconSource: root.windowIcon(modelData)
                                     readonly property var miniRect: root.previewRect(modelData, groupDelegate.modelData.bounds, miniMap.width, miniMap.height)
+                                    readonly property int thumbnailRevision: root.thumbnailProvider ? root.thumbnailProvider.revision : 0
+                                    readonly property var thumbnailState: root.thumbnailProvider ? root.thumbnailProvider.thumbnailStateForWindow(modelData, thumbnailRevision) : null
+                                    readonly property bool thumbnailAvailable: !!(thumbnailState && thumbnailState.ready && !thumbnailState.failed)
+                                    readonly property string thumbnailSource: thumbnailAvailable && thumbnailState.path
+                                        ? "file://" + String(thumbnailState.path) + "?v=" + String(thumbnailState.generation || 0)
+                                        : ""
 
                                     width: Math.max(188, Math.min(236, groupDelegate.width))
                                     height: 164
 
                                     onSelectedChanged: if (selected) root.selectedCardItem = windowCard
+                                    onModelDataChanged: if (root.open) root.requestThumbnailFor(modelData, false)
 
-                                    Component.onCompleted: if (selected) root.selectedCardItem = windowCard
+                                    Component.onCompleted: {
+                                        if (selected)
+                                            root.selectedCardItem = windowCard;
+                                        if (root.open)
+                                            root.requestThumbnailFor(modelData, false);
+                                    }
 
                                     Rectangle {
                                         anchors.fill: parent
@@ -553,6 +582,25 @@ PanelWindow {
                                         color: "#1f20242a"
                                         border.color: "#22ffffff"
                                         border.width: 1
+                                        clip: true
+
+                                        Image {
+                                            id: thumbnailImage
+
+                                            anchors.fill: parent
+                                            source: windowCard.thumbnailSource
+                                            fillMode: Image.PreserveAspectCrop
+                                            smooth: true
+                                            mipmap: true
+                                            asynchronous: true
+                                            cache: false
+                                            opacity: windowCard.minimized ? 0.62 : 1
+                                            visible: windowCard.thumbnailSource.length > 0 && status !== Image.Error
+                                            onStatusChanged: {
+                                                if (status === Image.Error && windowCard.thumbnailAvailable && root.thumbnailProvider)
+                                                    root.thumbnailProvider.markImageFailed(windowCard.modelData, "window overview thumbnail image failed to load");
+                                            }
+                                        }
 
                                         Rectangle {
                                             x: windowCard.miniRect.x
@@ -563,6 +611,31 @@ PanelWindow {
                                             color: windowCard.minimized ? "#5f8c929a" : "#8af7fbff"
                                             border.color: windowCard.modelData && windowCard.modelData.isFocused ? "#202124" : "#66ffffff"
                                             border.width: windowCard.modelData && windowCard.modelData.isFocused ? 2 : 1
+                                            visible: !thumbnailImage.visible
+                                        }
+
+                                        Rectangle {
+                                            anchors.left: parent.left
+                                            anchors.bottom: parent.bottom
+                                            anchors.margins: 6
+                                            width: 24
+                                            height: 24
+                                            radius: 7
+                                            color: "#e8ffffff"
+                                            border.color: "#70ffffff"
+                                            border.width: 1
+                                            visible: thumbnailImage.visible && windowCard.iconSource.length > 0
+
+                                            Image {
+                                                anchors.centerIn: parent
+                                                width: 17
+                                                height: 17
+                                                source: windowCard.iconSource
+                                                fillMode: Image.PreserveAspectFit
+                                                smooth: true
+                                                mipmap: true
+                                                asynchronous: true
+                                            }
                                         }
                                     }
 

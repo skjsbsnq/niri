@@ -25,6 +25,7 @@ Item {
     property string pendingPinPreview: ""
     property string pendingPinIcon: "\ue14f"
     property var pinnedEntries: []
+    property var commandRunner
 
     readonly property bool available: cliphistAvailable && wlCopyAvailable
     readonly property int historyCount: entries ? entries.length : 0
@@ -255,7 +256,46 @@ Item {
         root.pendingPinIcon = "\ue14f";
     }
 
+    function applyCommandRunnerTools() {
+        if (!root.commandRunner)
+            return false;
+
+        if (root.commandRunner.revision === 0) {
+            root.commandRunner.refreshDependencies();
+            return false;
+        }
+
+        root.cliphistAvailable = root.commandRunner.commandAvailable("cliphist");
+        root.wlCopyAvailable = root.commandRunner.commandAvailable("wl-copy");
+        root.wlPasteAvailable = root.commandRunner.commandAvailable("wl-paste");
+
+        if (!root.cliphistAvailable)
+            root.errorText = "需要安装 cliphist";
+        else if (!root.wlCopyAvailable)
+            root.errorText = "需要安装 wl-clipboard";
+        else if (!root.wlPasteAvailable)
+            root.errorText = "需要 wl-paste 以监听剪贴板";
+        else
+            root.errorText = "";
+
+        var detail = root.commandRunner.dependencyDetail("clipboard");
+        if (root.errorText.length === 0 && root.commandRunner.dependencyState("clipboard") === "warn")
+            root.errorText = detail;
+
+        root.statusText = root.available ? "剪贴板历史可用" : "剪贴板历史不可用";
+
+        if (root.cliphistAvailable && root.wlPasteAvailable)
+            root.startWatcher();
+        if (root.cliphistAvailable)
+            Qt.callLater(root.refresh);
+
+        return true;
+    }
+
     function detectTools() {
+        if (root.applyCommandRunnerTools())
+            return;
+
         if (!toolProbe.running)
             toolProbe.running = true;
     }
@@ -298,6 +338,12 @@ Item {
             root.startWatcher();
         if (root.cliphistAvailable)
             Qt.callLater(root.refresh);
+    }
+
+    function dependencyWarningText() {
+        if (!root.commandRunner || root.commandRunner.revision === 0)
+            return "";
+        return root.commandRunner.dependencyState("clipboard") === "ok" ? "" : root.commandRunner.dependencyDetail("clipboard");
     }
 
     function parseList(text) {
@@ -358,6 +404,13 @@ Item {
             return;
         }
 
+        if (root.commandRunner && root.commandRunner.runClipboardCopyEntry) {
+            var result = root.commandRunner.runClipboardCopyEntry(entry.raw, root.textMimeType);
+            root.statusText = result && result.success ? "已复制" : String(result && (result.detail || result.message) || "复制失败");
+            root.errorText = result && result.success ? root.dependencyWarningText() : root.statusText;
+            return;
+        }
+
         root.statusText = "已复制";
         Quickshell.execDetached({
             command: ["sh", "-c", "printf %s \"$1\" | cliphist decode | wl-copy --type '" + root.textMimeType + "'", "sh", entry.raw],
@@ -369,6 +422,13 @@ Item {
         if (!pin || !pin.text || !root.wlCopyAvailable)
             return;
 
+        if (root.commandRunner && root.commandRunner.runClipboardCopyText) {
+            var result = root.commandRunner.runClipboardCopyText(String(pin.text || ""), root.textMimeType);
+            root.statusText = result && result.success ? "已复制固定项" : String(result && (result.detail || result.message) || "复制失败");
+            root.errorText = result && result.success ? root.dependencyWarningText() : root.statusText;
+            return;
+        }
+
         root.statusText = "已复制固定项";
         Quickshell.execDetached({
             command: ["sh", "-c", "printf %s \"$1\" | wl-copy --type '" + root.textMimeType + "'", "sh", String(pin.text || "")],
@@ -379,6 +439,14 @@ Item {
     function deleteEntry(entry) {
         if (!entry || !entry.raw || !root.cliphistAvailable)
             return;
+
+        if (root.commandRunner && root.commandRunner.runClipboardDeleteEntry) {
+            var result = root.commandRunner.runClipboardDeleteEntry(entry.raw);
+            root.statusText = result && result.success ? "已删除" : String(result && (result.detail || result.message) || "删除失败");
+            root.errorText = result && result.success ? root.dependencyWarningText() : root.statusText;
+            root.scheduleRefresh();
+            return;
+        }
 
         root.statusText = "已删除";
         Quickshell.execDetached({
@@ -396,6 +464,18 @@ Item {
         root.lastListText = "";
         root.clearEntries();
         root.setValue("statusText", root.pinnedCount > 0 ? "已清空历史，固定项保留" : "已清空历史");
+        if (root.commandRunner && root.commandRunner.runClipboardClearHistory) {
+            var result = root.commandRunner.runClipboardClearHistory();
+            if (result && !result.success) {
+                root.statusText = String(result.detail || result.message || "清空失败");
+                root.errorText = root.statusText;
+            } else {
+                root.errorText = root.dependencyWarningText();
+            }
+            root.scheduleRefresh();
+            return;
+        }
+
         Quickshell.execDetached({
             command: ["cliphist", "wipe"],
             workingDirectory: ""
@@ -431,7 +511,7 @@ Item {
     Process {
         id: listProbe
         running: false
-        command: ["cliphist", "list"]
+        command: root.commandRunner && root.commandRunner.clipboardListCommand ? root.commandRunner.clipboardListCommand() : ["cliphist", "list"]
         stdout: StdioCollector {
             id: listProbeOut
             onStreamFinished: root.parseList(listProbeOut.text)
@@ -450,7 +530,7 @@ Item {
     Process {
         id: pinDecodeProcess
         running: false
-        command: ["sh", "-c", "printf %s \"$1\" | cliphist decode", "sh", root.pendingPinRaw]
+        command: root.commandRunner && root.commandRunner.clipboardDecodeCommand ? root.commandRunner.clipboardDecodeCommand(root.pendingPinRaw) : ["sh", "-c", "printf %s \"$1\" | cliphist decode", "sh", root.pendingPinRaw]
         stdout: StdioCollector {
             id: pinDecodeOut
             onStreamFinished: root.finishPinDecode(pinDecodeOut.text)
@@ -466,7 +546,7 @@ Item {
     Process {
         id: clipboardWatcher
         running: false
-        command: ["wl-paste", "--watch", "cliphist", "store"]
+        command: root.commandRunner && root.commandRunner.clipboardWatchCommand ? root.commandRunner.clipboardWatchCommand() : ["wl-paste", "--watch", "cliphist", "store"]
         onExited: function(code, exitStatus) {
             if (root.cliphistAvailable && root.wlPasteAvailable)
                 watcherRestartTimer.restart();
@@ -492,6 +572,15 @@ Item {
         running: true
         repeat: true
         onTriggered: root.refresh()
+    }
+
+    Connections {
+        target: root.commandRunner
+        ignoreUnknownSignals: true
+
+        function onRevisionChanged() {
+            root.applyCommandRunnerTools();
+        }
     }
 
     Component.onCompleted: {

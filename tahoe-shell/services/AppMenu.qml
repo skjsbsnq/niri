@@ -10,6 +10,7 @@ Item {
 
     property var windowsService
     property var appsService
+    property var commandRunner
     property bool registrarAvailable: false
     property string registrarOwner: ""
     property bool probing: false
@@ -32,6 +33,31 @@ Item {
         : nativeMenuStatus
 
     function refresh() {
+        if (commandRunner && commandRunner.revision === 0)
+            commandRunner.refreshDependencies();
+
+        if (commandRunner && commandRunner.revision > 0 && commandRunner.dependency) {
+            var appmenuDependency = commandRunner.dependency("appmenu");
+            var appmenuState = appmenuDependency ? String(appmenuDependency.state || "") : "";
+            if (appmenuState === "missing" || appmenuState === "broken") {
+                probing = false;
+                applyProbe(JSON.stringify({
+                    "status": "应用菜单不可用",
+                    "detail": String(appmenuDependency.detail || "") + (appmenuDependency.action ? "；" + String(appmenuDependency.action) : "")
+                }));
+                return;
+            }
+        }
+
+        if (commandRunner && commandRunner.revision > 0 && commandRunner.missingCommands) {
+            var missing = commandRunner.missingCommands(["python3", "busctl"]);
+            if (missing.length > 0) {
+                probing = false;
+                applyProbe("{\"status\":\"应用菜单不可用\",\"detail\":\"缺少 " + missing.join(" ") + "\"}");
+                return;
+            }
+        }
+
         if (!probe.running) {
             probing = true;
             probe.running = true;
@@ -76,21 +102,32 @@ Item {
         if (trigger.running)
             return;
 
-        trigger.command = [
-            "busctl",
-            "--user",
-            "call",
-            nativeMenuService,
-            nativeMenuPath,
-            "com.canonical.dbusmenu",
-            "Event",
-            "isvu",
-            String(item.id),
-            "clicked",
-            "i",
-            "0",
-            "0"
-        ];
+        if (commandRunner && commandRunner.revision > 0 && commandRunner.missingCommands) {
+            var missing = commandRunner.missingCommands(["busctl"]);
+            if (missing.length > 0) {
+                nativeMenuStatus = "应用菜单动作不可用";
+                nativeMenuDetail = "缺少 " + missing.join(" ");
+                return;
+            }
+        }
+
+        trigger.command = commandRunner && commandRunner.appMenuTriggerCommand
+            ? commandRunner.appMenuTriggerCommand(nativeMenuService, nativeMenuPath, item.id)
+            : [
+                "busctl",
+                "--user",
+                "call",
+                nativeMenuService,
+                nativeMenuPath,
+                "com.canonical.dbusmenu",
+                "Event",
+                "isvu",
+                String(item.id),
+                "clicked",
+                "i",
+                "0",
+                "0"
+            ];
         trigger.running = true;
     }
 
@@ -112,14 +149,16 @@ Item {
     Process {
         id: probe
         running: false
-        command: [
-            "python3",
-            Quickshell.shellPath("services/appmenu_probe.py"),
-            root.activeWindowId,
-            root.activePid,
-            root.activeAppId,
-            root.activeWindowTitle
-        ]
+        command: root.commandRunner && root.commandRunner.appMenuProbeCommand
+            ? root.commandRunner.appMenuProbeCommand(root.activeWindowId, root.activePid, root.activeAppId, root.activeWindowTitle)
+            : [
+                "python3",
+                Quickshell.shellPath("services/appmenu_probe.py"),
+                root.activeWindowId,
+                root.activePid,
+                root.activeAppId,
+                root.activeWindowTitle
+            ]
         stdout: StdioCollector {
             id: probeOut
             onStreamFinished: root.applyProbe(probeOut.text)

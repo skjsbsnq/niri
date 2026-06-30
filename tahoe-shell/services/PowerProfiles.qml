@@ -15,6 +15,7 @@ Item {
     property string errorText: ""
     property string backend: ""
     property var availableProfileIds: []
+    property var commandRunner
 
     readonly property var profiles: [
         {
@@ -84,7 +85,7 @@ Item {
         root.setValue("profile", id);
         root.setValue("updating", true);
         profileSetter.command = root.backend === "busctl"
-            ? [
+            ? (root.commandRunner && root.commandRunner.powerProfileBusSetCommand ? root.commandRunner.powerProfileBusSetCommand(id) : [
                 "busctl",
                 "set-property",
                 "net.hadess.PowerProfiles",
@@ -93,8 +94,8 @@ Item {
                 "ActiveProfile",
                 "s",
                 id
-            ]
-            : ["powerprofilesctl", "set", id];
+            ])
+            : (root.commandRunner && root.commandRunner.powerProfileCliSetCommand ? root.commandRunner.powerProfileCliSetCommand(id) : ["powerprofilesctl", "set", id]);
         profileSetter.running = true;
     }
 
@@ -127,7 +128,7 @@ Item {
     Process {
         id: busProfileProbe
         running: false
-        command: [
+        command: root.commandRunner && root.commandRunner.powerProfileBusGetCommand ? root.commandRunner.powerProfileBusGetCommand("ActiveProfile") : [
             "busctl",
             "get-property",
             "net.hadess.PowerProfiles",
@@ -148,7 +149,7 @@ Item {
     Process {
         id: busListProbe
         running: false
-        command: [
+        command: root.commandRunner && root.commandRunner.powerProfileBusGetCommand ? root.commandRunner.powerProfileBusGetCommand("Profiles") : [
             "busctl",
             "get-property",
             "net.hadess.PowerProfiles",
@@ -169,7 +170,7 @@ Item {
     Process {
         id: cliProfileProbe
         running: false
-        command: ["powerprofilesctl", "get"]
+        command: root.commandRunner && root.commandRunner.powerProfileCliGetCommand ? root.commandRunner.powerProfileCliGetCommand() : ["powerprofilesctl", "get"]
         stdout: StdioCollector {
             id: cliProfileProbeOut
             onStreamFinished: root.parseProfile(cliProfileProbeOut.text, "powerprofilesctl")
@@ -185,7 +186,7 @@ Item {
     Process {
         id: cliListProbe
         running: false
-        command: ["powerprofilesctl", "list"]
+        command: root.commandRunner && root.commandRunner.powerProfileCliListCommand ? root.commandRunner.powerProfileCliListCommand() : ["powerprofilesctl", "list"]
         stdout: StdioCollector {
             id: cliListProbeOut
             onStreamFinished: root.parseProfileList(cliListProbeOut.text)

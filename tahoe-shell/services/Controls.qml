@@ -32,6 +32,11 @@ Item {
     property bool controlsStateLoaded: false
     property int preferredWifiRestoreAttempts: 0
     property bool preferredWifiRestoreSuppressed: false
+    property var commandRunner
+    property string networkErrorText: ""
+    property string bluetoothErrorText: ""
+    property string brightnessErrorText: ""
+    property var lastActionResult: null
 
     FileView {
         id: controlsStateFile
@@ -145,6 +150,11 @@ Item {
     }
 
     function refreshBrightness() {
+        if (root.commandRunner && root.commandRunner.revision > 0 && !root.commandRunner.commandAvailable("brightnessctl")) {
+            root.brightnessErrorText = "缺少 brightnessctl";
+            root.setBrightnessAvailable(false);
+            return;
+        }
         brightnessProbe.running = true;
     }
 
@@ -164,6 +174,12 @@ Item {
         if (!isFinite(current) || !isFinite(max) || max <= 0)
             return;
 
+        if (root.commandRunner && root.commandRunner.revision > 0 && !root.commandRunner.commandAvailable("brightnessctl")) {
+            root.brightnessErrorText = "缺少 brightnessctl";
+            root.setBrightnessAvailable(false);
+            return;
+        }
+
         root.setBrightnessValue(current / max);
         root.setBrightnessAvailable(true);
     }
@@ -171,6 +187,11 @@ Item {
     function setBrightness(value) {
         if (!brightnessAvailable)
             return;
+        if (root.commandRunner && root.commandRunner.revision > 0 && !root.commandRunner.commandAvailable("brightnessctl")) {
+            root.brightnessErrorText = "缺少 brightnessctl";
+            root.setBrightnessAvailable(false);
+            return;
+        }
         var v = Math.max(0.05, Math.min(1, Number(value) || 0));
         brightnessUpdating = true;
         root.setBrightnessValue(v);
@@ -266,6 +287,8 @@ Item {
     }
 
     Component.onCompleted: {
+        if (root.commandRunner)
+            root.commandRunner.refreshDependencies();
         root.refreshBrightness();
         root.rescanWifi();
         if (root.wifiConnected)
@@ -510,24 +533,30 @@ Item {
 
         root.preferredWifiRestoreAttempts += 1;
         root.rescanWifi();
-        Quickshell.execDetached({
-            command: [
-                "sh",
-                "-lc",
-                [
-                    "ssid=\"$1\"",
-                    "[ -n \"$ssid\" ] || exit 0",
-                    "command -v nmcli >/dev/null 2>&1 || exit 0",
-                    "nmcli radio wifi on >/dev/null 2>&1 || true",
-                    "nmcli connection modify \"$ssid\" connection.autoconnect yes >/dev/null 2>&1 || true",
-                    "nmcli --wait 20 connection up id \"$ssid\" >/dev/null 2>&1",
-                    "  || nmcli --wait 20 device wifi connect \"$ssid\" >/dev/null 2>&1",
-                    "  || true"
-                ].join("\n"),
-                "sh",
-                ssid
-            ]
-        });
+        if (root.commandRunner && root.commandRunner.runWifiRestorePreferred) {
+            var result = root.commandRunner.runWifiRestorePreferred(ssid);
+            root.lastActionResult = result;
+            root.networkErrorText = result && result.success ? "" : String(result && (result.detail || result.message) || "");
+        } else {
+            Quickshell.execDetached({
+                command: [
+                    "sh",
+                    "-lc",
+                    [
+                        "ssid=\"$1\"",
+                        "[ -n \"$ssid\" ] || exit 0",
+                        "command -v nmcli >/dev/null 2>&1 || exit 0",
+                        "nmcli radio wifi on >/dev/null 2>&1 || true",
+                        "nmcli connection modify \"$ssid\" connection.autoconnect yes >/dev/null 2>&1 || true",
+                        "nmcli --wait 20 connection up id \"$ssid\" >/dev/null 2>&1",
+                        "  || nmcli --wait 20 device wifi connect \"$ssid\" >/dev/null 2>&1",
+                        "  || true"
+                    ].join("\n"),
+                    "sh",
+                    ssid
+                ]
+            });
+        }
 
         if (root.preferredWifiRestoreAttempts < 6)
             root.schedulePreferredWifiRestore(10000, false);
@@ -544,6 +573,13 @@ Item {
         var name = String(ssid || "").trim();
         if (!root.validWifiSsid(name))
             return;
+
+        if (root.commandRunner && root.commandRunner.runWifiAutoconnect) {
+            var result = root.commandRunner.runWifiAutoconnect(name);
+            root.lastActionResult = result;
+            root.networkErrorText = result && result.success ? "" : String(result && (result.detail || result.message) || "");
+            return;
+        }
 
         Quickshell.execDetached({
             command: [
@@ -615,7 +651,13 @@ Item {
         var command = ["nmcli", "device", "wifi", "connect", ssid];
         if (psk && psk.length > 0)
             command.push("password", psk);
-        Quickshell.execDetached({ command: command });
+        if (root.commandRunner && root.commandRunner.runWifiConnect) {
+            var result = root.commandRunner.runWifiConnect(ssid, psk || "");
+            root.lastActionResult = result;
+            root.networkErrorText = result && result.success ? "" : String(result && (result.detail || result.message) || "");
+        } else {
+            Quickshell.execDetached({ command: command });
+        }
         root.schedulePreferredWifiRestore(6500, true);
     }
 
@@ -693,6 +735,24 @@ Item {
 
         root.airplaneMode = false;
         setBluetoothEnabled(!root.bluetoothEnabled);
+    }
+
+    function syncCommandDependencies() {
+        if (!root.commandRunner || root.commandRunner.revision === 0)
+            return;
+
+        var networkState = root.commandRunner.dependencyState("network");
+        root.networkErrorText = networkState === "missing" ? root.commandRunner.dependencyDetail("network") : "";
+
+        var bluetoothState = root.commandRunner.dependencyState("bluetooth");
+        root.bluetoothErrorText = bluetoothState === "missing" || bluetoothState === "warn"
+            ? root.commandRunner.dependencyDetail("bluetooth")
+            : "";
+
+        var brightnessState = root.commandRunner.dependencyState("brightness");
+        root.brightnessErrorText = brightnessState === "ok" ? "" : root.commandRunner.dependencyDetail("brightness");
+        if (brightnessState === "missing")
+            root.setBrightnessAvailable(false);
     }
 
     function toggleAirplaneMode() {
@@ -890,6 +950,15 @@ Item {
             try {
                 p.positionChanged();
             } catch (e) {}
+        }
+    }
+
+    Connections {
+        target: root.commandRunner
+        ignoreUnknownSignals: true
+
+        function onRevisionChanged() {
+            root.syncCommandDependencies();
         }
     }
 }

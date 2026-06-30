@@ -32,8 +32,12 @@ function stateLabel(state) {
         return "正常";
     if (state === "warn")
         return "注意";
+    if (state === "stale")
+        return "过期";
     if (state === "missing")
         return "缺失";
+    if (state === "broken")
+        return "损坏";
     return "信息";
 }
 
@@ -42,8 +46,12 @@ function stateColor(state, darkMode) {
         return darkMode ? "#30d158" : "#34c759";
     if (state === "warn")
         return "#ff9f0a";
+    if (state === "stale")
+        return "#ffcc00";
     if (state === "missing")
         return "#ff453a";
+    if (state === "broken")
+        return darkMode ? "#ff6961" : "#d70015";
     return accentBlue(darkMode);
 }
 

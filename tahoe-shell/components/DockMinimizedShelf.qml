@@ -7,6 +7,7 @@ Item {
     id: root
 
     property var windowsService
+    property var thumbnailProvider
     property var appsService
     property var dockWindow
     property var dockSurfaceItem
@@ -56,6 +57,7 @@ Item {
                     width: root.thumbnailWidth
                     windowModel: modelData
                     windowsService: root.windowsService
+                    thumbnailProvider: root.thumbnailProvider
                     appsService: root.appsService
                     dockWindow: root.dockWindow
                     dockSurfaceItem: root.dockSurfaceItem

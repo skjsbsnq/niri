@@ -6,6 +6,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import Quickshell.Wayland
 import "components"
 import "services"
 
@@ -54,6 +55,9 @@ ShellRoot {
     property string baseFontFamily: "Noto Sans CJK SC"
     property string monoFontFamily: "Noto Sans Mono CJK SC"
     property bool darkMode: appearance.darkMode
+    readonly property real idleLockTimeoutSeconds: Math.max(0, envNumber("TAHOE_IDLE_LOCK_SECONDS", 600))
+    readonly property bool idleLockEnabled: idleLockTimeoutSeconds > 0
+    property string lastLockSource: ""
 
     // Real hardware default: spring gives the dock and panel animations their
     // bouncy settle. If Image textures vanish on a VM/software renderer, flip
@@ -63,6 +67,12 @@ ShellRoot {
 
     signal taskSwitcherCycleRequested(int direction)
     signal taskSwitcherConfirmRequested()
+
+    function envNumber(name, fallback) {
+        var raw = Quickshell.env(name);
+        var parsed = parseFloat(String(raw || ""));
+        return isNaN(parsed) ? fallback : parsed;
+    }
 
     function screenName(screen) {
         return screen ? String(screen.name || "") : "";
@@ -88,6 +98,90 @@ ShellRoot {
         topBarPopupAnchorRect = anchorRect || null;
     }
 
+    function closeLaunchpadAndSpotlight() {
+        launchpadOpen = false;
+        spotlightOpen = false;
+    }
+
+    function topBarPopupOpenValue(popupName) {
+        switch (popupName) {
+        case "appMenu":
+            return appMenuOpen;
+        case "applicationMenu":
+            return applicationMenuOpen;
+        case "controlCenter":
+            return controlCenterOpen;
+        case "notificationCenter":
+            return notificationCenterOpen;
+        case "battery":
+            return batteryPopupOpen;
+        case "wifi":
+            return wifiPopupOpen;
+        case "fan":
+            return fanPopupOpen;
+        case "clipboard":
+            return clipboardPopupOpen;
+        case "trayMenu":
+            return trayMenuOpen;
+        default:
+            return false;
+        }
+    }
+
+    function setTopBarPopupOpen(popupName, open) {
+        switch (popupName) {
+        case "appMenu":
+            appMenuOpen = open;
+            break;
+        case "applicationMenu":
+            applicationMenuOpen = open;
+            break;
+        case "controlCenter":
+            controlCenterOpen = open;
+            break;
+        case "notificationCenter":
+            notificationCenterOpen = open;
+            break;
+        case "battery":
+            batteryPopupOpen = open;
+            break;
+        case "wifi":
+            wifiPopupOpen = open;
+            break;
+        case "fan":
+            fanPopupOpen = open;
+            break;
+        case "clipboard":
+            clipboardPopupOpen = open;
+            break;
+        case "trayMenu":
+            trayMenuOpen = open;
+            if (!open)
+                trayMenuItem = null;
+            break;
+        }
+    }
+
+    function topBarPopupOpenForName(popupName, screen) {
+        return topBarPopupOpenFor(topBarPopupOpenValue(popupName), screen);
+    }
+
+    function toggleTopBarPopup(popupName, screen, anchorRect) {
+        var wasOpenHere = topBarPopupOpenForName(popupName, screen);
+        prepareTopBarPopup(screen, anchorRect);
+        closeTopBarPopups(popupName);
+        setTopBarPopupOpen(popupName, !wasOpenHere);
+        closeLaunchpadAndSpotlight();
+    }
+
+    function openTopBarTrayMenu(item, screen, anchorRect) {
+        prepareTopBarPopup(screen, anchorRect);
+        closeTopBarPopups("trayMenu");
+        trayMenuItem = item;
+        trayMenuOpen = true;
+        closeLaunchpadAndSpotlight();
+    }
+
     function screenByName(name) {
         var target = String(name || "");
         var screens = [...Quickshell.screens];
@@ -111,32 +205,38 @@ ShellRoot {
         };
     }
 
-    function prepareDynamicIslandPopup() {
+    function openDynamicIslandControlCenter() {
         var screen = screenByName(dynamicIsland ? dynamicIsland.targetScreenName : navigationScreenName());
         if (!screen)
-            return false;
-        prepareTopBarPopup(screen, dynamicIslandAnchorRect(screen));
-        return true;
-    }
-
-    function openDynamicIslandControlCenter() {
-        if (!prepareDynamicIslandPopup())
             return;
-        var wasOpenHere = topBarPopupOpenFor(controlCenterOpen, screenByName(topBarPopupScreenName));
-        closeTopBarPopups("controlCenter");
-        controlCenterOpen = !wasOpenHere;
-        launchpadOpen = false;
-        spotlightOpen = false;
+        toggleTopBarPopup("controlCenter", screen, dynamicIslandAnchorRect(screen));
     }
 
     function openDynamicIslandNotificationCenter() {
-        if (!prepareDynamicIslandPopup())
+        var screen = screenByName(dynamicIsland ? dynamicIsland.targetScreenName : navigationScreenName());
+        if (!screen)
             return;
-        var wasOpenHere = topBarPopupOpenFor(notificationCenterOpen, screenByName(topBarPopupScreenName));
-        closeTopBarPopups("notificationCenter");
-        notificationCenterOpen = !wasOpenHere;
-        launchpadOpen = false;
-        spotlightOpen = false;
+        toggleTopBarPopup("notificationCenter", screen, dynamicIslandAnchorRect(screen));
+    }
+
+    function requestLock(source) {
+        lastLockSource = String(source || "unknown");
+        if (power && power.requestAction) {
+            power.requestAction("lock");
+        } else if (lockScreen && lockScreen.lock) {
+            lockScreen.lock();
+        }
+        return lockStatus();
+    }
+
+    function lockStatus() {
+        return [
+            "locked=" + (lockScreen ? lockScreen.locked : false),
+            "secure=" + (lockScreen ? lockScreen.secure : false),
+            "source=" + lastLockSource,
+            "idleEnabled=" + idleLockEnabled,
+            "idleTimeoutSeconds=" + idleLockTimeoutSeconds
+        ].join("; ");
     }
 
     function topBarPopupOpenFor(open, screen) {
@@ -300,8 +400,7 @@ ShellRoot {
         prepareWindowNavigation();
         closeTopBarPopups("taskSwitcher");
         closeWindowNavigation("taskSwitcher");
-        launchpadOpen = false;
-        spotlightOpen = false;
+        closeLaunchpadAndSpotlight();
         taskSwitcherOpen = true;
         taskSwitcherCycleRequested(direction);
     }
@@ -319,8 +418,7 @@ ShellRoot {
         prepareWindowNavigation();
         closeTopBarPopups("windowOverview");
         closeWindowNavigation("windowOverview");
-        launchpadOpen = false;
-        spotlightOpen = false;
+        closeLaunchpadAndSpotlight();
         windowOverviewOpen = true;
     }
 
@@ -341,9 +439,61 @@ ShellRoot {
         settingsPanelScreenName = navigationScreenName();
         closeTopBarPopups("settings");
         closeWindowNavigation("");
-        launchpadOpen = false;
-        spotlightOpen = false;
+        closeLaunchpadAndSpotlight();
         settingsPanelOpen = true;
+    }
+
+    function openClipboardPopupFromSearch() {
+        var screen = screenByName(navigationScreenName());
+        if (!screen)
+            return;
+
+        prepareTopBarPopup(screen, dynamicIslandAnchorRect(screen));
+        closeTopBarPopups("clipboard");
+        clipboardPopupOpen = true;
+        closeLaunchpadAndSpotlight();
+    }
+
+    function requestPowerActionFromSearch(action) {
+        var text = String(action || "");
+        if (text.length === 0 || !power || !power.requestAction)
+            return;
+
+        var pending = power.requestAction(text);
+        if (!pending)
+            return;
+
+        var screen = screenByName(navigationScreenName());
+        if (!screen)
+            return;
+
+        prepareTopBarPopup(screen, dynamicIslandAnchorRect(screen));
+        closeTopBarPopups("appMenu");
+        appMenuOpen = true;
+        closeLaunchpadAndSpotlight();
+    }
+
+    function runSearchSystemAction(action) {
+        var text = String(action || "");
+        if (text === "lock") {
+            requestLock("spotlight");
+        } else if (text === "overview") {
+            openWindowOverview();
+        } else if (text === "task-switcher") {
+            showTaskSwitcher();
+        } else if (text === "launchpad") {
+            closeTopBarPopups("launchpad");
+            spotlightOpen = false;
+            launchpadOpen = true;
+        } else if (text === "control-center") {
+            openDynamicIslandControlCenter();
+        } else if (text === "notification-center") {
+            openDynamicIslandNotificationCenter();
+        } else if (text === "clipboard") {
+            openClipboardPopupFromSearch();
+        } else if (text === "sleep" || text === "logout" || text === "restart" || text === "shutdown") {
+            requestPowerActionFromSearch(text);
+        }
     }
 
     function toggleLeftSidebar(screen) {
@@ -353,8 +503,7 @@ ShellRoot {
         leftSidebarScreenName = target;
         closeTopBarPopups("leftSidebar");
         leftSidebarOpen = !wasOpenHere;
-        launchpadOpen = false;
-        spotlightOpen = false;
+        closeLaunchpadAndSpotlight();
     }
 
     function closeTopBarPopups(except) {
@@ -395,8 +544,7 @@ ShellRoot {
         appMenuOpen = false;
         applicationMenuOpen = false;
         controlCenterOpen = false;
-        launchpadOpen = false;
-        spotlightOpen = false;
+        closeLaunchpadAndSpotlight();
         notificationCenterOpen = false;
         batteryPopupOpen = false;
         fanPopupOpen = false;
@@ -431,6 +579,15 @@ ShellRoot {
         id: niri
     }
 
+    ThumbnailProvider {
+        id: thumbnailProvider
+        windowsService: niri
+    }
+
+    CommandRunner {
+        id: commandRunner
+    }
+
     IpcHandler {
         target: "tahoe"
 
@@ -448,13 +605,15 @@ ShellRoot {
         function openDynamicIslandSettings(): void { shell.openSettingsPanel("dynamic-island"); }
         function openWeatherSettings(): void { shell.openSettingsPanel("weather"); }
         function closeSettings(): void { shell.closeSettingsPanel(); }
+        function lock(): string { return shell.requestLock("ipc"); }
+        function lockFrom(source: string): string { return shell.requestLock(source); }
+        function lockStatus(): string { return shell.lockStatus(); }
         function toggleLeftSidebar(): void { shell.toggleLeftSidebar(shell.screenByName(shell.navigationScreenName())); }
         function openLeftSidebar(): void {
             shell.leftSidebarScreenName = shell.navigationScreenName();
             shell.closeTopBarPopups("leftSidebar");
             shell.leftSidebarOpen = true;
-            shell.launchpadOpen = false;
-            shell.spotlightOpen = false;
+            shell.closeLaunchpadAndSpotlight();
         }
         function closeLeftSidebar(): void { shell.closeLeftSidebar(); }
         function dynamicIslandGetState(): string { return dynamicIsland.state; }
@@ -496,10 +655,12 @@ ShellRoot {
         id: appMenu
         windowsService: niri
         appsService: apps
+        commandRunner: commandRunner
     }
 
     Controls {
         id: controls
+        commandRunner: commandRunner
     }
 
     DesktopSettings {
@@ -508,6 +669,7 @@ ShellRoot {
 
     SystemStatus {
         id: systemStatus
+        commandRunner: commandRunner
     }
 
     SystemStats {
@@ -530,6 +692,7 @@ ShellRoot {
     Power {
         id: power
         lockService: lockScreen
+        commandRunner: commandRunner
     }
 
     Battery {
@@ -538,6 +701,7 @@ ShellRoot {
 
     PowerProfiles {
         id: powerProfiles
+        commandRunner: commandRunner
     }
 
     FanControl {
@@ -546,6 +710,7 @@ ShellRoot {
 
     InputMethod {
         id: inputMethod
+        commandRunner: commandRunner
     }
 
     Sound {
@@ -554,19 +719,27 @@ ShellRoot {
 
     ClipboardHistory {
         id: clipboardHistory
+        commandRunner: commandRunner
     }
 
     Screenshot {
         id: screenshotService
         settingsService: desktopSettings
+        commandRunner: commandRunner
     }
 
     Search {
         id: search
         appsService: apps
         screenshotService: screenshotService
+        windowsService: niri
+        clipboardService: clipboardHistory
+        commandRunner: commandRunner
         onOpenSettingsRequested: function(page) {
             shell.openSettingsPanel(page);
+        }
+        onSystemActionRequested: function(action) {
+            shell.runSearchSystemAction(action);
         }
     }
 
@@ -592,6 +765,18 @@ ShellRoot {
 
     LockScreen {
         id: lockScreen
+    }
+
+    IdleMonitor {
+        id: idleLockMonitor
+        enabled: shell.idleLockEnabled
+        timeout: shell.idleLockTimeoutSeconds
+        respectInhibitors: true
+
+        onIsIdleChanged: {
+            if (isIdle && !lockScreen.locked)
+                shell.requestLock("idle");
+        }
     }
 
     Variants {
@@ -643,28 +828,13 @@ ShellRoot {
                 leftSidebarOpen: shell.navigationOpenFor(shell.leftSidebarOpen, shell.leftSidebarScreenName, modelData)
                 darkMode: shell.darkMode
                 onToggleAppMenu: function(anchorRect) {
-                    var wasOpenHere = shell.topBarPopupOpenFor(shell.appMenuOpen, modelData);
-                    shell.prepareTopBarPopup(modelData, anchorRect);
-                    shell.closeTopBarPopups("appMenu");
-                    shell.appMenuOpen = !wasOpenHere;
-                    shell.launchpadOpen = false;
-                    shell.spotlightOpen = false;
+                    shell.toggleTopBarPopup("appMenu", modelData, anchorRect);
                 }
                 onToggleApplicationMenu: function(anchorRect) {
-                    var wasOpenHere = shell.topBarPopupOpenFor(shell.applicationMenuOpen, modelData);
-                    shell.prepareTopBarPopup(modelData, anchorRect);
-                    shell.closeTopBarPopups("applicationMenu");
-                    shell.applicationMenuOpen = !wasOpenHere;
-                    shell.launchpadOpen = false;
-                    shell.spotlightOpen = false;
+                    shell.toggleTopBarPopup("applicationMenu", modelData, anchorRect);
                 }
                 onToggleControlCenter: function(anchorRect) {
-                    var wasOpenHere = shell.topBarPopupOpenFor(shell.controlCenterOpen, modelData);
-                    shell.prepareTopBarPopup(modelData, anchorRect);
-                    shell.closeTopBarPopups("controlCenter");
-                    shell.controlCenterOpen = !wasOpenHere;
-                    shell.launchpadOpen = false;
-                    shell.spotlightOpen = false;
+                    shell.toggleTopBarPopup("controlCenter", modelData, anchorRect);
                 }
                 onToggleSpotlight: {
                     shell.spotlightOpen = !shell.spotlightOpen;
@@ -678,59 +848,28 @@ ShellRoot {
                 }
                 onToggleLeftSidebar: shell.toggleLeftSidebar(modelData)
                 onToggleNotifications: function(anchorRect) {
-                    var wasOpenHere = shell.topBarPopupOpenFor(shell.notificationCenterOpen, modelData);
-                    shell.prepareTopBarPopup(modelData, anchorRect);
-                    shell.closeTopBarPopups("notificationCenter");
-                    shell.notificationCenterOpen = !wasOpenHere;
-                    shell.launchpadOpen = false;
-                    shell.spotlightOpen = false;
+                    shell.toggleTopBarPopup("notificationCenter", modelData, anchorRect);
                 }
                 onToggleBattery: function(anchorRect) {
-                    var wasOpenHere = shell.topBarPopupOpenFor(shell.batteryPopupOpen, modelData);
-                    shell.prepareTopBarPopup(modelData, anchorRect);
-                    shell.closeTopBarPopups("battery");
-                    shell.batteryPopupOpen = !wasOpenHere;
-                    shell.launchpadOpen = false;
-                    shell.spotlightOpen = false;
+                    shell.toggleTopBarPopup("battery", modelData, anchorRect);
                 }
                 onToggleWifi: function(anchorRect) {
-                    var wasOpenHere = shell.topBarPopupOpenFor(shell.wifiPopupOpen, modelData);
-                    shell.prepareTopBarPopup(modelData, anchorRect);
-                    shell.closeTopBarPopups("wifi");
-                    shell.wifiPopupOpen = !wasOpenHere;
-                    shell.launchpadOpen = false;
-                    shell.spotlightOpen = false;
+                    shell.toggleTopBarPopup("wifi", modelData, anchorRect);
                 }
                 onToggleFan: function(anchorRect) {
-                    var wasOpenHere = shell.topBarPopupOpenFor(shell.fanPopupOpen, modelData);
-                    shell.prepareTopBarPopup(modelData, anchorRect);
-                    shell.closeTopBarPopups("fan");
-                    shell.fanPopupOpen = !wasOpenHere;
-                    shell.launchpadOpen = false;
-                    shell.spotlightOpen = false;
+                    shell.toggleTopBarPopup("fan", modelData, anchorRect);
                 }
                 onToggleClipboard: function(anchorRect) {
-                    var wasOpenHere = shell.topBarPopupOpenFor(shell.clipboardPopupOpen, modelData);
-                    shell.prepareTopBarPopup(modelData, anchorRect);
-                    shell.closeTopBarPopups("clipboard");
-                    shell.clipboardPopupOpen = !wasOpenHere;
-                    shell.launchpadOpen = false;
-                    shell.spotlightOpen = false;
+                    shell.toggleTopBarPopup("clipboard", modelData, anchorRect);
                 }
                 onTriggerScreenshot: {
                     screenshotService.captureSelection();
                     shell.closeTopBarPopups("");
-                    shell.launchpadOpen = false;
-                    shell.spotlightOpen = false;
+                    shell.closeLaunchpadAndSpotlight();
                 }
                 onToggleInputMethod: inputMethod.toggle()
                 onOpenTrayMenu: function(item, anchorRect) {
-                    shell.prepareTopBarPopup(modelData, anchorRect);
-                    shell.closeTopBarPopups("trayMenu");
-                    shell.trayMenuItem = item;
-                    shell.trayMenuOpen = true;
-                    shell.launchpadOpen = false;
-                    shell.spotlightOpen = false;
+                    shell.openTopBarTrayMenu(item, modelData, anchorRect);
                 }
             }
 
@@ -816,6 +955,7 @@ ShellRoot {
                 screen: modelData
                 appsService: apps
                 niriService: niri
+                thumbnailProvider: thumbnailProvider
                 settingsService: desktopSettings
                 useSpring: shell.useSpring
                 darkMode: shell.darkMode
@@ -832,8 +972,7 @@ ShellRoot {
                     shell.prepareDockAppMenu(modelData, app, appId, anchorRect);
                     shell.closeTopBarPopups("dockAppMenu");
                     shell.dockAppMenuOpen = !wasSameApp;
-                    shell.launchpadOpen = false;
-                    shell.spotlightOpen = false;
+                    shell.closeLaunchpadAndSpotlight();
                 }
                 onOpenWindowMenu: function(window, anchorRect) {
                     var wasOpenHere = shell.dockWindowMenuOpenFor(modelData);
@@ -846,8 +985,7 @@ ShellRoot {
                     shell.prepareDockWindowMenu(modelData, window, anchorRect);
                     shell.closeTopBarPopups("dockWindowMenu");
                     shell.dockWindowMenuOpen = !wasSameWindow;
-                    shell.launchpadOpen = false;
-                    shell.spotlightOpen = false;
+                    shell.closeLaunchpadAndSpotlight();
                 }
             }
 
@@ -924,6 +1062,7 @@ ShellRoot {
 
                 screen: modelData
                 windowsService: niri
+                thumbnailProvider: thumbnailProvider
                 appsService: apps
                 open: shell.navigationOpenFor(shell.taskSwitcherOpen, shell.taskSwitcherScreenName, modelData)
                 onCloseRequested: shell.closeTaskSwitcher()
@@ -946,6 +1085,7 @@ ShellRoot {
             WindowOverview {
                 screen: modelData
                 windowsService: niri
+                thumbnailProvider: thumbnailProvider
                 appsService: apps
                 open: shell.navigationOpenFor(shell.windowOverviewOpen, shell.windowOverviewScreenName, modelData)
                 onCloseRequested: shell.closeWindowOverview()

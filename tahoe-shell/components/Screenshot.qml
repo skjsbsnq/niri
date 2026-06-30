@@ -8,11 +8,15 @@ Item {
     visible: false
 
     property var settingsService
+    property var commandRunner
     property string lastFile: ""
+    property string errorText: ""
+    property var lastResult: null
     readonly property var keywords: ["截图", "截屏", "screenshot", "screen", "capture", "shot"]
     readonly property string configuredDirectory: settingsService ? settingsService.effectiveScreenshotDirectory : ""
     readonly property bool copyToClipboard: !settingsService || settingsService.screenshotCopyToClipboard
     readonly property bool offerActions: !settingsService || settingsService.screenshotOfferActions
+    readonly property bool available: !commandRunner || commandRunner.revision === 0 || commandRunner.dependencyReady("screenshot")
 
     function matchesQuery(query) {
         var text = String(query || "").trim().toLowerCase();
@@ -35,7 +39,7 @@ Item {
             "name": "截图选区",
             "title": "截图选区",
             "genericName": "保存、复制并可标注",
-            "subtitle": "保存、复制并可标注",
+            "subtitle": root.available ? "保存、复制并可标注" : root.errorText,
             "icon": "photos.png",
             "score": 860
         };
@@ -46,7 +50,28 @@ Item {
             captureSelection();
     }
 
+    function syncDependencyStatus() {
+        if (!commandRunner || commandRunner.revision === 0) {
+            errorText = "";
+            return;
+        }
+
+        if (commandRunner.dependencyReady("screenshot")) {
+            var state = commandRunner.dependencyState("screenshot");
+            errorText = state === "warn" ? commandRunner.dependencyDetail("screenshot") : "";
+        } else {
+            errorText = commandRunner.dependencyDetail("screenshot") || "需要安装 grim 和 slurp";
+        }
+    }
+
     function captureSelection() {
+        if (commandRunner && commandRunner.runScreenshotSelection) {
+            var result = commandRunner.runScreenshotSelection(root.configuredDirectory, root.copyToClipboard, root.offerActions);
+            root.lastResult = result;
+            root.errorText = result && result.success ? "" : String(result && (result.detail || result.message) || "");
+            return result;
+        }
+
         Quickshell.execDetached({
             command: [
                 "sh",
@@ -98,5 +123,24 @@ Item {
             ],
             workingDirectory: ""
         });
+        root.lastResult = {
+            "action": "screenshot.selection",
+            "status": "success",
+            "success": true,
+            "message": "截图工具已启动"
+        };
+        root.errorText = "";
+        return root.lastResult;
     }
+
+    Connections {
+        target: root.commandRunner
+        ignoreUnknownSignals: true
+
+        function onRevisionChanged() {
+            root.syncDependencyStatus();
+        }
+    }
+
+    Component.onCompleted: root.syncDependencyStatus()
 }

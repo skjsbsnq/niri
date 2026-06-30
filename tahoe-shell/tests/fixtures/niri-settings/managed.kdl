@@ -1,0 +1,102 @@
+// User-owned header comment must survive writes.
+
+// tahoe-managed: begin input
+input {
+    keyboard {
+        xkb {}
+        numlock
+        repeat-rate 25
+        repeat-delay 600
+    }
+
+    touchpad {
+        tap
+        natural-scroll
+        accel-speed 0.0
+    }
+}
+// tahoe-managed: end input
+
+output "eDP-1" {
+    scale 1.25
+}
+
+// tahoe-managed: begin layout
+layout {
+    gaps 16
+    center-focused-column "never"
+
+    focus-ring {
+        off
+    }
+
+    border {
+        off
+    }
+
+    shadow {
+        on
+        softness 36
+        spread 4
+        offset x=0 y=10
+        color "#0006"
+    }
+
+    snap-assist {
+        on
+        threshold 16
+    }
+}
+// tahoe-managed: end layout
+
+// tahoe-managed: begin blur
+blur {
+    on
+    passes 4
+    offset 4
+    noise 0.004
+    saturation 1.22
+}
+// tahoe-managed: end blur
+
+// tahoe-managed: begin tahoe-glass
+tahoe-glass {
+    material "panel" {
+        edge-highlight 0.14
+        refraction 0.004
+        inner-shadow 0.06
+        chromatic 0.0
+        lens-depth 0.0
+    }
+}
+// tahoe-managed: end tahoe-glass
+
+window-rule {
+    // This unmanaged block must remain byte-for-byte unchanged.
+    open-floating true
+    custom-user-token "keep-me"
+}
+
+// tahoe-managed: begin animations
+animations {
+    workspace-switch {
+        spring damping-ratio=1.0 stiffness=780 epsilon=0.0001
+    }
+
+    window-movement {
+        spring damping-ratio=0.86 stiffness=620 epsilon=0.001
+    }
+
+    window-resize {
+        spring damping-ratio=0.96 stiffness=700 epsilon=0.0005
+    }
+
+    overview-open-close {
+        spring damping-ratio=0.95 stiffness=760 epsilon=0.0005
+    }
+}
+// tahoe-managed: end animations
+
+layer-rule {
+    match namespace="^tahoe-test$"
+}

@@ -688,13 +688,14 @@ PanelWindow {
                     color: root.topText
                     font.family: "Material Icons"
                     font.pixelSize: 16
+                    opacity: root.screenshotService && root.screenshotService.available ? 1 : 0.45
                 }
 
                 MouseArea {
                     id: screenshotMouse
                     anchors.fill: parent
                     hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
+                    cursorShape: root.screenshotService && root.screenshotService.available ? Qt.PointingHandCursor : Qt.ArrowCursor
                     onClicked: root.triggerScreenshot()
                 }
             }

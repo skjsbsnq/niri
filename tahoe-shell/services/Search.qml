@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import Quickshell
+import Quickshell.Io
 
 Item {
     id: root
@@ -9,7 +10,17 @@ Item {
 
     property var appsService
     property var screenshotService
+    property var windowsService
+    property var clipboardService
+    property var commandRunner
     readonly property int defaultLimit: 6
+    readonly property int slowProviderDebounceMs: 90
+    property int providerRevision: 0
+    property string pendingTaskQuery: ""
+    property string activeTaskQuery: ""
+    property string taskIndexOutputQuery: ""
+    property string cachedTaskQuery: ""
+    property var cachedTaskEntries: []
     readonly property var settingsItems: [
         {
             "id": "tahoe-settings",
@@ -160,8 +171,99 @@ Item {
             "commands": [["fcitx5-configtool"], ["gnome-control-center", "keyboard"], ["systemsettings", "kcm_fcitx5"]]
         }
     ]
+    readonly property var systemActionItems: [
+        {
+            "id": "lock",
+            "title": "锁定屏幕",
+            "subtitle": "使用 Tahoe 锁屏",
+            "keywords": ["锁屏", "锁定", "lock", "screen", "安全", "session"],
+            "action": "lock",
+            "icon": "preferences.png"
+        },
+        {
+            "id": "overview",
+            "title": "窗口总览",
+            "subtitle": "查看并切换当前打开的窗口",
+            "keywords": ["窗口", "总览", "overview", "expose", "mission control", "任务"],
+            "action": "overview",
+            "icon": "finder.png"
+        },
+        {
+            "id": "task-switcher",
+            "title": "任务切换器",
+            "subtitle": "打开最近窗口切换器",
+            "keywords": ["任务", "切换", "窗口", "alt tab", "switcher", "recent"],
+            "action": "task-switcher",
+            "icon": "finder.png"
+        },
+        {
+            "id": "launchpad",
+            "title": "Launchpad",
+            "subtitle": "打开应用网格",
+            "keywords": ["launchpad", "启动台", "应用", "app grid", "程序"],
+            "action": "launchpad",
+            "icon": "launchpad.png"
+        },
+        {
+            "id": "control-center",
+            "title": "控制中心",
+            "subtitle": "打开 Wi-Fi、蓝牙、亮度和电源控制",
+            "keywords": ["控制中心", "control center", "wifi", "蓝牙", "亮度", "电源"],
+            "action": "control-center",
+            "icon": "preferences.png"
+        },
+        {
+            "id": "notification-center",
+            "title": "通知中心",
+            "subtitle": "查看通知历史和勿扰状态",
+            "keywords": ["通知", "通知中心", "notification", "notifications", "dnd", "勿扰"],
+            "action": "notification-center",
+            "icon": "preferences.png"
+        },
+        {
+            "id": "clipboard",
+            "title": "剪贴板历史",
+            "subtitle": "打开剪贴板历史与固定项",
+            "keywords": ["剪贴板", "clipboard", "复制", "copy", "固定项", "pins"],
+            "action": "clipboard",
+            "icon": "notes.png"
+        },
+        {
+            "id": "sleep",
+            "title": "睡眠",
+            "subtitle": "打开确认框后让电脑进入睡眠",
+            "keywords": ["睡眠", "sleep", "suspend", "挂起"],
+            "action": "sleep",
+            "icon": "preferences.png"
+        },
+        {
+            "id": "logout",
+            "title": "退出登录",
+            "subtitle": "打开确认框后退出当前 niri 会话",
+            "keywords": ["退出", "注销", "logout", "log out", "session", "quit"],
+            "action": "logout",
+            "icon": "preferences.png"
+        },
+        {
+            "id": "restart",
+            "title": "重新启动",
+            "subtitle": "打开确认框后重启电脑",
+            "keywords": ["重启", "重新启动", "restart", "reboot"],
+            "action": "restart",
+            "icon": "preferences.png"
+        },
+        {
+            "id": "shutdown",
+            "title": "关机",
+            "subtitle": "打开确认框后关闭电脑",
+            "keywords": ["关机", "关闭", "shutdown", "poweroff", "power off"],
+            "action": "shutdown",
+            "icon": "preferences.png"
+        }
+    ]
 
     signal openSettingsRequested(string page)
+    signal systemActionRequested(string action)
 
     function normalizedText(value) {
         return String(value || "").trim().toLowerCase();
@@ -169,6 +271,56 @@ Item {
 
     function iconPath(iconSet, fileName) {
         return root.appsService ? root.appsService.iconPath(iconSet, fileName) : "";
+    }
+
+    function bumpProviderRevision() {
+        root.providerRevision += 1;
+    }
+
+    function pathBasename(path) {
+        var text = String(path || "").replace(/\\/g, "/");
+        var slash = text.lastIndexOf("/");
+        return slash >= 0 ? text.substring(slash + 1) : text;
+    }
+
+    function compactPath(path) {
+        var text = String(path || "").trim();
+        var home = String(Quickshell.env("HOME") || "").trim();
+        if (home.length > 0 && text.indexOf(home + "/") === 0)
+            return "~" + text.substring(home.length);
+        return text;
+    }
+
+    function windowTitle(window) {
+        var title = String(window && window.title || "").trim();
+        if (title.length > 0)
+            return title;
+        if (root.appsService)
+            return root.appsService.windowAppLabel(window);
+        var appId = String(window && window.appId || "").trim();
+        return appId.length > 0 ? appId : "窗口";
+    }
+
+    function windowSubtitle(window) {
+        var parts = [];
+        var app = root.appsService ? root.appsService.windowAppLabel(window) : String(window && window.appId || "").trim();
+        if (app.length > 0)
+            parts.push(app);
+        var workspace = window && window.workspace ? String(window.workspace.name || window.workspace.id || "").trim() : "";
+        if (workspace.length > 0)
+            parts.push("工作区 " + workspace);
+        if (window && window.isMinimized)
+            parts.push("已最小化");
+        return parts.length > 0 ? parts.join(" · ") : "打开窗口";
+    }
+
+    function windowIcon(window) {
+        if (!root.appsService)
+            return iconPath("dock", "finder.png");
+        var app = root.appsService.appForWindow(window);
+        if (app)
+            return root.appsService.iconForApp(app);
+        return root.appsService.iconForAppId(window && window.appId ? window.appId : "");
     }
 
     function makeResult(fields) {
@@ -285,8 +437,8 @@ Item {
         return [
             makeResult({
                 "id": "command:" + command,
-                "title": "运行命令",
-                "subtitle": command,
+                "title": "运行 Shell 命令",
+                "subtitle": "危险：回车将在 shell 中执行 · " + command,
                 "icon": iconPath("dock", "terminal.png"),
                 "kind": "command",
                 "provider": "command",
@@ -342,6 +494,139 @@ Item {
         return results;
     }
 
+    function systemActionResults(query) {
+        var normalized = String(query || "").trim();
+        if (normalized.length === 0)
+            return [];
+
+        var results = [];
+        for (var i = 0; i < systemActionItems.length; i++) {
+            var item = systemActionItems[i];
+            var score = scoreText(item.title, item.subtitle, item.keywords || [], normalized, 740);
+            if (score <= 0)
+                continue;
+
+            results.push(makeResult({
+                "id": "system-action:" + item.id,
+                "title": item.title,
+                "subtitle": item.subtitle,
+                "icon": iconPath("dock", item.icon || "preferences.png"),
+                "kind": "system-action",
+                "provider": "system-actions",
+                "score": score,
+                "systemAction": item.action
+            }));
+        }
+        return results;
+    }
+
+    function windowResults(query, limit) {
+        var normalized = String(query || "").trim();
+        if (normalized.length === 0 || !root.windowsService)
+            return [];
+
+        var windows = root.windowsService.recentWindowList || root.windowsService.windowList || [];
+        var max = Math.max(1, limit || root.defaultLimit);
+        var results = [];
+        for (var i = 0; i < windows.length && results.length < max; i++) {
+            var window = windows[i];
+            if (!window)
+                continue;
+
+            var title = windowTitle(window);
+            var subtitle = windowSubtitle(window);
+            var score = scoreText(title, subtitle, [window.appId || "", window.output || ""], normalized, 820);
+            if (score <= 0)
+                continue;
+
+            if (window.isFocused)
+                score += 16;
+            if (window.isMinimized)
+                score += 12;
+
+            results.push(makeResult({
+                "id": "window:" + String(window.modelKey || window.id || i),
+                "title": title,
+                "subtitle": subtitle,
+                "icon": windowIcon(window),
+                "kind": "window",
+                "provider": "windows",
+                "score": score,
+                "window": window
+            }));
+        }
+        return results;
+    }
+
+    function pinnedClipboardResults(query, limit) {
+        var normalized = String(query || "").trim();
+        if (normalized.length === 0 || !root.clipboardService || !root.clipboardService.pinnedEntries)
+            return [];
+
+        var pins = root.clipboardService.pinnedEntries || [];
+        var max = Math.max(1, limit || root.defaultLimit);
+        var results = [];
+        for (var i = 0; i < pins.length && results.length < max; i++) {
+            var pin = pins[i];
+            if (!pin)
+                continue;
+
+            var preview = String(pin.preview || "").trim();
+            var text = String(pin.text || "");
+            var title = preview.length > 0 ? preview : root.clipboardService.previewForText(text);
+            var score = scoreText(title, "固定剪贴板 · 回车复制", [text], normalized, 700);
+            if (score <= 0)
+                continue;
+
+            results.push(makeResult({
+                "id": "clipboard-pin:" + String(i) + ":" + title,
+                "title": title,
+                "subtitle": "固定剪贴板 · 回车复制",
+                "icon": iconPath("dock", "notes.png"),
+                "kind": "clipboard-pin",
+                "provider": "clipboard-pins",
+                "score": score,
+                "pin": pin
+            }));
+        }
+        return results;
+    }
+
+    function taskIndexResults(query, limit) {
+        var normalized = String(query || "").trim();
+        if (normalized.length === 0 || root.cachedTaskQuery !== normalized)
+            return [];
+
+        var entries = root.cachedTaskEntries || [];
+        var max = Math.max(1, limit || root.defaultLimit);
+        var results = [];
+        for (var i = 0; i < entries.length && results.length < max; i++) {
+            var entry = entries[i] || {};
+            var path = String(entry.path || "").trim();
+            if (path.length === 0)
+                continue;
+
+            var kind = String(entry.kind || "recent-file");
+            var title = String(entry.title || pathBasename(path) || path);
+            var subtitle = String(entry.subtitle || (kind === "folder" ? "文件夹" : "最近文件"));
+            var score = scoreText(title, subtitle, [path], normalized, kind === "folder" ? 540 : 560);
+            if (score <= 0)
+                continue;
+
+            results.push(makeResult({
+                "id": kind + ":" + path,
+                "title": title,
+                "subtitle": subtitle,
+                "icon": iconPath("dock", kind === "folder" ? "finder.png" : "notes.png"),
+                "kind": kind,
+                "provider": kind === "folder" ? "folders" : "recent-files",
+                "score": score,
+                "path": path
+            }));
+        }
+        return results;
+    }
+
     function dedupeAndSort(results, limit) {
         var seen = {};
         var unique = [];
@@ -372,18 +657,232 @@ Item {
         return unique.slice(0, Math.max(1, limit || root.defaultLimit));
     }
 
+    function shouldRunTaskIndex(query) {
+        var normalized = String(query || "").trim();
+        if (normalized.length < 2)
+            return false;
+
+        var prefix = normalized.charAt(0);
+        return prefix !== ">" && prefix !== "!" && prefix !== "=";
+    }
+
+    function scheduleTaskIndex(query) {
+        var normalized = String(query || "").trim();
+        if (!shouldRunTaskIndex(normalized)) {
+            root.pendingTaskQuery = "";
+            return;
+        }
+
+        if (root.cachedTaskQuery === normalized || root.activeTaskQuery === normalized || root.pendingTaskQuery === normalized)
+            return;
+
+        root.pendingTaskQuery = normalized;
+        taskIndexDebounceTimer.restart();
+    }
+
+    function startTaskIndex() {
+        if (taskIndexProcess.running)
+            return;
+        if (root.pendingTaskQuery.length === 0)
+            return;
+
+        root.activeTaskQuery = root.pendingTaskQuery;
+        root.taskIndexOutputQuery = root.activeTaskQuery;
+        root.pendingTaskQuery = "";
+        taskIndexProcess.running = true;
+    }
+
+    function taskIndexCommand(query) {
+        if (root.commandRunner && root.commandRunner.revision > 0 && !root.commandRunner.commandAvailable("python3"))
+            return ["sh", "-c", "exit 0"];
+
+        return [
+            "sh",
+            "-lc",
+            "if command -v python3 >/dev/null 2>&1; then " +
+                "if command -v timeout >/dev/null 2>&1; then " +
+                    "exec timeout 1s python3 -c \"$1\" \"$2\"; " +
+                "else " +
+                    "exec python3 -c \"$1\" \"$2\"; " +
+                "fi; " +
+            "fi",
+            "sh",
+            taskIndexPython(),
+            String(query || "")
+        ];
+    }
+
+    function taskIndexPython() {
+        return [
+            "import datetime, json, os, sys, time, urllib.parse, xml.etree.ElementTree as ET",
+            "query = sys.argv[1].strip().lower() if len(sys.argv) > 1 else ''",
+            "terms = [term for term in query.split() if term]",
+            "deadline = time.monotonic() + 0.82",
+            "home = os.path.expanduser('~')",
+            "results = []",
+            "seen = set()",
+            "def expired():",
+            "    return time.monotonic() > deadline",
+            "def compact(path):",
+            "    if home and path.startswith(home + os.sep):",
+            "        return '~' + path[len(home):]",
+            "    return path",
+            "def matches(*values):",
+            "    haystack = ' '.join(str(value or '').lower() for value in values)",
+            "    return all(term in haystack for term in terms)",
+            "def basename(path):",
+            "    name = os.path.basename(path.rstrip(os.sep))",
+            "    return name or path",
+            "def stamp(value):",
+            "    if not value:",
+            "        return 0.0",
+            "    try:",
+            "        return datetime.datetime.fromisoformat(value.replace('Z', '+00:00')).timestamp()",
+            "    except Exception:",
+            "        return 0.0",
+            "def add(kind, path, title, subtitle, mtime=0.0):",
+            "    if expired():",
+            "        return",
+            "    path = os.path.abspath(os.path.expanduser(path))",
+            "    if path in seen or not os.path.exists(path):",
+            "        return",
+            "    if kind == 'folder':",
+            "        if not os.path.isdir(path):",
+            "            return",
+            "    elif not os.path.isfile(path):",
+            "        return",
+            "    title = str(title or basename(path)).strip()",
+            "    subtitle = str(subtitle or compact(path)).strip()",
+            "    if terms and not matches(title, subtitle, path):",
+            "        return",
+            "    seen.add(path)",
+            "    results.append({'kind': kind, 'path': path, 'title': title, 'subtitle': subtitle, 'mtime': float(mtime or 0)})",
+            "def bookmark_title(bookmark, fallback):",
+            "    for child in list(bookmark):",
+            "        if child.tag.rsplit('}', 1)[-1] == 'title' and child.text:",
+            "            text = child.text.strip()",
+            "            if text:",
+            "                return text",
+            "    return fallback",
+            "def local_href_path(href):",
+            "    parsed = urllib.parse.urlparse(href or '')",
+            "    if parsed.scheme != 'file':",
+            "        return ''",
+            "    return urllib.parse.unquote(parsed.path or '')",
+            "def add_recent_files():",
+            "    xbel = os.path.join(home, '.local', 'share', 'recently-used.xbel')",
+            "    try:",
+            "        bookmarks = ET.parse(xbel).getroot().findall('.//{*}bookmark')",
+            "    except Exception:",
+            "        return",
+            "    for bookmark in bookmarks[:450]:",
+            "        if expired() or len(results) >= 80:",
+            "            return",
+            "        path = local_href_path(bookmark.attrib.get('href', ''))",
+            "        if not path:",
+            "            continue",
+            "        title = bookmark_title(bookmark, basename(path))",
+            "        mtime = stamp(bookmark.attrib.get('modified') or bookmark.attrib.get('visited') or bookmark.attrib.get('added'))",
+            "        add('recent-file', path, title, '最近文件 · ' + compact(path), mtime)",
+            "def configured_user_dirs():",
+            "    paths = [home]",
+            "    config = os.path.join(home, '.config', 'user-dirs.dirs')",
+            "    try:",
+            "        with open(config, 'r', encoding='utf-8', errors='ignore') as handle:",
+            "            for line in handle:",
+            "                line = line.strip()",
+            "                if not line.startswith('XDG_') or '=' not in line:",
+            "                    continue",
+            "                value = line.split('=', 1)[1].strip().strip(chr(34))",
+            "                value = value.replace('$HOME', home)",
+            "                paths.append(os.path.expandvars(value))",
+            "    except Exception:",
+            "        pass",
+            "    for name in ('Desktop', 'Documents', 'Downloads', 'Pictures', 'Music', 'Videos', 'Templates', 'Public', 'Projects'):",
+            "        paths.append(os.path.join(home, name))",
+            "    unique = []",
+            "    used = set()",
+            "    for path in paths:",
+            "        path = os.path.abspath(os.path.expanduser(path))",
+            "        if path not in used and os.path.isdir(path):",
+            "            used.add(path)",
+            "            unique.append(path)",
+            "    return unique",
+            "def add_folders():",
+            "    roots = configured_user_dirs()",
+            "    for path in roots:",
+            "        if expired() or len(results) >= 80:",
+            "            return",
+            "        add('folder', path, basename(path), '文件夹 · ' + compact(path), os.path.getmtime(path) if os.path.exists(path) else 0)",
+            "    for base in roots[:7]:",
+            "        if expired() or len(results) >= 80:",
+            "            return",
+            "        try:",
+            "            with os.scandir(base) as entries:",
+            "                for entry in entries:",
+            "                    if expired() or len(results) >= 80:",
+            "                        return",
+            "                    try:",
+            "                        if entry.is_dir(follow_symlinks=False):",
+            "                            stat = entry.stat(follow_symlinks=False)",
+            "                            add('folder', entry.path, entry.name, '文件夹 · ' + compact(entry.path), stat.st_mtime)",
+            "                    except Exception:",
+            "                        pass",
+            "        except Exception:",
+            "            pass",
+            "add_recent_files()",
+            "add_folders()",
+            "results.sort(key=lambda item: (float(item.get('mtime') or 0), 1 if item.get('kind') == 'folder' else 0), reverse=True)",
+            "print(json.dumps(results[:80], ensure_ascii=False))"
+        ].join("\n");
+    }
+
+    function parseTaskIndexOutput(text) {
+        var entries = [];
+        try {
+            var parsed = JSON.parse(String(text || "[]"));
+            var list = Array.isArray(parsed) ? parsed : [];
+            for (var i = 0; i < list.length && entries.length < 80; i++) {
+                var item = list[i] || {};
+                var kind = String(item.kind || "");
+                var path = String(item.path || "").trim();
+                if ((kind === "recent-file" || kind === "folder") && path.length > 0) {
+                    entries.push({
+                        "kind": kind,
+                        "path": path,
+                        "title": String(item.title || pathBasename(path)),
+                        "subtitle": String(item.subtitle || compactPath(path)),
+                        "mtime": Number(item.mtime || 0)
+                    });
+                }
+            }
+        } catch (e) {
+            entries = [];
+        }
+
+        root.cachedTaskQuery = root.taskIndexOutputQuery;
+        root.cachedTaskEntries = entries;
+        bumpProviderRevision();
+    }
+
     function resultsForQuery(query, limit) {
         var normalized = String(query || "").trim();
         if (normalized.length === 0)
             return [];
 
+        var revision = root.providerRevision;
         var max = Math.max(1, limit || root.defaultLimit);
         var results = [];
+        scheduleTaskIndex(normalized);
         results = results.concat(commandResults(normalized));
         results = results.concat(calculatorResults(normalized));
         results = results.concat(screenshotResults(normalized));
         results = results.concat(settingsResults(normalized));
+        results = results.concat(systemActionResults(normalized));
+        results = results.concat(windowResults(normalized, max));
+        results = results.concat(pinnedClipboardResults(normalized, max));
         results = results.concat(appResults(normalized, max));
+        results = results.concat(taskIndexResults(normalized, max));
         return dedupeAndSort(results, max);
     }
 
@@ -423,6 +922,20 @@ Item {
 
         if (result.kind === "settings")
             return activateSettingsItem(result.settingsItem);
+
+        if (result.kind === "window")
+            return activateWindowResult(result.window);
+
+        if (result.kind === "recent-file" || result.kind === "folder")
+            return openPath(result.path);
+
+        if (result.kind === "clipboard-pin")
+            return copyPinnedClipboardResult(result.pin);
+
+        if (result.kind === "system-action") {
+            root.systemActionRequested(String(result.systemAction || ""));
+            return true;
+        }
 
         return false;
     }
@@ -483,6 +996,39 @@ Item {
             command: ["sh", "-c", "printf %s \"$1\" | wl-copy --type 'text/plain;charset=utf-8'", "sh", value],
             workingDirectory: ""
         });
+        return true;
+    }
+
+    function activateWindowResult(window) {
+        if (!window || !root.windowsService)
+            return false;
+
+        if (window.isMinimized && root.windowsService.restore)
+            root.windowsService.restore(window);
+        else if (root.windowsService.activate)
+            root.windowsService.activate(window);
+        else
+            return false;
+        return true;
+    }
+
+    function openPath(path) {
+        var value = String(path || "").trim();
+        if (value.length === 0)
+            return false;
+
+        Quickshell.execDetached({
+            command: ["xdg-open", value],
+            workingDirectory: ""
+        });
+        return true;
+    }
+
+    function copyPinnedClipboardResult(pin) {
+        if (!pin || !root.clipboardService || !root.clipboardService.copyPinnedEntry)
+            return false;
+
+        root.clipboardService.copyPinnedEntry(pin);
         return true;
     }
 
@@ -684,5 +1230,31 @@ Item {
         text = text.replace(/(\.\d*?)0+($|e)/, "$1$2");
         text = text.replace(/\.($|e)/, "$1");
         return text;
+    }
+
+    Timer {
+        id: taskIndexDebounceTimer
+        interval: root.slowProviderDebounceMs
+        repeat: false
+        onTriggered: root.startTaskIndex()
+    }
+
+    Process {
+        id: taskIndexProcess
+        running: false
+        command: root.taskIndexCommand(root.activeTaskQuery)
+
+        stdout: StdioCollector {
+            id: taskIndexOut
+            onStreamFinished: root.parseTaskIndexOutput(taskIndexOut.text)
+        }
+
+        onExited: function(code, exitStatus) {
+            Qt.callLater(function() {
+                root.activeTaskQuery = "";
+                if (root.pendingTaskQuery.length > 0)
+                    root.startTaskIndex();
+            });
+        }
     }
 }

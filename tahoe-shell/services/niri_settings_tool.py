@@ -14,6 +14,8 @@ from typing import Any
 
 
 NUMBER_RE = r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)"
+MANAGED_BEGIN_RE = re.compile(r"^\s*//\s*tahoe-managed:\s*begin\s+([A-Za-z0-9_-]+)\s*$")
+MANAGED_END_RE = re.compile(r"^\s*//\s*tahoe-managed:\s*end\s+([A-Za-z0-9_-]+)\s*$")
 
 
 class KdlEditError(RuntimeError):
@@ -98,6 +100,93 @@ def find_top_level_block(lines: list[str], name: str) -> tuple[int, int]:
             break
         depth += brace_delta(line)
     raise KdlEditError(f"missing top-level {name} block")
+
+
+def find_top_level_blocks(lines: list[str], name: str) -> list[tuple[int, int]]:
+    blocks: list[tuple[int, int]] = []
+    start_re = re.compile(rf"^\s*{re.escape(name)}\b[^\n{{]*\{{\s*$")
+    depth = 0
+    index = 0
+    while index < len(lines):
+        body = uncommented_body(lines[index])
+        if depth == 0 and start_re.match(body):
+            local_depth = 0
+            for end in range(index, len(lines)):
+                local_depth += brace_delta(lines[end])
+                if local_depth == 0:
+                    blocks.append((index, end))
+                    index = end + 1
+                    break
+            else:
+                raise KdlEditError(f"unterminated top-level {name} block")
+            continue
+        depth += brace_delta(lines[index])
+        index += 1
+    return blocks
+
+
+def previous_content_line(lines: list[str], index: int) -> tuple[int, str] | None:
+    for cursor in range(index - 1, -1, -1):
+        if lines[cursor].strip():
+            return cursor, lines[cursor]
+    return None
+
+
+def next_content_line(lines: list[str], index: int) -> tuple[int, str] | None:
+    for cursor in range(index + 1, len(lines)):
+        if lines[cursor].strip():
+            return cursor, lines[cursor]
+    return None
+
+
+def managed_block_for_field(field: str) -> str:
+    if field.startswith("layout."):
+        return "layout"
+    if field.startswith("glass."):
+        return "tahoe-glass"
+    if field.startswith("blur."):
+        return "blur"
+    if field.startswith("input."):
+        return "input"
+    if field.startswith("animations."):
+        return "animations"
+    raise KdlEditError(f"unsupported field: {field}")
+
+
+def managed_recovery_message(block_name: str) -> str:
+    return (
+        f"Recovery: re-deploy config/niri/tahoe-phase0.kdl or wrap the {block_name} block with "
+        f"// tahoe-managed: begin {block_name} and // tahoe-managed: end {block_name}. "
+        "The live config was not changed."
+    )
+
+
+def assert_managed_write_target(text: str, field: str) -> None:
+    block_name = managed_block_for_field(field)
+    lines = text.splitlines(True)
+    blocks = find_top_level_blocks(lines, block_name)
+    if len(blocks) != 1:
+        raise KdlEditError(
+            f"refusing to edit {field}: expected exactly one top-level {block_name} block, "
+            f"found {len(blocks)}. {managed_recovery_message(block_name)}"
+        )
+
+    start, end = blocks[0]
+    before = previous_content_line(lines, start)
+    after = next_content_line(lines, end)
+    begin_ok = bool(before and (match := MANAGED_BEGIN_RE.match(before[1])) and match.group(1) == block_name)
+    end_ok = bool(after and (match := MANAGED_END_RE.match(after[1])) and match.group(1) == block_name)
+    if not begin_ok or not end_ok:
+        missing: list[str] = []
+        if not begin_ok:
+            missing.append(f"// tahoe-managed: begin {block_name}")
+        if not end_ok:
+            missing.append(f"// tahoe-managed: end {block_name}")
+        raise KdlEditError(
+            f"refusing to edit {field}: {block_name} block is not Tahoe-managed "
+            f"(missing {' and '.join(missing)} near lines {start + 1}-{end + 1}). "
+            f"{managed_recovery_message(block_name)}"
+        )
 
 
 def find_child_block(lines: list[str], parent_start: int, parent_end: int, name: str) -> tuple[int, int] | None:
@@ -787,6 +876,8 @@ def read_binds_text(text: str) -> dict[str, Any]:
 
 
 def update_field(text: str, field: str, raw_value: str) -> str:
+    assert_managed_write_target(text, field)
+
     if field.startswith("layout."):
         return update_layout_text(text, field, raw_value)
 

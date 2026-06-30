@@ -4,6 +4,7 @@
 // through scripts/arch-update.sh. It intentionally does not replace the
 // user's default ~/.config/niri/config.kdl.
 
+// tahoe-managed: begin input
 input {
     keyboard {
         xkb {}
@@ -15,6 +16,7 @@ input {
         natural-scroll
     }
 }
+// tahoe-managed: end input
 
 output "eDP-2" {
     mode "2560x1600@239.998"
@@ -24,6 +26,7 @@ output "eDP-2" {
     // variable-refresh-rate
 }
 
+// tahoe-managed: begin layout
 layout {
     gaps 16
     center-focused-column "never"
@@ -53,7 +56,9 @@ layout {
         preview-border-color "#78beffb4"
     }
 }
+// tahoe-managed: end layout
 
+// tahoe-managed: begin blur
 blur {
     on
     passes 4
@@ -61,7 +66,9 @@ blur {
     noise 0.004
     saturation 1.22
 }
+// tahoe-managed: end blur
 
+// tahoe-managed: begin tahoe-glass
 tahoe-glass {
     // Tahoe shell glass should sample the real framebuffer behind the panel.
     // Leaving xray implicit makes it sample only niri's backdrop buffer, so
@@ -188,6 +195,7 @@ tahoe-glass {
         }
     }
 }
+// tahoe-managed: end tahoe-glass
 
 hotkey-overlay {
     skip-at-startup
@@ -243,6 +251,7 @@ spawn-at-startup "fcitx5" "-d" "--replace"
 // without polkit-gnome don't log a missing-binary error.
 spawn-sh-at-startup "command -v /usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1 >/dev/null 2>&1 && /usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1 &"
 
+// tahoe-managed: begin animations
 animations {
     workspace-switch {
         spring damping-ratio=1.0 stiffness=780 epsilon=0.0001
@@ -298,6 +307,7 @@ vec4 close_color(vec3 coords_geo, vec3 size_geo) {
         spring damping-ratio=0.95 stiffness=760 epsilon=0.0005
     }
 }
+// tahoe-managed: end animations
 
 window-rule {
     open-floating true
@@ -732,7 +742,9 @@ binds {
 
     Mod+T hotkey-overlay-title="Open a Terminal: alacritty" { spawn "alacritty"; }
     Mod+D hotkey-overlay-title="Run an Application: fuzzel" { spawn "fuzzel"; }
-    Super+Alt+L hotkey-overlay-title="Lock the Screen: swaylock" { spawn "swaylock"; }
+    Super+Alt+L hotkey-overlay-title="Lock the Screen: Tahoe" {
+        spawn-sh "lock_helper=\"${TAHOE_CONFIG_DIR:-$HOME/.config/quickshell/tahoe}/scripts/tahoe-lock.sh\"; if [ -r \"$lock_helper\" ]; then exec bash \"$lock_helper\" shortcut; fi; qs_bin=\"${TAHOE_QUICKSHELL_BIN:-$HOME/.local/bin/quickshell}\"; cfg=\"${TAHOE_CONFIG_DIR:-$HOME/.config/quickshell/tahoe}\"; [ -x \"$qs_bin\" ] || qs_bin=quickshell; \"$qs_bin\" ipc -p \"$cfg\" call tahoe lockFrom shortcut >/dev/null 2>&1 || \"$qs_bin\" ipc -p \"$cfg\" call tahoe lock >/dev/null 2>&1 || loginctl lock-session \"${XDG_SESSION_ID:-}\" >/dev/null 2>&1 || { command -v swaylock >/dev/null 2>&1 && exec swaylock; }";
+    }
 
     Super+Alt+S allow-when-locked=true hotkey-overlay-title=null { spawn-sh "pkill orca || exec orca"; }
 

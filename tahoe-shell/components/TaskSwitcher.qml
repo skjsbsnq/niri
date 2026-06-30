@@ -10,6 +10,7 @@ PanelWindow {
 
     property bool open: false
     property var windowsService
+    property var thumbnailProvider
     property var appsService
     property int selectedIndex: 0
     property string selectedWindowKey: ""
@@ -51,6 +52,7 @@ PanelWindow {
 
             selectedIndex = focusedIndex();
             selectedWindowKey = windowKey(currentWindow());
+            requestVisibleThumbnails(false);
             Qt.callLater(function() {
                 if (root.open)
                     focusCatcher.forceActiveFocus();
@@ -60,7 +62,10 @@ PanelWindow {
         }
     }
 
-    onWindowChoicesChanged: if (open) syncSelectionAfterModelChange()
+    onWindowChoicesChanged: if (open) {
+        syncSelectionAfterModelChange();
+        requestVisibleThumbnails(false);
+    }
 
     onSelectedIndexChanged: {
         selectedWindowKey = windowKey(currentWindow());
@@ -226,6 +231,18 @@ PanelWindow {
         return parts.join(" - ");
     }
 
+    function requestThumbnailFor(window, force) {
+        if (!root.thumbnailProvider || !window)
+            return;
+        root.thumbnailProvider.requestThumbnail(window, 360, 220, "task-switcher", !!force);
+    }
+
+    function requestVisibleThumbnails(force) {
+        if (!root.thumbnailProvider)
+            return;
+        root.thumbnailProvider.requestThumbnails(root.windowChoices, 360, 220, "task-switcher", !!force);
+    }
+
     Timer {
         id: releaseConfirmTimer
         interval: 40
@@ -367,9 +384,18 @@ PanelWindow {
                 readonly property bool selected: index === root.selectedIndex
                 readonly property bool minimized: !!(modelData && modelData.isMinimized)
                 readonly property string iconSource: root.windowIcon(modelData)
+                readonly property int thumbnailRevision: root.thumbnailProvider ? root.thumbnailProvider.revision : 0
+                readonly property var thumbnailState: root.thumbnailProvider ? root.thumbnailProvider.thumbnailStateForWindow(modelData, thumbnailRevision) : null
+                readonly property bool thumbnailAvailable: !!(thumbnailState && thumbnailState.ready && !thumbnailState.failed)
+                readonly property string thumbnailSource: thumbnailAvailable && thumbnailState.path
+                    ? "file://" + String(thumbnailState.path) + "?v=" + String(thumbnailState.generation || 0)
+                    : ""
 
                 width: 138
                 height: windowListView.height
+
+                onModelDataChanged: if (root.open) root.requestThumbnailFor(modelData, false)
+                Component.onCompleted: if (root.open) root.requestThumbnailFor(modelData, false)
 
                 Rectangle {
                     anchors.fill: parent
@@ -381,47 +407,99 @@ PanelWindow {
                 }
 
                 Rectangle {
+                    id: previewFrame
+
                     anchors.horizontalCenter: parent.horizontalCenter
                     anchors.top: parent.top
-                    anchors.topMargin: 14
-                    width: 54
-                    height: 54
-                    radius: 16
+                    anchors.topMargin: 12
+                    width: 116
+                    height: 66
+                    radius: 13
                     color: windowItem.minimized ? "#26ffffff" : "#42ffffff"
                     border.color: "#42ffffff"
                     border.width: 1
-                }
+                    clip: true
 
-                Image {
-                    id: windowIconImage
+                    Image {
+                        id: thumbnailImage
 
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    anchors.top: parent.top
-                    anchors.topMargin: 22
-                    width: 38
-                    height: 38
-                    source: windowItem.iconSource
-                    fillMode: Image.PreserveAspectFit
-                    smooth: true
-                    mipmap: true
-                    opacity: windowItem.minimized ? 0.58 : 1
-                    visible: windowItem.iconSource.length > 0 && status !== Image.Error
-                }
+                        anchors.fill: parent
+                        source: windowItem.thumbnailSource
+                        fillMode: Image.PreserveAspectCrop
+                        smooth: true
+                        mipmap: true
+                        asynchronous: true
+                        cache: false
+                        opacity: windowItem.minimized ? 0.62 : 1
+                        visible: windowItem.thumbnailSource.length > 0 && status !== Image.Error
+                        onStatusChanged: {
+                            if (status === Image.Error && windowItem.thumbnailAvailable && root.thumbnailProvider)
+                                root.thumbnailProvider.markImageFailed(windowItem.modelData, "task switcher thumbnail image failed to load");
+                        }
+                    }
 
-                Text {
-                    anchors.centerIn: windowIconImage
-                    text: "\ue8d0"
-                    color: "#5a626a"
-                    font.family: "Material Icons"
-                    font.pixelSize: 22
-                    visible: !windowIconImage.visible
+                    Rectangle {
+                        anchors.centerIn: parent
+                        width: 54
+                        height: 54
+                        radius: 16
+                        color: "transparent"
+                        visible: !thumbnailImage.visible
+                    }
+
+                    Image {
+                        id: windowIconImage
+
+                        anchors.centerIn: parent
+                        width: 38
+                        height: 38
+                        source: windowItem.iconSource
+                        fillMode: Image.PreserveAspectFit
+                        smooth: true
+                        mipmap: true
+                        opacity: windowItem.minimized ? 0.58 : 1
+                        visible: !thumbnailImage.visible && windowItem.iconSource.length > 0 && status !== Image.Error
+                    }
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: "\ue8d0"
+                        color: "#5a626a"
+                        font.family: "Material Icons"
+                        font.pixelSize: 22
+                        visible: !thumbnailImage.visible && !windowIconImage.visible
+                    }
+
+                    Rectangle {
+                        anchors.left: parent.left
+                        anchors.bottom: parent.bottom
+                        anchors.margins: 5
+                        width: 24
+                        height: 24
+                        radius: 7
+                        color: "#e8ffffff"
+                        border.color: "#70ffffff"
+                        border.width: 1
+                        visible: thumbnailImage.visible && windowItem.iconSource.length > 0
+
+                        Image {
+                            anchors.centerIn: parent
+                            width: 17
+                            height: 17
+                            source: windowItem.iconSource
+                            fillMode: Image.PreserveAspectFit
+                            smooth: true
+                            mipmap: true
+                            asynchronous: true
+                        }
+                    }
                 }
 
                 Text {
                     anchors.left: parent.left
                     anchors.right: parent.right
                     anchors.top: parent.top
-                    anchors.topMargin: 80
+                    anchors.topMargin: 84
                     anchors.leftMargin: 10
                     anchors.rightMargin: 10
                     text: root.windowLabel(windowItem.modelData)
@@ -437,7 +515,7 @@ PanelWindow {
                     anchors.left: parent.left
                     anchors.right: parent.right
                     anchors.top: parent.top
-                    anchors.topMargin: 101
+                    anchors.topMargin: 105
                     anchors.leftMargin: 10
                     anchors.rightMargin: 10
                     text: root.detailText(windowItem.modelData)

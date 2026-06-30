@@ -62,6 +62,8 @@ XWAYLAND_SATELLITE_TARGET_DIR="${XWAYLAND_SATELLITE_TARGET_DIR:-"$TAHOE_CACHE_DI
 XWAYLAND_SATELLITE_BIN="${XWAYLAND_SATELLITE_BIN:-"$HOME/.local/lib/niri/xwayland-satellite-minimize"}"
 XWAYLAND_SATELLITE_GLAMOR_WRAPPER="${XWAYLAND_SATELLITE_GLAMOR_WRAPPER:-"$XWAYLAND_SATELLITE_BIN-glamor"}"
 XWAYLAND_SATELLITE_BUILD_STAMP="${XWAYLAND_SATELLITE_BUILD_STAMP:-"$TAHOE_STATE_DIR/xwayland-satellite-minimize.stamp"}"
+XWAYLAND_SATELLITE_COMPAT_CHECK_SCRIPT="${XWAYLAND_SATELLITE_COMPAT_CHECK_SCRIPT:-"$REPO_DIR/scripts/check-xwayland-satellite-compat.sh"}"
+TAHOE_XWAYLAND_COMPAT_CHECK_TARGET="${TAHOE_XWAYLAND_COMPAT_CHECK_TARGET:-"$TAHOE_CONFIG_DIR/scripts/check-xwayland-satellite-compat.sh"}"
 RUN_TAHOE_GLASS_GUARDRAILS="${RUN_TAHOE_GLASS_GUARDRAILS:-true}"
 TAHOE_GLASS_GUARDRAILS_SCRIPT="${TAHOE_GLASS_GUARDRAILS_SCRIPT:-"$REPO_DIR/scripts/check-tahoe-glass-guardrails.sh"}"
 ALLOW_NIRI_VRR="${ALLOW_NIRI_VRR:-false}"
@@ -663,6 +665,11 @@ deploy_tahoe_shell() {
   log "deploying Tahoe shell to $TAHOE_CONFIG_DIR"
   migrate_legacy_tahoe_shell_state
   sync_dir "$TAHOE_SHELL_DIR" "$TAHOE_CONFIG_DIR"
+  if [[ -x "$XWAYLAND_SATELLITE_COMPAT_CHECK_SCRIPT" ]]; then
+    install -Dm755 "$XWAYLAND_SATELLITE_COMPAT_CHECK_SCRIPT" "$TAHOE_XWAYLAND_COMPAT_CHECK_TARGET"
+  else
+    log "xwayland-satellite compatibility check script not deployed; missing $XWAYLAND_SATELLITE_COMPAT_CHECK_SCRIPT"
+  fi
   shell_deployed=true
 }
 
@@ -738,6 +745,39 @@ run_tahoe_glass_guardrails() {
 
   log "running Tahoe glass Phase 7 guardrails"
   bash "$TAHOE_GLASS_GUARDRAILS_SCRIPT"
+}
+
+run_xwayland_satellite_compat_check() {
+  local output
+
+  if ! xwayland_satellite_enabled; then
+    log "skipping patched xwayland-satellite compatibility check; BUILD_XWAYLAND_SATELLITE=$BUILD_XWAYLAND_SATELLITE"
+    return
+  fi
+
+  [[ -x "$XWAYLAND_SATELLITE_COMPAT_CHECK_SCRIPT" ]] \
+    || die "missing xwayland-satellite compatibility check: $XWAYLAND_SATELLITE_COMPAT_CHECK_SCRIPT"
+
+  log "checking patched xwayland-satellite compatibility"
+  if ! output="$(
+    REPO_DIR="$REPO_DIR" \
+    TAHOE_CACHE_DIR="$TAHOE_CACHE_DIR" \
+    TAHOE_STATE_DIR="$TAHOE_STATE_DIR" \
+    NIRI_CONFIG_TARGET="$NIRI_CONFIG_TARGET" \
+    XWAYLAND_SATELLITE_REPO_URL="$XWAYLAND_SATELLITE_REPO_URL" \
+    XWAYLAND_SATELLITE_REF="$XWAYLAND_SATELLITE_REF" \
+    XWAYLAND_SATELLITE_PATCH="$XWAYLAND_SATELLITE_PATCH" \
+    XWAYLAND_SATELLITE_UPSTREAM_DIR="$XWAYLAND_SATELLITE_UPSTREAM_DIR" \
+    XWAYLAND_SATELLITE_BIN="$XWAYLAND_SATELLITE_BIN" \
+    XWAYLAND_SATELLITE_GLAMOR_WRAPPER="$XWAYLAND_SATELLITE_GLAMOR_WRAPPER" \
+    XWAYLAND_SATELLITE_BUILD_STAMP="$XWAYLAND_SATELLITE_BUILD_STAMP" \
+    bash "$XWAYLAND_SATELLITE_COMPAT_CHECK_SCRIPT" --status --strict 2>&1
+  )"; then
+    printf '%s\n' "$output" | sed 's/^/[arch-update]   /'
+    die "patched xwayland-satellite compatibility check failed"
+  fi
+
+  printf '%s\n' "$output" | sed 's/^/[arch-update]   /'
 }
 
 main() {
@@ -968,7 +1008,9 @@ main() {
   fi
 
   if changed_since_pull '^(tahoe-shell/|macOS-26-Tahoe-for-the-Web-main/(background|icon)/|.*\.qml$)' \
-    || dirs_differ "$TAHOE_SHELL_DIR" "$TAHOE_CONFIG_DIR"; then
+    || changed_since_pull '^scripts/check-xwayland-satellite-compat\.sh$' \
+    || dirs_differ "$TAHOE_SHELL_DIR" "$TAHOE_CONFIG_DIR" \
+    || files_differ "$XWAYLAND_SATELLITE_COMPAT_CHECK_SCRIPT" "$TAHOE_XWAYLAND_COMPAT_CHECK_TARGET"; then
     need_shell_deploy=true
   fi
 
@@ -1036,6 +1078,8 @@ main() {
   else
     log "Tahoe session entry deploy not needed"
   fi
+
+  run_xwayland_satellite_compat_check
 
   log "summary:"
   log "  repo from: $before_commit"

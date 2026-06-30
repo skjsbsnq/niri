@@ -10,6 +10,7 @@ PanelWindow {
 
     property var appsService
     property var niriService
+    property var thumbnailProvider
     property var settingsService
     property bool launchpadOpen: false
     // See shell.qml useSpring. Spring on Image geometry corrupts textures on
@@ -741,6 +742,7 @@ PanelWindow {
                 height: 64
                 visible: root.hasMinimizedWindows && width > 0
                 windowsService: root.niriService
+                thumbnailProvider: root.thumbnailProvider
                 appsService: root.appsService
                 dockWindow: root
                 dockSurfaceItem: dockSurface

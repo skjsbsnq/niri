@@ -1,25 +1,26 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
-import Quickshell.Io
 
 Item {
     id: root
 
     property var windowModel: null
     property var windowsService
+    property var thumbnailProvider
     property var appsService
     property var dockWindow
     property var dockSurfaceItem
     property int thumbnailMaxWidth: 320
     property int thumbnailMaxHeight: 220
-    property bool thumbnailReady: false
-    property bool thumbnailFailed: false
-    property int thumbnailGeneration: 0
-    property bool refreshPending: false
     property real bounceOffset: 0
     readonly property bool hasWindowId: windowModel && windowModel.id !== undefined && windowModel.id !== null
-    readonly property string thumbnailPath: windowsService && windowModel ? windowsService.thumbnailPathForWindow(windowModel) : ""
+    readonly property int thumbnailProviderRevision: thumbnailProvider ? thumbnailProvider.revision : 0
+    readonly property var thumbnailState: thumbnailProvider ? thumbnailProvider.thumbnailStateForWindow(windowModel, thumbnailProviderRevision) : null
+    readonly property bool thumbnailReady: !!(thumbnailState && thumbnailState.ready)
+    readonly property bool thumbnailFailed: !!(thumbnailState && thumbnailState.failed)
+    readonly property int thumbnailGeneration: thumbnailState ? Number(thumbnailState.generation || 0) : 0
+    readonly property string thumbnailPath: thumbnailState ? String(thumbnailState.path || "") : ""
     readonly property string thumbnailSource: thumbnailReady && thumbnailPath.length > 0
         ? "file://" + thumbnailPath + "?v=" + String(thumbnailGeneration)
         : ""
@@ -44,34 +45,16 @@ Item {
     }
 
     function refreshThumbnail() {
-        if (!root.hasWindowId || root.thumbnailPath.length === 0) {
-            root.thumbnailReady = false;
-            root.thumbnailFailed = true;
+        if (!root.hasWindowId || !root.thumbnailProvider)
             return;
-        }
 
-        if (thumbnailProcess.running) {
-            root.refreshPending = true;
-            return;
-        }
-
-        root.thumbnailReady = false;
-        root.thumbnailFailed = false;
-        thumbnailProcess.command = [
-            "niri",
-            "msg",
-            "--json",
-            "window-thumbnail",
-            "--id",
-            String(root.windowModel.id),
-            "--path",
-            root.thumbnailPath,
-            "--max-width",
-            String(root.thumbnailMaxWidth),
-            "--max-height",
-            String(root.thumbnailMaxHeight)
-        ];
-        thumbnailProcess.running = true;
+        root.thumbnailProvider.requestThumbnail(
+            root.windowModel,
+            root.thumbnailMaxWidth,
+            root.thumbnailMaxHeight,
+            "dock-minimized",
+            false
+        );
     }
 
     function updateDockRectangle() {
@@ -104,7 +87,7 @@ Item {
     }
 
     onWindowModelChanged: scheduleThumbnailRefresh()
-    onThumbnailPathChanged: scheduleThumbnailRefresh()
+    onThumbnailProviderChanged: scheduleThumbnailRefresh()
     Component.onCompleted: scheduleThumbnailRefresh()
 
     Timer {
@@ -112,26 +95,6 @@ Item {
         interval: 40
         repeat: false
         onTriggered: root.refreshThumbnail()
-    }
-
-    Process {
-        id: thumbnailProcess
-        running: false
-        onExited: function(code, exitStatus) {
-            if (code === 0) {
-                root.thumbnailGeneration += 1;
-                root.thumbnailReady = true;
-                root.thumbnailFailed = false;
-            } else {
-                root.thumbnailReady = false;
-                root.thumbnailFailed = true;
-            }
-
-            if (root.refreshPending) {
-                root.refreshPending = false;
-                root.scheduleThumbnailRefresh();
-            }
-        }
     }
 
     Rectangle {
@@ -160,10 +123,8 @@ Item {
             cache: false
             visible: !root.showFallback
             onStatusChanged: {
-                if (status === Image.Error && root.thumbnailReady)
-                    root.thumbnailFailed = true;
-                else if (status === Image.Ready)
-                    root.thumbnailFailed = false;
+                if (status === Image.Error && root.thumbnailReady && root.thumbnailProvider)
+                    root.thumbnailProvider.markImageFailed(root.windowModel, "dock thumbnail image failed to load");
             }
         }
 

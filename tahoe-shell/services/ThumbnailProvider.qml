@@ -1,0 +1,409 @@
+pragma ComponentBehavior: Bound
+
+import QtQuick
+import Quickshell
+import Quickshell.Io
+
+// Centralized window thumbnail queue for Tahoe shell surfaces.
+Item {
+    id: root
+    visible: false
+
+    property var windowsService
+    property int maxQueueLength: 64
+    property int maxCacheAgeMs: 30000
+    property int revision: 0
+    property int successCount: 0
+    property int failureCount: 0
+    property string lastError: ""
+    property var cache: ({})
+    property var queuedKeys: ({})
+    property var queue: []
+    property var activeJob: null
+
+    readonly property int pendingCount: queue.length
+    readonly property bool running: thumbnailProcess.running
+    readonly property string thumbnailDirectory: runtimeDirectory() + "/tahoe/window-thumbnails"
+
+    function runtimeDirectory() {
+        var dir = String(Quickshell.env("XDG_RUNTIME_DIR") || "").trim();
+        return dir.length > 0 ? dir : "/tmp";
+    }
+
+    function copyObject(source) {
+        var out = {};
+        var value = source || {};
+        for (var key in value)
+            out[key] = value[key];
+        return out;
+    }
+
+    function setCacheState(key, state) {
+        var next = copyObject(root.cache);
+        next[key] = state;
+        root.cache = next;
+    }
+
+    function deleteCacheState(key) {
+        var next = copyObject(root.cache);
+        delete next[key];
+        root.cache = next;
+    }
+
+    function touch() {
+        root.revision += 1;
+    }
+
+    function windowFromIdOrObject(idOrWindow) {
+        if (idOrWindow === undefined || idOrWindow === null)
+            return null;
+        if (typeof idOrWindow === "object")
+            return idOrWindow;
+        if (root.windowsService && root.windowsService.windowFromIdOrObject)
+            return root.windowsService.windowFromIdOrObject(idOrWindow);
+        return { "id": idOrWindow };
+    }
+
+    function keyForWindow(idOrWindow) {
+        var window = windowFromIdOrObject(idOrWindow);
+        var id = window && window.id !== undefined && window.id !== null ? window.id : idOrWindow;
+        var key = String(id === undefined || id === null ? "" : id).trim();
+        return /^\d+$/.test(key) ? key : "";
+    }
+
+    function thumbnailPathForId(id) {
+        var key = keyForWindow(id);
+        if (key.length === 0)
+            return "";
+        return root.thumbnailDirectory + "/window-" + key + ".png";
+    }
+
+    function thumbnailPathForWindow(idOrWindow) {
+        var key = keyForWindow(idOrWindow);
+        return key.length > 0 ? root.thumbnailDirectory + "/window-" + key + ".png" : "";
+    }
+
+    function makeState(key) {
+        return {
+            "key": key,
+            "path": root.thumbnailDirectory + "/window-" + key + ".png",
+            "ready": false,
+            "failed": false,
+            "queued": false,
+            "loading": false,
+            "generation": 0,
+            "maxWidth": 0,
+            "maxHeight": 0,
+            "desiredWidth": 0,
+            "desiredHeight": 0,
+            "updatedAt": 0,
+            "error": "",
+            "status": "idle",
+            "refreshPending": false
+        };
+    }
+
+    function stateForKey(key, create) {
+        key = String(key || "");
+        if (key.length === 0)
+            return null;
+
+        var state = root.cache[key];
+        if (!state && create) {
+            state = makeState(key);
+            setCacheState(key, state);
+        }
+        return state || null;
+    }
+
+    function thumbnailStateForWindow(idOrWindow, revisionToken) {
+        revisionToken = revisionToken;
+        var key = keyForWindow(idOrWindow);
+        return key.length > 0 ? stateForKey(key, true) : null;
+    }
+
+    function clampDimension(value, fallback) {
+        var number = Math.round(Number(value));
+        if (!isFinite(number) || number <= 0)
+            number = fallback;
+        return Math.max(1, Math.min(4096, number));
+    }
+
+    function removeQueuedKey(key) {
+        key = String(key || "");
+        if (key.length === 0)
+            return;
+
+        var nextQueue = [];
+        for (var i = 0; i < root.queue.length; i++) {
+            if (String(root.queue[i]) !== key)
+                nextQueue.push(root.queue[i]);
+        }
+        root.queue = nextQueue;
+
+        var nextKeys = copyObject(root.queuedKeys);
+        delete nextKeys[key];
+        root.queuedKeys = nextKeys;
+
+        var state = stateForKey(key, false);
+        if (state) {
+            state.queued = false;
+            if (!state.loading && state.status === "queued")
+                state.status = state.ready ? "ready" : "idle";
+        }
+    }
+
+    function queueKey(key) {
+        key = String(key || "");
+        if (key.length === 0)
+            return false;
+
+        var state = stateForKey(key, true);
+        if (!state)
+            return false;
+
+        if (root.queuedKeys[key]) {
+            state.queued = true;
+            touch();
+            return true;
+        }
+
+        if (root.queue.length >= root.maxQueueLength) {
+            state.loading = false;
+            state.queued = false;
+            state.failed = true;
+            state.status = "failed";
+            state.error = "thumbnail queue is full";
+            root.lastError = state.error;
+            root.failureCount += 1;
+            touch();
+            return false;
+        }
+
+        var nextKeys = copyObject(root.queuedKeys);
+        nextKeys[key] = true;
+        root.queuedKeys = nextKeys;
+        root.queue = root.queue.concat([key]);
+        state.queued = true;
+        state.status = "queued";
+        pumpTimer.restart();
+        touch();
+        return true;
+    }
+
+    function requestThumbnail(idOrWindow, maxWidth, maxHeight, reason, force) {
+        var key = keyForWindow(idOrWindow);
+        if (key.length === 0)
+            return false;
+
+        var state = stateForKey(key, true);
+        if (!state)
+            return false;
+
+        var width = clampDimension(maxWidth, 320);
+        var height = clampDimension(maxHeight, 220);
+        state.desiredWidth = Math.max(Number(state.desiredWidth) || 0, width);
+        state.desiredHeight = Math.max(Number(state.desiredHeight) || 0, height);
+
+        var now = Date.now();
+        var age = state.updatedAt > 0 ? now - state.updatedAt : 999999999999;
+        var hasEnoughSize = state.maxWidth >= width && state.maxHeight >= height;
+        var cacheFresh = state.ready && !state.failed && hasEnoughSize && age < root.maxCacheAgeMs;
+        if (!force && cacheFresh) {
+            touch();
+            return true;
+        }
+
+        if (state.loading) {
+            state.refreshPending = true;
+            touch();
+            return true;
+        }
+
+        state.failed = false;
+        state.error = "";
+        state.status = "queued";
+        return queueKey(key);
+    }
+
+    function requestThumbnails(windows, maxWidth, maxHeight, reason, force) {
+        var values = Array.isArray(windows) ? windows : [];
+        var limit = Math.min(values.length, root.maxQueueLength);
+        for (var i = 0; i < limit; i++)
+            requestThumbnail(values[i], maxWidth, maxHeight, reason, force);
+    }
+
+    function markImageFailed(idOrWindow, error) {
+        var key = keyForWindow(idOrWindow);
+        var state = stateForKey(key, false);
+        if (!state)
+            return;
+        state.ready = false;
+        state.failed = true;
+        state.loading = false;
+        state.status = "failed";
+        state.error = String(error || "thumbnail image failed to load");
+        root.lastError = state.error;
+        touch();
+    }
+
+    function cleanupThumbnailFileForId(id) {
+        var path = thumbnailPathForId(id);
+        if (path.length === 0)
+            return;
+        Quickshell.execDetached({ command: ["rm", "-f", "--", path] });
+    }
+
+    function cleanupCachedKey(key) {
+        key = String(key || "");
+        if (key.length === 0)
+            return;
+
+        removeQueuedKey(key);
+        if (root.activeJob && root.activeJob.key === key)
+            root.activeJob.cancelled = true;
+        deleteCacheState(key);
+        cleanupThumbnailFileForId(key);
+        touch();
+    }
+
+    function pruneStaleThumbnails() {
+        if (!root.windowsService || !root.windowsService.windowList)
+            return;
+
+        var live = {};
+        var windows = root.windowsService.windowList || [];
+        for (var i = 0; i < windows.length; i++) {
+            var key = keyForWindow(windows[i]);
+            if (key.length > 0)
+                live[key] = true;
+        }
+
+        var keys = [];
+        for (var cacheKey in root.cache) {
+            if (!live[cacheKey])
+                keys.push(cacheKey);
+        }
+        for (var j = 0; j < keys.length; j++)
+            cleanupCachedKey(keys[j]);
+    }
+
+    function pumpQueue() {
+        if (thumbnailProcess.running || root.activeJob)
+            return;
+
+        while (root.queue.length > 0) {
+            var key = String(root.queue[0]);
+            root.queue = root.queue.slice(1);
+            var nextKeys = copyObject(root.queuedKeys);
+            delete nextKeys[key];
+            root.queuedKeys = nextKeys;
+
+            var state = stateForKey(key, false);
+            if (!state || state.path.length === 0)
+                continue;
+
+            state.queued = false;
+            state.loading = true;
+            state.failed = false;
+            state.error = "";
+            state.status = "loading";
+
+            var width = clampDimension(state.desiredWidth, 320);
+            var height = clampDimension(state.desiredHeight, 220);
+            root.activeJob = {
+                "key": key,
+                "path": state.path,
+                "maxWidth": width,
+                "maxHeight": height,
+                "cancelled": false
+            };
+            thumbnailProcess.command = [
+                "sh",
+                "-c",
+                "if command -v timeout >/dev/null 2>&1; then exec timeout 8s niri msg --json window-thumbnail --id \"$1\" --path \"$2\" --max-width \"$3\" --max-height \"$4\"; else exec niri msg --json window-thumbnail --id \"$1\" --path \"$2\" --max-width \"$3\" --max-height \"$4\"; fi",
+                "sh",
+                key,
+                state.path,
+                String(width),
+                String(height)
+            ];
+            thumbnailProcess.running = true;
+            touch();
+            return;
+        }
+    }
+
+    function finishActiveJob(code) {
+        var job = root.activeJob;
+        if (!job)
+            return;
+
+        var state = stateForKey(job.key, false);
+        if (job.cancelled) {
+            cleanupThumbnailFileForId(job.key);
+            root.activeJob = null;
+            pumpTimer.restart();
+            touch();
+            return;
+        }
+
+        if (state) {
+            state.loading = false;
+            state.queued = false;
+            if (code === 0) {
+                state.ready = true;
+                state.failed = false;
+                state.generation = (Number(state.generation) || 0) + 1;
+                state.maxWidth = job.maxWidth;
+                state.maxHeight = job.maxHeight;
+                state.updatedAt = Date.now();
+                state.error = "";
+                state.status = "ready";
+                root.successCount += 1;
+            } else {
+                state.ready = false;
+                state.failed = true;
+                state.error = "niri window-thumbnail exited with code " + String(code);
+                state.status = "failed";
+                root.lastError = state.error;
+                root.failureCount += 1;
+            }
+
+            if (state.refreshPending) {
+                state.refreshPending = false;
+                queueKey(job.key);
+            }
+        }
+
+        root.activeJob = null;
+        pumpTimer.restart();
+        touch();
+    }
+
+    onWindowsServiceChanged: pruneStaleThumbnails()
+
+    Connections {
+        target: root.windowsService
+        ignoreUnknownSignals: true
+
+        function onWindowListChanged() {
+            root.pruneStaleThumbnails();
+        }
+    }
+
+    Timer {
+        id: pumpTimer
+        interval: 0
+        repeat: false
+        onTriggered: root.pumpQueue()
+    }
+
+    Process {
+        id: thumbnailProcess
+        running: false
+        onExited: function(code, exitStatus) {
+            root.finishActiveJob(code);
+        }
+    }
+}

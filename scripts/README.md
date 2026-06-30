@@ -15,7 +15,7 @@ bash scripts/baremetal-install.sh
 It does only what a minimal install is missing, and otherwise drives the existing scripts:
 
 1. clones the repo to `~/niri` (or `git pull --ff-only` + submodule update if it already exists; refuses to overwrite uncommitted changes),
-2. installs `lightdm` + `lightdm-gtk-greeter` and the GUI apps/runtime helpers the config/shell call directly (`alacritty`, `fuzzel`, `grim`, `slurp`, `swappy`, `gammastep`, `qt6ct`, `kvantum`, `swaylock`, `swaybg`, `brightnessctl`, `cliphist`, `wl-clipboard`, `network-manager-applet`, `nm-connection-editor`, `power-profiles-daemon`, `xwayland-satellite`, `xdg-desktop-portal`, `xdg-desktop-portal-gnome`, `xdg-desktop-portal-gtk`),
+2. installs `lightdm` + `lightdm-gtk-greeter` and the GUI apps/runtime helpers the config/shell call directly (`alacritty`, `fuzzel`, `grim`, `slurp`, `swappy`, `gammastep`, `qt6ct`, `kvantum`, `swaylock` as an emergency lock fallback, `swaybg`, `brightnessctl`, `cliphist`, `wl-clipboard`, `network-manager-applet`, `nm-connection-editor`, `power-profiles-daemon`, `xwayland-satellite`, `xdg-desktop-portal`, `xdg-desktop-portal-gnome`, `xdg-desktop-portal-gtk`),
 3. enables `NetworkManager` and `lightdm` (lightdm starts on next boot, not now, so it does not seize a running session),
 4. runs `arch-bootstrap.sh` with `BUILD_NIRI_FORK=auto BUILD_QUICKSHELL_FORK=auto`, so the first deploy pass builds and installs both forks under `~/.local/bin` for full compositor/shell validation,
 5. runs `arch-zh-setup.sh` for CJK locale/fonts/fcitx5,
@@ -116,6 +116,14 @@ XWAYLAND_SATELLITE_REF=main FORCE_XWAYLAND_SATELLITE_BUILD=true bash scripts/arc
 
 If upstream has merged equivalent minimize support and the local patch no longer applies, the script will build without the local patch when it detects native `set_minimized` plus `WM_CHANGE_STATE` support. Otherwise it stops with a clear patch-update error. Set `BUILD_XWAYLAND_SATELLITE=false` to skip this stage temporarily.
 
+The XWayland compatibility diagnostics are split out into:
+
+```sh
+bash scripts/check-xwayland-satellite-compat.sh --status
+```
+
+It prints Tahoe health-page `STATUS|...` rows for the patched satellite path, the selected upstream ref, patch hash, build stamp, wrapper executable, niri config path, runtime process, and the minimize/clipboard bridge regression anchors in `patches/xwayland-satellite-minimize.patch`. `arch-update.sh` runs the same check with `--strict` after build/deploy; static `missing`, `stale`, or `broken` states fail the update, while a currently running old satellite process is reported but only requires restarting niri or reopening X11 apps.
+
 Before deploying, `arch-update.sh` runs the Phase 7 Tahoe Glass guardrails. The check rejects broad `namespace="^quickshell"` glass rules, direct Tahoe QML `BackgroundEffect.blurRegion` usage, `PanelWindow` files without `tahoe-*` namespaces, and `TahoeGlassRegion` declarations without material/radius.
 
 Run the same check manually with:
@@ -178,6 +186,7 @@ After running it, log out and log back in so locale, fontconfig, and input metho
 - patched xwayland-satellite: `~/.local/lib/niri/xwayland-satellite-minimize`
 - patched xwayland-satellite glamor wrapper: `~/.local/lib/niri/xwayland-satellite-minimize-glamor`
 - Tahoe shell: `~/.config/quickshell/tahoe`
+- Tahoe XWayland health helper: `~/.config/quickshell/tahoe/scripts/check-xwayland-satellite-compat.sh`
 - session launcher: `~/.local/bin/tahoe-niri-session`
 - system session launcher: `/usr/local/bin/tahoe-niri-session`
 - user Wayland session entry: `~/.local/share/wayland-sessions/tahoe-niri.desktop`

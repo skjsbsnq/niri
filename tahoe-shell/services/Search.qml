@@ -24,9 +24,9 @@ Item {
     readonly property var settingsItems: [
         {
             "id": "tahoe-settings",
-            "title": "Tahoe 设置",
-            "subtitle": "外观、壁纸、通知、输入法、截图、Dock 和启动项",
-            "keywords": ["设置", "tahoe", "settings", "preferences", "desktop", "dock", "壁纸", "wallpaper", "截图", "通知", "输入法"],
+            "title": "设置",
+            "subtitle": "Wi-Fi、网络、蓝牙、显示、电源、应用和系统",
+            "keywords": ["设置", "tahoe", "settings", "preferences", "desktop", "wifi", "network", "bluetooth", "display", "power", "应用", "系统"],
             "internalPage": "settings"
         },
         {
@@ -34,35 +34,77 @@ Item {
             "title": "壁纸设置",
             "subtitle": "静态图片、动态命令和 Linux Wallpaper Engine UX",
             "keywords": ["壁纸", "动态壁纸", "wallpaper", "live wallpaper", "linux-wallpaper-engine", "wallpaperengine", "ux"],
-            "internalPage": "wallpaper"
+            "internalPage": "appearance"
+        },
+        {
+            "id": "tahoe-apps",
+            "title": "应用设置",
+            "subtitle": "默认应用、应用列表和权限状态",
+            "keywords": ["应用", "默认应用", "权限", "apps", "applications", "default apps", "permissions"],
+            "internalPage": "apps"
+        },
+        {
+            "id": "tahoe-displays",
+            "title": "显示器设置",
+            "subtitle": "显示输出、夜览和色温",
+            "keywords": ["显示", "显示器", "缩放", "夜览", "色温", "display", "monitor", "scale", "night light"],
+            "internalPage": "displays"
+        },
+        {
+            "id": "tahoe-power",
+            "title": "电源设置",
+            "subtitle": "电池、亮度、电源模式和空闲锁定",
+            "keywords": ["电源", "电池", "亮度", "省电", "性能", "锁屏", "power", "battery", "brightness", "profile", "idle"],
+            "internalPage": "power"
+        },
+        {
+            "id": "tahoe-notifications",
+            "title": "通知设置",
+            "subtitle": "勿扰和通知历史",
+            "keywords": ["通知", "勿扰", "历史", "notification", "notifications", "dnd"],
+            "internalPage": "notifications"
+        },
+        {
+            "id": "tahoe-keyboard",
+            "title": "键盘设置",
+            "subtitle": "按键重复、输入法、快捷键和截图",
+            "keywords": ["键盘", "输入法", "快捷键", "截图", "repeat", "keyboard", "input method", "shortcut", "screenshot"],
+            "internalPage": "keyboard"
+        },
+        {
+            "id": "tahoe-mouse-touchpad",
+            "title": "鼠标与触摸板",
+            "subtitle": "触摸板点按、自然滚动和指针速度",
+            "keywords": ["鼠标", "触摸板", "触控板", "滚动", "指针", "mouse", "touchpad", "scroll", "pointer"],
+            "internalPage": "mouse-touchpad"
         },
         {
             "id": "tahoe-dock",
             "title": "Dock 设置",
             "subtitle": "自动隐藏、触发热区和窗口按钮",
             "keywords": ["dock", "自动隐藏", "隐藏", "热区", "窗口标题", "autohide", "auto hide"],
-            "internalPage": "dock"
+            "internalPage": "multitasking"
         },
         {
             "id": "tahoe-dynamic-island",
             "title": "灵动岛设置",
             "subtitle": "顶栏胶囊、点击行为和 hover 展开",
             "keywords": ["灵动岛", "dynamic island", "island", "胶囊", "顶栏", "时间", "hover", "媒体"],
-            "internalPage": "dynamic-island"
+            "internalPage": "multitasking"
         },
         {
             "id": "tahoe-health",
             "title": "系统健康",
             "subtitle": "检查 portal、PipeWire、截图、剪贴板、托盘和兼容性",
             "keywords": ["健康", "诊断", "依赖", "状态", "health", "diagnostics", "status", "pipewire", "portal", "tray"],
-            "internalPage": "health"
+            "internalPage": "system"
         },
         {
             "id": "tahoe-about",
             "title": "关于 niri",
             "subtitle": "版本、提交、子模块、GPU 和会话信息",
             "keywords": ["关于", "版本", "提交", "about", "version", "commit", "gpu", "session", "niri", "quickshell"],
-            "internalPage": "about"
+            "internalPage": "system"
         },
         {
             "id": "tahoe-niri",
@@ -80,24 +122,31 @@ Item {
         },
         {
             "id": "tahoe-niri-input",
-            "title": "输入与显示",
-            "subtitle": "键盘、触摸板与显示器缩放（输出只读）",
+            "title": "旧输入与显示入口",
+            "subtitle": "已归档到键盘、鼠标与触摸板、显示器",
             "keywords": ["输入", "键盘", "触摸板", "触控板", "重复", "自然滚动", "numlock", "显示", "缩放", "input", "keyboard", "touchpad", "display", "niri"],
-            "internalPage": "niri-input"
+            "internalPage": "keyboard"
         },
         {
             "id": "tahoe-niri-animations",
             "title": "动画",
             "subtitle": "工作区、窗口与概览的弹簧动画",
             "keywords": ["动画", "弹簧", "阻尼", "刚度", "弹性", "animation", "spring", "damping", "stiffness", "niri"],
-            "internalPage": "niri-animations"
+            "internalPage": "multitasking"
         },
         {
             "id": "tahoe-niri-keyboard",
             "title": "键盘快捷键",
             "subtitle": "niri binds 只读查看",
             "keywords": ["快捷键", "键位", "binds", "shortcut", "keybind", "热键", "niri"],
-            "internalPage": "niri-keyboard"
+            "internalPage": "keyboard"
+        },
+        {
+            "id": "tahoe-weather",
+            "title": "天气设置",
+            "subtitle": "定位、手动覆盖和温度单位",
+            "keywords": ["天气", "定位", "温度", "weather", "forecast", "temperature", "location"],
+            "internalPage": "system"
         },
         {
             "id": "system",

@@ -18,7 +18,7 @@ Rectangle {
 
     Layout.fillWidth: true
     implicitHeight: visible ? rows.implicitHeight + 26 : 0
-    radius: 18
+    radius: 8
     color: box.sectionFill
     border.color: box.sectionStroke
     border.width: 1

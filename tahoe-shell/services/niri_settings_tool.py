@@ -731,6 +731,20 @@ def read_output_text(text: str) -> dict[str, Any]:
     return {"name": "", "scale": 1.0, "present": False}
 
 
+def update_output_text(text: str, field: str, raw_value: str) -> str:
+    if field != "output.scale":
+        raise KdlEditError(f"unsupported output field: {field}")
+    lines = text.splitlines(True)
+    outputs = find_top_level_blocks(lines, "output")
+    if len(outputs) != 1:
+        raise KdlEditError(
+            f"refusing to edit {field}: expected exactly one top-level output block, found {len(outputs)}. "
+            "Edit config.kdl by hand for multi-monitor layouts."
+        )
+    set_leaf_value(lines, outputs[0], "scale", format_float(bounded_number(raw_value, 0.5, 4.0)))
+    return "".join(lines)
+
+
 def read_input_text(text: str) -> dict[str, Any]:
     lines = text.splitlines(True)
     input_block = find_top_level_block_or_none(lines, "input")
@@ -876,6 +890,9 @@ def read_binds_text(text: str) -> dict[str, Any]:
 
 
 def update_field(text: str, field: str, raw_value: str) -> str:
+    if field.startswith("output."):
+        return update_output_text(text, field, raw_value)
+
     assert_managed_write_target(text, field)
 
     if field.startswith("layout."):

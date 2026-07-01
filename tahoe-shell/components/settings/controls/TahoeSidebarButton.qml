@@ -15,19 +15,21 @@ Item {
 
     readonly property string iconFont: theme ? theme.iconFont : "Material Icons"
     readonly property color textPrimary: theme ? theme.textPrimary : "#1d1d1f"
+    readonly property color textSecondary: theme ? theme.textSecondary : "#721d1d1f"
     readonly property color activeFill: theme ? theme.sidebarActiveFill : "#64ffffff"
     readonly property color activeStroke: theme ? theme.sidebarActiveStroke : "#5cffffff"
     readonly property color hoverFill: theme ? theme.sidebarHoverFill : "#42ffffff"
+    readonly property color accentBlue: theme ? theme.accentBlue : "#007ff7"
     readonly property color danger: theme ? theme.danger : "#ff453a"
 
     signal activated()
 
     Layout.fillWidth: true
-    Layout.preferredHeight: 36
+    Layout.preferredHeight: 34
 
     Rectangle {
         anchors.fill: parent
-        radius: 10
+        radius: 8
         color: btn.active ? btn.activeFill : (buttonMouse.containsMouse ? btn.hoverFill : "transparent")
         border.color: btn.active ? btn.activeStroke : "transparent"
         border.width: 1
@@ -35,15 +37,19 @@ Item {
 
     RowLayout {
         anchors.fill: parent
-        anchors.leftMargin: 7
+        anchors.leftMargin: 9
         anchors.rightMargin: 8
-        spacing: 9
+        spacing: 10
 
-        TahoeCategoryIcon {
-            theme: btn.theme
-            iconCode: btn.iconCode
-            accentColor: btn.accentColor
-            square: 22
+        Text {
+            Layout.preferredWidth: 22
+            Layout.alignment: Qt.AlignVCenter
+            text: btn.iconCode
+            color: btn.active ? btn.accentBlue : btn.textSecondary
+            font.family: btn.iconFont
+            font.pixelSize: 18
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
         }
 
         Text {

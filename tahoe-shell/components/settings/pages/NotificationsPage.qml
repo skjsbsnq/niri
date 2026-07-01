@@ -24,8 +24,8 @@ Flickable {
 
         Controls.TahoeSection {
             theme: page.theme
-            title: "通知与输入"
-            subtitle: "通知历史、勿扰和输入法"
+            title: "通知"
+            subtitle: "勿扰和通知历史"
 
             Controls.TahoeListRow {
                 theme: page.theme
@@ -57,30 +57,6 @@ Flickable {
                 }
             }
 
-            Controls.TahoeListRow {
-                theme: page.theme
-                label: "输入法"
-                detail: page.panel ? page.panel.inputStatusText() : ""
-                iconCode: "\ue312"
-
-                RowLayout {
-                    spacing: 7
-
-                    Controls.TahoeButton {
-                        theme: page.theme
-                        label: "切换"
-                        enabled: !!(page.panel && page.panel.inputMethodService && page.panel.inputMethodService.available)
-                        onActivated: page.panel.inputMethodService.toggle()
-                    }
-
-                    Controls.TahoeButton {
-                        theme: page.theme
-                        label: "刷新"
-                        enabled: !!(page.panel && page.panel.inputMethodService)
-                        onActivated: page.panel.inputMethodService.refresh()
-                    }
-                }
-            }
         }
     }
 }

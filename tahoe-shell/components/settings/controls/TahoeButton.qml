@@ -31,7 +31,7 @@ Item {
 
     Rectangle {
         anchors.fill: parent
-        radius: btn.iconOnly ? 12 : 10
+        radius: 8
         color: btn.primaryState ? btn.accentFill : (buttonMouse.containsMouse && btn.enabled ? btn.rowFillHover : btn.buttonFill)
         border.color: btn.primaryState ? btn.accentStroke : btn.buttonStroke
         border.width: 1

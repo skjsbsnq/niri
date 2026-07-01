@@ -25,7 +25,7 @@ Flickable {
         Controls.TahoeSection {
             theme: page.theme
             title: "外观"
-            subtitle: "深浅色、夜览和色温"
+            subtitle: "深浅色和系统主题"
 
             Controls.TahoeListRow {
                 theme: page.theme
@@ -41,34 +41,28 @@ Flickable {
                 }
             }
 
+        }
+
+        Controls.TahoeSection {
+            theme: page.theme
+            title: "壁纸"
+            subtitle: "背景图片和动态壁纸"
+
             Controls.TahoeListRow {
                 theme: page.theme
-                label: "夜览"
-                detail: page.panel && page.panel.appearanceService && page.panel.appearanceService.nightMode
-                    ? "色温 " + page.panel.appearanceService.colorTemperature + "K"
-                    : "关闭"
-                iconCode: "\ue3a9"
-                checkable: true
-                checked: page.panel && page.panel.appearanceService && page.panel.appearanceService.nightMode
-                enabled: !!(page.panel && page.panel.appearanceService)
-                onToggled: function(checked) {
-                    if (page.panel.appearanceService)
-                        page.panel.appearanceService.setNightMode(checked);
-                }
-            }
+                label: "壁纸"
+                detail: page.panel && page.panel.settingsService
+                    ? page.panel.settingsService.wallpaperModeLabel(page.panel.settingsService.wallpaperMode)
+                    : "设置服务不可用"
+                iconCode: "\ue40b"
 
-            Controls.TahoeSlider {
-                theme: page.theme
-                iconCode: "\ueb37"
-                label: "夜览色温"
-                valueText: page.panel && page.panel.appearanceService ? page.panel.appearanceService.colorTemperature + "K" : "—"
-                value: page.panel && page.panel.appearanceService
-                    ? Math.max(0, Math.min(1, (page.panel.appearanceService.colorTemperature - 2500) / 4000))
-                    : 0
-                enabled: !!(page.panel && page.panel.appearanceService)
-                onUserSet: function(v) {
-                    if (page.panel.appearanceService)
-                        page.panel.appearanceService.setColorTemperature(2500 + Math.round(v * 4000));
+                Controls.TahoeButton {
+                    theme: page.theme
+                    label: "打开"
+                    onActivated: {
+                        if (page.panel)
+                            page.panel.openPage("wallpaper");
+                    }
                 }
             }
         }

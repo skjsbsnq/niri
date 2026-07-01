@@ -175,16 +175,6 @@ function tileStrokeHover(darkMode) {
     return darkMode ? "#34ffffff" : "#a0ffffff";
 }
 
-// --- Health / About hero strip -------------------------------------------
-
-function heroFill(darkMode) {
-    return darkMode ? "#1cffffff" : "#70ffffff";
-}
-
-function heroStroke(darkMode) {
-    return darkMode ? "#2effffff" : "#86ffffff";
-}
-
 // --- Overlay scrim --------------------------------------------------------
 
 function scrim(darkMode) {
@@ -192,8 +182,8 @@ function scrim(darkMode) {
 }
 
 // --- Brand category colors ------------------------------------------------
-// One solid macOS-style brand color per settings category. Used by the
-// sidebar category icons and the overview summary tiles.
+// One solid accent per legacy summary category. The sidebar uses symbolic
+// icons instead of category color blocks.
 
 function categoryColor(key, darkMode) {
     switch (key) {

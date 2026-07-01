@@ -22,47 +22,38 @@ Flickable {
         width: parent.width
         spacing: 10
 
-        Rectangle {
+        Controls.TahoeSection {
             Layout.fillWidth: true
-            Layout.preferredHeight: 74
-            radius: 18
-            color: page.theme ? page.theme.heroFill : "#2affffff"
-            border.color: page.theme ? page.theme.heroStroke : "#42ffffff"
+            theme: page.theme
+            title: "摘要"
+            subtitle: page.panel && page.panel.systemStatusService ? "最后检测 " + page.panel.systemStatusService.lastUpdatedText : "系统状态检测"
 
-            RowLayout {
-                anchors.fill: parent
-                anchors.margins: 12
-                spacing: 12
+            Controls.TahoeListRow {
+                theme: page.theme
+                label: "正常"
+                detail: page.panel && page.panel.systemStatusService ? page.panel.systemStatusService.okCount + " 项" : "0 项"
+                iconCode: "\ue86c"
+            }
 
-                Controls.TahoeHealthCounter {
-                    theme: page.theme
-                    label: "正常"
-                    value: page.panel && page.panel.systemStatusService ? page.panel.systemStatusService.okCount : 0
-                    colorValue: page.theme ? page.theme.stateColor("ok") : "#34c759"
-                }
+            Controls.TahoeListRow {
+                theme: page.theme
+                label: "注意"
+                detail: page.panel && page.panel.systemStatusService ? page.panel.systemStatusService.warnCount + " 项" : "0 项"
+                iconCode: "\ue002"
+            }
 
-                Controls.TahoeHealthCounter {
-                    theme: page.theme
-                    label: "注意"
-                    value: page.panel && page.panel.systemStatusService ? page.panel.systemStatusService.warnCount : 0
-                    colorValue: page.theme ? page.theme.stateColor("warn") : "#ff9f0a"
-                }
+            Controls.TahoeListRow {
+                theme: page.theme
+                label: "缺失"
+                detail: page.panel && page.panel.systemStatusService ? page.panel.systemStatusService.missingCount + " 项" : "0 项"
+                iconCode: "\ue14c"
+            }
 
-                Controls.TahoeHealthCounter {
-                    theme: page.theme
-                    label: "缺失"
-                    value: page.panel && page.panel.systemStatusService ? page.panel.systemStatusService.missingCount : 0
-                    colorValue: page.theme ? page.theme.stateColor("missing") : "#ff453a"
-                }
-
-                Item { Layout.fillWidth: true }
-
-                Text {
-                    text: page.panel && page.panel.systemStatusService && page.panel.systemStatusService.refreshing ? "检测中" : "已刷新"
-                    color: page.theme ? page.theme.textSecondary : "#721d1d1f"
-                    font.pixelSize: 12
-                    font.weight: Font.DemiBold
-                }
+            Controls.TahoeListRow {
+                theme: page.theme
+                label: "检测状态"
+                detail: page.panel && page.panel.systemStatusService && page.panel.systemStatusService.refreshing ? "检测中" : "已刷新"
+                iconCode: "\ue5d5"
             }
         }
 
@@ -76,13 +67,20 @@ Flickable {
             wrapMode: Text.WordWrap
         }
 
-        Repeater {
-            model: page.panel && page.panel.systemStatusService ? page.panel.systemStatusService.statusItems : []
+        Controls.TahoeSection {
+            Layout.fillWidth: true
+            theme: page.theme
+            title: "诊断项"
+            subtitle: "依赖项、服务和 Tahoe 会话状态"
 
-            delegate: Controls.TahoeStatusRow {
-                required property var modelData
-                theme: page.theme
-                item: modelData
+            Repeater {
+                model: page.panel && page.panel.systemStatusService ? page.panel.systemStatusService.statusItems : []
+
+                delegate: Controls.TahoeStatusRow {
+                    required property var modelData
+                    theme: page.theme
+                    item: modelData
+                }
             }
         }
     }

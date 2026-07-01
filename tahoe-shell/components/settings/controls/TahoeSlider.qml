@@ -37,7 +37,7 @@ Item {
 
     Rectangle {
         anchors.fill: parent
-        radius: 14
+        radius: 8
         color: slider.rowFill
         border.color: slider.rowStroke
         border.width: 1

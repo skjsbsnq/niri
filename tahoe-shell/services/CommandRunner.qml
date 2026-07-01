@@ -339,6 +339,62 @@ Item {
         return command;
     }
 
+    function wifiKnownListCommand() {
+        return shellCommand([
+            "set +e",
+            "if ! command -v nmcli >/dev/null 2>&1; then",
+            "  printf 'STATUS|missing|缺少 nmcli\\n'",
+            "  exit 0",
+            "fi",
+            "running=\"$(nmcli -t -f RUNNING general 2>/dev/null || true)\"",
+            "if [ \"$running\" != running ]; then",
+            "  printf 'STATUS|missing|NetworkManager 未运行\\n'",
+            "  exit 0",
+            "fi",
+            "printf 'STATUS|ok|NetworkManager 在线\\n'",
+            "active_uuids=\"$(nmcli -t --escape no --separator '|' -f UUID connection show --active 2>/dev/null || true)\"",
+            "active_hotspot=\"$(nmcli -t --escape no --separator '|' -f NAME,TYPE connection show --active 2>/dev/null | awk -F'|' 'tolower($1) ~ /hotspot/ && $2 == \"802-11-wireless\" {print $1; exit}')\"",
+            "if [ -n \"$active_hotspot\" ]; then printf 'HOTSPOT|1|%s\\n' \"$active_hotspot\"; else printf 'HOTSPOT|0|\\n'; fi",
+            "nmcli -t --escape no --separator '|' -f NAME,UUID,TYPE,AUTOCONNECT connection show 2>/dev/null | while IFS='|' read -r name uuid type autoconnect rest; do",
+            "  [ \"$type\" = '802-11-wireless' ] || continue",
+            "  active=0",
+            "  printf '%s\\n' \"$active_uuids\" | grep -Fx -- \"$uuid\" >/dev/null 2>&1 && active=1",
+            "  printf 'WIFI|%s|%s|%s|%s\\n' \"$name\" \"$uuid\" \"$autoconnect\" \"$active\"",
+            "done"
+        ].join("\n"), []);
+    }
+
+    function wifiForgetCommand(uuid) {
+        return ["nmcli", "connection", "delete", "uuid", String(uuid || "")];
+    }
+
+    function wifiHiddenConnectCommand(ssid, psk) {
+        var command = ["nmcli", "--wait", "30", "device", "wifi", "connect", String(ssid || ""), "hidden", "yes"];
+        if (psk && String(psk).length > 0)
+            command.push("password", String(psk));
+        return command;
+    }
+
+    function wifiHotspotUpCommand(ssid, psk) {
+        var command = ["nmcli", "device", "wifi", "hotspot", "ssid", String(ssid || "Tahoe Hotspot")];
+        if (psk && String(psk).length > 0)
+            command.push("password", String(psk));
+        return command;
+    }
+
+    function wifiHotspotDownCommand() {
+        return shellCommand([
+            "set +e",
+            "if ! command -v nmcli >/dev/null 2>&1; then exit 127; fi",
+            "for name in Hotspot hotspot 'Tahoe Hotspot'; do",
+            "  nmcli connection down \"$name\" >/dev/null 2>&1 && exit 0",
+            "done",
+            "uuid=\"$(nmcli -t --escape no --separator '|' -f UUID,NAME,TYPE connection show --active 2>/dev/null | awk -F'|' 'tolower($2) ~ /hotspot/ && $3 == \"802-11-wireless\" {print $1; exit}')\"",
+            "[ -n \"$uuid\" ] && nmcli connection down uuid \"$uuid\" >/dev/null 2>&1 && exit 0",
+            "exit 0"
+        ].join("\n"), []);
+    }
+
     function runWifiRestorePreferred(ssid) {
         return runDetached("network.restore-wifi", wifiRestorePreferredCommand(ssid), ["nmcli"], {
             "missingMessage": "Wi-Fi 恢复不可用",
@@ -360,6 +416,269 @@ Item {
             "missingMessage": "Wi-Fi 连接不可用",
             "missingDetail": "需要 nmcli",
             "successMessage": "已请求连接 Wi-Fi"
+        });
+    }
+
+    function runWifiForget(uuid, name) {
+        return runDetached("network.forget-wifi", wifiForgetCommand(uuid), ["nmcli"], {
+            "missingMessage": "忘记网络不可用",
+            "missingDetail": "需要 nmcli",
+            "successMessage": "已请求忘记 Wi-Fi",
+            "successDetail": String(name || "")
+        });
+    }
+
+    function runWifiHiddenConnect(ssid, psk) {
+        return runDetached("network.hidden-wifi", wifiHiddenConnectCommand(ssid, psk), ["nmcli"], {
+            "missingMessage": "隐藏网络连接不可用",
+            "missingDetail": "需要 nmcli",
+            "successMessage": "已请求连接隐藏网络",
+            "successDetail": String(ssid || "")
+        });
+    }
+
+    function runWifiHotspotUp(ssid, psk) {
+        return runDetached("network.hotspot-up", wifiHotspotUpCommand(ssid, psk), ["nmcli"], {
+            "missingMessage": "热点不可用",
+            "missingDetail": "需要 nmcli",
+            "successMessage": "已请求开启热点",
+            "successDetail": String(ssid || "")
+        });
+    }
+
+    function runWifiHotspotDown() {
+        return runDetached("network.hotspot-down", wifiHotspotDownCommand(), ["nmcli"], {
+            "missingMessage": "热点关闭不可用",
+            "missingDetail": "需要 nmcli",
+            "successMessage": "已请求关闭热点"
+        });
+    }
+
+    function networkVpnListCommand() {
+        return shellCommand([
+            "set +e",
+            "get_nm() { nmcli -g \"$2\" connection show uuid \"$1\" 2>/dev/null | paste -sd, -; }",
+            "if ! command -v nmcli >/dev/null 2>&1; then",
+            "  printf 'STATUS|missing|缺少 nmcli\\n'",
+            "  exit 0",
+            "fi",
+            "running=\"$(nmcli -t -f RUNNING general 2>/dev/null || true)\"",
+            "if [ \"$running\" != running ]; then",
+            "  printf 'STATUS|missing|NetworkManager 未运行\\n'",
+            "  exit 0",
+            "fi",
+            "printf 'STATUS|ok|NetworkManager 在线\\n'",
+            "active_uuids=\"$(nmcli -t --escape no --separator '|' -f UUID connection show --active 2>/dev/null || true)\"",
+            "nmcli -t --escape no --separator '|' -f NAME,UUID,TYPE,DEVICE connection show 2>/dev/null | while IFS='|' read -r name uuid type device rest; do",
+            "  case \"$type\" in",
+            "    vpn|wireguard)",
+            "      active=0",
+            "      printf '%s\\n' \"$active_uuids\" | grep -Fx -- \"$uuid\" >/dev/null 2>&1 && active=1",
+            "      autoconnect=\"$(get_nm \"$uuid\" connection.autoconnect)\"",
+            "      printf 'VPN|%s|%s|%s|%s|%s|%s\\n' \"$name\" \"$uuid\" \"$type\" \"${device:-}\" \"$active\" \"$autoconnect\"",
+            "      ;;",
+            "    802-3-ethernet|ethernet)",
+            "      active=0",
+            "      printf '%s\\n' \"$active_uuids\" | grep -Fx -- \"$uuid\" >/dev/null 2>&1 && active=1",
+            "      autoconnect=\"$(get_nm \"$uuid\" connection.autoconnect)\"",
+            "      ipv4_method=\"$(get_nm \"$uuid\" ipv4.method)\"",
+            "      ipv4_addresses=\"$(get_nm \"$uuid\" ipv4.addresses)\"",
+            "      ipv4_gateway=\"$(get_nm \"$uuid\" ipv4.gateway)\"",
+            "      ipv4_dns=\"$(get_nm \"$uuid\" ipv4.dns)\"",
+            "      ipv6_method=\"$(get_nm \"$uuid\" ipv6.method)\"",
+            "      ipv6_addresses=\"$(get_nm \"$uuid\" ipv6.addresses)\"",
+            "      ipv6_gateway=\"$(get_nm \"$uuid\" ipv6.gateway)\"",
+            "      ipv6_dns=\"$(get_nm \"$uuid\" ipv6.dns)\"",
+            "      printf 'WIRED_PROFILE|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s\\n' \"$name\" \"$uuid\" \"${device:-}\" \"$active\" \"$autoconnect\" \"$ipv4_method\" \"$ipv4_addresses\" \"$ipv4_gateway\" \"$ipv4_dns\" \"$ipv6_method\" \"$ipv6_addresses\" \"$ipv6_gateway\" \"$ipv6_dns\"",
+            "      ;;",
+            "  esac",
+            "done",
+            "if command -v gsettings >/dev/null 2>&1 && gsettings writable org.gnome.system.proxy mode >/dev/null 2>&1; then",
+            "  mode=\"$(gsettings get org.gnome.system.proxy mode 2>/dev/null | tr -d \"'\" || true)\"",
+            "  autoconfig=\"$(gsettings get org.gnome.system.proxy autoconfig-url 2>/dev/null | tr -d \"'\" || true)\"",
+            "  http_host=\"$(gsettings get org.gnome.system.proxy.http host 2>/dev/null | tr -d \"'\" || true)\"",
+            "  http_port=\"$(gsettings get org.gnome.system.proxy.http port 2>/dev/null || true)\"",
+            "  https_host=\"$(gsettings get org.gnome.system.proxy.https host 2>/dev/null | tr -d \"'\" || true)\"",
+            "  https_port=\"$(gsettings get org.gnome.system.proxy.https port 2>/dev/null || true)\"",
+            "  socks_host=\"$(gsettings get org.gnome.system.proxy.socks host 2>/dev/null | tr -d \"'\" || true)\"",
+            "  socks_port=\"$(gsettings get org.gnome.system.proxy.socks port 2>/dev/null || true)\"",
+            "  printf 'PROXY|ok|%s|%s|%s|%s|%s|%s|%s|%s\\n' \"$mode\" \"$autoconfig\" \"$http_host\" \"$http_port\" \"$https_host\" \"$https_port\" \"$socks_host\" \"$socks_port\"",
+            "else",
+            "  printf 'PROXY|missing|none||||||\\n'",
+            "fi"
+        ].join("\n"), []);
+    }
+
+    function networkVpnUpCommand(uuid) {
+        return ["nmcli", "--wait", "20", "connection", "up", "uuid", String(uuid || "")];
+    }
+
+    function networkVpnDownCommand(uuid) {
+        return ["nmcli", "--wait", "20", "connection", "down", "uuid", String(uuid || "")];
+    }
+
+    function networkConnectionEditorCommand(uuid) {
+        var id = String(uuid || "").trim();
+        if (id.length > 0)
+            return ["nm-connection-editor", "--edit=" + id];
+        return ["nm-connection-editor"];
+    }
+
+    function networkNewVpnCommand() {
+        return ["nm-connection-editor", "--create", "--type=vpn"];
+    }
+
+    function networkVpnImportCommand(vpnType, path) {
+        return ["nmcli", "connection", "import", "type", String(vpnType || "openvpn"), "file", String(path || "")];
+    }
+
+    function networkVpnSaveCommand(uuid, name, autoconnect) {
+        return shellCommand([
+            "uuid=\"$1\"",
+            "name=\"$2\"",
+            "autoconnect=\"$3\"",
+            "[ -n \"$uuid\" ] || exit 2",
+            "if [ -n \"$name\" ]; then nmcli connection modify uuid \"$uuid\" connection.id \"$name\" || exit $?; fi",
+            "case \"$autoconnect\" in yes|no) nmcli connection modify uuid \"$uuid\" connection.autoconnect \"$autoconnect\" || exit $? ;; esac"
+        ].join("\n"), [uuid, name, autoconnect ? "yes" : "no"]);
+    }
+
+    function networkProxySaveCommand(mode, autoconfigUrl, httpHost, httpPort, httpsHost, httpsPort, socksHost, socksPort) {
+        return shellCommand([
+            "mode=\"$1\"",
+            "autoconfig_url=\"$2\"",
+            "http_host=\"$3\"",
+            "http_port=\"$4\"",
+            "https_host=\"$5\"",
+            "https_port=\"$6\"",
+            "socks_host=\"$7\"",
+            "socks_port=\"$8\"",
+            "command -v gsettings >/dev/null 2>&1 || exit 127",
+            "case \"$mode\" in none|manual|auto) ;; *) mode=none ;; esac",
+            "gsettings set org.gnome.system.proxy mode \"$mode\" || exit $?",
+            "gsettings set org.gnome.system.proxy autoconfig-url \"$autoconfig_url\" || true",
+            "gsettings set org.gnome.system.proxy.http host \"$http_host\" || true",
+            "gsettings set org.gnome.system.proxy.http port \"${http_port:-0}\" || true",
+            "gsettings set org.gnome.system.proxy.https host \"$https_host\" || true",
+            "gsettings set org.gnome.system.proxy.https port \"${https_port:-0}\" || true",
+            "gsettings set org.gnome.system.proxy.socks host \"$socks_host\" || true",
+            "gsettings set org.gnome.system.proxy.socks port \"${socks_port:-0}\" || true"
+        ].join("\n"), [mode, autoconfigUrl, httpHost, httpPort, httpsHost, httpsPort, socksHost, socksPort]);
+    }
+
+    function networkWiredSaveCommand(uuid, ipv4Method, ipv4Addresses, ipv4Gateway, ipv4Dns, ipv6Method, ipv6Addresses, ipv6Gateway, ipv6Dns) {
+        return shellCommand([
+            "uuid=\"$1\"",
+            "ipv4_method=\"$2\"",
+            "ipv4_addresses=\"$3\"",
+            "ipv4_gateway=\"$4\"",
+            "ipv4_dns=\"$5\"",
+            "ipv6_method=\"$6\"",
+            "ipv6_addresses=\"$7\"",
+            "ipv6_gateway=\"$8\"",
+            "ipv6_dns=\"$9\"",
+            "[ -n \"$uuid\" ] || exit 2",
+            "case \"$ipv4_method\" in auto|manual|disabled|link-local|shared) ;; *) ipv4_method=auto ;; esac",
+            "case \"$ipv6_method\" in auto|manual|disabled|ignore|link-local|shared) ;; *) ipv6_method=auto ;; esac",
+            "nmcli connection modify uuid \"$uuid\" ipv4.method \"$ipv4_method\" || exit $?",
+            "if [ \"$ipv4_method\" = manual ]; then",
+            "  nmcli connection modify uuid \"$uuid\" ipv4.addresses \"$ipv4_addresses\" ipv4.gateway \"$ipv4_gateway\" ipv4.dns \"$ipv4_dns\" || exit $?",
+            "else",
+            "  nmcli connection modify uuid \"$uuid\" ipv4.addresses '' ipv4.gateway '' ipv4.dns '' || true",
+            "fi",
+            "nmcli connection modify uuid \"$uuid\" ipv6.method \"$ipv6_method\" || exit $?",
+            "if [ \"$ipv6_method\" = manual ]; then",
+            "  nmcli connection modify uuid \"$uuid\" ipv6.addresses \"$ipv6_addresses\" ipv6.gateway \"$ipv6_gateway\" ipv6.dns \"$ipv6_dns\" || exit $?",
+            "else",
+            "  nmcli connection modify uuid \"$uuid\" ipv6.addresses '' ipv6.gateway '' ipv6.dns '' || true",
+            "fi"
+        ].join("\n"), [uuid, ipv4Method, ipv4Addresses, ipv4Gateway, ipv4Dns, ipv6Method, ipv6Addresses, ipv6Gateway, ipv6Dns]);
+    }
+
+    function appsSettingsProbePath() {
+        return Quickshell.shellPath("services/apps_settings_probe.py");
+    }
+
+    function appsDefaultsProbeCommand() {
+        return ["python3", appsSettingsProbePath(), "probe"];
+    }
+
+    function appsSetDefaultCommand(desktopId, mimes) {
+        var command = ["python3", appsSettingsProbePath(), "set-default", String(desktopId || "")];
+        var values = Array.isArray(mimes) ? mimes : [];
+        for (var i = 0; i < values.length; i++)
+            command.push(String(values[i] || ""));
+        return command;
+    }
+
+    function appsPermissionsCommand(desktopId) {
+        return ["python3", appsSettingsProbePath(), "permissions", String(desktopId || "")];
+    }
+
+    function runNetworkVpnUp(uuid, name) {
+        return runDetached("network.vpn-up", networkVpnUpCommand(uuid), ["nmcli"], {
+            "missingMessage": "VPN 连接不可用",
+            "missingDetail": "需要 nmcli",
+            "successMessage": "已请求连接 VPN",
+            "successDetail": String(name || "")
+        });
+    }
+
+    function runNetworkVpnDown(uuid, name) {
+        return runDetached("network.vpn-down", networkVpnDownCommand(uuid), ["nmcli"], {
+            "missingMessage": "VPN 断开不可用",
+            "missingDetail": "需要 nmcli",
+            "successMessage": "已请求断开 VPN",
+            "successDetail": String(name || "")
+        });
+    }
+
+    function runNetworkConnectionEditor(uuid) {
+        return runDetached("network.connection-editor", networkConnectionEditorCommand(uuid), ["nm-connection-editor"], {
+            "missingMessage": "连接编辑器不可用",
+            "missingDetail": "需要 nm-connection-editor",
+            "successMessage": "连接编辑器已打开"
+        });
+    }
+
+    function runNetworkNewVpn() {
+        return runDetached("network.vpn-new", networkNewVpnCommand(), ["nm-connection-editor"], {
+            "missingMessage": "VPN 新增不可用",
+            "missingDetail": "需要 nm-connection-editor",
+            "successMessage": "VPN 新增窗口已打开"
+        });
+    }
+
+    function runNetworkVpnImport(vpnType, path) {
+        return runDetached("network.vpn-import", networkVpnImportCommand(vpnType, path), ["nmcli"], {
+            "missingMessage": "VPN 导入不可用",
+            "missingDetail": "需要 nmcli 和对应 NetworkManager VPN 插件",
+            "successMessage": "已请求导入 VPN",
+            "successDetail": String(path || "")
+        });
+    }
+
+    function runNetworkVpnSave(uuid, name, autoconnect) {
+        return runDetached("network.vpn-save", networkVpnSaveCommand(uuid, name, autoconnect), ["nmcli"], {
+            "missingMessage": "VPN 编辑不可用",
+            "missingDetail": "需要 nmcli",
+            "successMessage": "已请求保存 VPN"
+        });
+    }
+
+    function runNetworkProxySave(mode, autoconfigUrl, httpHost, httpPort, httpsHost, httpsPort, socksHost, socksPort) {
+        return runDetached("network.proxy-save", networkProxySaveCommand(mode, autoconfigUrl, httpHost, httpPort, httpsHost, httpsPort, socksHost, socksPort), ["gsettings"], {
+            "missingMessage": "代理设置不可用",
+            "missingDetail": "需要 gsettings",
+            "successMessage": "已请求保存代理"
+        });
+    }
+
+    function runNetworkWiredSave(uuid, ipv4Method, ipv4Addresses, ipv4Gateway, ipv4Dns, ipv6Method, ipv6Addresses, ipv6Gateway, ipv6Dns) {
+        return runDetached("network.wired-save", networkWiredSaveCommand(uuid, ipv4Method, ipv4Addresses, ipv4Gateway, ipv4Dns, ipv6Method, ipv6Addresses, ipv6Gateway, ipv6Dns), ["nmcli"], {
+            "missingMessage": "有线网络编辑不可用",
+            "missingDetail": "需要 nmcli",
+            "successMessage": "已请求保存有线网络"
         });
     }
 
@@ -479,7 +798,7 @@ Item {
             "emit_command() { if have \"$1\"; then printf 'COMMAND|%s|1\\n' \"$1\"; else printf 'COMMAND|%s|0\\n' \"$1\"; fi; }",
             "emit_status() { printf 'STATUS|%s|%s|%s|%s|%s|%s|%s\\n' \"$1\" \"$2\" \"$3\" \"$4\" \"$5\" \"$6\" \"$7\"; }",
             "missing_commands() { out=''; for c in \"$@\"; do have \"$c\" || out=\"$out ${c}\"; done; printf '%s' \"${out# }\"; }",
-            "for c in grim slurp swappy wl-copy wl-paste cliphist notify-send xdg-open xdg-user-dir nmcli bluetoothctl busctl python3 fcitx5-remote loginctl systemctl niri powerprofilesctl brightnessctl; do emit_command \"$c\"; done",
+            "for c in grim slurp swappy wl-copy wl-paste cliphist notify-send xdg-open xdg-user-dir xdg-mime nmcli nm-connection-editor bluetoothctl busctl python3 fcitx5-remote loginctl systemctl niri powerprofilesctl brightnessctl flatpak snap gsettings pactl wpctl qrencode tracker3 gnome-control-center goa-daemon colormgr lpstat system-config-printer cupsctl ssh avahi-browse rygel smbd; do emit_command \"$c\"; done",
             "if (have nmcli && [ \"$(nmcli -t -f RUNNING general 2>/dev/null)\" = running ]) || system_bus_name org.freedesktop.NetworkManager || is_system_active NetworkManager.service; then",
             "  emit_status network ok NetworkManager 'NetworkManager 在线' 'Wi-Fi 和网络状态可用' '' ''",
             "elif have nmcli; then",
@@ -550,6 +869,17 @@ Item {
             "  emit_status powerprofiles warn '电源模式' '命令存在但 daemon 未响应' '电源模式切换可能不可用' '启动 power-profiles-daemon' ''",
             "else",
             "  emit_status powerprofiles missing '电源模式' '缺少 busctl 和 powerprofilesctl' '电源模式切换不可用' '安装 power-profiles-daemon' 'busctl powerprofilesctl'",
+            "fi",
+            "apps_helper=" + JSON.stringify(Quickshell.shellPath("services/apps_settings_probe.py")),
+            "apps_missing=\"$(missing_commands python3 xdg-mime)\"",
+            "if [ ! -r \"$apps_helper\" ]; then",
+            "  emit_status apps missing '应用设置' \"helper 不可读：$apps_helper\" '默认应用和权限探测不可用' '确认 apps_settings_probe.py 已部署' ''",
+            "elif [ -n \"$apps_missing\" ]; then",
+            "  emit_status apps missing '应用设置' \"缺少 $apps_missing\" '默认应用读取和写入不可用' '安装 python3 和 xdg-utils' \"$apps_missing\"",
+            "elif have busctl && busctl --user status org.freedesktop.impl.portal.PermissionStore >/dev/null 2>&1; then",
+            "  emit_status apps ok '应用设置' 'xdg-mime 与 portal permission store 可用' '默认应用和 portal 权限状态可读取' '' ''",
+            "else",
+            "  emit_status apps warn '应用设置' 'xdg-mime 可用；portal permission store 未检测到' '默认应用可用，应用权限会以只读降级状态显示' '启动 xdg-desktop-portal' ''",
             "fi",
             "if have brightnessctl && brightnessctl -m info >/dev/null 2>&1; then",
             "  emit_status brightness ok '亮度命令' 'brightnessctl 可读取背光' '控制中心亮度滑块可用' '' ''",

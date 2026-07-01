@@ -37,6 +37,12 @@ Item {
     property string bluetoothErrorText: ""
     property string brightnessErrorText: ""
     property var lastActionResult: null
+    property var knownWifiProfiles: []
+    property string knownWifiStatus: "unknown"
+    property string knownWifiDetail: "尚未读取已知网络"
+    property bool knownWifiRefreshing: false
+    property bool hotspotActive: false
+    property string hotspotName: ""
 
     FileView {
         id: controlsStateFile
@@ -291,6 +297,7 @@ Item {
             root.commandRunner.refreshDependencies();
         root.refreshBrightness();
         root.rescanWifi();
+        root.refreshKnownWifiProfiles();
         if (root.wifiConnected)
             root.rememberCurrentWifi();
         root.schedulePreferredWifiRestore(4200, true);
@@ -299,6 +306,12 @@ Item {
     // ------------------------------------------------------------------
     // Wi-Fi
     // ------------------------------------------------------------------
+
+    readonly property bool networkManagerAvailable: {
+        if (root.commandRunner && root.commandRunner.revision > 0)
+            return root.commandRunner.dependencyReady("network");
+        return String(root.networkErrorText || "").trim().length === 0;
+    }
 
     readonly property bool wifiEnabled: {
         try {
@@ -661,6 +674,106 @@ Item {
         root.schedulePreferredWifiRestore(6500, true);
     }
 
+    function wifiEscapeQr(value) {
+        return String(value || "").replace(/([\\;,:"])/g, "\\$1");
+    }
+
+    function wifiQrPayload(ssid, psk, secured, hidden) {
+        var auth = secured ? "WPA" : "nopass";
+        var payload = "WIFI:T:" + auth + ";S:" + root.wifiEscapeQr(ssid) + ";";
+        if (secured)
+            payload += "P:" + root.wifiEscapeQr(psk) + ";";
+        if (hidden)
+            payload += "H:true;";
+        return payload + ";";
+    }
+
+    function refreshKnownWifiProfiles() {
+        if (!root.commandRunner || !root.commandRunner.wifiKnownListCommand) {
+            root.knownWifiStatus = "missing";
+            root.knownWifiDetail = "CommandRunner 未注入，无法读取已知网络。";
+            root.knownWifiProfiles = [];
+            return;
+        }
+        if (knownWifiProbe.running)
+            return;
+
+        root.knownWifiRefreshing = true;
+        knownWifiProbe.command = root.commandRunner.wifiKnownListCommand();
+        knownWifiProbe.running = true;
+    }
+
+    function parseKnownWifiProfiles(text) {
+        var profiles = [];
+        var status = "missing";
+        var detail = "NetworkManager 状态未知。";
+        var lines = String(text || "").split(/\r?\n/);
+        for (var i = 0; i < lines.length; i++) {
+            var line = lines[i];
+            if (!line || line.length === 0)
+                continue;
+            var fields = line.split("|");
+            if (fields[0] === "STATUS" && fields.length >= 3) {
+                status = fields[1];
+                detail = fields.slice(2).join("|");
+            } else if (fields[0] === "HOTSPOT" && fields.length >= 2) {
+                root.hotspotActive = fields[1] === "1";
+                root.hotspotName = fields.length >= 3 ? String(fields[2] || "") : "";
+            } else if (fields[0] === "WIFI" && fields.length >= 5) {
+                var name = String(fields[1] || "").trim();
+                var uuid = String(fields[2] || "").trim();
+                if (uuid.length === 0)
+                    continue;
+                profiles.push({
+                    "name": name.length > 0 ? name : "未命名网络",
+                    "uuid": uuid,
+                    "autoconnect": String(fields[3] || "") === "yes",
+                    "active": String(fields[4] || "") === "1"
+                });
+            }
+        }
+        profiles.sort(function(a, b) {
+            if (a.active !== b.active)
+                return a.active ? -1 : 1;
+            if (a.autoconnect !== b.autoconnect)
+                return a.autoconnect ? -1 : 1;
+            return a.name.localeCompare(b.name);
+        });
+        root.knownWifiStatus = status;
+        root.knownWifiDetail = detail;
+        root.knownWifiProfiles = profiles;
+    }
+
+    function forgetWifiProfile(entry) {
+        if (!entry || !entry.uuid || !root.commandRunner || !root.commandRunner.runWifiForget)
+            return;
+        var result = root.commandRunner.runWifiForget(entry.uuid, entry.name);
+        root.lastActionResult = result;
+        knownWifiRefreshTimer.restart();
+    }
+
+    function connectHiddenWifi(ssid, psk) {
+        var name = String(ssid || "").trim();
+        if (name.length === 0 || !root.commandRunner || !root.commandRunner.runWifiHiddenConnect)
+            return;
+        root.rememberPreferredWifiSsid(name);
+        var result = root.commandRunner.runWifiHiddenConnect(name, psk || "");
+        root.lastActionResult = result;
+        root.preferredWifiRestoreSuppressed = false;
+        root.schedulePreferredWifiRestore(6500, true);
+        knownWifiRefreshTimer.restart();
+    }
+
+    function setWifiHotspotEnabled(enabled, ssid, psk) {
+        if (!root.commandRunner)
+            return;
+        var result = enabled
+            ? root.commandRunner.runWifiHotspotUp(ssid || "Tahoe Hotspot", psk || "")
+            : root.commandRunner.runWifiHotspotDown();
+        root.lastActionResult = result;
+        knownWifiRefreshTimer.restart();
+    }
+
     function disconnectWifi() {
         root.preferredWifiRestoreSuppressed = true;
         var d = root.wifiDevice;
@@ -689,7 +802,34 @@ Item {
         interval: 30000
         running: true
         repeat: true
-        onTriggered: root.rescanWifi()
+        onTriggered: {
+            root.rescanWifi();
+            root.refreshKnownWifiProfiles();
+        }
+    }
+
+    Process {
+        id: knownWifiProbe
+        running: false
+        stdout: StdioCollector {
+            id: knownWifiOut
+            onStreamFinished: root.parseKnownWifiProfiles(knownWifiOut.text)
+        }
+        onExited: function(code, exitStatus) {
+            root.knownWifiRefreshing = false;
+            if (code !== 0 && root.knownWifiStatus !== "ok") {
+                root.knownWifiStatus = "missing";
+                root.knownWifiDetail = "已知网络读取失败，退出码 " + String(code);
+                root.knownWifiProfiles = [];
+            }
+        }
+    }
+
+    Timer {
+        id: knownWifiRefreshTimer
+        interval: 1600
+        repeat: false
+        onTriggered: root.refreshKnownWifiProfiles()
     }
 
     // ------------------------------------------------------------------
@@ -711,13 +851,189 @@ Item {
         return !!a && !!a.enabled;
     }
 
-    readonly property int bluetoothConnectedCount: {
+    readonly property string bluetoothDependencyState: {
+        if (root.commandRunner && root.commandRunner.revision > 0)
+            return root.commandRunner.dependencyState("bluetooth");
+        return String(root.bluetoothErrorText || "").trim().length > 0 ? "warn" : "ok";
+    }
+
+    readonly property bool bluetoothBackendAvailable: bluetoothDependencyState !== "missing"
+
+    readonly property string bluetoothAdapterName: {
+        var a = root.bluetoothAdapter;
+        if (!a)
+            return "";
         try {
-            var devs = Bluetooth.devices;
-            return devs && devs.values ? devs.values.length : 0;
+            var name = String(a.name || "").trim();
+            if (name.length > 0)
+                return name;
+        } catch (e) {}
+        try {
+            return String(a.adapterId || "").trim();
+        } catch (e) {}
+        return "";
+    }
+
+    readonly property int bluetoothAdapterState: {
+        var a = root.bluetoothAdapter;
+        if (!a)
+            return -1;
+        try {
+            return Number(a.state);
         } catch (e) {
-            return 0;
+            return -1;
         }
+    }
+
+    readonly property bool bluetoothAdapterBlocked: bluetoothAdapterState === 4
+
+    readonly property bool bluetoothDiscovering: {
+        var a = root.bluetoothAdapter;
+        if (!a)
+            return false;
+        try {
+            return !!a.discovering;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    readonly property bool bluetoothDiscoverable: {
+        var a = root.bluetoothAdapter;
+        if (!a)
+            return false;
+        try {
+            return !!a.discoverable;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    readonly property bool bluetoothPairable: {
+        var a = root.bluetoothAdapter;
+        if (!a)
+            return false;
+        try {
+            return !!a.pairable;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    readonly property var bluetoothDeviceEntries: {
+        var a = root.bluetoothAdapter;
+        var values = [];
+        try {
+            if (a && a.devices && a.devices.values)
+                values = a.devices.values;
+            else {
+                var devs = Bluetooth.devices;
+                if (devs && devs.values)
+                    values = devs.values;
+            }
+        } catch (e) {
+            values = [];
+        }
+
+        var out = [];
+        var seen = {};
+        for (var i = 0; i < values.length; i++) {
+            var device = values[i];
+            if (!device)
+                continue;
+            var entry = root.bluetoothDeviceEntry(device);
+            if (!entry)
+                continue;
+            var key = entry.address.length > 0 ? entry.address : entry.dbusPath;
+            if (key.length > 0 && seen[key])
+                continue;
+            if (key.length > 0)
+                seen[key] = true;
+            out.push(entry);
+        }
+
+        out.sort(function(a, b) {
+            if (a.connected !== b.connected)
+                return a.connected ? -1 : 1;
+            if (a.paired !== b.paired)
+                return a.paired ? -1 : 1;
+            if (a.trusted !== b.trusted)
+                return a.trusted ? -1 : 1;
+            return a.name.localeCompare(b.name);
+        });
+
+        return out;
+    }
+
+    readonly property int bluetoothConnectedCount: {
+        var count = 0;
+        var entries = root.bluetoothDeviceEntries || [];
+        for (var i = 0; i < entries.length; i++) {
+            if (entries[i] && entries[i].connected)
+                count += 1;
+        }
+        return count;
+    }
+
+    function bluetoothDeviceEntry(device) {
+        if (!device)
+            return null;
+
+        var name = "";
+        try {
+            name = String(device.name || "").trim();
+        } catch (e) {}
+        if (name.length === 0) {
+            try {
+                name = String(device.deviceName || "").trim();
+            } catch (e) {}
+        }
+        if (name.length === 0)
+            name = "未命名设备";
+
+        var address = "";
+        try {
+            address = String(device.address || "").trim();
+        } catch (e) {}
+
+        var state = 0;
+        try {
+            state = Number(device.state);
+        } catch (e) {
+            state = device.connected ? 1 : 0;
+        }
+
+        var battery = 0;
+        var batteryAvailable = false;
+        try {
+            batteryAvailable = !!device.batteryAvailable;
+            battery = Math.round(Math.max(0, Math.min(1, Number(device.battery) || 0)) * 100);
+        } catch (e) {}
+
+        return {
+            "device": device,
+            "name": name,
+            "address": address,
+            "icon": String(device.icon || ""),
+            "dbusPath": String(device.dbusPath || ""),
+            "connected": !!device.connected,
+            "paired": !!device.paired,
+            "bonded": !!device.bonded,
+            "pairing": !!device.pairing,
+            "trusted": !!device.trusted,
+            "blocked": !!device.blocked,
+            "wakeAllowed": !!device.wakeAllowed,
+            "batteryAvailable": batteryAvailable,
+            "batteryPercent": battery,
+            "state": state,
+            "stateChanging": state === 2 || state === 3 || !!device.pairing
+        };
+    }
+
+    function bluetoothDeviceFromEntry(entry) {
+        if (!entry)
+            return null;
+        return entry.device ? entry.device : entry;
     }
 
     function setBluetoothEnabled(enabled) {
@@ -726,6 +1042,118 @@ Item {
             return;
         try {
             a.enabled = !!enabled;
+        } catch (e) {}
+    }
+
+    function setBluetoothDiscovering(enabled) {
+        var a = root.bluetoothAdapter;
+        if (!a || !root.bluetoothEnabled)
+            return;
+
+        try {
+            a.discovering = !!enabled;
+            return;
+        } catch (e) {}
+
+        try {
+            if (enabled && a.startDiscovery)
+                a.startDiscovery();
+            else if (!enabled && a.stopDiscovery)
+                a.stopDiscovery();
+        } catch (e) {}
+    }
+
+    function toggleBluetoothDiscovering() {
+        root.setBluetoothDiscovering(!root.bluetoothDiscovering);
+    }
+
+    function setBluetoothDiscoverable(enabled) {
+        var a = root.bluetoothAdapter;
+        if (!a || !root.bluetoothEnabled)
+            return;
+        try {
+            a.discoverable = !!enabled;
+        } catch (e) {}
+    }
+
+    function setBluetoothPairable(enabled) {
+        var a = root.bluetoothAdapter;
+        if (!a || !root.bluetoothEnabled)
+            return;
+        try {
+            a.pairable = !!enabled;
+        } catch (e) {}
+    }
+
+    function connectBluetoothDevice(entry) {
+        var d = root.bluetoothDeviceFromEntry(entry);
+        if (!d)
+            return;
+        try {
+            if (d.connect)
+                d.connect();
+            else
+                d.connected = true;
+        } catch (e) {}
+    }
+
+    function disconnectBluetoothDevice(entry) {
+        var d = root.bluetoothDeviceFromEntry(entry);
+        if (!d)
+            return;
+        try {
+            if (d.disconnect)
+                d.disconnect();
+            else
+                d.connected = false;
+        } catch (e) {}
+    }
+
+    function pairBluetoothDevice(entry) {
+        var d = root.bluetoothDeviceFromEntry(entry);
+        if (!d)
+            return;
+        try {
+            if (d.pair)
+                d.pair();
+        } catch (e) {}
+    }
+
+    function cancelBluetoothPairing(entry) {
+        var d = root.bluetoothDeviceFromEntry(entry);
+        if (!d)
+            return;
+        try {
+            if (d.cancelPair)
+                d.cancelPair();
+        } catch (e) {}
+    }
+
+    function forgetBluetoothDevice(entry) {
+        var d = root.bluetoothDeviceFromEntry(entry);
+        if (!d)
+            return;
+        try {
+            if (d.forget)
+                d.forget();
+        } catch (e) {}
+    }
+
+    function setBluetoothDeviceTrusted(entry, trusted) {
+        var d = root.bluetoothDeviceFromEntry(entry);
+        if (!d)
+            return;
+        try {
+            d.trusted = !!trusted;
+        } catch (e) {}
+    }
+
+    function setBluetoothDeviceBlocked(entry, blocked) {
+        var d = root.bluetoothDeviceFromEntry(entry);
+        if (!d)
+            return;
+        try {
+            d.blocked = !!blocked;
         } catch (e) {}
     }
 

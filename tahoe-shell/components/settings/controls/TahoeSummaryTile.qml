@@ -26,7 +26,7 @@ Item {
 
     Rectangle {
         anchors.fill: parent
-        radius: 18
+        radius: 8
         color: tileMouse.containsMouse ? tile.tileFillHover : tile.tileFill
         border.color: tileMouse.containsMouse ? tile.tileStrokeHover : tile.tileStroke
         border.width: 1
@@ -37,11 +37,16 @@ Item {
         anchors.margins: 12
         spacing: 12
 
-        TahoeCategoryIcon {
-            theme: tile.theme
-            iconCode: tile.iconCode
-            accentColor: tile.accentColor
-            square: 42
+        Text {
+            Layout.preferredWidth: 42
+            Layout.preferredHeight: 42
+            Layout.alignment: Qt.AlignVCenter
+            text: tile.iconCode
+            color: tile.accentColor
+            font.family: tile.iconFont
+            font.pixelSize: 24
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
         }
 
         ColumnLayout {

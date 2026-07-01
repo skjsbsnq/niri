@@ -2,7 +2,6 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Layouts
-import Quickshell
 import "../controls" as Controls
 
 Flickable {
@@ -23,58 +22,20 @@ Flickable {
         width: parent.width
         spacing: 10
 
-        Rectangle {
+        Controls.TahoeSection {
             Layout.fillWidth: true
-            Layout.preferredHeight: 92
-            radius: 18
-            color: page.theme ? page.theme.heroFill : "#2affffff"
-            border.color: page.theme ? page.theme.heroStroke : "#42ffffff"
+            theme: page.theme
+            title: "关于"
+            subtitle: "当前 shell、子模块、运行时、GPU 和会话信息"
 
-            RowLayout {
-                anchors.fill: parent
-                anchors.margins: 14
-                spacing: 14
+            Repeater {
+                model: page.panel && page.panel.systemStatusService ? page.panel.systemStatusService.aboutItems : []
 
-                Image {
-                    Layout.preferredWidth: 54
-                    Layout.preferredHeight: 54
-                    source: Quickshell.shellPath("assets/icons/niri-icon-smol.png")
-                    fillMode: Image.PreserveAspectFit
-                    smooth: true
-                    mipmap: true
+                delegate: Controls.TahoeAboutRow {
+                    required property var modelData
+                    theme: page.theme
+                    item: modelData
                 }
-
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    spacing: 2
-
-                    Text {
-                        Layout.fillWidth: true
-                        text: "niri Tahoe Desktop"
-                        color: page.theme ? page.theme.textPrimary : "#1d1d1f"
-                        font.pixelSize: 18
-                        font.weight: Font.DemiBold
-                        elide: Text.ElideRight
-                    }
-
-                    Text {
-                        Layout.fillWidth: true
-                        text: "当前 shell、子模块、运行时、GPU 和会话信息"
-                        color: page.theme ? page.theme.textSecondary : "#721d1d1f"
-                        font.pixelSize: 12
-                        elide: Text.ElideRight
-                    }
-                }
-            }
-        }
-
-        Repeater {
-            model: page.panel && page.panel.systemStatusService ? page.panel.systemStatusService.aboutItems : []
-
-            delegate: Controls.TahoeAboutRow {
-                required property var modelData
-                theme: page.theme
-                item: modelData
             }
         }
     }

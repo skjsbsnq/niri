@@ -5,6 +5,9 @@ TAHOE_CONFIG_DIR="${TAHOE_CONFIG_DIR:-"$HOME/.config/quickshell/tahoe"}"
 TAHOE_STATE_DIR="${TAHOE_STATE_DIR:-"${XDG_STATE_HOME:-"$HOME/.local/state"}/quickshell/by-shell/tahoe"}"
 TAHOE_SETTINGS_FILE="${TAHOE_SETTINGS_FILE:-"$TAHOE_STATE_DIR/desktop-settings.json"}"
 
+# Keep manual lock available, but do not lock automatically while idle.
+export TAHOE_IDLE_LOCK_SECONDS="${TAHOE_IDLE_LOCK_SECONDS:-0}"
+
 json_string_setting() {
   local key="$1"
   local file="$2"

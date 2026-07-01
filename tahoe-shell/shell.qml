@@ -588,6 +588,12 @@ ShellRoot {
         id: commandRunner
     }
 
+    AppsSettings {
+        id: appsSettings
+        appsService: apps
+        commandRunner: commandRunner
+    }
+
     IpcHandler {
         target: "tahoe"
 
@@ -663,6 +669,16 @@ ShellRoot {
         commandRunner: commandRunner
     }
 
+    NetworkSettings {
+        id: networkSettings
+        commandRunner: commandRunner
+    }
+
+    SystemFeatures {
+        id: systemFeatures
+        commandRunner: commandRunner
+    }
+
     DesktopSettings {
         id: desktopSettings
     }
@@ -715,6 +731,7 @@ ShellRoot {
 
     Sound {
         id: sound
+        commandRunner: commandRunner
     }
 
     ClipboardHistory {
@@ -1099,6 +1116,16 @@ ShellRoot {
                 appearanceService: appearance
                 notificationsService: notifications
                 inputMethodService: inputMethod
+                controlsService: controls
+                soundService: sound
+                batteryService: battery
+                powerProfileService: powerProfiles
+                powerService: power
+                idleLockEnabled: shell.idleLockEnabled
+                idleLockTimeoutSeconds: shell.idleLockTimeoutSeconds
+                networkSettingsService: networkSettings
+                appsSettingsService: appsSettings
+                systemFeaturesService: systemFeatures
                 niriSettingsService: niriSettings
                 weatherService: weather
                 open: shell.navigationOpenFor(shell.settingsPanelOpen, shell.settingsPanelScreenName, modelData)

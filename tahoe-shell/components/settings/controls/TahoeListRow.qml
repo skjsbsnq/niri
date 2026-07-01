@@ -28,7 +28,7 @@ Item {
 
     Rectangle {
         anchors.fill: parent
-        radius: 14
+        radius: 8
         color: row.rowFill
         border.color: row.rowStroke
         border.width: 1

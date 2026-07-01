@@ -30,7 +30,7 @@ Item {
 
     Rectangle {
         anchors.fill: parent
-        radius: 16
+        radius: 8
         color: row.rowFill
         border.color: row.rowStroke
         border.width: 1

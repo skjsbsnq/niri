@@ -6,6 +6,7 @@ import Quickshell
 import Quickshell.Wayland
 import "TahoeGlass.js" as GlassStyle
 import "settings" as Settings
+import "settings/SettingsModel.js" as SettingsModel
 import "settings/SettingsTheme.js" as SettingsTheme
 import "settings/controls" as Controls
 import "settings/pages" as Pages
@@ -15,12 +16,22 @@ PanelWindow {
 
     property bool open: false
     property string page: "settings"
-    property string selectedPage: page.length > 0 ? page : "settings"
+    property string selectedPage: SettingsModel.resolveId(page)
     property var settingsService
     property var systemStatusService
     property var appearanceService
     property var notificationsService
     property var inputMethodService
+    property var controlsService
+    property var soundService
+    property var batteryService
+    property var powerProfileService
+    property var powerService
+    property bool idleLockEnabled: false
+    property real idleLockTimeoutSeconds: 0
+    property var networkSettingsService
+    property var appsSettingsService
+    property var systemFeaturesService
     property var niriSettingsService
     property var weatherService
 
@@ -65,10 +76,9 @@ PanelWindow {
     readonly property color tileFillHover: SettingsTheme.tileFillHover(darkMode)
     readonly property color tileStroke: SettingsTheme.tileStroke(darkMode)
     readonly property color tileStrokeHover: SettingsTheme.tileStrokeHover(darkMode)
-    readonly property color heroFill: SettingsTheme.heroFill(darkMode)
-    readonly property color heroStroke: SettingsTheme.heroStroke(darkMode)
     readonly property color scrim: SettingsTheme.scrim(darkMode)
     readonly property color danger: SettingsTheme.danger(darkMode)
+    readonly property string currentPageId: SettingsModel.resolveId(selectedPage)
 
     function categoryColor(key) {
         return SettingsTheme.categoryColor(key, darkMode);
@@ -95,8 +105,15 @@ PanelWindow {
     }
 
     onPageChanged: {
-        if (page.length > 0)
-            selectedPage = page;
+        selectedPage = SettingsModel.resolveId(page);
+    }
+
+    onSelectedPageChanged: {
+        var resolved = SettingsModel.resolveId(selectedPage);
+        if (selectedPage !== resolved) {
+            selectedPage = resolved;
+            return;
+        }
     }
 
     onOpenChanged: {
@@ -115,112 +132,33 @@ PanelWindow {
         return isFinite(number) ? number : fallback;
     }
 
-    function pageTitle() {
-        if (selectedPage === "appearance")
-            return "外观";
-        if (selectedPage === "wallpaper")
-            return "壁纸";
-        if (selectedPage === "notifications")
-            return "通知与输入";
-        if (selectedPage === "dynamic-island")
-            return "灵动岛";
-        if (selectedPage === "screenshot")
-            return "截图";
-        if (selectedPage === "dock")
-            return "Dock";
-        if (selectedPage === "weather")
-            return "天气";
-        if (selectedPage === "niri")
-            return "布局与窗口";
-        if (selectedPage === "niri-layout")
-            return "布局与窗口";
-        if (selectedPage === "niri-glass")
-            return "玻璃材质";
-        if (selectedPage === "niri-input")
-            return "输入与显示";
-        if (selectedPage === "niri-animations")
-            return "动画";
-        if (selectedPage === "niri-keyboard")
-            return "快捷键";
-        if (selectedPage === "startup")
-            return "启动项";
-        if (selectedPage === "health")
-            return "系统健康";
-        if (selectedPage === "about")
-            return "关于 niri";
-        return "概览";
+    function pageInfo(name) {
+        return SettingsModel.resolvedPanel(name || selectedPage);
     }
 
-    function pageSubtitle() {
-        if (selectedPage === "appearance")
-            return "深浅色、夜览、色温和图标主题";
-        if (selectedPage === "wallpaper")
-            return "静态图片和动态壁纸";
-        if (selectedPage === "notifications")
-            return "勿扰、通知历史和输入法状态";
-        if (selectedPage === "dynamic-island")
-            return "顶栏中心胶囊、点击行为和展开偏好";
-        if (selectedPage === "screenshot")
-            return "保存目录、复制和通知动作";
-        if (selectedPage === "dock")
-            return "窗口按钮显示偏好";
-        if (selectedPage === "weather")
-            return "定位、手动覆盖和温度单位";
-        if (selectedPage === "niri")
-            return "niri 间距、焦点环、边框、阴影与 snap 助手";
-        if (selectedPage === "niri-layout")
-            return "niri 间距、焦点环、边框、阴影与 snap 助手";
-        if (selectedPage === "niri-glass")
-            return "tahoe-glass 材质、折射与全局模糊";
-        if (selectedPage === "niri-input")
-            return "键盘、触摸板与显示器（输出只读）";
-        if (selectedPage === "niri-animations")
-            return "工作区、窗口移动/缩放与概览的弹簧动画";
-        if (selectedPage === "niri-keyboard")
-            return "niri binds 只读查看（任务切换 binds 受保护）";
-        if (selectedPage === "startup")
-            return "XDG autostart 和会话备注";
-        if (selectedPage === "health")
+    function pageTitle(name) {
+        return SettingsModel.title(name || selectedPage);
+    }
+
+    function pageSubtitle(name) {
+        var id = SettingsModel.resolveId(name || selectedPage);
+        if (id === "health")
             return systemStatusService ? "最后检测 " + systemStatusService.lastUpdatedText : "系统状态检测";
-        if (selectedPage === "about")
-            return "Tahoe Shell、niri、Quickshell 和当前会话";
-        return "常用状态、偏好入口和系统摘要";
+        return SettingsModel.subtitle(id);
     }
 
     function pageIndex(name) {
-        if (name === "appearance")
-            return 1;
-        if (name === "wallpaper")
-            return 2;
-        if (name === "notifications")
-            return 3;
-        if (name === "dynamic-island")
-            return 4;
-        if (name === "screenshot")
-            return 5;
-        if (name === "dock")
-            return 6;
-        if (name === "startup")
-            return 7;
-        if (name === "health")
-            return 8;
-        if (name === "about")
-            return 9;
-        if (name === "niri")
-            return 10;
-        if (name === "niri-layout")
-            return 11;
-        if (name === "niri-glass")
-            return 12;
-        if (name === "niri-input")
-            return 13;
-        if (name === "niri-animations")
-            return 14;
-        if (name === "niri-keyboard")
-            return 15;
-        if (name === "weather")
-            return 16;
-        return 0;
+        return SettingsModel.pageIndex(name || selectedPage);
+    }
+
+    function isSelectedPage(name) {
+        return SettingsModel.resolveId(selectedPage) === SettingsModel.resolveId(name);
+    }
+
+    function openPage(name) {
+        selectedPage = SettingsModel.resolveId(name);
+        if (selectedPage === "health" && systemStatusService)
+            systemStatusService.refresh();
     }
 
     function stateLabel(state) {
@@ -363,7 +301,7 @@ PanelWindow {
 
                     Controls.TahoeButton {
                         theme: root
-                        visible: root.selectedPage === "health" || root.selectedPage === "about"
+                        visible: root.currentPageId === "health" || root.currentPageId === "about" || root.currentPageId === "system"
                         iconCode: "\ue5d5"
                         label: "刷新"
                         enabled: !!root.systemStatusService && !root.systemStatusService.refreshing
@@ -390,7 +328,40 @@ PanelWindow {
                         anchors.fill: parent
                         currentIndex: root.pageIndex(root.selectedPage)
 
-                        Pages.OverviewPage {
+                        Pages.WifiPage {
+                            panel: root
+                            theme: root
+                            controlsService: root.controlsService
+                        }
+
+                        Pages.NetworkPage {
+                            panel: root
+                            theme: root
+                            networkSettingsService: root.networkSettingsService
+                        }
+
+                        Pages.BluetoothPage {
+                            panel: root
+                            theme: root
+                            controlsService: root.controlsService
+                        }
+
+                        Pages.DisplaysPage {
+                            panel: root
+                            theme: root
+                        }
+
+                        Pages.SoundPage {
+                            panel: root
+                            theme: root
+                        }
+
+                        Pages.PowerPage {
+                            panel: root
+                            theme: root
+                        }
+
+                        Pages.MultitaskingPage {
                             panel: root
                             theme: root
                         }
@@ -400,12 +371,86 @@ PanelWindow {
                             theme: root
                         }
 
-                        Pages.WallpaperPage {
+                        Pages.AppsPage {
+                            panel: root
+                            theme: root
+                            appsSettingsService: root.appsSettingsService
+                        }
+
+                        Pages.NotificationsPage {
                             panel: root
                             theme: root
                         }
 
-                        Pages.NotificationsPage {
+                        Pages.FeaturePage {
+                            panel: root
+                            theme: root
+                            panelId: "search"
+                        }
+
+                        Pages.FeaturePage {
+                            panel: root
+                            theme: root
+                            panelId: "online-accounts"
+                        }
+
+                        Pages.FeaturePage {
+                            panel: root
+                            theme: root
+                            panelId: "sharing"
+                        }
+
+                        Pages.FeaturePage {
+                            panel: root
+                            theme: root
+                            panelId: "wellbeing"
+                        }
+
+                        Pages.MouseTouchpadPage {
+                            panel: root
+                            theme: root
+                        }
+
+                        Pages.KeyboardPage {
+                            panel: root
+                            theme: root
+                        }
+
+                        Pages.FeaturePage {
+                            panel: root
+                            theme: root
+                            panelId: "color"
+                        }
+
+                        Pages.FeaturePage {
+                            panel: root
+                            theme: root
+                            panelId: "printers"
+                        }
+
+                        Pages.FeaturePage {
+                            panel: root
+                            theme: root
+                            panelId: "accessibility"
+                        }
+
+                        Pages.FeaturePage {
+                            panel: root
+                            theme: root
+                            panelId: "privacy"
+                        }
+
+                        Pages.SystemPage {
+                            panel: root
+                            theme: root
+                        }
+
+                        Pages.NiriPage {
+                            panel: root
+                            theme: root
+                        }
+
+                        Pages.WallpaperPage {
                             panel: root
                             theme: root
                         }
@@ -425,6 +470,11 @@ PanelWindow {
                             theme: root
                         }
 
+                        Pages.WeatherPage {
+                            panel: root
+                            theme: root
+                        }
+
                         Pages.StartupPage {
                             panel: root
                             theme: root
@@ -436,11 +486,6 @@ PanelWindow {
                         }
 
                         Pages.AboutPage {
-                            panel: root
-                            theme: root
-                        }
-
-                        Pages.NiriPage {
                             panel: root
                             theme: root
                         }
@@ -470,7 +515,7 @@ PanelWindow {
                             theme: root
                         }
 
-                        Pages.WeatherPage {
+                        Pages.OverviewPage {
                             panel: root
                             theme: root
                         }

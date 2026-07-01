@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Layouts
+import "SettingsModel.js" as SettingsModel
 import "controls" as Controls
 
 Rectangle {
@@ -9,80 +10,81 @@ Rectangle {
 
     property var panel
     property var theme
+    property string searchText: ""
+    property var navItems: SettingsModel.sidebarItems(searchText)
 
     readonly property string iconFont: theme ? theme.iconFont : "Material Icons"
     readonly property color textPrimary: theme ? theme.textPrimary : "#1d1d1f"
     readonly property color textSecondary: theme ? theme.textSecondary : "#721d1d1f"
+    readonly property color textMuted: theme ? theme.textMuted : "#5f6870"
     readonly property color sidebarFill: theme ? theme.sidebarFill : "#20ffffff"
     readonly property color sidebarStroke: theme ? theme.sidebarStroke : "#34ffffff"
+    readonly property color fieldFill: theme ? theme.fieldFill : "#3fffffff"
+    readonly property color fieldStroke: theme ? theme.fieldStroke : "#4cffffff"
+    readonly property color fieldStrokeFocus: theme ? theme.fieldStrokeFocus : "#007ff7"
     readonly property color accentBlue: theme ? theme.accentBlue : "#007ff7"
+    readonly property bool searching: searchText.trim().length > 0
 
-    function categoryColor(key) {
-        return theme && theme.categoryColor ? theme.categoryColor(key) : accentBlue
-    }
-
-    Layout.preferredWidth: 188
+    Layout.preferredWidth: 210
     Layout.fillHeight: true
-    radius: 18
+    radius: 8
     color: sidebar.sidebarFill
     border.color: sidebar.sidebarStroke
     border.width: 1
     clip: true
 
-    function activeButton() {
-        if (!sidebar.panel)
-            return null;
+    function parentPageFor(id) {
+        return SettingsModel.parentId(id);
+    }
 
-        var selected = String(sidebar.panel.selectedPage);
-        if (selected === "settings")
-            return overviewButton;
-        if (selected === "appearance")
-            return appearanceButton;
-        if (selected === "wallpaper")
-            return wallpaperButton;
-        if (selected === "niri" || selected.indexOf("niri-") === 0)
-            return niriButton;
-        if (selected === "notifications")
-            return notificationsButton;
-        if (selected === "dynamic-island")
-            return dynamicIslandButton;
-        if (selected === "screenshot")
-            return screenshotButton;
-        if (selected === "dock")
-            return dockButton;
-        if (selected === "weather")
-            return weatherButton;
-        if (selected === "startup")
-            return startupButton;
-        if (selected === "health")
-            return healthButton;
-        if (selected === "about")
-            return aboutButton;
-        return overviewButton;
+    function activeFor(info) {
+        if (!sidebar.panel || !info)
+            return false;
+
+        var current = SettingsModel.resolveId(sidebar.panel.selectedPage);
+        if (current === info.id)
+            return true;
+        if (sidebar.searching)
+            return false;
+        return parentPageFor(current) === info.id;
+    }
+
+    function badgeFor(info) {
+        if (!sidebar.panel || !info)
+            return "";
+        if (info.id === "notifications"
+                && sidebar.panel.notificationsService
+                && sidebar.panel.notificationsService.historyCount > 0)
+            return String(Math.min(99, sidebar.panel.notificationsService.historyCount));
+        if (info.id === "system"
+                && sidebar.panel.systemStatusService
+                && sidebar.panel.systemStatusService.missingCount > 0)
+            return String(sidebar.panel.systemStatusService.missingCount);
+        return "";
+    }
+
+    function activeIndex() {
+        for (var i = 0; i < navItems.length; i++) {
+            var item = navItems[i];
+            if (item && !item.separator && activeFor(item))
+                return i;
+        }
+        return -1;
     }
 
     function ensureActiveVisible() {
-        var item = activeButton();
-        if (!item || navFlick.height <= 0)
+        if (!navList || navList.count <= 0)
             return;
-        if (navFlick.contentHeight <= navFlick.height) {
-            navFlick.contentY = 0;
-            return;
-        }
 
-        var margin = 6;
-        var top = item.y;
-        var bottom = item.y + item.height;
-        var maxY = Math.max(0, navFlick.contentHeight - navFlick.height);
-
-        if (top < navFlick.contentY + margin)
-            navFlick.contentY = Math.max(0, top - margin);
-        else if (bottom > navFlick.contentY + navFlick.height - margin)
-            navFlick.contentY = Math.min(maxY, bottom - navFlick.height + margin);
+        var index = activeIndex();
+        if (index >= 0)
+            navList.positionViewAtIndex(index, ListView.Contain);
     }
 
     Component.onCompleted: Qt.callLater(function() { sidebar.ensureActiveVisible(); })
     onHeightChanged: Qt.callLater(function() { sidebar.ensureActiveVisible(); })
+    onSearchTextChanged: Qt.callLater(function() { sidebar.ensureActiveVisible(); })
+    onNavItemsChanged: Qt.callLater(function() { sidebar.ensureActiveVisible(); })
 
     Connections {
         target: sidebar.panel
@@ -97,214 +99,153 @@ Rectangle {
         anchors.margins: 10
         spacing: 8
 
-        RowLayout {
+        Text {
             Layout.fillWidth: true
-            Layout.preferredHeight: 42
-            spacing: 9
+            Layout.preferredHeight: 24
+            text: "设置"
+            color: sidebar.textPrimary
+            font.pixelSize: 17
+            font.weight: Font.DemiBold
+            elide: Text.ElideRight
+            verticalAlignment: Text.AlignVCenter
+        }
 
-            Controls.TahoeCategoryIcon {
-                theme: sidebar.theme
-                iconCode: "\ue8b8"
-                accentColor: sidebar.accentBlue
-                square: 30
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 32
+            radius: 8
+            color: sidebar.fieldFill
+            border.color: searchInput.activeFocus ? sidebar.fieldStrokeFocus : sidebar.fieldStroke
+            border.width: searchInput.activeFocus ? 2 : 1
+
+            Behavior on border.width {
+                NumberAnimation { duration: 80; easing.type: Easing.OutCubic }
             }
 
-            ColumnLayout {
-                Layout.fillWidth: true
-                spacing: 1
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 9
+                anchors.rightMargin: 7
+                spacing: 7
 
                 Text {
+                    Layout.preferredWidth: 18
+                    text: "\ue8b6"
+                    color: sidebar.textSecondary
+                    font.family: sidebar.iconFont
+                    font.pixelSize: 17
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                }
+
+                Item {
                     Layout.fillWidth: true
-                    text: "Tahoe"
-                    color: sidebar.textPrimary
-                    font.pixelSize: 13
-                    font.weight: Font.DemiBold
+                    Layout.fillHeight: true
+
+                    Text {
+                        anchors.fill: parent
+                        text: "搜索"
+                        color: sidebar.textMuted
+                        font.pixelSize: 12
+                        verticalAlignment: Text.AlignVCenter
+                        visible: searchInput.text.length === 0
+                    }
+
+                    TextInput {
+                        id: searchInput
+
+                        anchors.fill: parent
+                        text: sidebar.searchText
+                        color: sidebar.textPrimary
+                        selectionColor: sidebar.accentBlue
+                        selectedTextColor: "#ffffff"
+                        font.pixelSize: 12
+                        verticalAlignment: TextInput.AlignVCenter
+                        clip: true
+                        onTextChanged: {
+                            if (sidebar.searchText !== text)
+                                sidebar.searchText = text;
+                        }
+                    }
                 }
 
                 Text {
-                    Layout.fillWidth: true
-                    text: "Desktop"
-                    color: sidebar.textSecondary
-                    font.pixelSize: 11
+                    Layout.preferredWidth: 18
+                    text: "\ue5cd"
+                    color: clearMouse.containsMouse ? sidebar.textPrimary : sidebar.textSecondary
+                    font.family: sidebar.iconFont
+                    font.pixelSize: 16
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                    visible: sidebar.searchText.length > 0
+
+                    MouseArea {
+                        id: clearMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            sidebar.searchText = "";
+                            searchInput.forceActiveFocus();
+                        }
+                    }
                 }
             }
         }
 
-        Flickable {
-            id: navFlick
+        ListView {
+            id: navList
 
             Layout.fillWidth: true
             Layout.fillHeight: true
-            contentWidth: width
-            contentHeight: navColumn.implicitHeight
+            model: sidebar.navItems
+            spacing: 2
             clip: true
             boundsBehavior: Flickable.StopAtBounds
-            flickableDirection: Flickable.VerticalFlick
             interactive: contentHeight > height
-            onHeightChanged: Qt.callLater(function() { sidebar.ensureActiveVisible(); })
-            onContentHeightChanged: Qt.callLater(function() { sidebar.ensureActiveVisible(); })
 
-            ColumnLayout {
-                id: navColumn
+            delegate: Item {
+                id: navDelegate
 
-                width: navFlick.width
-                spacing: 8
+                required property var modelData
 
-                Controls.TahoeSidebarButton {
-                    id: overviewButton
+                width: ListView.view.width
+                height: modelData && modelData.separator ? 11 : 34
 
-                    theme: sidebar.theme
-                    label: "概览"
-                    iconCode: "\ue8b8"
-                    accentColor: sidebar.categoryColor("overview")
-                    active: sidebar.panel && sidebar.panel.selectedPage === "settings"
-                    onActivated: sidebar.panel.selectedPage = "settings"
+                Rectangle {
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.leftMargin: 8
+                    anchors.rightMargin: 8
+                    anchors.verticalCenter: parent.verticalCenter
+                    height: 1
+                    color: sidebar.sidebarStroke
+                    visible: !!(navDelegate.modelData && navDelegate.modelData.separator)
                 }
 
                 Controls.TahoeSidebarButton {
-                    id: appearanceButton
-
+                    anchors.fill: parent
                     theme: sidebar.theme
-                    label: "外观"
-                    iconCode: "\ue51c"
-                    accentColor: sidebar.categoryColor("appearance")
-                    active: sidebar.panel && sidebar.panel.selectedPage === "appearance"
-                    onActivated: sidebar.panel.selectedPage = "appearance"
-                }
-
-                Controls.TahoeSidebarButton {
-                    id: wallpaperButton
-
-                    theme: sidebar.theme
-                    label: "壁纸"
-                    iconCode: "\ue40b"
-                    accentColor: sidebar.categoryColor("wallpaper")
-                    active: sidebar.panel && sidebar.panel.selectedPage === "wallpaper"
-                    onActivated: sidebar.panel.selectedPage = "wallpaper"
-                }
-
-                Controls.TahoeSidebarButton {
-                    id: niriButton
-
-                    theme: sidebar.theme
-                    label: "布局与窗口"
-                    iconCode: "\ue871"
-                    accentColor: sidebar.categoryColor("niri")
-                    // Stays active on the niri hub and every niri-* sub-page so the
-                    // sidebar highlights the group the user is inside.
-                    active: sidebar.panel && (sidebar.panel.selectedPage === "niri"
-                        || String(sidebar.panel.selectedPage).indexOf("niri-") === 0)
-                    onActivated: sidebar.panel.selectedPage = "niri"
-                }
-
-                Controls.TahoeSidebarButton {
-                    id: notificationsButton
-
-                    theme: sidebar.theme
-                    label: "通知与输入"
-                    iconCode: "\ue7f4"
-                    accentColor: sidebar.categoryColor("notifications")
-                    active: sidebar.panel && sidebar.panel.selectedPage === "notifications"
-                    badgeText: sidebar.panel && sidebar.panel.notificationsService && sidebar.panel.notificationsService.historyCount > 0
-                        ? String(Math.min(99, sidebar.panel.notificationsService.historyCount))
-                        : ""
-                    onActivated: sidebar.panel.selectedPage = "notifications"
-                }
-
-                Controls.TahoeSidebarButton {
-                    id: dynamicIslandButton
-
-                    theme: sidebar.theme
-                    label: "灵动岛"
-                    iconCode: "\ueb81"
-                    accentColor: sidebar.categoryColor("dynamic-island")
-                    active: sidebar.panel && sidebar.panel.selectedPage === "dynamic-island"
-                    onActivated: sidebar.panel.selectedPage = "dynamic-island"
-                }
-
-                Controls.TahoeSidebarButton {
-                    id: screenshotButton
-
-                    theme: sidebar.theme
-                    label: "截图"
-                    iconCode: "\ue3b0"
-                    accentColor: sidebar.categoryColor("screenshot")
-                    active: sidebar.panel && sidebar.panel.selectedPage === "screenshot"
-                    onActivated: sidebar.panel.selectedPage = "screenshot"
-                }
-
-                Controls.TahoeSidebarButton {
-                    id: dockButton
-
-                    theme: sidebar.theme
-                    label: "Dock"
-                    iconCode: "\ue8d0"
-                    accentColor: sidebar.categoryColor("dock")
-                    active: sidebar.panel && sidebar.panel.selectedPage === "dock"
-                    onActivated: sidebar.panel.selectedPage = "dock"
-                }
-
-                Controls.TahoeSidebarButton {
-                    id: weatherButton
-
-                    theme: sidebar.theme
-                    label: "天气"
-                    iconCode: "\ue2bd"
-                    accentColor: sidebar.categoryColor("weather")
-                    active: sidebar.panel && sidebar.panel.selectedPage === "weather"
-                    onActivated: sidebar.panel.selectedPage = "weather"
-                }
-
-                Controls.TahoeSidebarButton {
-                    id: startupButton
-
-                    theme: sidebar.theme
-                    label: "启动项"
-                    iconCode: "\ue89e"
-                    accentColor: sidebar.categoryColor("startup")
-                    active: sidebar.panel && sidebar.panel.selectedPage === "startup"
-                    onActivated: sidebar.panel.selectedPage = "startup"
-                }
-
-                Controls.TahoeSidebarButton {
-                    id: healthButton
-
-                    theme: sidebar.theme
-                    label: "系统健康"
-                    iconCode: "\ue868"
-                    accentColor: sidebar.categoryColor("health")
-                    active: sidebar.panel && sidebar.panel.selectedPage === "health"
-                    badgeText: sidebar.panel && sidebar.panel.systemStatusService && sidebar.panel.systemStatusService.missingCount > 0
-                        ? String(sidebar.panel.systemStatusService.missingCount)
-                        : ""
+                    label: navDelegate.modelData && navDelegate.modelData.title ? navDelegate.modelData.title : ""
+                    iconCode: navDelegate.modelData && navDelegate.modelData.icon ? navDelegate.modelData.icon : ""
+                    active: sidebar.activeFor(navDelegate.modelData)
+                    badgeText: sidebar.badgeFor(navDelegate.modelData)
+                    visible: !(navDelegate.modelData && navDelegate.modelData.separator)
                     onActivated: {
-                        sidebar.panel.selectedPage = "health";
-                        if (sidebar.panel.systemStatusService)
-                            sidebar.panel.systemStatusService.refresh();
+                        if (sidebar.panel && navDelegate.modelData)
+                            sidebar.panel.openPage(navDelegate.modelData.id);
                     }
-                }
-
-                Controls.TahoeSidebarButton {
-                    id: aboutButton
-
-                    theme: sidebar.theme
-                    label: "关于"
-                    iconCode: "\ue88e"
-                    accentColor: sidebar.categoryColor("about")
-                    active: sidebar.panel && sidebar.panel.selectedPage === "about"
-                    onActivated: sidebar.panel.selectedPage = "about"
                 }
             }
         }
 
         Text {
             Layout.fillWidth: true
-            Layout.preferredHeight: 14
-            text: sidebar.panel && sidebar.panel.settingsService ? sidebar.panel.settingsService.settingsPath : ""
+            text: "无结果"
             color: sidebar.textSecondary
-            font.pixelSize: 10
-            elide: Text.ElideMiddle
-            maximumLineCount: 1
+            font.pixelSize: 12
+            horizontalAlignment: Text.AlignHCenter
+            visible: sidebar.searching && sidebar.navItems.length === 0
         }
     }
 }

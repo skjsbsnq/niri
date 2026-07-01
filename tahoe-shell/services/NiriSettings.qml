@@ -53,8 +53,8 @@ Item {
 
     // S5.2 input mirrors. keyboard repeat-rate/repeat-delay/numlock and
     // touchpad tap/natural-scroll/dwt/accel-speed are writable through setX.
-    // Defaults mirror the deployed config.kdl. Output scale is read-only
-    // (display only); the GUI never writes output or variable-refresh-rate.
+    // Defaults mirror the deployed config.kdl. Output scale is writable through
+    // the same validated helper path; variable-refresh-rate is never touched.
     property int keyboardRepeatRate: 25
     property int keyboardRepeatDelay: 600
     property bool keyboardNumlock: true
@@ -313,6 +313,14 @@ Item {
             return;
         root.touchpadAccelSpeed = next;
         root.writeField("input.touchpad.accel_speed", next);
+    }
+
+    function setOutputScale(value) {
+        var next = clampReal(value, 0.5, 4, outputScale);
+        if (Math.abs(next - outputScale) < 1e-9)
+            return;
+        root.outputScale = next;
+        root.writeField("output.scale", next);
     }
 
     function setAnimParam(action, param, value) {

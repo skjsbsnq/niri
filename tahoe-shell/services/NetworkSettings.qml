@@ -311,7 +311,7 @@ Item {
                     "httpsPort": String(fields[7] || "0"),
                     "socksHost": String(fields[8] || ""),
                     "socksPort": String(fields[9] || "0")
-                });
+                };
             }
         }
 

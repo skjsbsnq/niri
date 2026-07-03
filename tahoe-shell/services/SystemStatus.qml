@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import "StatusTypes.js" as StatusTypes
 
 Item {
     id: root
@@ -17,16 +18,16 @@ Item {
     property string lastError: ""
 
     readonly property bool refreshing: localRefreshing || (!!commandRunner && commandRunner.refreshing)
-    readonly property int okCount: countByState("ok")
-    readonly property int staleCount: countByState("stale")
-    readonly property int brokenCount: countByState("broken")
-    readonly property int warnCount: countByState("warn") + staleCount
-    readonly property int missingCount: countByState("missing") + brokenCount
+    readonly property int okCount: StatusTypes.countByState(statusItems, StatusTypes.OK)
+    readonly property int staleCount: StatusTypes.countByState(statusItems, StatusTypes.STALE)
+    readonly property int brokenCount: StatusTypes.countByState(statusItems, StatusTypes.BROKEN)
+    readonly property int warnCount: StatusTypes.countWarn(statusItems)
+    readonly property int missingCount: StatusTypes.countMissing(statusItems)
 
     function countByState(state) {
         var count = 0;
         for (var i = 0; i < statusItems.length; i++) {
-            if (statusItems[i] && statusItems[i].state === state)
+            if (statusItems[i] && StatusTypes.normalizeState(statusItems[i].state) === StatusTypes.normalizeState(state))
                 count += 1;
         }
         return count;
@@ -60,7 +61,7 @@ Item {
                     continue;
                 if (id.length > 0)
                     seen[id] = true;
-                out.push(item);
+                out.push(StatusTypes.normalizeStatus(item, {}, item.updatedAt || ""));
             }
         }
         return out;
@@ -75,6 +76,7 @@ Item {
     function parseProbe(text) {
         var statuses = [];
         var about = [];
+        var updatedAt = new Date().toISOString();
         var lines = String(text || "").split(/\r?\n/);
         for (var i = 0; i < lines.length; i++) {
             var line = lines[i];
@@ -83,14 +85,7 @@ Item {
 
             var fields = line.split("|");
             if (fields[0] === "STATUS" && fields.length >= 6) {
-                statuses.push({
-                    "id": fields[1],
-                    "state": fields[2],
-                    "title": fields[3],
-                    "detail": fields[4],
-                    "impact": fields[5],
-                    "action": fields.length > 6 ? fields.slice(6).join("|") : ""
-                });
+                statuses.push(StatusTypes.fromStatusFields(fields, updatedAt));
             } else if (fields[0] === "ABOUT" && fields.length >= 4) {
                 about.push({
                     "id": fields[1],

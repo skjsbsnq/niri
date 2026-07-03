@@ -128,36 +128,16 @@ Item {
             }
         }
 
-        Rectangle {
+        WindowPreviewFallback {
             anchors.fill: parent
             visible: root.showFallback
-            color: "#f2f4f7"
-
-            Image {
-                anchors.horizontalCenter: parent.horizontalCenter
-                anchors.top: parent.top
-                anchors.topMargin: 8
-                width: 28
-                height: 28
-                source: root.windowIcon
-                fillMode: Image.PreserveAspectFit
-                smooth: true
-                mipmap: true
-                asynchronous: true
-            }
-
-            Text {
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.bottom: parent.bottom
-                anchors.margins: 7
-                text: root.windowLabel
-                color: "#202124"
-                font.pixelSize: 10
-                elide: Text.ElideRight
-                maximumLineCount: 1
-                horizontalAlignment: Text.AlignHCenter
-            }
+            backgroundColor: "#f2f4f7"
+            iconSource: root.windowIcon
+            title: root.windowLabel
+            iconSize: 28
+            showTitle: true
+            titlePixelSize: 10
+            titleBottomMargin: 7
         }
 
         Rectangle {

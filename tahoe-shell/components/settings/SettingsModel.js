@@ -514,6 +514,237 @@ var panels = [
     }
 ];
 
+var CAPABILITY_NATIVE = "native";
+var CAPABILITY_PROBE = "probe";
+var CAPABILITY_EXTERNAL = "external";
+var CAPABILITY_READONLY = "readonly";
+
+var panelCapabilities = {
+    "wifi": {
+        "capability": CAPABILITY_NATIVE,
+        "backend": "NetworkManager via Controls service",
+        "externalPanel": "wifi",
+        "writeScope": "Wi-Fi 开关、扫描、连接、忘记网络和热点动作"
+    },
+    "network": {
+        "capability": CAPABILITY_NATIVE,
+        "backend": "NetworkManager via NetworkSettings service",
+        "externalPanel": "network",
+        "writeScope": "有线连接、VPN profile 和 proxy 的 NetworkManager 写入"
+    },
+    "bluetooth": {
+        "capability": CAPABILITY_NATIVE,
+        "backend": "BlueZ via Controls service",
+        "externalPanel": "bluetooth",
+        "writeScope": "蓝牙开关、扫描、配对、连接和信任设备"
+    },
+    "displays": {
+        "capability": CAPABILITY_NATIVE,
+        "backend": "niri_settings_tool.py and Appearance service",
+        "externalPanel": "display",
+        "writeScope": "输出缩放和夜览；VRR 保持 guardrail 只读"
+    },
+    "sound": {
+        "capability": CAPABILITY_NATIVE,
+        "backend": "PipeWire/WirePlumber via Sound service",
+        "externalPanel": "sound",
+        "writeScope": "音量、静音、默认输入输出和设备端口"
+    },
+    "power": {
+        "capability": CAPABILITY_NATIVE,
+        "backend": "UPower, powerprofilesctl and Tahoe session settings",
+        "externalPanel": "power",
+        "writeScope": "亮度、电源模式和空闲锁定偏好"
+    },
+    "multitasking": {
+        "capability": CAPABILITY_NATIVE,
+        "backend": "Tahoe settings and niri settings",
+        "externalPanel": "",
+        "writeScope": "窗口、工作区、Dock、动画和灵动岛偏好入口"
+    },
+    "appearance": {
+        "capability": CAPABILITY_NATIVE,
+        "backend": "Tahoe Appearance service and desktop theme commands",
+        "externalPanel": "appearance",
+        "writeScope": "深浅色、图标主题、壁纸和夜览偏好"
+    },
+    "apps": {
+        "capability": CAPABILITY_NATIVE,
+        "backend": "apps_settings_probe.py, xdg-mime and portal stores",
+        "externalPanel": "applications",
+        "writeScope": "默认应用可写；权限行按 sandbox enforceability 显示只读或可管理范围"
+    },
+    "notifications": {
+        "capability": CAPABILITY_NATIVE,
+        "backend": "Tahoe Notifications service",
+        "externalPanel": "notifications",
+        "writeScope": "勿扰、通知历史和 Tahoe 通知偏好"
+    },
+    "search": {
+        "capability": CAPABILITY_PROBE,
+        "backend": "Tahoe Search service plus optional tracker3 probe",
+        "externalPanel": "search",
+        "writeScope": "只显示索引后端状态；搜索 provider 排序和索引配置未在此页写入",
+        "featureIds": ["search-index"]
+    },
+    "online-accounts": {
+        "capability": CAPABILITY_EXTERNAL,
+        "backend": "GNOME Online Accounts probe",
+        "externalPanel": "online-accounts",
+        "writeScope": "Tahoe 不保存账号凭据；账号添加和同步由外部设置处理",
+        "featureIds": ["online-accounts", "gnome-control-center"]
+    },
+    "sharing": {
+        "capability": CAPABILITY_PROBE,
+        "backend": "OpenSSH, Avahi, Samba and Rygel probes",
+        "externalPanel": "sharing",
+        "writeScope": "只探测共享后端；不写入远程登录、发现、文件共享或媒体共享配置",
+        "featureIds": ["remote-login", "discovery", "file-sharing", "media-sharing"]
+    },
+    "wellbeing": {
+        "capability": CAPABILITY_READONLY,
+        "backend": "Tahoe session state; no screen-time backend",
+        "externalPanel": "",
+        "writeScope": "屏幕时间只读说明；页面仅暴露已有勿扰和空闲锁定状态"
+    },
+    "mouse-touchpad": {
+        "capability": CAPABILITY_NATIVE,
+        "backend": "niri_settings_tool.py input writes",
+        "externalPanel": "mouse",
+        "writeScope": "指针、滚动和触摸板输入偏好"
+    },
+    "keyboard": {
+        "capability": CAPABILITY_NATIVE,
+        "backend": "Input method service, Tahoe settings and niri read-only binds",
+        "externalPanel": "keyboard",
+        "writeScope": "输入法、重复按键和相关入口；niri binds 本页不写"
+    },
+    "color": {
+        "capability": CAPABILITY_EXTERNAL,
+        "backend": "colord probe via colormgr",
+        "externalPanel": "color",
+        "writeScope": "只探测 colord；ICC profile 管理由外部设置处理",
+        "featureIds": ["color"]
+    },
+    "printers": {
+        "capability": CAPABILITY_EXTERNAL,
+        "backend": "CUPS probe via lpstat",
+        "externalPanel": "printers",
+        "writeScope": "只探测打印服务；设备和队列管理由外部设置处理",
+        "featureIds": ["printers"]
+    },
+    "accessibility": {
+        "capability": CAPABILITY_EXTERNAL,
+        "backend": "GNOME accessibility gsettings probe",
+        "externalPanel": "universal-access",
+        "writeScope": "只探测无障碍 schema；具体辅助功能由外部设置处理",
+        "featureIds": ["accessibility"]
+    },
+    "privacy": {
+        "capability": CAPABILITY_READONLY,
+        "backend": "xdg-desktop-portal and portal permission store probes",
+        "externalPanel": "privacy",
+        "writeScope": "隐私总览只读；应用权限写入范围由 Apps 页按 sandbox 类型显式限定",
+        "featureIds": ["portal-permissions", "desktop-portal"]
+    },
+    "system": {
+        "capability": CAPABILITY_NATIVE,
+        "backend": "Tahoe settings and status services",
+        "externalPanel": "info-overview",
+        "writeScope": "系统健康、启动项、天气和关于入口"
+    },
+    "niri": {
+        "capability": CAPABILITY_NATIVE,
+        "backend": "niri_settings_tool.py whitelist writes",
+        "externalPanel": "",
+        "writeScope": "niri 布局、玻璃、输入和动画白名单字段；binds 保持只读"
+    },
+    "wallpaper": {
+        "capability": CAPABILITY_NATIVE,
+        "backend": "Tahoe settings and wallpaper processes",
+        "externalPanel": "background",
+        "writeScope": "静态壁纸、动态壁纸和外部壁纸命令偏好"
+    },
+    "dynamic-island": {
+        "capability": CAPABILITY_NATIVE,
+        "backend": "Tahoe settings",
+        "externalPanel": "",
+        "writeScope": "顶栏中心胶囊、点击行为和展开偏好"
+    },
+    "screenshot": {
+        "capability": CAPABILITY_NATIVE,
+        "backend": "Tahoe screenshot command pipeline",
+        "externalPanel": "",
+        "writeScope": "截图保存目录、复制和通知动作偏好"
+    },
+    "dock": {
+        "capability": CAPABILITY_NATIVE,
+        "backend": "Tahoe settings and Windows service",
+        "externalPanel": "",
+        "writeScope": "Dock 窗口标题、任务按钮和最小化窗口显示偏好"
+    },
+    "weather": {
+        "capability": CAPABILITY_NATIVE,
+        "backend": "Tahoe Weather service",
+        "externalPanel": "",
+        "writeScope": "定位、手动城市和温度单位偏好"
+    },
+    "startup": {
+        "capability": CAPABILITY_NATIVE,
+        "backend": "XDG autostart manager and Tahoe settings",
+        "externalPanel": "",
+        "writeScope": "列出、添加、启用、停用和移除用户 autostart .desktop 覆盖；不写系统目录"
+    },
+    "health": {
+        "capability": CAPABILITY_PROBE,
+        "backend": "CommandRunner, SystemFeatures and SystemStatus probes",
+        "externalPanel": "",
+        "writeScope": "只读依赖、服务和 Tahoe 会话状态探测"
+    },
+    "about": {
+        "capability": CAPABILITY_READONLY,
+        "backend": "Tahoe, niri and Quickshell runtime metadata",
+        "externalPanel": "",
+        "writeScope": "只读版本、会话和组件信息"
+    },
+    "niri-layout": {
+        "capability": CAPABILITY_NATIVE,
+        "backend": "niri_settings_tool.py whitelist writes",
+        "externalPanel": "",
+        "writeScope": "间距、焦点环、边框、阴影和 snap helper 白名单字段"
+    },
+    "niri-glass": {
+        "capability": CAPABILITY_NATIVE,
+        "backend": "niri_settings_tool.py glass whitelist writes",
+        "externalPanel": "",
+        "writeScope": "Tahoe glass、模糊、折射和材质参数白名单字段"
+    },
+    "niri-input": {
+        "capability": CAPABILITY_NATIVE,
+        "backend": "niri_settings_tool.py input whitelist writes",
+        "externalPanel": "",
+        "writeScope": "键盘和触摸板输入字段；输出信息保持只读"
+    },
+    "niri-animations": {
+        "capability": CAPABILITY_NATIVE,
+        "backend": "niri_settings_tool.py animation whitelist writes",
+        "externalPanel": "",
+        "writeScope": "工作区、窗口移动、缩放和概览动画白名单字段"
+    },
+    "niri-keyboard": {
+        "capability": CAPABILITY_READONLY,
+        "backend": "niri_settings_tool.py binds enumeration",
+        "externalPanel": "",
+        "writeScope": "只读查看 niri binds；GUI 不写 binds 权威块"
+    },
+    "overview": {
+        "capability": CAPABILITY_READONLY,
+        "backend": "Tahoe settings summary",
+        "externalPanel": "",
+        "writeScope": "兼容入口，只读展示旧版 Tahoe 偏好摘要"
+    }
+};
+
 var aliases = {
     "settings": "wifi",
     "general": "system",
@@ -527,6 +758,75 @@ var aliases = {
 
 function normalizeText(value) {
     return String(value || "").toLowerCase().trim();
+}
+
+function normalizedCapability(value) {
+    var key = String(value || CAPABILITY_NATIVE).trim().toLowerCase();
+    if (key === CAPABILITY_NATIVE || key === CAPABILITY_PROBE || key === CAPABILITY_EXTERNAL || key === CAPABILITY_READONLY)
+        return key;
+    return CAPABILITY_NATIVE;
+}
+
+function capabilityLabel(value) {
+    var key = normalizedCapability(value);
+    if (key === CAPABILITY_NATIVE)
+        return "原生页面";
+    if (key === CAPABILITY_PROBE)
+        return "功能探测";
+    if (key === CAPABILITY_EXTERNAL)
+        return "外部设置";
+    if (key === CAPABILITY_READONLY)
+        return "只读能力";
+    return "原生页面";
+}
+
+function capabilityDetail(value) {
+    var key = normalizedCapability(value);
+    if (key === CAPABILITY_NATIVE)
+        return "Tahoe 提供页面和可控写入范围";
+    if (key === CAPABILITY_PROBE)
+        return "Tahoe 只探测后端状态，不写入该系统域配置";
+    if (key === CAPABILITY_EXTERNAL)
+        return "Tahoe 保留入口和状态说明，具体配置交给外部设置";
+    if (key === CAPABILITY_READONLY)
+        return "Tahoe 只展示状态或受限入口，不伪装成完整控制面";
+    return "";
+}
+
+function capabilityIcon(value) {
+    var key = normalizedCapability(value);
+    if (key === CAPABILITY_NATIVE)
+        return "\ue86c";
+    if (key === CAPABILITY_PROBE)
+        return "\ue8b6";
+    if (key === CAPABILITY_EXTERNAL)
+        return "\ue89e";
+    if (key === CAPABILITY_READONLY)
+        return "\ue8f5";
+    return "\ue86c";
+}
+
+function metadataFor(panel) {
+    if (!panel || !panel.id)
+        return {};
+    return panelCapabilities[panel.id] || {};
+}
+
+function decoratedPanel(panel) {
+    if (!panel)
+        return null;
+
+    var out = {};
+    for (var key in panel)
+        out[key] = panel[key];
+
+    var meta = metadataFor(panel);
+    out.capability = normalizedCapability(meta.capability);
+    out.backend = String(meta.backend || "");
+    out.externalPanel = String(meta.externalPanel || "");
+    out.writeScope = String(meta.writeScope || "");
+    out.featureIds = meta.featureIds || [];
+    return out;
 }
 
 function panelById(id) {
@@ -548,7 +848,7 @@ function resolveId(id) {
 }
 
 function resolvedPanel(id) {
-    return panelById(resolveId(id)) || panels[0];
+    return decoratedPanel(panelById(resolveId(id)) || panels[0]);
 }
 
 function parentId(id) {
@@ -575,18 +875,43 @@ function subtitle(id) {
     return resolvedPanel(id).subtitle;
 }
 
+function capability(id) {
+    return resolvedPanel(id).capability;
+}
+
+function backend(id) {
+    return resolvedPanel(id).backend;
+}
+
+function externalPanel(id) {
+    return resolvedPanel(id).externalPanel;
+}
+
+function writeScope(id) {
+    return resolvedPanel(id).writeScope;
+}
+
+function featureIds(id) {
+    return resolvedPanel(id).featureIds || [];
+}
+
 function matchesPanel(panel, query) {
     if (!panel || query.length === 0)
         return true;
 
+    var info = decoratedPanel(panel);
     var haystack = [
-        panel.id,
-        panel.title,
-        panel.subtitle,
-        panel.group,
-        panel.statusBadge || ""
+        info.id,
+        info.title,
+        info.subtitle,
+        info.group,
+        info.statusBadge || "",
+        info.capability || "",
+        info.backend || "",
+        info.externalPanel || "",
+        info.writeScope || ""
     ];
-    var keywords = panel.keywords || [];
+    var keywords = info.keywords || [];
     for (var i = 0; i < keywords.length; i++)
         haystack.push(keywords[i]);
 
@@ -607,9 +932,9 @@ function sidebarItems(query) {
                 continue;
             if (panel.separatorBefore)
                 out.push({"separator": true, "id": "separator-" + panel.id});
-            out.push(panel);
+            out.push(decoratedPanel(panel));
         } else if (matchesPanel(panel, q)) {
-            out.push(panel);
+            out.push(decoratedPanel(panel));
         }
     }
 

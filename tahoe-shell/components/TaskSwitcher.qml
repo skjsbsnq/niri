@@ -438,36 +438,12 @@ PanelWindow {
                         }
                     }
 
-                    Rectangle {
-                        anchors.centerIn: parent
-                        width: 54
-                        height: 54
-                        radius: 16
-                        color: "transparent"
+                    WindowPreviewFallback {
+                        anchors.fill: parent
+                        iconSource: windowItem.iconSource
+                        minimized: windowItem.minimized
+                        iconSize: 38
                         visible: !thumbnailImage.visible
-                    }
-
-                    Image {
-                        id: windowIconImage
-
-                        anchors.centerIn: parent
-                        width: 38
-                        height: 38
-                        source: windowItem.iconSource
-                        fillMode: Image.PreserveAspectFit
-                        smooth: true
-                        mipmap: true
-                        opacity: windowItem.minimized ? 0.58 : 1
-                        visible: !thumbnailImage.visible && windowItem.iconSource.length > 0 && status !== Image.Error
-                    }
-
-                    Text {
-                        anchors.centerIn: parent
-                        text: "\ue8d0"
-                        color: "#5a626a"
-                        font.family: "Material Icons"
-                        font.pixelSize: 22
-                        visible: !thumbnailImage.visible && !windowIconImage.visible
                     }
 
                     Rectangle {

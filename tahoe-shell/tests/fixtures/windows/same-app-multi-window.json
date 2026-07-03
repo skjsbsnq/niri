@@ -1,0 +1,127 @@
+{
+  "description": "Same app with two distinct window titles plus one toplevel-only fallback.",
+  "workspaces": [
+    {
+      "id": 1,
+      "idx": 1,
+      "name": "main",
+      "output": "eDP-1",
+      "coordinates": [0]
+    }
+  ],
+  "toplevels": [
+    {
+      "key": "editor-main",
+      "appId": "org.code.Editor",
+      "title": "main.js",
+      "activated": true,
+      "minimized": false
+    },
+    {
+      "key": "editor-settings",
+      "appId": "org.code.Editor",
+      "title": "Settings",
+      "activated": false,
+      "minimized": false
+    },
+    {
+      "key": "terminal-fallback",
+      "appId": "org.wezfurlong.wezterm",
+      "title": "Terminal",
+      "activated": false,
+      "minimized": false
+    }
+  ],
+  "ipcWindows": [
+    {
+      "id": 101,
+      "app_id": "org.code.Editor",
+      "title": "main.js",
+      "pid": 1001,
+      "workspace_id": 1,
+      "is_focused": true,
+      "is_floating": false,
+      "is_minimized": false,
+      "is_urgent": false,
+      "focus_timestamp": {
+        "secs": 20,
+        "nanos": 0
+      },
+      "layout": {
+        "tile_pos_in_workspace_view": [10, 20],
+        "tile_size": [800, 600]
+      }
+    },
+    {
+      "id": 102,
+      "app_id": "org.code.Editor",
+      "title": "Settings",
+      "pid": 1002,
+      "workspace_id": 1,
+      "is_focused": false,
+      "is_floating": false,
+      "is_minimized": false,
+      "is_urgent": false,
+      "focus_timestamp": {
+        "secs": 10,
+        "nanos": 0
+      },
+      "layout": {
+        "tile_pos_in_workspace_view": [40, 60],
+        "tile_size": [640, 480]
+      }
+    }
+  ],
+  "expect": {
+    "models": [
+      {
+        "id": 101,
+        "modelKey": "id:101",
+        "title": "main.js",
+        "appId": "org.code.Editor",
+        "toplevelKey": "editor-main",
+        "workspaceId": 1,
+        "output": "eDP-1",
+        "isFocused": true,
+        "isMinimized": false,
+        "isUrgent": false,
+        "geometry": {
+          "x": 10,
+          "y": 20,
+          "w": 800,
+          "h": 600,
+          "width": 800,
+          "height": 600
+        }
+      },
+      {
+        "id": 102,
+        "modelKey": "id:102",
+        "title": "Settings",
+        "appId": "org.code.Editor",
+        "toplevelKey": "editor-settings",
+        "workspaceId": 1,
+        "output": "eDP-1",
+        "isFocused": false,
+        "isMinimized": false,
+        "isUrgent": false
+      },
+      {
+        "id": null,
+        "modelKey": "toplevel:org.wezfurlong.wezterm:2",
+        "title": "Terminal",
+        "appId": "org.wezfurlong.wezterm",
+        "toplevelKey": "terminal-fallback",
+        "workspaceId": null,
+        "output": "",
+        "isFocused": false,
+        "isMinimized": false,
+        "isUrgent": false
+      }
+    ],
+    "focusedKey": 101,
+    "minimizedKeys": [],
+    "recentKeys": [101, 102, "toplevel:org.wezfurlong.wezterm:2"],
+    "workspaceOrder": [1]
+  }
+}

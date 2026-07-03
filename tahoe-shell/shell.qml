@@ -13,20 +13,24 @@ import "services"
 ShellRoot {
     id: shell
 
-    property bool controlCenterOpen: false
+    ShellPopupState {
+        id: shellPopupState
+    }
+
+    property alias controlCenterOpen: shellPopupState.controlCenterOpen
+    property alias appMenuOpen: shellPopupState.appMenuOpen
+    property alias applicationMenuOpen: shellPopupState.applicationMenuOpen
+    property alias notificationCenterOpen: shellPopupState.notificationCenterOpen
+    property alias batteryPopupOpen: shellPopupState.batteryPopupOpen
+    property alias wifiPopupOpen: shellPopupState.wifiPopupOpen
+    property alias fanPopupOpen: shellPopupState.fanPopupOpen
+    property alias clipboardPopupOpen: shellPopupState.clipboardPopupOpen
+    property alias trayMenuOpen: shellPopupState.trayMenuOpen
+    property alias trayMenuItem: shellPopupState.trayMenuItem
+    property alias topBarPopupAnchorRect: shellPopupState.topBarPopupAnchorRect
+    property alias topBarPopupScreenName: shellPopupState.topBarPopupScreenName
     property bool launchpadOpen: false
-    property bool appMenuOpen: false
-    property bool applicationMenuOpen: false
     property bool spotlightOpen: false
-    property bool notificationCenterOpen: false
-    property bool batteryPopupOpen: false
-    property bool wifiPopupOpen: false
-    property bool fanPopupOpen: false
-    property bool clipboardPopupOpen: false
-    property bool trayMenuOpen: false
-    property var trayMenuItem: null
-    property var topBarPopupAnchorRect: null
-    property string topBarPopupScreenName: ""
     property bool dockAppMenuOpen: false
     property var dockAppMenuApp: null
     property string dockAppMenuAppId: ""
@@ -75,27 +79,19 @@ ShellRoot {
     }
 
     function screenName(screen) {
-        return screen ? String(screen.name || "") : "";
+        return shellNavigation.screenName(screen);
     }
 
     function navigationScreenName() {
-        var focused = niri ? niri.focusedWindow : null;
-        var output = focused ? String(focused.output || "").trim() : "";
-        if (output.length > 0)
-            return output;
-
-        var screens = [...Quickshell.screens];
-        return screens.length > 0 ? screenName(screens[0]) : "";
+        return shellNavigation.navigationScreenName();
     }
 
     function navigationOpenFor(open, targetScreenName, screen) {
-        var target = String(targetScreenName || "");
-        return open && (target.length === 0 || target === screenName(screen));
+        return shellNavigation.navigationOpenFor(open, targetScreenName, screen);
     }
 
     function prepareTopBarPopup(screen, anchorRect) {
-        topBarPopupScreenName = screenName(screen);
-        topBarPopupAnchorRect = anchorRect || null;
+        shellPopupState.prepareTopBarPopup(screenName(screen), anchorRect);
     }
 
     function closeLaunchpadAndSpotlight() {
@@ -104,62 +100,11 @@ ShellRoot {
     }
 
     function topBarPopupOpenValue(popupName) {
-        switch (popupName) {
-        case "appMenu":
-            return appMenuOpen;
-        case "applicationMenu":
-            return applicationMenuOpen;
-        case "controlCenter":
-            return controlCenterOpen;
-        case "notificationCenter":
-            return notificationCenterOpen;
-        case "battery":
-            return batteryPopupOpen;
-        case "wifi":
-            return wifiPopupOpen;
-        case "fan":
-            return fanPopupOpen;
-        case "clipboard":
-            return clipboardPopupOpen;
-        case "trayMenu":
-            return trayMenuOpen;
-        default:
-            return false;
-        }
+        return shellPopupState.topBarPopupOpenValue(popupName);
     }
 
     function setTopBarPopupOpen(popupName, open) {
-        switch (popupName) {
-        case "appMenu":
-            appMenuOpen = open;
-            break;
-        case "applicationMenu":
-            applicationMenuOpen = open;
-            break;
-        case "controlCenter":
-            controlCenterOpen = open;
-            break;
-        case "notificationCenter":
-            notificationCenterOpen = open;
-            break;
-        case "battery":
-            batteryPopupOpen = open;
-            break;
-        case "wifi":
-            wifiPopupOpen = open;
-            break;
-        case "fan":
-            fanPopupOpen = open;
-            break;
-        case "clipboard":
-            clipboardPopupOpen = open;
-            break;
-        case "trayMenu":
-            trayMenuOpen = open;
-            if (!open)
-                trayMenuItem = null;
-            break;
-        }
+        shellPopupState.setTopBarPopupOpen(popupName, open);
     }
 
     function topBarPopupOpenForName(popupName, screen) {
@@ -183,13 +128,7 @@ ShellRoot {
     }
 
     function screenByName(name) {
-        var target = String(name || "");
-        var screens = [...Quickshell.screens];
-        for (var i = 0; i < screens.length; i++) {
-            if (screenName(screens[i]) === target)
-                return screens[i];
-        }
-        return screens.length > 0 ? screens[0] : null;
+        return shellNavigation.screenByName(name);
     }
 
     function dynamicIslandAnchorRect(screen) {
@@ -240,77 +179,23 @@ ShellRoot {
     }
 
     function topBarPopupOpenFor(open, screen) {
-        return open && topBarPopupScreenName === screenName(screen);
+        return shellPopupState.topBarPopupOpenFor(open, screenName(screen));
     }
 
     function topBarDismissOpenFor(screen) {
-        return topBarPopupOpenFor(appMenuOpen, screen)
-            || topBarPopupOpenFor(applicationMenuOpen, screen)
-            || topBarPopupOpenFor(controlCenterOpen, screen)
-            || topBarPopupOpenFor(notificationCenterOpen, screen)
-            || topBarPopupOpenFor(batteryPopupOpen, screen)
-            || topBarPopupOpenFor(wifiPopupOpen, screen)
-            || topBarPopupOpenFor(fanPopupOpen, screen)
-            || topBarPopupOpenFor(clipboardPopupOpen, screen)
-            || topBarPopupOpenFor(trayMenuOpen, screen);
+        return shellPopupState.topBarDismissOpenFor(screenName(screen));
     }
 
     function topBarDismissPopupWidth() {
-        if (applicationMenuOpen)
-            return 286;
-        if (controlCenterOpen)
-            return 360;
-        if (notificationCenterOpen)
-            return 360;
-        if (batteryPopupOpen)
-            return 292;
-        if (wifiPopupOpen)
-            return 328;
-        if (fanPopupOpen)
-            return 328;
-        if (clipboardPopupOpen)
-            return 360;
-        if (trayMenuOpen)
-            return 238;
-        return 218;
+        return shellPopupState.topBarDismissPopupWidth();
     }
 
     function topBarDismissPopupHeight() {
-        if (applicationMenuOpen)
-            return 700;
-        if (controlCenterOpen)
-            return 380;
-        if (notificationCenterOpen)
-            return 560;
-        if (batteryPopupOpen)
-            return 340;
-        if (wifiPopupOpen)
-            return 520;
-        if (fanPopupOpen)
-            return 440;
-        if (clipboardPopupOpen)
-            return 620;
-        if (trayMenuOpen)
-            return 560;
-        return 420;
+        return shellPopupState.topBarDismissPopupHeight();
     }
 
     function topBarDismissFallbackRight() {
-        if (applicationMenuOpen)
-            return 96;
-        if (notificationCenterOpen)
-            return 56;
-        if (batteryPopupOpen)
-            return 92;
-        if (wifiPopupOpen)
-            return 132;
-        if (fanPopupOpen)
-            return 164;
-        if (clipboardPopupOpen)
-            return 202;
-        if (trayMenuOpen)
-            return 40;
-        return 12;
+        return shellPopupState.topBarDismissFallbackRight();
     }
 
     function prepareDockAppMenu(screen, app, appId, anchorRect) {
@@ -507,26 +392,7 @@ ShellRoot {
     }
 
     function closeTopBarPopups(except) {
-        if (except !== "appMenu")
-            appMenuOpen = false;
-        if (except !== "applicationMenu")
-            applicationMenuOpen = false;
-        if (except !== "controlCenter")
-            controlCenterOpen = false;
-        if (except !== "notificationCenter")
-            notificationCenterOpen = false;
-        if (except !== "battery")
-            batteryPopupOpen = false;
-        if (except !== "wifi")
-            wifiPopupOpen = false;
-        if (except !== "fan")
-            fanPopupOpen = false;
-        if (except !== "clipboard")
-            clipboardPopupOpen = false;
-        if (except !== "trayMenu") {
-            trayMenuOpen = false;
-            trayMenuItem = null;
-        }
+        shellPopupState.closeTopBarPopups(except);
         if (except !== "dockAppMenu")
             closeDockAppMenu();
         if (except !== "dockWindowMenu")
@@ -550,6 +416,7 @@ ShellRoot {
         fanPopupOpen = false;
         clipboardPopupOpen = false;
         trayMenuOpen = false;
+        trayMenuItem = null;
         closeDockMenus();
         closeWindowNavigation("");
         closeSettingsPanel();
@@ -577,6 +444,11 @@ ShellRoot {
 
     Windows {
         id: niri
+    }
+
+    ShellNavigation {
+        id: shellNavigation
+        windowsService: niri
     }
 
     ThumbnailProvider {
@@ -1125,6 +997,7 @@ ShellRoot {
                 idleLockTimeoutSeconds: shell.idleLockTimeoutSeconds
                 networkSettingsService: networkSettings
                 appsSettingsService: appsSettings
+                appsService: apps
                 systemFeaturesService: systemFeatures
                 niriSettingsService: niriSettings
                 weatherService: weather

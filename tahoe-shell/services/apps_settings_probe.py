@@ -77,6 +77,12 @@ PERMISSIONS = [
     {"id": "shortcuts", "title": "快捷键抑制", "table": "shortcuts-inhibit", "object": "app"},
 ]
 
+SCHEMA_VERSION = 1
+
+CONTROL_READONLY = "readonly"
+CONTROL_WARNING = "warning"
+CONTROL_EXTERNAL = "external"
+
 
 def emit(payload):
     print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
@@ -87,6 +93,62 @@ def run(command, timeout=4):
         return subprocess.run(command, capture_output=True, text=True, timeout=timeout, check=False)
     except Exception as exc:
         return subprocess.CompletedProcess(command, 1, "", str(exc))
+
+
+def schema_fields(mode):
+    return {"schemaVersion": SCHEMA_VERSION, "mode": mode}
+
+
+def control_model(control, reason, scope="portal-record", external_action=""):
+    return {
+        "control": control,
+        "presentation": control,
+        "canToggle": False,
+        "readOnly": True,
+        "readOnlyReason": reason,
+        "scope": scope,
+        "externalAction": external_action,
+    }
+
+
+def portal_permission_control(sandbox_type, portal_status):
+    if portal_status != "ok":
+        reason = "portal permission store 不可用；权限记录只能以降级状态显示"
+        if sandbox_type == "none":
+            reason += "，普通桌面应用也没有 Tahoe 可强制 sandbox"
+        return control_model(CONTROL_WARNING, reason)
+
+    if sandbox_type == "none":
+        return control_model(
+            CONTROL_READONLY,
+            "普通桌面应用没有 Tahoe 可强制 sandbox；这里只显示 portal 记录",
+        )
+
+    return control_model(
+        CONTROL_READONLY,
+        "Tahoe 当前只读取 portal 权限记录；sandbox 边界由应用运行时强制",
+    )
+
+
+def external_permission_control(kind, status):
+    if status == "unavailable":
+        return control_model(
+            CONTROL_WARNING,
+            f"{kind} 权限信息不可读取；Tahoe 不会伪装为可控制开关",
+            scope="runtime-metadata",
+        )
+    return control_model(
+        CONTROL_EXTERNAL,
+        f"{kind} 静态权限由对应运行时管理，Tahoe 当前只读展示",
+        scope="runtime-metadata",
+        external_action=kind,
+    )
+
+
+def apply_control(row, model):
+    out = dict(row)
+    out.update(model)
+    return out
 
 
 def desktop_roots():
@@ -279,15 +341,38 @@ def probe_defaults():
             }
         )
 
-    return {"status": status, "detail": detail, "categories": rows, "desktopMeta": meta}
+    return {
+        **schema_fields("defaults"),
+        "status": status,
+        "detail": detail,
+        "xdgMime": {
+            "status": status,
+            "available": bool(xdg_mime),
+            "canRead": bool(xdg_mime),
+            "canWrite": bool(xdg_mime),
+            "detail": detail,
+        },
+        "categories": rows,
+        "desktopMeta": meta,
+    }
 
 
 def set_default(desktop_id, mimes):
     xdg_mime = shutil.which("xdg-mime")
     if not xdg_mime:
-        return {"success": False, "message": "缺少 xdg-mime", "verified": {}}
+        return {
+            **schema_fields("set-default"),
+            "success": False,
+            "message": "缺少 xdg-mime",
+            "verified": {},
+        }
     if not desktop_id or not mimes:
-        return {"success": False, "message": "缺少 desktop id 或 MIME type", "verified": {}}
+        return {
+            **schema_fields("set-default"),
+            "success": False,
+            "message": "缺少 desktop id 或 MIME type",
+            "verified": {},
+        }
 
     result = run([xdg_mime, "default", desktop_id] + list(mimes))
     verified = {mime: query_default(mime) for mime in mimes}
@@ -295,6 +380,7 @@ def set_default(desktop_id, mimes):
     success = result.returncode == 0 and verified_count == len(mimes)
     message = "默认应用已更新" if success else (result.stderr.strip() or "默认应用写入后未全部通过验证")
     return {
+        **schema_fields("set-default"),
         "success": success,
         "message": message,
         "desktopId": desktop_id,
@@ -394,27 +480,25 @@ def static_permissions_for(item, sandbox):
         return []
     flatpak = shutil.which("flatpak")
     if not flatpak:
-        return [
-            {
-                "id": "flatpak-missing",
-                "title": "Flatpak permissions",
-                "detail": "缺少 flatpak 命令，无法读取静态权限",
-                "status": "unavailable",
-            }
-        ]
+        row = {
+            "id": "flatpak-missing",
+            "title": "Flatpak permissions",
+            "detail": "缺少 flatpak 命令，无法读取静态权限",
+            "status": "unavailable",
+        }
+        return [apply_control(row, external_permission_control("Flatpak", row["status"]))]
     result = run([flatpak, "info", "--show-permissions", sandbox_id], timeout=4)
     if result.returncode != 0:
         detail = (result.stderr or result.stdout).strip() or "flatpak info 读取失败"
-        return [
-            {
-                "id": "flatpak-error",
-                "title": "Flatpak permissions",
-                "detail": detail.splitlines()[0],
-                "status": "unavailable",
-            }
-        ]
+        row = {
+            "id": "flatpak-error",
+            "title": "Flatpak permissions",
+            "detail": detail.splitlines()[0],
+            "status": "unavailable",
+        }
+        return [apply_control(row, external_permission_control("Flatpak", row["status"]))]
     rows = parse_flatpak_permissions(result.stdout)
-    return rows or [
+    rows = rows or [
         {
             "id": "flatpak-empty",
             "title": "Flatpak permissions",
@@ -422,6 +506,7 @@ def static_permissions_for(item, sandbox):
             "status": "unrecorded",
         }
     ]
+    return [apply_control(row, external_permission_control("Flatpak", row["status"])) for row in rows]
 
 
 def snap_connections_for(item, sandbox):
@@ -431,38 +516,35 @@ def snap_connections_for(item, sandbox):
         return []
     snap = shutil.which("snap")
     if not snap:
-        return [
-            {
-                "id": "snap-missing",
-                "title": "Snap connections",
-                "detail": "缺少 snap 命令，无法读取权限连接",
-                "status": "unavailable",
-            }
-        ]
+        row = {
+            "id": "snap-missing",
+            "title": "Snap connections",
+            "detail": "缺少 snap 命令，无法读取权限连接",
+            "status": "unavailable",
+        }
+        return [apply_control(row, external_permission_control("Snap", row["status"]))]
     result = run([snap, "connections", sandbox_id], timeout=5)
     if result.returncode != 0:
         detail = (result.stderr or result.stdout).strip() or "snap connections 读取失败"
-        return [
-            {
-                "id": "snap-error",
-                "title": "Snap connections",
-                "detail": detail.splitlines()[0],
-                "status": "unavailable",
-            }
-        ]
+        row = {
+            "id": "snap-error",
+            "title": "Snap connections",
+            "detail": detail.splitlines()[0],
+            "status": "unavailable",
+        }
+        return [apply_control(row, external_permission_control("Snap", row["status"]))]
     rows = []
     for line in result.stdout.splitlines()[1:]:
         parts = line.split()
         if len(parts) < 4:
             continue
-        rows.append(
-            {
-                "id": "snap:" + ":".join(parts[:2]),
-                "title": parts[0],
-                "detail": " ".join(parts[1:]),
-                "status": "connected" if "-" not in parts[2:4] else "unconnected",
-            }
-        )
+        row = {
+            "id": "snap:" + ":".join(parts[:2]),
+            "title": parts[0],
+            "detail": " ".join(parts[1:]),
+            "status": "connected" if "-" not in parts[2:4] else "unconnected",
+        }
+        rows.append(apply_control(row, external_permission_control("Snap", row["status"])))
     return rows
 
 
@@ -549,14 +631,31 @@ def permissions_for(desktop_id):
     item = meta.get(desktop_id, {})
     app_key = item.get("sandboxId") or desktop_id.removesuffix(".desktop")
     sandbox_type = item.get("sandboxType", "none")
+    fully_enforceable = sandbox_type in ("flatpak", "snap")
     sandbox = {
         "type": sandbox_type,
+        "sandboxType": sandbox_type,
         "id": app_key,
-        "fullyEnforceable": sandbox_type in ("flatpak", "snap"),
+        "sandboxId": app_key,
+        "fullyEnforceable": fully_enforceable,
         "desktopId": desktop_id,
+        "writeScope": "none",
+        "enforcementScope": "runtime-sandbox" if fully_enforceable else "none",
     }
 
     available, portal_status, portal_detail = permission_store_available()
+    capability = {
+        "sandboxType": sandbox_type,
+        "sandboxId": app_key,
+        "fullyEnforceable": fully_enforceable,
+        "portalStatus": portal_status,
+        "defaultControl": CONTROL_WARNING if portal_status != "ok" else CONTROL_READONLY,
+        "canTogglePortalPermissions": False,
+        "canWriteStaticPermissions": False,
+        "writeScope": "none",
+        "ordinaryAppWarning": sandbox_type == "none",
+        "staticPermissionScope": "runtime-metadata" if sandbox_type in ("flatpak", "snap") else "none",
+    }
     rows = []
     for permission in PERMISSIONS:
         object_id = app_key if permission["object"] == "app" else permission["object"]
@@ -573,6 +672,7 @@ def permissions_for(desktop_id):
                 "status": result["status"],
                 "detail": result["detail"],
                 "raw": result["raw"],
+                **portal_permission_control(sandbox_type, portal_status),
             }
         )
 
@@ -580,7 +680,23 @@ def permissions_for(desktop_id):
         portal_detail = portal_detail + "；普通桌面应用的权限不能被 Tahoe 完整强制执行"
 
     return {
-        "portal": {"status": portal_status, "detail": portal_detail},
+        **schema_fields("permissions"),
+        "app": {
+            "desktopId": desktop_id,
+            "id": item.get("id", desktop_id.removesuffix(".desktop")),
+            "name": item.get("name", desktop_id.removesuffix(".desktop")),
+            "sandboxType": sandbox_type,
+            "sandboxId": app_key,
+        },
+        "portal": {
+            "status": portal_status,
+            "portalStatus": portal_status,
+            "detail": portal_detail,
+            "available": available,
+            "canRead": available,
+            "canWrite": False,
+        },
+        "capability": capability,
         "sandbox": sandbox,
         "permissions": rows,
         "staticPermissions": static_permissions_for(item, sandbox),

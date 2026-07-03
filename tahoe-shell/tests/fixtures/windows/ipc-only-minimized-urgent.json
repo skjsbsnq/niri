@@ -1,0 +1,62 @@
+{
+  "description": "An IPC-only window keeps compositor state for minimized and urgent flags.",
+  "workspaces": [
+    {
+      "id": 2,
+      "idx": 2,
+      "name": "chat",
+      "output": "eDP-1",
+      "coordinates": [1]
+    }
+  ],
+  "toplevels": [],
+  "ipcWindows": [
+    {
+      "id": 401,
+      "app_id": "org.telegram.desktop",
+      "title": "Telegram",
+      "pid": 4001,
+      "workspace_id": 2,
+      "is_focused": false,
+      "is_floating": false,
+      "is_minimized": true,
+      "is_urgent": true,
+      "focus_timestamp": {
+        "secs": 5,
+        "nanos": 500000000
+      },
+      "layout": {
+        "tile_pos_in_workspace_view": [100, 120],
+        "window_size": [500, 700]
+      }
+    }
+  ],
+  "expect": {
+    "models": [
+      {
+        "id": 401,
+        "modelKey": "id:401",
+        "title": "Telegram",
+        "appId": "org.telegram.desktop",
+        "toplevelKey": null,
+        "workspaceId": 2,
+        "output": "eDP-1",
+        "isFocused": false,
+        "isMinimized": true,
+        "isUrgent": true,
+        "geometry": {
+          "x": 100,
+          "y": 120,
+          "w": 500,
+          "h": 700,
+          "width": 500,
+          "height": 700
+        }
+      }
+    ],
+    "focusedKey": null,
+    "minimizedKeys": [401],
+    "recentKeys": [401],
+    "workspaceOrder": [2]
+  }
+}

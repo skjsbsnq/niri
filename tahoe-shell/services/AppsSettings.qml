@@ -25,6 +25,7 @@ Item {
     property var snapConnectionItems: []
     property var storageInfo: ({ "total": "0 B", "totalBytes": 0, "items": [] })
     property var sandboxInfo: ({})
+    property var permissionCapability: ({})
     property string permissionStatus: "unknown"
     property string permissionDetail: "尚未读取权限"
     property bool permissionsRefreshing: false
@@ -136,8 +137,12 @@ Item {
             return { "type": "unknown", "id": "", "fullyEnforceable": false };
         return {
             "type": String(meta.sandboxType || "none"),
+            "sandboxType": String(meta.sandboxType || "none"),
             "id": String(meta.sandboxId || ""),
-            "fullyEnforceable": meta.sandboxType === "flatpak" || meta.sandboxType === "snap"
+            "sandboxId": String(meta.sandboxId || ""),
+            "fullyEnforceable": meta.sandboxType === "flatpak" || meta.sandboxType === "snap",
+            "writeScope": "none",
+            "enforcementScope": meta.sandboxType === "flatpak" || meta.sandboxType === "snap" ? "runtime-sandbox" : "none"
         };
     }
 
@@ -222,6 +227,7 @@ Item {
             root.snapConnectionItems = [];
             root.storageInfo = ({ "total": "0 B", "totalBytes": 0, "items": [] });
             root.sandboxInfo = ({});
+            root.permissionCapability = ({});
             root.revision += 1;
             return;
         }
@@ -233,6 +239,15 @@ Item {
             root.snapConnectionItems = [];
             root.storageInfo = ({ "total": "0 B", "totalBytes": 0, "items": [] });
             root.sandboxInfo = sandboxForDesktopId(root.selectedDesktopId);
+            root.permissionCapability = ({
+                "sandboxType": root.sandboxInfo.type || "unknown",
+                "fullyEnforceable": root.sandboxInfo.fullyEnforceable === true,
+                "portalStatus": "missing",
+                "defaultControl": "warning",
+                "canTogglePortalPermissions": false,
+                "writeScope": "none",
+                "ordinaryAppWarning": root.sandboxInfo.type === "none"
+            });
             root.revision += 1;
             return;
         }
@@ -254,6 +269,15 @@ Item {
             root.snapConnectionItems = parsed.snapConnections || [];
             root.storageInfo = parsed.storage || ({ "total": "0 B", "totalBytes": 0, "items": [] });
             root.sandboxInfo = parsed.sandbox || sandboxForDesktopId(root.selectedDesktopId);
+            root.permissionCapability = parsed.capability || ({
+                "sandboxType": root.sandboxInfo.type || "unknown",
+                "fullyEnforceable": root.sandboxInfo.fullyEnforceable === true,
+                "portalStatus": root.permissionStatus,
+                "defaultControl": root.permissionStatus === "ok" ? "readonly" : "warning",
+                "canTogglePortalPermissions": false,
+                "writeScope": "none",
+                "ordinaryAppWarning": root.sandboxInfo.type === "none"
+            });
         } catch (e) {
             root.permissionStatus = "error";
             root.permissionDetail = "权限数据解析失败：" + String(e);
@@ -262,6 +286,15 @@ Item {
             root.snapConnectionItems = [];
             root.storageInfo = ({ "total": "0 B", "totalBytes": 0, "items": [] });
             root.sandboxInfo = sandboxForDesktopId(root.selectedDesktopId);
+            root.permissionCapability = ({
+                "sandboxType": root.sandboxInfo.type || "unknown",
+                "fullyEnforceable": root.sandboxInfo.fullyEnforceable === true,
+                "portalStatus": "error",
+                "defaultControl": "warning",
+                "canTogglePortalPermissions": false,
+                "writeScope": "none",
+                "ordinaryAppWarning": root.sandboxInfo.type === "none"
+            });
         }
         root.revision += 1;
     }
@@ -317,6 +350,15 @@ Item {
                 root.snapConnectionItems = [];
                 root.storageInfo = ({ "total": "0 B", "totalBytes": 0, "items": [] });
                 root.sandboxInfo = root.sandboxForDesktopId(root.selectedDesktopId);
+                root.permissionCapability = ({
+                    "sandboxType": root.sandboxInfo.type || "unknown",
+                    "fullyEnforceable": root.sandboxInfo.fullyEnforceable === true,
+                    "portalStatus": "error",
+                    "defaultControl": "warning",
+                    "canTogglePortalPermissions": false,
+                    "writeScope": "none",
+                    "ordinaryAppWarning": root.sandboxInfo.type === "none"
+                });
                 root.revision += 1;
             }
         }

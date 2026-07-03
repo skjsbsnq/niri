@@ -1,0 +1,58 @@
+{
+  "description": "A transient event-stream mismatch can reference a workspace not present in the latest workspace snapshot.",
+  "workspaces": [
+    {
+      "id": 1,
+      "idx": 1,
+      "output": "eDP-1",
+      "coordinates": [0]
+    }
+  ],
+  "toplevels": [
+    {
+      "key": "terminal",
+      "appId": "org.wezfurlong.wezterm",
+      "title": "Terminal",
+      "activated": false,
+      "minimized": false
+    }
+  ],
+  "ipcWindows": [
+    {
+      "id": 501,
+      "app_id": "org.wezfurlong.wezterm",
+      "title": "Terminal",
+      "pid": 5001,
+      "workspace_id": 99,
+      "is_focused": false,
+      "is_floating": false,
+      "is_minimized": false,
+      "is_urgent": false,
+      "layout": {
+        "tile_pos_in_workspace_view": [0, 0],
+        "tile_size": [700, 500]
+      }
+    }
+  ],
+  "expect": {
+    "models": [
+      {
+        "id": 501,
+        "modelKey": "id:501",
+        "title": "Terminal",
+        "appId": "org.wezfurlong.wezterm",
+        "toplevelKey": "terminal",
+        "workspaceId": 99,
+        "output": "",
+        "workspace": null,
+        "isFocused": false,
+        "isMinimized": false,
+        "isUrgent": false
+      }
+    ],
+    "focusedKey": null,
+    "minimizedKeys": [],
+    "recentKeys": [501],
+    "workspaceOrder": [1]
+  }
+}

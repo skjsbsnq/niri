@@ -4,7 +4,43 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 
-// Centralized window thumbnail queue for Tahoe shell surfaces.
+/*
+ * Centralized window thumbnail queue for Tahoe shell surfaces.
+ *
+ * Public contract:
+ * - requestThumbnail(window, maxWidth, maxHeight, reason, force) is the only
+ *   shell-side entry point for a single window preview. window may be a niri
+ *   window object or a numeric niri window id. reason is diagnostic only.
+ * - requestThumbnails(windows, maxWidth, maxHeight, reason, force) batches
+ *   requests through the same queue and keeps the same cache semantics.
+ * - thumbnailStateForWindow(window, revisionToken) returns the provider-owned
+ *   state object. Callers should bind revisionToken to revision so QML updates
+ *   when queued/loading/ready/failed changes.
+ * - markImageFailed(window, error) lets an Image consumer report decode/load
+ *   failures back to the provider so every preview surface sees the same
+ *   failed state and fallback.
+ *
+ * Cache key:
+ * - The cache key is the decimal niri window id. Toplevel-only windows without
+ *   a numeric id cannot request compositor thumbnails and must render fallback.
+ * - Files are provider-owned runtime artifacts at
+ *   $XDG_RUNTIME_DIR/tahoe/window-thumbnails/window-<id>.png.
+ *
+ * Failure state:
+ * - state.status is one of idle, queued, loading, ready, failed.
+ * - On queue overflow, niri failure, or image decode failure, state.failed is
+ *   true and state.error contains a user/debuggable reason.
+ *
+ * Cleanup:
+ * - When Windows.windowList changes, stale cache entries are removed and their
+ *   runtime PNG files are deleted.
+ * - A cancelled active job is allowed to exit, then its output path is removed.
+ *
+ * Guardrail:
+ * - Dock, TaskSwitcher, WindowOverview, and future window-preview surfaces must
+ *   call this provider. Do not spawn `niri msg window-thumbnail`, use screencopy,
+ *   or create a second thumbnail queue in component code.
+ */
 Item {
     id: root
     visible: false

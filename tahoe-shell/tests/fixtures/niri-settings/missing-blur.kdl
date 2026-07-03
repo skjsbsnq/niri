@@ -1,0 +1,9 @@
+// tahoe-managed: begin layout
+layout {
+    gaps 16
+}
+// tahoe-managed: end layout
+
+layer-rule {
+    match namespace="^tahoe-test$"
+}

@@ -9,6 +9,7 @@ Item {
     visible: false
 
     readonly property string settingsPath: Quickshell.stateDir + "/desktop-settings.json"
+    readonly property string autostartManagerPath: Quickshell.shellPath("services/autostart_manager.py")
     readonly property string homeDir: envString("HOME")
     readonly property string defaultScreenshotDirectory: homeDir.length > 0
         ? homeDir + "/Pictures/Screenshots"
@@ -50,6 +51,14 @@ Item {
     readonly property string weatherLocationName: settingsAdapter.weatherLocationName
     readonly property bool weatherManualOverride: settingsAdapter.weatherManualOverride
     readonly property string weatherTempUnit: settingsAdapter.weatherTempUnit
+    property var autostartEntries: []
+    property string autostartStatus: "unknown"
+    property string autostartDetail: "尚未读取启动项"
+    property string autostartUserDir: homeDir.length > 0 ? homeDir + "/.config/autostart" : ""
+    property string autostartActionText: ""
+    property bool autostartRefreshing: false
+    property bool autostartActionRunning: false
+    property int autostartRevision: 0
     property bool loaded: false
 
     function envString(name) {
@@ -467,6 +476,70 @@ Item {
         });
     }
 
+    function autostartCommand(args) {
+        return ["python3", root.autostartManagerPath].concat(args || []);
+    }
+
+    function refreshAutostart() {
+        if (autostartProbe.running)
+            return;
+
+        root.autostartRefreshing = true;
+        autostartProbe.command = autostartCommand(["list"]);
+        autostartProbe.running = true;
+    }
+
+    function parseAutostart(text) {
+        try {
+            var parsed = JSON.parse(String(text || "{}"));
+            root.autostartStatus = String(parsed.status || "unknown");
+            root.autostartDetail = String(parsed.detail || "");
+            root.autostartUserDir = String(parsed.userDir || root.autostartUserDir || "");
+            root.autostartEntries = parsed.entries || [];
+        } catch (e) {
+            root.autostartStatus = "error";
+            root.autostartDetail = "启动项数据解析失败：" + String(e);
+            root.autostartEntries = [];
+        }
+        root.autostartRevision += 1;
+    }
+
+    function runAutostartAction(args, fallbackText) {
+        if (autostartAction.running)
+            return;
+
+        root.autostartActionRunning = true;
+        root.autostartActionText = fallbackText || "";
+        autostartAction.command = autostartCommand(args || []);
+        autostartAction.running = true;
+    }
+
+    function parseAutostartAction(text) {
+        try {
+            var parsed = JSON.parse(String(text || "{}"));
+            root.autostartActionText = String(parsed.message || parsed.detail || "");
+            if (String(parsed.status || "") !== "ok" && root.autostartActionText.length === 0)
+                root.autostartActionText = "启动项操作失败";
+        } catch (e) {
+            root.autostartActionText = "启动项操作结果解析失败：" + String(e);
+        }
+    }
+
+    function setAutostartEnabled(desktopId, enabled) {
+        runAutostartAction(
+            ["set-enabled", String(desktopId || ""), enabled ? "true" : "false"],
+            enabled ? "正在启用启动项" : "正在停用启动项"
+        );
+    }
+
+    function addAutostartApp(desktopId) {
+        runAutostartAction(["add", String(desktopId || "")], "正在添加启动项");
+    }
+
+    function removeAutostartEntry(desktopId) {
+        runAutostartAction(["remove", String(desktopId || "")], "正在移除启动项");
+    }
+
     function sanitizeState() {
         root.loaded = true;
         var changed = false;
@@ -567,6 +640,41 @@ Item {
 
         if (changed)
             settingsFile.writeAdapter();
+    }
+
+    Component.onCompleted: refreshAutostart()
+
+    Process {
+        id: autostartProbe
+        running: false
+        stdout: StdioCollector {
+            id: autostartOut
+            onStreamFinished: root.parseAutostart(autostartOut.text)
+        }
+        onExited: function(code, exitStatus) {
+            root.autostartRefreshing = false;
+            if (code !== 0) {
+                root.autostartStatus = "error";
+                root.autostartDetail = "启动项读取失败，退出码 " + String(code);
+                root.autostartEntries = [];
+                root.autostartRevision += 1;
+            }
+        }
+    }
+
+    Process {
+        id: autostartAction
+        running: false
+        stdout: StdioCollector {
+            id: autostartActionOut
+            onStreamFinished: root.parseAutostartAction(autostartActionOut.text)
+        }
+        onExited: function(code, exitStatus) {
+            root.autostartActionRunning = false;
+            if (code !== 0)
+                root.autostartActionText = "启动项操作失败，退出码 " + String(code);
+            root.refreshAutostart();
+        }
     }
 
     FileView {

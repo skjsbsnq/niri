@@ -602,15 +602,12 @@ PanelWindow {
                                             }
                                         }
 
-                                        Rectangle {
-                                            x: windowCard.miniRect.x
-                                            y: windowCard.miniRect.y
-                                            width: windowCard.miniRect.width
-                                            height: windowCard.miniRect.height
-                                            radius: 7
-                                            color: windowCard.minimized ? "#5f8c929a" : "#8af7fbff"
-                                            border.color: windowCard.modelData && windowCard.modelData.isFocused ? "#202124" : "#66ffffff"
-                                            border.width: windowCard.modelData && windowCard.modelData.isFocused ? 2 : 1
+                                        WindowPreviewFallback {
+                                            anchors.fill: parent
+                                            showGeometry: true
+                                            geometryRect: windowCard.miniRect
+                                            minimized: windowCard.minimized
+                                            focused: !!(windowCard.modelData && windowCard.modelData.isFocused)
                                             visible: !thumbnailImage.visible
                                         }
 

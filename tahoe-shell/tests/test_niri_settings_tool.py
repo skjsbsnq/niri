@@ -29,7 +29,37 @@ def write_fake_niri(path: Path, exit_code: int, message: str) -> None:
     path.chmod(path.stat().st_mode | stat.S_IXUSR)
 
 
+def shader_block(text: str) -> str:
+    start = text.index('custom-shader r#"')
+    end = text.index('"#', start) + 2
+    return text[start:end]
+
+
 class NiriSettingsToolTests(unittest.TestCase):
+    def test_writable_field_specs_are_an_explicit_whitelist(self) -> None:
+        fields = set(niri_settings_tool.WRITABLE_FIELD_SPECS)
+
+        self.assertEqual(len(fields), 70)
+        for field in (
+            "layout.gaps",
+            "glass.panel.refraction",
+            "glass.backdrop.lens_depth",
+            "blur.saturation",
+            "input.touchpad.accel_speed",
+            "output.scale",
+            "animations.overview_open_close.epsilon",
+        ):
+            spec = niri_settings_tool.WRITABLE_FIELD_SPECS[field]
+            self.assertEqual(spec["field"], field)
+            self.assertIn("kdlPath", spec)
+            self.assertIn("range", spec)
+            self.assertIn("validation", spec)
+            self.assertIn("rollback", spec)
+
+        self.assertFalse(any(field.startswith("binds.") for field in fields))
+        self.assertNotIn("glass.panel.xray", fields)
+        self.assertNotIn("animations.window_open.duration_ms", fields)
+
     def test_layout_write_matches_golden_and_preserves_unmanaged_block(self) -> None:
         original = read_fixture("managed.kdl")
         updated = niri_settings_tool.update_field(original, "layout.gaps", "24")
@@ -62,6 +92,82 @@ class NiriSettingsToolTests(unittest.TestCase):
             niri_settings_tool.update_field(text, "layout.gaps", "24")
 
         self.assertIn("expected exactly one top-level layout block, found 2", str(raised.exception))
+
+    def test_unknown_and_readonly_fields_are_rejected_before_writes(self) -> None:
+        original = read_fixture("managed.kdl")
+        for field in (
+            "glass.unknown.refraction",
+            "glass.panel.xray",
+            "binds.Mod+T.action",
+            "animations.window_open.duration_ms",
+            "input.mouse.accel_speed",
+            "variable-refresh-rate",
+        ):
+            with self.subTest(field=field):
+                with self.assertRaises(niri_settings_tool.KdlEditError) as raised:
+                    niri_settings_tool.update_field(original, field, "1")
+                self.assertIn(f"unsupported field: {field}", str(raised.exception))
+
+    def test_malformed_kdl_is_rejected_before_editing(self) -> None:
+        with self.assertRaises(niri_settings_tool.KdlEditError) as raised:
+            niri_settings_tool.update_field(read_fixture("malformed-layout.kdl"), "layout.gaps", "24")
+
+        self.assertIn("unterminated top-level layout block", str(raised.exception))
+
+    def test_comments_and_multiline_raw_string_survive_scoped_writes(self) -> None:
+        original = read_fixture("comments-and-multiline.kdl")
+
+        layout_updated = niri_settings_tool.update_field(original, "layout.gaps", "18")
+        self.assertIn("gaps 18 // user gap comment", layout_updated)
+        self.assertIn("off // inline flag comment", layout_updated)
+        self.assertEqual(shader_block(original), shader_block(layout_updated))
+
+        anim_updated = niri_settings_tool.update_field(
+            original,
+            "animations.window_resize.damping_ratio",
+            "0.9",
+        )
+        self.assertIn(
+            "spring damping-ratio=0.9 stiffness=700 epsilon=0.0005 // motion comment",
+            anim_updated,
+        )
+        self.assertEqual(shader_block(original), shader_block(anim_updated))
+
+    def test_missing_top_level_block_is_rejected(self) -> None:
+        with self.assertRaises(niri_settings_tool.KdlEditError) as raised:
+            niri_settings_tool.update_field(read_fixture("missing-blur.kdl"), "blur.passes", "5")
+
+        self.assertIn("expected exactly one top-level blur block, found 0", str(raised.exception))
+
+    def test_missing_child_block_is_created_inside_managed_parent(self) -> None:
+        updated = niri_settings_tool.update_field(
+            read_fixture("missing-child-block.kdl"),
+            "input.touchpad.tap",
+            "true",
+        )
+
+        self.assertIn("    touchpad {\n        tap\n    }\n", updated)
+        self.assertIn("repeat-rate 25", updated)
+
+    def test_output_scale_is_rejected_for_multi_output_layouts(self) -> None:
+        with self.assertRaises(niri_settings_tool.KdlEditError) as raised:
+            niri_settings_tool.update_field(read_fixture("multi-output.kdl"), "output.scale", "1.5")
+
+        self.assertIn("expected exactly one top-level output block, found 2", str(raised.exception))
+
+    def test_config_guardrails_block_vrr_and_broad_namespace(self) -> None:
+        base = read_fixture("managed.kdl")
+        niri_settings_tool.config_guardrails(base + "\n// variable-refresh-rate\n")
+
+        with self.assertRaises(niri_settings_tool.KdlEditError) as raised:
+            niri_settings_tool.config_guardrails(base + "\nvariable-refresh-rate\n")
+        self.assertIn("variable-refresh-rate must stay disabled", str(raised.exception))
+
+        with self.assertRaises(niri_settings_tool.KdlEditError) as raised:
+            niri_settings_tool.config_guardrails(
+                base.replace('match namespace="^tahoe-test$"', 'match namespace="^quickshell"')
+            )
+        self.assertIn('broad namespace="^quickshell"', str(raised.exception))
 
     def test_cli_successful_write_uses_atomic_path(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

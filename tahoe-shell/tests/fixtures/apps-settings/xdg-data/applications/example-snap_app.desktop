@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Snap Camera
+GenericName=Camera
+Comment=Fixture Snap app
+Exec=snap run example-snap.app %U
+Icon=example-snap
+MimeType=image/png;
+X-SnapInstanceName=example-snap

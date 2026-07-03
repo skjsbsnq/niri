@@ -31,6 +31,7 @@ PanelWindow {
     property real idleLockTimeoutSeconds: 0
     property var networkSettingsService
     property var appsSettingsService
+    property var appsService
     property var systemFeaturesService
     property var niriSettingsService
     property var weatherService
@@ -382,25 +383,25 @@ PanelWindow {
                             theme: root
                         }
 
-                        Pages.FeaturePage {
+                        Pages.FeatureProbePage {
                             panel: root
                             theme: root
                             panelId: "search"
                         }
 
-                        Pages.FeaturePage {
+                        Pages.ExternalSettingsPage {
                             panel: root
                             theme: root
                             panelId: "online-accounts"
                         }
 
-                        Pages.FeaturePage {
+                        Pages.FeatureProbePage {
                             panel: root
                             theme: root
                             panelId: "sharing"
                         }
 
-                        Pages.FeaturePage {
+                        Pages.ReadOnlyCapabilityPage {
                             panel: root
                             theme: root
                             panelId: "wellbeing"
@@ -416,25 +417,25 @@ PanelWindow {
                             theme: root
                         }
 
-                        Pages.FeaturePage {
+                        Pages.ExternalSettingsPage {
                             panel: root
                             theme: root
                             panelId: "color"
                         }
 
-                        Pages.FeaturePage {
+                        Pages.ExternalSettingsPage {
                             panel: root
                             theme: root
                             panelId: "printers"
                         }
 
-                        Pages.FeaturePage {
+                        Pages.ExternalSettingsPage {
                             panel: root
                             theme: root
                             panelId: "accessibility"
                         }
 
-                        Pages.FeaturePage {
+                        Pages.ReadOnlyCapabilityPage {
                             panel: root
                             theme: root
                             panelId: "privacy"
@@ -478,6 +479,7 @@ PanelWindow {
                         Pages.StartupPage {
                             panel: root
                             theme: root
+                            appsService: root.appsService
                         }
 
                         Pages.HealthPage {

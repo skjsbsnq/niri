@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Ordinary Editor
+GenericName=Text Editor
+Comment=Fixture ordinary desktop app
+Exec=ordinary-editor %U
+Icon=ordinary-editor
+MimeType=text/plain;

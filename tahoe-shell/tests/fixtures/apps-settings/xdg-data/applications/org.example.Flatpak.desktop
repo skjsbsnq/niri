@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Flatpak Notes
+GenericName=Notes
+Comment=Fixture Flatpak app
+Exec=flatpak run org.example.Flatpak %U
+Icon=org.example.Flatpak
+MimeType=text/plain;
+X-Flatpak=org.example.Flatpak

@@ -1,0 +1,34 @@
+{
+  "description": "A Quickshell toplevel without an IPC window id remains actionable through the toplevel fallback.",
+  "workspaces": [],
+  "toplevels": [
+    {
+      "key": "legacy-app",
+      "appId": "legacy.desktop.App",
+      "title": "Legacy App",
+      "activated": true,
+      "minimized": false
+    }
+  ],
+  "ipcWindows": [],
+  "expect": {
+    "models": [
+      {
+        "id": null,
+        "modelKey": "toplevel:legacy.desktop.App:0",
+        "title": "Legacy App",
+        "appId": "legacy.desktop.App",
+        "toplevelKey": "legacy-app",
+        "workspaceId": null,
+        "output": "",
+        "isFocused": true,
+        "isMinimized": false,
+        "isUrgent": false
+      }
+    ],
+    "focusedKey": "toplevel:legacy.desktop.App:0",
+    "minimizedKeys": [],
+    "recentKeys": ["toplevel:legacy.desktop.App:0"],
+    "workspaceOrder": []
+  }
+}

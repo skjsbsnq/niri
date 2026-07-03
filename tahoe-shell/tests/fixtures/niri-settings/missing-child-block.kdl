@@ -1,0 +1,11 @@
+// tahoe-managed: begin input
+input {
+    keyboard {
+        repeat-rate 25
+    }
+}
+// tahoe-managed: end input
+
+layer-rule {
+    match namespace="^tahoe-test$"
+}

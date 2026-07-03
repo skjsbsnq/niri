@@ -776,6 +776,113 @@ ANIM_ACTIONS = ["workspace-switch", "window-movement", "window-resize", "overvie
 ANIM_SPRING_PARAMS = ["damping-ratio", "stiffness", "epsilon"]
 
 
+def build_writable_field_specs() -> dict[str, dict[str, str]]:
+    rollback = (
+        "guardrails + temporary file + fsync + niri validate + atomic replace; "
+        "on validation/guardrail failure the live config is unchanged"
+    )
+    bool_validation = "parse_bool: 1/0, true/false, yes/no, on/off, enabled/disabled"
+    specs: dict[str, dict[str, str]] = {}
+
+    def add(
+        field: str,
+        kdl_path: str,
+        range_text: str,
+        validation: str,
+        managed_block: str,
+    ) -> None:
+        specs[field] = {
+            "field": field,
+            "kdlPath": kdl_path,
+            "range": range_text,
+            "validation": validation,
+            "managedBlock": managed_block,
+            "rollback": rollback,
+        }
+
+    for field, path, range_text, validation in [
+        ("layout.gaps", "layout.gaps", "0..65535", "bounded_number"),
+        ("layout.focus_ring.enabled", "layout.focus-ring.on/off", "boolean", bool_validation),
+        ("layout.border.enabled", "layout.border.on/off", "boolean", bool_validation),
+        ("layout.shadow.enabled", "layout.shadow.on/off", "boolean", bool_validation),
+        ("layout.shadow.softness", "layout.shadow.softness", "0..1024", "bounded_number"),
+        ("layout.shadow.spread", "layout.shadow.spread", "-1024..1024", "bounded_number"),
+        ("layout.shadow.offset_x", "layout.shadow.offset.x", "-65535..65535", "bounded_number"),
+        ("layout.shadow.offset_y", "layout.shadow.offset.y", "-65535..65535", "bounded_number"),
+        ("layout.snap_assist.enabled", "layout.snap-assist.on/off", "boolean", bool_validation),
+        ("layout.snap_assist.threshold", "layout.snap-assist.threshold", "0..65535", "bounded_number"),
+    ]:
+        add(field, path, range_text, validation, "layout")
+
+    for material in GLASS_MATERIAL_NAMES:
+        for field_kdl in GLASS_MATERIAL_FIELDS:
+            add(
+                f"glass.{material}.{field_kdl.replace('-', '_')}",
+                f'tahoe-glass.material["{material}"].{field_kdl}',
+                "0..1000",
+                "bounded_number; material and field are both whitelisted",
+                "tahoe-glass",
+            )
+
+    for field, path, range_text, validation in [
+        ("blur.enabled", "blur.on/off", "boolean", bool_validation),
+        ("blur.passes", "blur.passes", "0..255", "bounded_number"),
+        ("blur.offset", "blur.offset", "0..100", "bounded_number"),
+        ("blur.noise", "blur.noise", "0..1000", "bounded_number"),
+        ("blur.saturation", "blur.saturation", "0..1000", "bounded_number"),
+    ]:
+        add(field, path, range_text, validation, "blur")
+
+    for field, path, range_text, validation in [
+        ("input.keyboard.repeat_rate", "input.keyboard.repeat-rate", "0..255", "bounded_number"),
+        ("input.keyboard.repeat_delay", "input.keyboard.repeat-delay", "0..65535", "bounded_number"),
+        ("input.keyboard.numlock", "input.keyboard.numlock", "boolean", bool_validation),
+        ("input.touchpad.tap", "input.touchpad.tap", "boolean", bool_validation),
+        ("input.touchpad.natural_scroll", "input.touchpad.natural-scroll", "boolean", bool_validation),
+        ("input.touchpad.dwt", "input.touchpad.dwt", "boolean", bool_validation),
+        ("input.touchpad.accel_speed", "input.touchpad.accel-speed", "-1..1", "bounded_number"),
+    ]:
+        add(field, path, range_text, validation, "input")
+
+    add(
+        "output.scale",
+        "output.<single-output>.scale",
+        "0.5..4.0",
+        "bounded_number; exactly one top-level output block is required",
+        "single output block",
+    )
+
+    for action in ANIM_ACTIONS:
+        action_field = action.replace("-", "_")
+        for param in ANIM_SPRING_PARAMS:
+            field_param = param.replace("-", "_")
+            if param == "damping-ratio":
+                range_text = "0.1..10"
+            elif param == "stiffness":
+                range_text = "1..100000"
+            else:
+                range_text = "0.00001..0.1"
+            add(
+                f"animations.{action_field}.{field_param}",
+                f"animations.{action}.spring.{param}",
+                range_text,
+                "bounded_number; action and spring param are both whitelisted",
+                "animations",
+            )
+
+    return specs
+
+
+WRITABLE_FIELD_SPECS = build_writable_field_specs()
+
+
+def writable_field_spec(field: str) -> dict[str, str]:
+    try:
+        return WRITABLE_FIELD_SPECS[field]
+    except KeyError as exc:
+        raise KdlEditError(f"unsupported field: {field}") from exc
+
+
 def parse_spring_line(body: str) -> dict[str, float]:
     vals = {"damping-ratio": 1.0, "stiffness": 1000.0, "epsilon": 0.0001}
     for param in ANIM_SPRING_PARAMS:
@@ -890,6 +997,8 @@ def read_binds_text(text: str) -> dict[str, Any]:
 
 
 def update_field(text: str, field: str, raw_value: str) -> str:
+    writable_field_spec(field)
+
     if field.startswith("output."):
         return update_output_text(text, field, raw_value)
 
@@ -906,6 +1015,8 @@ def update_field(text: str, field: str, raw_value: str) -> str:
             raise KdlEditError(f"unsupported glass field: {field}")
         material_name, field_raw = parts[1], parts[2]
         field_kdl = field_raw.replace("_", "-")
+        if material_name not in GLASS_MATERIAL_NAMES or field_kdl not in GLASS_MATERIAL_FIELDS:
+            raise KdlEditError(f"unsupported glass field: {field}")
         glass = find_top_level_block(lines, "tahoe-glass")
         block = find_material_block(lines, glass, material_name)
         if block is None:

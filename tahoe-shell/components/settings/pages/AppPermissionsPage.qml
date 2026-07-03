@@ -19,6 +19,7 @@ Flickable {
     readonly property var snapConnections: serviceRevision >= 0 && appsSettingsService ? appsSettingsService.snapConnectionItems : []
     readonly property var storageInfo: serviceRevision >= 0 && appsSettingsService ? appsSettingsService.storageInfo : ({ "total": "0 B", "items": [] })
     readonly property var sandbox: serviceRevision >= 0 && appsSettingsService ? appsSettingsService.sandboxInfo : ({})
+    readonly property var permissionCapability: serviceRevision >= 0 && appsSettingsService ? appsSettingsService.permissionCapability : ({})
     readonly property color textPrimary: theme ? theme.textPrimary : "#1d1d1f"
     readonly property color textSecondary: theme ? theme.textSecondary : "#721d1d1f"
     readonly property color rowFill: theme ? theme.rowFill : "#66ffffff"
@@ -108,6 +109,50 @@ Flickable {
         return "\ue8b8";
     }
 
+    function ordinaryWarningVisible() {
+        if (page.permissionCapability && typeof page.permissionCapability.ordinaryAppWarning !== "undefined")
+            return page.permissionCapability.ordinaryAppWarning === true;
+        return String(page.sandbox.type || "") === "none";
+    }
+
+    function controlRangeDetail() {
+        if (page.ordinaryWarningVisible())
+            return "普通桌面应用只显示 portal 记录；系统无法完整强制限制";
+        if (page.permissionCapability && page.permissionCapability.canTogglePortalPermissions === true)
+            return "portal 权限可在 Tahoe 中切换";
+        if (page.permissionCapability && String(page.permissionCapability.writeScope || "none") === "none")
+            return "Tahoe 当前只读展示权限记录和运行时静态权限";
+        return "权限控制能力由应用 sandbox 和 portal 状态决定";
+    }
+
+    function controlText(entry) {
+        if (entry && entry.canToggle === true)
+            return "可切换";
+
+        var control = String(entry && (entry.control || entry.presentation) ? (entry.control || entry.presentation) : "readonly");
+        if (control === "external")
+            return "外部";
+        if (control === "warning")
+            return "警告";
+        return "只读";
+    }
+
+    function permissionRowDetail(entry) {
+        var detail = String(entry && entry.detail ? entry.detail : "");
+        var reason = String(entry && entry.readOnlyReason ? entry.readOnlyReason : "");
+        if (reason.length === 0 || detail.indexOf(reason) >= 0)
+            return detail;
+        if (detail.length === 0)
+            return reason;
+        return detail + "；" + reason;
+    }
+
+    function permissionRowStatusText(entry) {
+        if (!entry)
+            return "";
+        return page.controlText(entry) + " · " + page.permissionStatusText(entry.status);
+    }
+
     ColumnLayout {
         id: settingsColumn
 
@@ -169,9 +214,9 @@ Flickable {
             Controls.TahoeListRow {
                 theme: page.theme
                 label: "权限控制范围"
-                detail: "普通桌面应用只显示 portal 记录；系统无法完整强制限制"
+                detail: page.controlRangeDetail()
                 iconCode: "\ue002"
-                visible: String(page.sandbox.type || "") === "none"
+                visible: page.ordinaryWarningVisible()
             }
 
             Controls.TahoeListRow {
@@ -208,7 +253,8 @@ Flickable {
                     Layout.fillWidth: true
                     theme: page.theme
                     entry: modelData
-                    statusText: page.permissionStatusText(modelData.status)
+                    detailText: page.permissionRowDetail(modelData)
+                    statusText: page.permissionRowStatusText(modelData)
                     iconCode: page.permissionIcon(modelData.status)
                 }
             }
@@ -239,7 +285,8 @@ Flickable {
                     Layout.fillWidth: true
                     theme: page.theme
                     entry: modelData
-                    statusText: String(modelData.status || "")
+                    detailText: page.permissionRowDetail(modelData)
+                    statusText: page.controlText(modelData) + " · " + String(modelData.status || "")
                     iconCode: "\ue897"
                 }
             }
@@ -264,7 +311,8 @@ Flickable {
                     Layout.fillWidth: true
                     theme: page.theme
                     entry: modelData
-                    statusText: String(modelData.status || "")
+                    detailText: page.permissionRowDetail(modelData)
+                    statusText: page.controlText(modelData) + " · " + String(modelData.status || "")
                     iconCode: "\ue897"
                 }
             }
@@ -313,6 +361,7 @@ Flickable {
         property var entry
         property string statusText: ""
         property string iconCode: ""
+        property string detailText: entry ? String(entry.detail || "") : ""
 
         readonly property color textPrimary: theme ? theme.textPrimary : "#1d1d1f"
         readonly property color textSecondary: theme ? theme.textSecondary : "#721d1d1f"
@@ -362,7 +411,7 @@ Flickable {
 
                 Text {
                     Layout.fillWidth: true
-                    text: row.entry ? row.entry.detail : ""
+                    text: row.detailText
                     color: row.textSecondary
                     font.pixelSize: 11
                     elide: Text.ElideRight
@@ -371,10 +420,13 @@ Flickable {
 
             Text {
                 Layout.alignment: Qt.AlignVCenter
+                Layout.maximumWidth: 120
                 text: row.statusText
                 color: row.textPrimary
                 font.pixelSize: 11
                 font.weight: Font.DemiBold
+                horizontalAlignment: Text.AlignRight
+                elide: Text.ElideRight
             }
         }
     }

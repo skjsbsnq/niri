@@ -1,0 +1,44 @@
+// User-owned comments and multiline nodes must survive scoped writes.
+
+// tahoe-managed: begin layout
+layout {
+    // Keep this note in place.
+    gaps 16 // user gap comment
+
+    focus-ring {
+        off // inline flag comment
+    }
+
+    shadow {
+        on
+        softness 36
+        spread 4
+        offset x=0 y=10 // offset comment
+    }
+}
+// tahoe-managed: end layout
+
+// tahoe-managed: begin animations
+animations {
+    window-open {
+        duration-ms 120
+        custom-shader r#"
+vec4 open_color(vec3 coords_geo, vec3 size_geo) {
+    // shader comment with { ignored by the line scanner
+    if (coords_geo.x < 0.0) {
+        return vec4(0.0);
+    }
+    return vec4(1.0);
+}
+"#
+    }
+
+    window-resize {
+        spring damping-ratio=0.96 stiffness=700 epsilon=0.0005 // motion comment
+    }
+}
+// tahoe-managed: end animations
+
+layer-rule {
+    match namespace="^tahoe-test$"
+}

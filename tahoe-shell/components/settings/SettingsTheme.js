@@ -38,6 +38,8 @@ function stateLabel(state) {
         return "缺失";
     if (state === "broken")
         return "损坏";
+    if (state === "unknown")
+        return "未知";
     return "信息";
 }
 

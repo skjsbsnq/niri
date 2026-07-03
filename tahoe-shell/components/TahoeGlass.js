@@ -6,10 +6,10 @@
 
 var MaterialPanel = "panel";
 var MaterialPill = "pill";
+var MaterialLauncher = "launcher";
 var MaterialDock = "dock";
 var MaterialMenu = "menu";
 var MaterialToast = "toast";
-var MaterialLauncher = "launcher";
 var MaterialBackdrop = "backdrop";
 
 var RadiusPanel = 28;

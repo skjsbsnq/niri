@@ -1,0 +1,11 @@
+output "eDP-1" {
+    scale 1.0
+}
+
+output "HDMI-A-1" {
+    scale 1.0
+}
+
+layer-rule {
+    match namespace="^tahoe-test$"
+}

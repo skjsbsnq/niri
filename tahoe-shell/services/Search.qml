@@ -3,6 +3,15 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import "search/AppProvider.js" as AppProvider
+import "search/CalculatorProvider.js" as CalculatorProvider
+import "search/ClipboardProvider.js" as ClipboardProvider
+import "search/CommandProvider.js" as CommandProvider
+import "search/ScreenshotProvider.js" as ScreenshotProvider
+import "search/SettingsProvider.js" as SettingsProvider
+import "search/SystemActionProvider.js" as SystemActionProvider
+import "search/TaskIndexProvider.js" as TaskIndexProvider
+import "search/WindowProvider.js" as WindowProvider
 
 Item {
     id: root
@@ -326,6 +335,27 @@ Item {
         root.providerRevision += 1;
     }
 
+    function providerContext() {
+        return {
+            "appsService": root.appsService,
+            "screenshotService": root.screenshotService,
+            "windowsService": root.windowsService,
+            "clipboardService": root.clipboardService,
+            "commandRunner": root.commandRunner,
+            "defaultLimit": root.defaultLimit,
+            "settingsItems": root.settingsItems,
+            "systemActionItems": root.systemActionItems,
+            "cachedTaskQuery": root.cachedTaskQuery,
+            "cachedTaskEntries": root.cachedTaskEntries,
+            "normalizedText": root.normalizedText,
+            "iconPath": root.iconPath,
+            "pathBasename": root.pathBasename,
+            "compactPath": root.compactPath,
+            "scoreText": root.scoreText,
+            "makeResult": root.makeResult
+        };
+    }
+
     function pathBasename(path) {
         var text = String(path || "").replace(/\\/g, "/");
         var slash = text.lastIndexOf("/");
@@ -341,35 +371,15 @@ Item {
     }
 
     function windowTitle(window) {
-        var title = String(window && window.title || "").trim();
-        if (title.length > 0)
-            return title;
-        if (root.appsService)
-            return root.appsService.windowAppLabel(window);
-        var appId = String(window && window.appId || "").trim();
-        return appId.length > 0 ? appId : "窗口";
+        return WindowProvider.title(window, providerContext());
     }
 
     function windowSubtitle(window) {
-        var parts = [];
-        var app = root.appsService ? root.appsService.windowAppLabel(window) : String(window && window.appId || "").trim();
-        if (app.length > 0)
-            parts.push(app);
-        var workspace = window && window.workspace ? String(window.workspace.name || window.workspace.id || "").trim() : "";
-        if (workspace.length > 0)
-            parts.push("工作区 " + workspace);
-        if (window && window.isMinimized)
-            parts.push("已最小化");
-        return parts.length > 0 ? parts.join(" · ") : "打开窗口";
+        return WindowProvider.subtitle(window, providerContext());
     }
 
     function windowIcon(window) {
-        if (!root.appsService)
-            return iconPath("dock", "finder.png");
-        var app = root.appsService.appForWindow(window);
-        if (app)
-            return root.appsService.iconForApp(app);
-        return root.appsService.iconForAppId(window && window.appId ? window.appId : "");
+        return WindowProvider.icon(window, providerContext());
     }
 
     function makeResult(fields) {
@@ -418,262 +428,43 @@ Item {
     }
 
     function appResults(query, limit) {
-        var normalized = String(query || "").trim();
-        if (normalized.length === 0 || !root.appsService)
-            return [];
-
-        var max = Math.max(1, limit || root.defaultLimit);
-        var apps = root.appsService.spotlightResults(normalized, Math.max(max * 2, 12));
-        var results = [];
-        for (var i = 0; i < apps.length; i++) {
-            var app = apps[i];
-            var title = root.appsService.appLabel(app);
-            var subtitle = String(app.genericName || app.id || "应用");
-            var score = scoreText(title, subtitle, [app.id || "", app.startupClass || "", app.execString || ""], normalized, 430);
-            if (score <= 0)
-                continue;
-
-            results.push(makeResult({
-                "id": "app:" + root.appsService.appStableId(app),
-                "title": title,
-                "subtitle": subtitle,
-                "icon": root.appsService.iconForApp(app),
-                "kind": "application",
-                "provider": "apps",
-                "score": score,
-                "app": app
-            }));
-        }
-        return results;
+        return AppProvider.results(query, limit, providerContext());
     }
 
     function screenshotResults(query) {
-        if (!root.screenshotService || !root.screenshotService.matchesQuery(query))
-            return [];
-
-        var raw = root.screenshotService.spotlightResult();
-        return [
-            makeResult({
-                "id": "screenshot:" + String(raw.id || "selection"),
-                "title": String(raw.title || raw.name || "截图选区"),
-                "subtitle": String(raw.subtitle || raw.genericName || "保存、复制并可标注"),
-                "icon": iconPath("dock", raw.icon || "photos.png"),
-                "kind": "screenshot",
-                "provider": "screenshot",
-                "score": Number(raw.score || 860),
-                "resultType": "screenshot"
-            })
-        ];
+        return ScreenshotProvider.results(query, providerContext());
     }
 
     function commandText(query) {
-        var text = String(query || "").trim();
-        if (text.length < 2)
-            return "";
-
-        var prefix = text.charAt(0);
-        if (prefix !== ">" && prefix !== "!")
-            return "";
-
-        return text.substring(1).trim();
+        return CommandProvider.commandText(query);
     }
 
     function commandResults(query) {
-        var command = commandText(query);
-        if (command.length === 0)
-            return [];
-
-        return [
-            makeResult({
-                "id": "command:" + command,
-                "title": "运行 Shell 命令",
-                "subtitle": "危险：回车将在 shell 中执行 · " + command,
-                "icon": iconPath("dock", "terminal.png"),
-                "kind": "command",
-                "provider": "command",
-                "score": 950,
-                "command": command
-            })
-        ];
+        return CommandProvider.results(query, providerContext());
     }
 
     function calculatorResults(query) {
-        var parsed = parseCalculatorQuery(query);
-        if (!parsed)
-            return [];
-
-        var valueText = formatNumber(parsed.value);
-        return [
-            makeResult({
-                "id": "calculator:" + parsed.expression,
-                "title": valueText,
-                "subtitle": parsed.expression + " = " + valueText + " · 回车复制",
-                "icon": iconPath("dock", "calculator.png"),
-                "kind": "calculator",
-                "provider": "calculator",
-                "score": 920,
-                "copyText": valueText
-            })
-        ];
+        return CalculatorProvider.results(query, providerContext());
     }
 
     function settingsResults(query) {
-        var normalized = String(query || "").trim();
-        if (normalized.length === 0)
-            return [];
-
-        var results = [];
-        for (var i = 0; i < settingsItems.length; i++) {
-            var item = settingsItems[i];
-            var score = scoreText(item.title, item.subtitle, item.keywords || [], normalized, item.internalPage ? 760 : 620);
-            if (score <= 0)
-                continue;
-
-            results.push(makeResult({
-                "id": "settings:" + item.id,
-                "title": item.title,
-                "subtitle": item.subtitle,
-                "icon": iconPath("dock", "preferences.png"),
-                "kind": "settings",
-                "provider": "settings",
-                "score": score,
-                "settingsItem": item
-            }));
-        }
-        return results;
+        return SettingsProvider.results(query, providerContext());
     }
 
     function systemActionResults(query) {
-        var normalized = String(query || "").trim();
-        if (normalized.length === 0)
-            return [];
-
-        var results = [];
-        for (var i = 0; i < systemActionItems.length; i++) {
-            var item = systemActionItems[i];
-            var score = scoreText(item.title, item.subtitle, item.keywords || [], normalized, 740);
-            if (score <= 0)
-                continue;
-
-            results.push(makeResult({
-                "id": "system-action:" + item.id,
-                "title": item.title,
-                "subtitle": item.subtitle,
-                "icon": iconPath("dock", item.icon || "preferences.png"),
-                "kind": "system-action",
-                "provider": "system-actions",
-                "score": score,
-                "systemAction": item.action
-            }));
-        }
-        return results;
+        return SystemActionProvider.results(query, providerContext());
     }
 
     function windowResults(query, limit) {
-        var normalized = String(query || "").trim();
-        if (normalized.length === 0 || !root.windowsService)
-            return [];
-
-        var windows = root.windowsService.recentWindowList || root.windowsService.windowList || [];
-        var max = Math.max(1, limit || root.defaultLimit);
-        var results = [];
-        for (var i = 0; i < windows.length && results.length < max; i++) {
-            var window = windows[i];
-            if (!window)
-                continue;
-
-            var title = windowTitle(window);
-            var subtitle = windowSubtitle(window);
-            var score = scoreText(title, subtitle, [window.appId || "", window.output || ""], normalized, 820);
-            if (score <= 0)
-                continue;
-
-            if (window.isFocused)
-                score += 16;
-            if (window.isMinimized)
-                score += 12;
-
-            results.push(makeResult({
-                "id": "window:" + String(window.modelKey || window.id || i),
-                "title": title,
-                "subtitle": subtitle,
-                "icon": windowIcon(window),
-                "kind": "window",
-                "provider": "windows",
-                "score": score,
-                "window": window
-            }));
-        }
-        return results;
+        return WindowProvider.results(query, limit, providerContext());
     }
 
     function pinnedClipboardResults(query, limit) {
-        var normalized = String(query || "").trim();
-        if (normalized.length === 0 || !root.clipboardService || !root.clipboardService.pinnedEntries)
-            return [];
-
-        var pins = root.clipboardService.pinnedEntries || [];
-        var max = Math.max(1, limit || root.defaultLimit);
-        var results = [];
-        for (var i = 0; i < pins.length && results.length < max; i++) {
-            var pin = pins[i];
-            if (!pin)
-                continue;
-
-            var preview = String(pin.preview || "").trim();
-            var text = String(pin.text || "");
-            var title = preview.length > 0 ? preview : root.clipboardService.previewForText(text);
-            var score = scoreText(title, "固定剪贴板 · 回车复制", [text], normalized, 700);
-            if (score <= 0)
-                continue;
-
-            results.push(makeResult({
-                "id": "clipboard-pin:" + String(i) + ":" + title,
-                "title": title,
-                "subtitle": "固定剪贴板 · 回车复制",
-                "icon": iconPath("dock", "notes.png"),
-                "kind": "clipboard-pin",
-                "provider": "clipboard-pins",
-                "score": score,
-                "pin": pin
-            }));
-        }
-        return results;
+        return ClipboardProvider.results(query, limit, providerContext());
     }
 
     function taskIndexResults(query, limit) {
-        var normalized = String(query || "").trim();
-        if (normalized.length === 0 || root.cachedTaskQuery !== normalized)
-            return [];
-
-        var entries = root.cachedTaskEntries || [];
-        var max = Math.max(1, limit || root.defaultLimit);
-        var results = [];
-        for (var i = 0; i < entries.length && results.length < max; i++) {
-            var entry = entries[i] || {};
-            var path = String(entry.path || "").trim();
-            if (path.length === 0)
-                continue;
-
-            var kind = String(entry.kind || "recent-file");
-            var title = String(entry.title || pathBasename(path) || path);
-            var subtitle = String(entry.subtitle || (kind === "folder" ? "文件夹" : "最近文件"));
-            var score = scoreText(title, subtitle, [path], normalized, kind === "folder" ? 540 : 560);
-            if (score <= 0)
-                continue;
-
-            results.push(makeResult({
-                "id": kind + ":" + path,
-                "title": title,
-                "subtitle": subtitle,
-                "icon": iconPath("dock", kind === "folder" ? "finder.png" : "notes.png"),
-                "kind": kind,
-                "provider": kind === "folder" ? "folders" : "recent-files",
-                "score": score,
-                "path": path
-            }));
-        }
-        return results;
+        return TaskIndexProvider.results(query, limit, providerContext());
     }
 
     function dedupeAndSort(results, limit) {
@@ -707,12 +498,7 @@ Item {
     }
 
     function shouldRunTaskIndex(query) {
-        var normalized = String(query || "").trim();
-        if (normalized.length < 2)
-            return false;
-
-        var prefix = normalized.charAt(0);
-        return prefix !== ">" && prefix !== "!" && prefix !== "=";
+        return TaskIndexProvider.shouldRun(query);
     }
 
     function scheduleTaskIndex(query) {
@@ -762,152 +548,11 @@ Item {
     }
 
     function taskIndexPython() {
-        return [
-            "import datetime, json, os, sys, time, urllib.parse, xml.etree.ElementTree as ET",
-            "query = sys.argv[1].strip().lower() if len(sys.argv) > 1 else ''",
-            "terms = [term for term in query.split() if term]",
-            "deadline = time.monotonic() + 0.82",
-            "home = os.path.expanduser('~')",
-            "results = []",
-            "seen = set()",
-            "def expired():",
-            "    return time.monotonic() > deadline",
-            "def compact(path):",
-            "    if home and path.startswith(home + os.sep):",
-            "        return '~' + path[len(home):]",
-            "    return path",
-            "def matches(*values):",
-            "    haystack = ' '.join(str(value or '').lower() for value in values)",
-            "    return all(term in haystack for term in terms)",
-            "def basename(path):",
-            "    name = os.path.basename(path.rstrip(os.sep))",
-            "    return name or path",
-            "def stamp(value):",
-            "    if not value:",
-            "        return 0.0",
-            "    try:",
-            "        return datetime.datetime.fromisoformat(value.replace('Z', '+00:00')).timestamp()",
-            "    except Exception:",
-            "        return 0.0",
-            "def add(kind, path, title, subtitle, mtime=0.0):",
-            "    if expired():",
-            "        return",
-            "    path = os.path.abspath(os.path.expanduser(path))",
-            "    if path in seen or not os.path.exists(path):",
-            "        return",
-            "    if kind == 'folder':",
-            "        if not os.path.isdir(path):",
-            "            return",
-            "    elif not os.path.isfile(path):",
-            "        return",
-            "    title = str(title or basename(path)).strip()",
-            "    subtitle = str(subtitle or compact(path)).strip()",
-            "    if terms and not matches(title, subtitle, path):",
-            "        return",
-            "    seen.add(path)",
-            "    results.append({'kind': kind, 'path': path, 'title': title, 'subtitle': subtitle, 'mtime': float(mtime or 0)})",
-            "def bookmark_title(bookmark, fallback):",
-            "    for child in list(bookmark):",
-            "        if child.tag.rsplit('}', 1)[-1] == 'title' and child.text:",
-            "            text = child.text.strip()",
-            "            if text:",
-            "                return text",
-            "    return fallback",
-            "def local_href_path(href):",
-            "    parsed = urllib.parse.urlparse(href or '')",
-            "    if parsed.scheme != 'file':",
-            "        return ''",
-            "    return urllib.parse.unquote(parsed.path or '')",
-            "def add_recent_files():",
-            "    xbel = os.path.join(home, '.local', 'share', 'recently-used.xbel')",
-            "    try:",
-            "        bookmarks = ET.parse(xbel).getroot().findall('.//{*}bookmark')",
-            "    except Exception:",
-            "        return",
-            "    for bookmark in bookmarks[:450]:",
-            "        if expired() or len(results) >= 80:",
-            "            return",
-            "        path = local_href_path(bookmark.attrib.get('href', ''))",
-            "        if not path:",
-            "            continue",
-            "        title = bookmark_title(bookmark, basename(path))",
-            "        mtime = stamp(bookmark.attrib.get('modified') or bookmark.attrib.get('visited') or bookmark.attrib.get('added'))",
-            "        add('recent-file', path, title, '最近文件 · ' + compact(path), mtime)",
-            "def configured_user_dirs():",
-            "    paths = [home]",
-            "    config = os.path.join(home, '.config', 'user-dirs.dirs')",
-            "    try:",
-            "        with open(config, 'r', encoding='utf-8', errors='ignore') as handle:",
-            "            for line in handle:",
-            "                line = line.strip()",
-            "                if not line.startswith('XDG_') or '=' not in line:",
-            "                    continue",
-            "                value = line.split('=', 1)[1].strip().strip(chr(34))",
-            "                value = value.replace('$HOME', home)",
-            "                paths.append(os.path.expandvars(value))",
-            "    except Exception:",
-            "        pass",
-            "    for name in ('Desktop', 'Documents', 'Downloads', 'Pictures', 'Music', 'Videos', 'Templates', 'Public', 'Projects'):",
-            "        paths.append(os.path.join(home, name))",
-            "    unique = []",
-            "    used = set()",
-            "    for path in paths:",
-            "        path = os.path.abspath(os.path.expanduser(path))",
-            "        if path not in used and os.path.isdir(path):",
-            "            used.add(path)",
-            "            unique.append(path)",
-            "    return unique",
-            "def add_folders():",
-            "    roots = configured_user_dirs()",
-            "    for path in roots:",
-            "        if expired() or len(results) >= 80:",
-            "            return",
-            "        add('folder', path, basename(path), '文件夹 · ' + compact(path), os.path.getmtime(path) if os.path.exists(path) else 0)",
-            "    for base in roots[:7]:",
-            "        if expired() or len(results) >= 80:",
-            "            return",
-            "        try:",
-            "            with os.scandir(base) as entries:",
-            "                for entry in entries:",
-            "                    if expired() or len(results) >= 80:",
-            "                        return",
-            "                    try:",
-            "                        if entry.is_dir(follow_symlinks=False):",
-            "                            stat = entry.stat(follow_symlinks=False)",
-            "                            add('folder', entry.path, entry.name, '文件夹 · ' + compact(entry.path), stat.st_mtime)",
-            "                    except Exception:",
-            "                        pass",
-            "        except Exception:",
-            "            pass",
-            "add_recent_files()",
-            "add_folders()",
-            "results.sort(key=lambda item: (float(item.get('mtime') or 0), 1 if item.get('kind') == 'folder' else 0), reverse=True)",
-            "print(json.dumps(results[:80], ensure_ascii=False))"
-        ].join("\n");
+        return TaskIndexProvider.pythonSource();
     }
 
     function parseTaskIndexOutput(text) {
-        var entries = [];
-        try {
-            var parsed = JSON.parse(String(text || "[]"));
-            var list = Array.isArray(parsed) ? parsed : [];
-            for (var i = 0; i < list.length && entries.length < 80; i++) {
-                var item = list[i] || {};
-                var kind = String(item.kind || "");
-                var path = String(item.path || "").trim();
-                if ((kind === "recent-file" || kind === "folder") && path.length > 0) {
-                    entries.push({
-                        "kind": kind,
-                        "path": path,
-                        "title": String(item.title || pathBasename(path)),
-                        "subtitle": String(item.subtitle || compactPath(path)),
-                        "mtime": Number(item.mtime || 0)
-                    });
-                }
-            }
-        } catch (e) {
-            entries = [];
-        }
+        var entries = TaskIndexProvider.parseOutput(text, providerContext());
 
         root.cachedTaskQuery = root.taskIndexOutputQuery;
         root.cachedTaskEntries = entries;
@@ -1139,146 +784,11 @@ Item {
     }
 
     function parseCalculatorQuery(query) {
-        var raw = String(query || "").trim();
-        if (raw.length === 0)
-            return null;
-
-        var explicit = raw.charAt(0) === "=";
-        var expression = explicit ? raw.substring(1).trim() : raw;
-        expression = expression.replace(/×/g, "*").replace(/÷/g, "/").replace(/，/g, ".");
-        if (expression.length === 0 || !/[0-9]/.test(expression))
-            return null;
-        if (!/^[0-9+\-*/%^().\s]+$/.test(expression))
-            return null;
-        if (!explicit && !/[+\-*/%^()]/.test(expression))
-            return null;
-        if (/^[0-9]{4}-[0-9]{1,2}-[0-9]{1,2}$/.test(expression))
-            return null;
-
-        try {
-            var state = { "text": expression, "pos": 0 };
-            var value = parseExpression(state);
-            skipSpaces(state);
-            if (state.pos !== state.text.length || !isFinite(value))
-                return null;
-            return { "expression": expression, "value": value };
-        } catch (e) {
-            return null;
-        }
-    }
-
-    function skipSpaces(state) {
-        while (state.pos < state.text.length && /\s/.test(state.text.charAt(state.pos)))
-            state.pos += 1;
-    }
-
-    function parseExpression(state) {
-        var value = parseTerm(state);
-        while (true) {
-            skipSpaces(state);
-            var op = state.text.charAt(state.pos);
-            if (op !== "+" && op !== "-")
-                break;
-
-            state.pos += 1;
-            var right = parseTerm(state);
-            value = op === "+" ? value + right : value - right;
-        }
-        return value;
-    }
-
-    function parseTerm(state) {
-        var value = parsePower(state);
-        while (true) {
-            skipSpaces(state);
-            var op = state.text.charAt(state.pos);
-            if (op !== "*" && op !== "/" && op !== "%")
-                break;
-
-            state.pos += 1;
-            var right = parsePower(state);
-            if (op === "*")
-                value *= right;
-            else if (op === "/")
-                value /= right;
-            else
-                value %= right;
-        }
-        return value;
-    }
-
-    function parsePower(state) {
-        var value = parseUnary(state);
-        skipSpaces(state);
-        if (state.text.charAt(state.pos) === "^") {
-            state.pos += 1;
-            value = Math.pow(value, parsePower(state));
-        }
-        return value;
-    }
-
-    function parseUnary(state) {
-        skipSpaces(state);
-        var op = state.text.charAt(state.pos);
-        if (op === "+" || op === "-") {
-            state.pos += 1;
-            var value = parseUnary(state);
-            return op === "-" ? -value : value;
-        }
-        return parsePrimary(state);
-    }
-
-    function parsePrimary(state) {
-        skipSpaces(state);
-        var ch = state.text.charAt(state.pos);
-        if (ch === "(") {
-            state.pos += 1;
-            var value = parseExpression(state);
-            skipSpaces(state);
-            if (state.text.charAt(state.pos) !== ")")
-                throw "missing closing parenthesis";
-            state.pos += 1;
-            return value;
-        }
-        return parseNumber(state);
-    }
-
-    function parseNumber(state) {
-        skipSpaces(state);
-        var start = state.pos;
-        var dotSeen = false;
-        var digitSeen = false;
-        while (state.pos < state.text.length) {
-            var ch = state.text.charAt(state.pos);
-            if (ch >= "0" && ch <= "9") {
-                digitSeen = true;
-                state.pos += 1;
-            } else if (ch === "." && !dotSeen) {
-                dotSeen = true;
-                state.pos += 1;
-            } else {
-                break;
-            }
-        }
-
-        if (!digitSeen)
-            throw "number expected";
-
-        return Number(state.text.substring(start, state.pos));
+        return CalculatorProvider.parseQuery(query);
     }
 
     function formatNumber(value) {
-        if (Math.abs(value) < 1e-12)
-            return "0";
-        if (Math.abs(value - Math.round(value)) < 1e-10)
-            return String(Math.round(value));
-
-        var text = Math.abs(value) >= 1000000000000 || Math.abs(value) < 0.000001
-            ? value.toPrecision(12)
-            : value.toFixed(10);
-        text = text.replace(/(\.\d*?)0+($|e)/, "$1$2");
-        text = text.replace(/\.($|e)/, "$1");
-        return text;
+        return CalculatorProvider.formatNumber(value);
     }
 
     Timer {

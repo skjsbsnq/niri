@@ -1,0 +1,12 @@
+// tahoe-managed: begin layout
+layout {
+    gaps 16
+    shadow {
+        on
+        softness 36
+    }
+// tahoe-managed: end layout
+
+layer-rule {
+    match namespace="^tahoe-test$"
+}

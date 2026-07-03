@@ -1,0 +1,81 @@
+{
+  "description": "When one title has changed, exact matches are consumed first and appId fallback uses the remaining toplevel.",
+  "workspaces": [
+    {
+      "id": 1,
+      "idx": 1,
+      "output": "eDP-1",
+      "coordinates": [0]
+    }
+  ],
+  "toplevels": [
+    {
+      "key": "doc-b",
+      "appId": "org.gnome.TextEditor",
+      "title": "Doc B",
+      "activated": false,
+      "minimized": false
+    },
+    {
+      "key": "doc-a",
+      "appId": "org.gnome.TextEditor",
+      "title": "Doc A - saved",
+      "activated": false,
+      "minimized": false
+    }
+  ],
+  "ipcWindows": [
+    {
+      "id": 302,
+      "app_id": "org.gnome.TextEditor",
+      "title": "Doc B",
+      "workspace_id": 1,
+      "is_focused": false,
+      "is_minimized": false,
+      "is_urgent": false,
+      "layout": {
+        "tile_pos_in_workspace_view": [0, 0],
+        "tile_size": [600, 500]
+      }
+    },
+    {
+      "id": 301,
+      "app_id": "org.gnome.TextEditor",
+      "title": "Doc A - unsaved",
+      "workspace_id": 1,
+      "is_focused": false,
+      "is_minimized": false,
+      "is_urgent": false,
+      "layout": {
+        "tile_pos_in_workspace_view": [50, 50],
+        "tile_size": [600, 500]
+      }
+    }
+  ],
+  "expect": {
+    "models": [
+      {
+        "id": 302,
+        "modelKey": "id:302",
+        "title": "Doc B",
+        "appId": "org.gnome.TextEditor",
+        "toplevelKey": "doc-b",
+        "workspaceId": 1,
+        "output": "eDP-1"
+      },
+      {
+        "id": 301,
+        "modelKey": "id:301",
+        "title": "Doc A - unsaved",
+        "appId": "org.gnome.TextEditor",
+        "toplevelKey": "doc-a",
+        "workspaceId": 1,
+        "output": "eDP-1"
+      }
+    ],
+    "focusedKey": null,
+    "minimizedKeys": [],
+    "recentKeys": [302, 301],
+    "workspaceOrder": [1]
+  }
+}

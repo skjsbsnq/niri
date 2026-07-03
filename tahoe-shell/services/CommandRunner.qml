@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import "StatusTypes.js" as StatusTypes
 
 // Central command/dependency policy for Tahoe shell services.
 Item {
@@ -35,7 +36,7 @@ Item {
 
     function dependencyState(id) {
         var item = dependency(id);
-        return item ? String(item.state || "") : "missing";
+        return item ? String(item.state || "") : StatusTypes.MISSING;
     }
 
     function dependencyDetail(id) {
@@ -44,8 +45,7 @@ Item {
     }
 
     function dependencyReady(id) {
-        var state = dependencyState(id);
-        return state === "ok" || state === "warn";
+        return StatusTypes.isReady(dependencyState(id));
     }
 
     function commandAvailable(name) {
@@ -64,15 +64,20 @@ Item {
     }
 
     function makeResult(action, status, message, detail, missing, exitCode) {
+        var timestamp = new Date().toISOString();
+        var missingItems = StatusTypes.normalizeMissing(missing);
         return {
             "action": String(action || ""),
             "status": String(status || "failure"),
+            "state": StatusTypes.stateFromActionStatus(status),
             "success": status === "success",
+            "title": String(message || ""),
             "message": String(message || ""),
             "detail": String(detail || ""),
-            "missing": Array.isArray(missing) ? missing : [],
+            "missing": missingItems,
             "exitCode": exitCode === undefined || exitCode === null ? -1 : Number(exitCode),
-            "timestamp": new Date().toISOString()
+            "timestamp": timestamp,
+            "updatedAt": timestamp
         };
     }
 
@@ -756,6 +761,7 @@ Item {
         var commands = {};
         var deps = {};
         var statuses = [];
+        var updatedAt = new Date().toISOString();
         var lines = String(text || "").split(/\r?\n/);
         for (var i = 0; i < lines.length; i++) {
             var line = lines[i];
@@ -766,16 +772,7 @@ Item {
             if (fields[0] === "COMMAND" && fields.length >= 3) {
                 commands[fields[1]] = fields[2] === "1";
             } else if (fields[0] === "STATUS" && fields.length >= 7) {
-                var missing = fields.length > 7 && fields[7].length > 0 ? fields[7].split(/\s+/).filter(function(value) { return value.length > 0; }) : [];
-                var item = {
-                    "id": fields[1],
-                    "state": fields[2],
-                    "title": fields[3],
-                    "detail": fields[4],
-                    "impact": fields[5],
-                    "action": fields[6],
-                    "missing": missing
-                };
+                var item = StatusTypes.fromStatusFields(fields, updatedAt);
                 statuses.push(item);
                 deps[item.id] = item;
             }

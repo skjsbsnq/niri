@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import "StatusTypes.js" as StatusTypes
 
 Item {
     id: root
@@ -26,9 +27,9 @@ Item {
         return root.itemMap[String(id || "")] || null;
     }
 
-    function state(id) {
+    function featureState(id) {
         var value = item(id);
-        return value ? String(value.state || "unknown") : "unknown";
+        return value ? String(value.state || StatusTypes.UNKNOWN) : StatusTypes.UNKNOWN;
     }
 
     function detail(id) {
@@ -56,20 +57,21 @@ Item {
     function parse(text) {
         var out = [];
         var map = {};
+        var updatedAt = new Date().toISOString();
         var lines = String(text || "").split(/\r?\n/);
         for (var i = 0; i < lines.length; i++) {
             var line = lines[i];
             if (!line || line.length === 0)
                 continue;
             var fields = line.split("|");
-            if (fields[0] !== "ITEM" || fields.length < 5)
+            var item = null;
+            if (fields[0] === "STATUS" && fields.length >= 7) {
+                item = StatusTypes.fromStatusFields(fields, updatedAt);
+            } else if (fields[0] === "ITEM" && fields.length >= 5) {
+                item = StatusTypes.status(fields[1], fields[2], fields[3], fields.slice(4).join("|"), "", "", [], updatedAt);
+            }
+            if (!item)
                 continue;
-            var item = {
-                "id": fields[1],
-                "state": fields[2],
-                "title": fields[3],
-                "detail": fields.slice(4).join("|")
-            };
             out.push(item);
             map[item.id] = item;
         }
@@ -85,7 +87,7 @@ Item {
             "have() { command -v \"$1\" >/dev/null 2>&1; }",
             "active() { systemctl --user is-active --quiet \"$1\" 2>/dev/null || systemctl is-active --quiet \"$1\" 2>/dev/null; }",
             "bus_user() { have busctl && busctl --user status \"$1\" >/dev/null 2>&1; }",
-            "emit() { printf 'ITEM|%s|%s|%s|%s\\n' \"$1\" \"$2\" \"$3\" \"$4\"; }",
+            "emit() { printf 'STATUS|%s|%s|%s|%s|%s|%s|%s\\n' \"$1\" \"$2\" \"$3\" \"$4\" '' '' ''; }",
             "if have tracker3; then emit search-index ok Tracker 'tracker3 可用，可用于文件索引诊断'; else emit search-index missing Tracker '缺少 tracker3，Tahoe 仍可搜索应用和窗口'; fi",
             "if bus_user org.gnome.OnlineAccounts; then emit online-accounts ok 'Online Accounts' 'GOA daemon 正在运行'; elif have goa-daemon; then emit online-accounts warn 'Online Accounts' 'goa-daemon 已安装但未检测到用户总线服务'; else emit online-accounts missing 'Online Accounts' '缺少 GNOME Online Accounts'; fi",
             "if have gnome-control-center; then emit gnome-control-center ok 'GNOME Control Center' '可打开外部系统设置作为补充入口'; else emit gnome-control-center missing 'GNOME Control Center' '缺少 gnome-control-center'; fi",

@@ -50,12 +50,19 @@ PanelWindow {
     readonly property bool batteryAvailable: batteryService && batteryService.available
     readonly property color glassFill: darkMode ? "#d01d1f24" : GlassStyle.FillTopBar
     readonly property color glassStroke: darkMode ? "#38ffffff" : GlassStyle.StrokeTopBar
-    readonly property color topText: darkMode ? "#f5f7fb" : "#202124"
-    readonly property color topTextSecondary: darkMode ? "#d6dde5" : "#2c2d30"
-    readonly property color buttonFill: darkMode ? "#24ffffff" : "#22ffffff"
-    readonly property color buttonHover: darkMode ? "#36ffffff" : "#30ffffff"
-    readonly property color buttonOpen: darkMode ? "#42ffffff" : "#38ffffff"
-    readonly property color buttonBorder: darkMode ? "#52ffffff" : "#40ffffff"
+    readonly property color topText: darkMode ? "#f5f7fb" : "#1d1d1f"
+    readonly property color topTextSecondary: darkMode ? "#d6dde5" : "#3a3a3c"
+    readonly property color statusText: topText
+    readonly property color statusTextDisabled: darkMode ? "#73f5f7fb" : "#731d1d1f"
+    readonly property color statusTextFaint: darkMode ? "#99f5f7fb" : "#991d1d1f"
+    readonly property color statusAttention: "#ff453a"
+    readonly property int statusItemHeight: 22
+    readonly property int statusIconWidth: 26
+    readonly property int statusRadius: 7
+    readonly property color buttonFill: "transparent"
+    readonly property color buttonHover: darkMode ? "#24ffffff" : "#26ffffff"
+    readonly property color buttonOpen: darkMode ? "#34ffffff" : "#34ffffff"
+    readonly property color buttonBorder: darkMode ? "#32ffffff" : "#28ffffff"
 
     signal toggleAppMenu(var anchorRect)
     signal toggleApplicationMenu(var anchorRect)
@@ -319,7 +326,7 @@ PanelWindow {
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
                 height: parent.height
-                spacing: 14
+                spacing: 6
                 clip: true
 
                 Item {
@@ -328,6 +335,7 @@ PanelWindow {
 
             Tray {
                 panelWindow: root
+                darkMode: root.darkMode
                 Layout.preferredWidth: visible ? implicitWidth : 0
                 Layout.preferredHeight: implicitHeight
                 Layout.alignment: Qt.AlignVCenter
@@ -339,21 +347,22 @@ PanelWindow {
             Item {
                 id: notificationButton
 
-                Layout.preferredWidth: 30
-                Layout.preferredHeight: 24
+                Layout.preferredWidth: root.statusIconWidth
+                Layout.preferredHeight: root.statusItemHeight
                 Layout.alignment: Qt.AlignVCenter
 
                 Rectangle {
                     anchors.fill: parent
-                    radius: 12
+                    radius: root.statusRadius
                     color: root.notificationCenterOpen ? root.buttonOpen : (badgeMouse.containsMouse ? root.buttonHover : root.buttonFill)
-                    border.color: root.buttonBorder
+                    border.color: root.notificationCenterOpen || badgeMouse.containsMouse ? root.buttonBorder : "transparent"
+                    border.width: 1
                 }
 
                 Text {
                     anchors.centerIn: parent
                     text: root.dndEnabled ? "\ue7f6" : "\ue7f4"
-                    color: root.topText
+                    color: root.statusText
                     font.family: "Material Icons"
                     font.pixelSize: 16
                     opacity: root.notificationCount > 0 || root.dndEnabled ? 1 : 0.68
@@ -393,22 +402,23 @@ PanelWindow {
             Item {
                 id: clipboardButton
 
-                Layout.preferredWidth: 30
-                Layout.preferredHeight: 24
+                Layout.preferredWidth: visible ? root.statusIconWidth : 0
+                Layout.preferredHeight: root.statusItemHeight
                 Layout.alignment: Qt.AlignVCenter
                 visible: !!root.clipboardService
 
                 Rectangle {
                     anchors.fill: parent
-                    radius: 12
+                    radius: root.statusRadius
                     color: root.clipboardPopupOpen ? root.buttonOpen : (clipboardMouse.containsMouse ? root.buttonHover : root.buttonFill)
-                    border.color: root.buttonBorder
+                    border.color: root.clipboardPopupOpen || clipboardMouse.containsMouse ? root.buttonBorder : "transparent"
+                    border.width: 1
                 }
 
                 Text {
                     anchors.centerIn: parent
                     text: "\ue14f"
-                    color: root.clipboardService && root.clipboardService.available ? root.topText : "#731d1d1f"
+                    color: root.clipboardService && root.clipboardService.available ? root.statusText : root.statusTextDisabled
                     font.family: "Material Icons"
                     font.pixelSize: 16
                     opacity: root.clipboardService && root.clipboardService.available ? 1 : 0.5
@@ -420,7 +430,7 @@ PanelWindow {
                     radius: 6.5
                     x: parent.width - width - 2
                     y: 1
-                    color: "#cc2c9cf2"
+                    color: "#ccff453a"
                     border.color: "#ffffff"
                     border.width: 1
                     visible: root.clipboardCount > 0
@@ -447,35 +457,26 @@ PanelWindow {
             Item {
                 id: fanButton
 
-                Layout.preferredWidth: 30
-                Layout.preferredHeight: 24
+                Layout.preferredWidth: visible ? root.statusIconWidth : 0
+                Layout.preferredHeight: root.statusItemHeight
                 Layout.alignment: Qt.AlignVCenter
                 visible: !!root.fanService
 
                 Rectangle {
                     anchors.fill: parent
-                    radius: 12
+                    radius: root.statusRadius
                     color: root.fanPopupOpen ? root.buttonOpen : (fanMouse.containsMouse ? root.buttonHover : root.buttonFill)
-                    border.color: root.buttonBorder
+                    border.color: root.fanPopupOpen || fanMouse.containsMouse ? root.buttonBorder : "transparent"
+                    border.width: 1
                 }
 
                 Text {
                     anchors.centerIn: parent
                     text: "\ue332"
-                    color: root.fanService && root.fanService.available && !root.fanService.autoMode ? "#0b6bd3" : root.topText
+                    color: root.statusText
                     font.family: "Material Icons"
                     font.pixelSize: 16
-                    opacity: root.fanService && root.fanService.available ? 1 : 0.5
-                }
-
-                Rectangle {
-                    width: 5
-                    height: 5
-                    radius: 2.5
-                    x: parent.width - width - 5
-                    y: parent.height - height - 4
-                    color: "#2c9cf2"
-                    visible: root.fanService && root.fanService.available && !root.fanService.autoMode
+                    opacity: root.fanService && root.fanService.available ? (root.fanService.autoMode ? 0.76 : 1) : 0.45
                 }
 
                 MouseArea {
@@ -490,24 +491,25 @@ PanelWindow {
             Item {
                 id: batteryButton
 
-                Layout.preferredWidth: visible ? 58 : 0
-                Layout.preferredHeight: 24
+                Layout.preferredWidth: visible ? 54 : 0
+                Layout.preferredHeight: root.statusItemHeight
                 Layout.alignment: Qt.AlignVCenter
                 visible: root.batteryAvailable
 
                 Rectangle {
                     anchors.fill: parent
-                    radius: 12
+                    radius: root.statusRadius
                     color: root.batteryPopupOpen ? root.buttonOpen : (batteryMouse.containsMouse ? root.buttonHover : root.buttonFill)
-                    border.color: root.buttonBorder
+                    border.color: root.batteryPopupOpen || batteryMouse.containsMouse ? root.buttonBorder : "transparent"
+                    border.width: 1
                 }
 
                 Text {
                     anchors.left: parent.left
-                    anchors.leftMargin: 8
+                    anchors.leftMargin: 6
                     anchors.verticalCenter: parent.verticalCenter
                     text: root.batteryService ? root.batteryService.roundedPercentage + "%" : ""
-                    color: root.topText
+                    color: root.statusText
                     font.pixelSize: 11
                     font.weight: Font.DemiBold
                 }
@@ -516,7 +518,7 @@ PanelWindow {
                     width: 20
                     height: 12
                     anchors.right: parent.right
-                    anchors.rightMargin: 7
+                    anchors.rightMargin: 6
                     anchors.verticalCenter: parent.verticalCenter
 
                     Rectangle {
@@ -527,7 +529,7 @@ PanelWindow {
                         height: 9
                         radius: 3
                         color: "transparent"
-                        border.color: "#99202124"
+                        border.color: root.statusTextFaint
                         border.width: 1
 
                         Rectangle {
@@ -537,8 +539,8 @@ PanelWindow {
                             height: parent.height - 4
                             radius: 2
                             color: root.batteryService && root.batteryService.roundedPercentage <= 15 && root.batteryService.onBattery
-                                ? "#ff453a"
-                                : root.topText
+                                ? root.statusAttention
+                                : root.statusText
                         }
                     }
 
@@ -548,7 +550,7 @@ PanelWindow {
                         width: 2
                         height: 3
                         radius: 1
-                        color: "#99202124"
+                        color: root.statusTextFaint
                     }
                 }
 
@@ -564,35 +566,26 @@ PanelWindow {
             Item {
                 id: wifiButton
 
-                Layout.preferredWidth: 30
-                Layout.preferredHeight: 24
+                Layout.preferredWidth: visible ? root.statusIconWidth : 0
+                Layout.preferredHeight: root.statusItemHeight
                 Layout.alignment: Qt.AlignVCenter
                 visible: !!root.controlsService
 
                 Rectangle {
                     anchors.fill: parent
-                    radius: 12
+                    radius: root.statusRadius
                     color: root.wifiPopupOpen ? root.buttonOpen : (wifiMouse.containsMouse ? root.buttonHover : root.buttonFill)
-                    border.color: root.buttonBorder
+                    border.color: root.wifiPopupOpen || wifiMouse.containsMouse ? root.buttonBorder : "transparent"
+                    border.width: 1
                 }
 
                 Text {
                     anchors.centerIn: parent
                     text: "\ue63e"
-                    color: root.controlsService && root.controlsService.wifiConnected ? "#0b6bd3" : root.topText
+                    color: root.statusText
                     font.family: "Material Icons"
                     font.pixelSize: 16
                     opacity: root.controlsService && root.controlsService.wifiEnabled ? 1 : 0.45
-                }
-
-                Rectangle {
-                    width: 5
-                    height: 5
-                    radius: 2.5
-                    x: parent.width - width - 5
-                    y: parent.height - height - 4
-                    color: "#2c9cf2"
-                    visible: root.controlsService && root.controlsService.wifiConnected
                 }
 
                 MouseArea {
@@ -606,21 +599,22 @@ PanelWindow {
 
             Item {
                 id: spotlightButton
-                Layout.preferredWidth: 30
-                Layout.preferredHeight: 24
+                Layout.preferredWidth: root.statusIconWidth
+                Layout.preferredHeight: root.statusItemHeight
                 Layout.alignment: Qt.AlignVCenter
 
                 Rectangle {
                     anchors.fill: parent
-                    radius: 12
+                    radius: root.statusRadius
                     color: root.spotlightOpen ? root.buttonOpen : (spotlightMouse.containsMouse ? root.buttonHover : root.buttonFill)
-                    border.color: root.buttonBorder
+                    border.color: root.spotlightOpen || spotlightMouse.containsMouse ? root.buttonBorder : "transparent"
+                    border.width: 1
                 }
 
                 Text {
                     anchors.centerIn: parent
                     text: "\ue8b6"
-                    color: root.topText
+                    color: root.statusText
                     font.family: "Material Icons"
                     font.pixelSize: 16
                 }
@@ -635,82 +629,17 @@ PanelWindow {
             }
 
             Item {
-                id: inputMethodButton
-                Layout.preferredWidth: visible ? 36 : 0
-                Layout.preferredHeight: 24
-                Layout.alignment: Qt.AlignVCenter
-                visible: !!root.inputMethodService
-
-                Rectangle {
-                    anchors.fill: parent
-                    radius: 12
-                    color: inputMethodMouse.containsMouse ? root.buttonHover : root.buttonFill
-                    border.color: root.buttonBorder
-                }
-
-                Text {
-                    anchors.centerIn: parent
-                    text: root.inputMethodService ? root.inputMethodService.displayText : "--"
-                    color: root.inputMethodService && root.inputMethodService.active ? "#0b6bd3" : root.topText
-                    font.pixelSize: 11
-                    font.weight: Font.DemiBold
-                    opacity: root.inputMethodService && root.inputMethodService.available ? 1 : 0.45
-                    elide: Text.ElideRight
-                    maximumLineCount: 1
-                }
-
-                MouseArea {
-                    id: inputMethodMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: root.inputMethodService && root.inputMethodService.available ? Qt.PointingHandCursor : Qt.ArrowCursor
-                    onClicked: root.toggleInputMethod()
-                }
-            }
-
-            Item {
-                id: screenshotButton
-                Layout.preferredWidth: visible ? 30 : 0
-                Layout.preferredHeight: 24
-                Layout.alignment: Qt.AlignVCenter
-                visible: !!root.screenshotService
-
-                Rectangle {
-                    anchors.fill: parent
-                    radius: 12
-                    color: screenshotMouse.containsMouse ? root.buttonHover : root.buttonFill
-                    border.color: root.buttonBorder
-                }
-
-                Text {
-                    anchors.centerIn: parent
-                    text: "\ue3b0"
-                    color: root.topText
-                    font.family: "Material Icons"
-                    font.pixelSize: 16
-                    opacity: root.screenshotService && root.screenshotService.available ? 1 : 0.45
-                }
-
-                MouseArea {
-                    id: screenshotMouse
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: root.screenshotService && root.screenshotService.available ? Qt.PointingHandCursor : Qt.ArrowCursor
-                    onClicked: root.triggerScreenshot()
-                }
-            }
-
-            Item {
                 id: statusButton
-                Layout.preferredWidth: 30
-                Layout.preferredHeight: 24
+                Layout.preferredWidth: root.statusIconWidth
+                Layout.preferredHeight: root.statusItemHeight
                 Layout.alignment: Qt.AlignVCenter
 
                 Rectangle {
                     anchors.fill: parent
-                    radius: 12
-                    color: root.controlCenterOpen ? root.buttonOpen : root.buttonFill
-                    border.color: root.buttonBorder
+                    radius: root.statusRadius
+                    color: root.controlCenterOpen ? root.buttonOpen : (statusMouse.containsMouse ? root.buttonHover : root.buttonFill)
+                    border.color: root.controlCenterOpen || statusMouse.containsMouse ? root.buttonBorder : "transparent"
+                    border.width: 1
                 }
 
                 Item {
@@ -724,7 +653,7 @@ PanelWindow {
                         width: 18
                         height: 2
                         radius: 1
-                        color: root.topText
+                        color: root.statusText
                         opacity: 0.86
                     }
 
@@ -734,7 +663,7 @@ PanelWindow {
                         width: 6
                         height: 8
                         radius: 3
-                        color: root.topText
+                        color: root.statusText
                     }
 
                     Rectangle {
@@ -743,7 +672,7 @@ PanelWindow {
                         width: 18
                         height: 2
                         radius: 1
-                        color: root.topText
+                        color: root.statusText
                         opacity: 0.86
                     }
 
@@ -753,12 +682,14 @@ PanelWindow {
                         width: 6
                         height: 8
                         radius: 3
-                        color: root.topText
+                        color: root.statusText
                     }
                 }
 
                 MouseArea {
+                    id: statusMouse
                     anchors.fill: parent
+                    hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
                     onClicked: root.toggleControlCenter(root.anchorRectFor(statusButton))
                 }

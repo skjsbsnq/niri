@@ -23,11 +23,12 @@ Item {
     property var dockSurfaceItem
     property var labelClipItem: null
     property real labelClipContentX: 0
+    property bool hoverLabelEnabled: true
     readonly property bool hovered: windowMouse.containsMouse
     readonly property bool active: windowModel ? !!windowModel.isFocused : !!(toplevel && toplevel.activated)
     readonly property bool minimized: windowModel ? !!windowModel.isMinimized : !!(toplevel && toplevel.minimized)
     readonly property string label: appsService ? appsService.toplevelLabel(windowModel || toplevel) : String((windowModel || toplevel) ? (windowModel || toplevel).title || (windowModel || toplevel).appId || "窗口" : "窗口")
-    readonly property bool showHoverLabel: !showTitle && hovered && label.length > 0
+    readonly property bool showHoverLabel: hoverLabelEnabled && !showTitle && hovered && label.length > 0
     readonly property real lift: (magnification - 1.0) * 16
 
     signal activateRequested(var toplevel)

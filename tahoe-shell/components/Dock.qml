@@ -22,6 +22,9 @@ PanelWindow {
     property bool dockHovered: false
     property bool pointerDragActive: false
     property int dragTargetVisualIndex: -1
+    property var hoveredWindowButton: null
+    property real windowHoverLabelCenterX: 0
+    property real windowHoverLabelY: -22
     readonly property bool dockMinimizedShelfEnabled: !!(settingsService && settingsService.dockMinimizedShelfEnabled)
     readonly property var dockWindowList: root.niriService
         ? (root.dockMinimizedShelfEnabled && root.niriService.nonMinimizedWindowList
@@ -83,6 +86,11 @@ PanelWindow {
     readonly property int windowViewportWidth: hasNonMinimizedWindows ? Math.min(activeWindowContentWidth, availableWindowViewportWidth) : 0
     readonly property int availableMinimizedViewportWidth: hasMinimizedWindows ? Math.max(0, dockRemainingFlexibleWidth - windowViewportWidth) : 0
     readonly property int minimizedViewportWidth: hasMinimizedWindows ? Math.min(minimizedWindowContentWidth, availableMinimizedViewportWidth) : 0
+    readonly property string windowHoverLabelText: hoveredWindowButton ? String(hoveredWindowButton.label || "") : ""
+    readonly property bool windowHoverLabelVisible: hoveredWindowButton
+        && hoveredWindowButton.hovered
+        && !hoveredWindowButton.showTitle
+        && windowHoverLabelText.length > 0
     readonly property color glassFill: darkMode ? "#d01d1f24" : GlassStyle.FillDock
     readonly property color glassStroke: darkMode ? "#38ffffff" : GlassStyle.StrokeDock
     readonly property color dockText: darkMode ? "#f5f7fb" : "#202124"
@@ -161,6 +169,30 @@ PanelWindow {
         hoverExitTimer.stop();
         root.dockHovered = false;
         root.dockMouseX = -10000;
+        root.clearWindowHoverLabel(null);
+    }
+
+    function updateWindowHoverLabelGeometry(button) {
+        if (!button || root.hoveredWindowButton !== button || !dockSurface)
+            return;
+
+        var center = button.mapToItem(dockSurface, button.width / 2, 0);
+        root.windowHoverLabelCenterX = center.x;
+        root.windowHoverLabelY = Math.round(center.y - 30);
+    }
+
+    function showWindowHoverLabel(button) {
+        var label = button ? String(button.label || "") : "";
+        if (!button || button.showTitle || label.length === 0)
+            return;
+
+        root.hoveredWindowButton = button;
+        root.updateWindowHoverLabelGeometry(button);
+    }
+
+    function clearWindowHoverLabel(button) {
+        if (!button || root.hoveredWindowButton === button)
+            root.hoveredWindowButton = null;
     }
 
     function seriesWidth(count, itemWidth) {
@@ -718,19 +750,28 @@ PanelWindow {
                                 iconSize: root.dockWindowButtonsShowTitle ? 36 : 38
                                 showTitle: root.dockWindowButtonsShowTitle
                                 magnification: root.proximityScale(windowButton)
+                                hoverLabelEnabled: false
                                 labelClipItem: windowViewport
                                 labelClipContentX: windowViewport.contentX
                                 dockWindow: root
                                 dockSurfaceItem: dockSurface
                                 onDockPointerMoved: function(x, buttons) {
+                                    root.updateWindowHoverLabelGeometry(windowButton);
                                     root.updateDockHoverFromButtons(x, buttons === undefined ? Qt.NoButton : buttons);
                                 }
-                                onDockPointerEntered: root.markDockHovered()
-                                onDockPointerExited: root.scheduleDockHoverReset()
+                                onDockPointerEntered: {
+                                    root.showWindowHoverLabel(windowButton);
+                                    root.markDockHovered();
+                                }
+                                onDockPointerExited: {
+                                    root.clearWindowHoverLabel(windowButton);
+                                    root.scheduleDockHoverReset();
+                                }
                                 onContextMenuRequested: function(window) {
                                     root.openWindowMenu(window, root.anchorRectFor(windowButton));
                                     root.markDockHovered();
                                 }
+                                Component.onDestruction: root.clearWindowHoverLabel(windowButton)
                             }
                         }
                     }
@@ -780,6 +821,47 @@ PanelWindow {
                 onUrlsDropped: function(urls) {
                     root.trashUrls(urls);
                 }
+            }
+        }
+
+        Rectangle {
+            id: windowHoverLabel
+
+            readonly property real labelMaxWidth: Math.max(48, Math.min(280, dockSurface.width - 12))
+
+            z: 20
+            x: Math.max(6, Math.min(dockSurface.width - width - 6, root.windowHoverLabelCenterX - width / 2))
+            y: root.windowHoverLabelVisible ? root.windowHoverLabelY : root.windowHoverLabelY + 10
+            width: Math.min(Math.max(windowHoverLabelTextItem.implicitWidth + 18, 48), labelMaxWidth)
+            height: 24
+            radius: 7
+            color: "#d9f7f8fb"
+            border.color: "#70ffffff"
+            opacity: root.windowHoverLabelVisible ? 1 : 0
+            visible: opacity > 0.01
+
+            Text {
+                id: windowHoverLabelTextItem
+
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.leftMargin: 9
+                anchors.rightMargin: 9
+                text: root.windowHoverLabelText
+                color: root.dockText
+                font.pixelSize: 11
+                elide: Text.ElideRight
+                maximumLineCount: 1
+                horizontalAlignment: Text.AlignHCenter
+            }
+
+            Behavior on opacity {
+                NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
+            }
+
+            Behavior on y {
+                NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
             }
         }
     }

@@ -14,7 +14,14 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="${REPO_DIR:-"$(cd -- "$SCRIPT_DIR/.." && pwd)"}"
 TAHOE_SHELL_DIR="${TAHOE_SHELL_DIR:-"$REPO_DIR/tahoe-shell"}"
 NIRI_CONFIG_SRC="${NIRI_CONFIG_SRC:-"$REPO_DIR/config/niri/tahoe-phase0.kdl"}"
-TAHOE_GLASS_ROADMAP_DOC="${TAHOE_GLASS_ROADMAP_DOC:-"$TAHOE_SHELL_DIR/docs/liquid-glass-niri-glass-forceblur-roadmap-2026-06-28.md"}"
+DEFAULT_TAHOE_GLASS_ROADMAP_DOC="$TAHOE_SHELL_DIR/docs/liquid-glass-niri-glass-forceblur-roadmap-2026-06-28.md"
+ARCHIVED_TAHOE_GLASS_ROADMAP_DOC="$TAHOE_SHELL_DIR/docs/old/liquid-glass-niri-glass-forceblur-roadmap-2026-06-28.md"
+TAHOE_GLASS_ROADMAP_DOC="${TAHOE_GLASS_ROADMAP_DOC:-"$DEFAULT_TAHOE_GLASS_ROADMAP_DOC"}"
+if [[ "$TAHOE_GLASS_ROADMAP_DOC" == "$DEFAULT_TAHOE_GLASS_ROADMAP_DOC" \
+  && ! -f "$TAHOE_GLASS_ROADMAP_DOC" \
+  && -f "$ARCHIVED_TAHOE_GLASS_ROADMAP_DOC" ]]; then
+  TAHOE_GLASS_ROADMAP_DOC="$ARCHIVED_TAHOE_GLASS_ROADMAP_DOC"
+fi
 NIRI_TAHOE_GLASS_XML="$REPO_DIR/niri/resources/tahoe-glass-v1.xml"
 QUICKSHELL_TAHOE_GLASS_XML="$REPO_DIR/quickshell/src/wayland/tahoe_glass/tahoe-glass-v1.xml"
 NIRI_TAHOE_GLASS_PROTOCOL="$REPO_DIR/niri/src/protocols/tahoe_glass.rs"

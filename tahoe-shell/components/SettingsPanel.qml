@@ -4,6 +4,7 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
+import "Motion.js" as Motion
 import "TahoeGlass.js" as GlassStyle
 import "settings" as Settings
 import "settings/SettingsModel.js" as SettingsModel
@@ -199,7 +200,7 @@ PanelWindow {
         opacity: root.open ? 1 : 0
 
         Behavior on opacity {
-            NumberAnimation { duration: 120; easing.type: Easing.OutCubic }
+            NumberAnimation { duration: Motion.fadeFast(root.settingsService); easing.type: Motion.emphasizedDecel }
         }
     }
 
@@ -228,11 +229,13 @@ PanelWindow {
         scale: root.open ? 1 : 0.985
 
         Behavior on opacity {
-            NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
+            NumberAnimation { duration: Motion.panelExit(root.settingsService); easing.type: Motion.emphasizedDecel }
         }
 
+        // Local exception: settings panel scale keeps the existing 160ms settle;
+        // opacity is tokenized, but the scale timing is deliberately unchanged.
         Behavior on scale {
-            NumberAnimation { duration: 160; easing.type: Easing.OutCubic }
+            NumberAnimation { duration: 160; easing.type: Motion.emphasizedDecel }
         }
 
         MouseArea {

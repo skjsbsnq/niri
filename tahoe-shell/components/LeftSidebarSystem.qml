@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Layouts
+import "Motion.js" as Motion
 
 // LS06: 左侧边栏「系统」标签页内容。
 //
@@ -20,6 +21,7 @@ Item {
 
     property var systemStats: null
     property var batteryService: null
+    property var settingsService: null
     property var sidebarPanel: null  // LeftSidebar PanelWindow，用于 itemRect 取进程行屏幕坐标
     property bool darkMode: false
     property string monoFontFamily: "Noto Sans Mono CJK SC"
@@ -74,8 +76,8 @@ Item {
     // 平滑纵坐标最大值（EMA 式平滑：直接取历史峰值 ×1.2，再用 Behavior 缓动过渡）。
     property real smoothMaxNet: 1024
     property real smoothMaxLoad: 1
-    Behavior on smoothMaxNet { NumberAnimation { duration: 600; easing.type: Easing.OutCubic } }
-    Behavior on smoothMaxLoad { NumberAnimation { duration: 600; easing.type: Easing.OutCubic } }
+    Behavior on smoothMaxNet { NumberAnimation { duration: 600; easing.type: Motion.emphasizedDecel } }
+    Behavior on smoothMaxLoad { NumberAnimation { duration: 600; easing.type: Motion.emphasizedDecel } }
     onSmoothMaxNetChanged: chartCanvas.requestPaint()
     onSmoothMaxLoadChanged: chartCanvas.requestPaint()
 
@@ -717,7 +719,7 @@ Item {
                         radius: 8
                         color: procMouse.containsMouse ? root.rowHover : "transparent"
 
-                        Behavior on color { ColorAnimation { duration: 120 } }
+                        Behavior on color { ColorAnimation { duration: Motion.fadeFast(root.settingsService) } }
 
                         property var proc: procDelegate.modelData || ({})
                         property bool cpuHigh: (proc && proc.cpuPercent ? proc.cpuPercent : 0) > root.highCpuThreshold
@@ -1240,7 +1242,7 @@ Item {
             : (sortHover.containsMouse
                 ? Qt.rgba(root.accentBlue.r, root.accentBlue.g, root.accentBlue.b, 0.08)
                 : "transparent")
-        Behavior on color { ColorAnimation { duration: 150 } }
+        Behavior on color { ColorAnimation { duration: Motion.menuEnter(root.settingsService) } }
 
         Row {
             anchors.centerIn: parent

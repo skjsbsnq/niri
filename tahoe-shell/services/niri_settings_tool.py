@@ -774,6 +774,208 @@ def read_input_text(text: str) -> dict[str, Any]:
 
 ANIM_ACTIONS = ["workspace-switch", "window-movement", "window-resize", "overview-open-close"]
 ANIM_SPRING_PARAMS = ["damping-ratio", "stiffness", "epsilon"]
+MOTION_PROFILE_NAMES = ["fast", "balanced", "liquid", "reduced"]
+MOTION_PROFILE_SPRINGS = {
+    "fast": {
+        "workspace-switch": {"damping-ratio": 1.0, "stiffness": 860, "epsilon": 0.0001},
+        "window-movement": {"damping-ratio": 0.9, "stiffness": 700, "epsilon": 0.001},
+        "window-resize": {"damping-ratio": 1.0, "stiffness": 760, "epsilon": 0.0005},
+        "overview-open-close": {"damping-ratio": 0.98, "stiffness": 820, "epsilon": 0.0005},
+    },
+    "balanced": {
+        "workspace-switch": {"damping-ratio": 1.0, "stiffness": 780, "epsilon": 0.0001},
+        "window-movement": {"damping-ratio": 0.86, "stiffness": 620, "epsilon": 0.001},
+        "window-resize": {"damping-ratio": 0.96, "stiffness": 700, "epsilon": 0.0005},
+        "overview-open-close": {"damping-ratio": 0.95, "stiffness": 760, "epsilon": 0.0005},
+    },
+    "liquid": {
+        "workspace-switch": {"damping-ratio": 0.92, "stiffness": 680, "epsilon": 0.0001},
+        "window-movement": {"damping-ratio": 0.82, "stiffness": 560, "epsilon": 0.001},
+        "window-resize": {"damping-ratio": 0.92, "stiffness": 620, "epsilon": 0.0005},
+        "overview-open-close": {"damping-ratio": 0.9, "stiffness": 680, "epsilon": 0.0005},
+    },
+    "reduced": {
+        "workspace-switch": {"damping-ratio": 1.0, "stiffness": 1000, "epsilon": 0.001},
+        "window-movement": {"damping-ratio": 1.0, "stiffness": 1000, "epsilon": 0.001},
+        "window-resize": {"damping-ratio": 1.0, "stiffness": 1000, "epsilon": 0.001},
+        "overview-open-close": {"damping-ratio": 1.0, "stiffness": 1000, "epsilon": 0.001},
+    },
+}
+LAYER_PROFILE_GROUPS = {
+    "control_center": ("tahoe-control-center",),
+    "notification_center": ("tahoe-notification-center",),
+    "left_sidebar": ("tahoe-left-sidebar",),
+    "spotlight": ("tahoe-spotlight",),
+    "small_popup": (
+        "tahoe-battery-popup",
+        "tahoe-wifi-popup",
+        "tahoe-fan-popup",
+        "tahoe-clipboard-popup",
+        "tahoe-menu-popup",
+        "tahoe-application-menu",
+        "tahoe-tray-menu",
+    ),
+    "dock_menu": ("tahoe-dock-app-menu", "tahoe-dock-window-menu"),
+    "process_menu": ("tahoe-process-menu",),
+    "toast": ("tahoe-notification-toast",),
+}
+
+
+def layer_phase(
+    transform_ms: int,
+    opacity_ms: int,
+    opacity_key: str,
+    opacity_value: float,
+    opacity_curve: str | None = None,
+) -> dict[str, int | float | str]:
+    values: dict[str, int | float | str] = {
+        "transform-duration-ms": transform_ms,
+        "opacity-duration-ms": opacity_ms,
+        opacity_key: opacity_value,
+    }
+    if opacity_curve is not None:
+        values["opacity-curve"] = opacity_curve
+    return values
+
+
+MOTION_PROFILE_LAYERS = {
+    "balanced": {
+        "control_center": {
+            "layer-open": layer_phase(210, 110, "opacity-from", 0.84, "standard-decel"),
+            "layer-close": layer_phase(210, 0, "opacity-to", 1.0),
+        },
+        "notification_center": {
+            "layer-open": layer_phase(210, 100, "opacity-from", 0.86, "standard-decel"),
+            "layer-close": layer_phase(210, 0, "opacity-to", 1.0),
+        },
+        "left_sidebar": {
+            "layer-open": layer_phase(210, 0, "opacity-from", 1.0),
+            "layer-close": layer_phase(180, 0, "opacity-to", 1.0),
+        },
+        "spotlight": {
+            "layer-open": layer_phase(180, 120, "opacity-from", 0.0, "standard-decel"),
+            "layer-close": layer_phase(110, 80, "opacity-to", 0.0, "menu-accel"),
+        },
+        "small_popup": {
+            "layer-open": layer_phase(180, 90, "opacity-from", 0.82, "standard-decel"),
+            "layer-close": layer_phase(180, 0, "opacity-to", 1.0),
+        },
+        "dock_menu": {
+            "layer-open": layer_phase(180, 90, "opacity-from", 0.82, "standard-decel"),
+            "layer-close": layer_phase(180, 0, "opacity-to", 1.0),
+        },
+        "process_menu": {
+            "layer-open": layer_phase(120, 80, "opacity-from", 0.88, "standard-decel"),
+            "layer-close": layer_phase(90, 70, "opacity-to", 0.3, "menu-accel"),
+        },
+        "toast": {
+            "layer-open": layer_phase(180, 100, "opacity-from", 0.75, "standard-decel"),
+            "layer-close": layer_phase(110, 80, "opacity-to", 0.35, "menu-accel"),
+        },
+    },
+    "fast": {
+        "control_center": {
+            "layer-open": layer_phase(170, 80, "opacity-from", 0.84, "standard-decel"),
+            "layer-close": layer_phase(140, 0, "opacity-to", 1.0),
+        },
+        "notification_center": {
+            "layer-open": layer_phase(170, 80, "opacity-from", 0.86, "standard-decel"),
+            "layer-close": layer_phase(140, 0, "opacity-to", 1.0),
+        },
+        "left_sidebar": {
+            "layer-open": layer_phase(170, 0, "opacity-from", 1.0),
+            "layer-close": layer_phase(140, 0, "opacity-to", 1.0),
+        },
+        "spotlight": {
+            "layer-open": layer_phase(140, 80, "opacity-from", 0.0, "standard-decel"),
+            "layer-close": layer_phase(90, 60, "opacity-to", 0.0, "menu-accel"),
+        },
+        "small_popup": {
+            "layer-open": layer_phase(140, 70, "opacity-from", 0.82, "standard-decel"),
+            "layer-close": layer_phase(110, 0, "opacity-to", 1.0),
+        },
+        "dock_menu": {
+            "layer-open": layer_phase(140, 70, "opacity-from", 0.82, "standard-decel"),
+            "layer-close": layer_phase(110, 0, "opacity-to", 1.0),
+        },
+        "process_menu": {
+            "layer-open": layer_phase(100, 60, "opacity-from", 0.88, "standard-decel"),
+            "layer-close": layer_phase(80, 50, "opacity-to", 0.3, "menu-accel"),
+        },
+        "toast": {
+            "layer-open": layer_phase(140, 80, "opacity-from", 0.75, "standard-decel"),
+            "layer-close": layer_phase(90, 60, "opacity-to", 0.35, "menu-accel"),
+        },
+    },
+    "liquid": {
+        "control_center": {
+            "layer-open": layer_phase(240, 130, "opacity-from", 0.84, "standard-decel"),
+            "layer-close": layer_phase(210, 0, "opacity-to", 1.0),
+        },
+        "notification_center": {
+            "layer-open": layer_phase(240, 130, "opacity-from", 0.86, "standard-decel"),
+            "layer-close": layer_phase(210, 0, "opacity-to", 1.0),
+        },
+        "left_sidebar": {
+            "layer-open": layer_phase(240, 0, "opacity-from", 1.0),
+            "layer-close": layer_phase(210, 0, "opacity-to", 1.0),
+        },
+        "spotlight": {
+            "layer-open": layer_phase(220, 130, "opacity-from", 0.0, "standard-decel"),
+            "layer-close": layer_phase(150, 90, "opacity-to", 0.0, "menu-accel"),
+        },
+        "small_popup": {
+            "layer-open": layer_phase(210, 110, "opacity-from", 0.82, "standard-decel"),
+            "layer-close": layer_phase(170, 0, "opacity-to", 1.0),
+        },
+        "dock_menu": {
+            "layer-open": layer_phase(210, 110, "opacity-from", 0.82, "standard-decel"),
+            "layer-close": layer_phase(170, 0, "opacity-to", 1.0),
+        },
+        "process_menu": {
+            "layer-open": layer_phase(150, 90, "opacity-from", 0.88, "standard-decel"),
+            "layer-close": layer_phase(120, 70, "opacity-to", 0.3, "menu-accel"),
+        },
+        "toast": {
+            "layer-open": layer_phase(220, 120, "opacity-from", 0.75, "standard-decel"),
+            "layer-close": layer_phase(150, 90, "opacity-to", 0.35, "menu-accel"),
+        },
+    },
+    "reduced": {
+        "control_center": {
+            "layer-open": layer_phase(0, 80, "opacity-from", 0.0, "standard-decel"),
+            "layer-close": layer_phase(0, 60, "opacity-to", 0.0, "menu-accel"),
+        },
+        "notification_center": {
+            "layer-open": layer_phase(0, 80, "opacity-from", 0.0, "standard-decel"),
+            "layer-close": layer_phase(0, 60, "opacity-to", 0.0, "menu-accel"),
+        },
+        "left_sidebar": {
+            "layer-open": layer_phase(0, 0, "opacity-from", 1.0),
+            "layer-close": layer_phase(0, 0, "opacity-to", 1.0),
+        },
+        "spotlight": {
+            "layer-open": layer_phase(0, 80, "opacity-from", 0.0, "standard-decel"),
+            "layer-close": layer_phase(0, 60, "opacity-to", 0.0, "menu-accel"),
+        },
+        "small_popup": {
+            "layer-open": layer_phase(0, 70, "opacity-from", 0.0, "standard-decel"),
+            "layer-close": layer_phase(0, 60, "opacity-to", 0.0, "menu-accel"),
+        },
+        "dock_menu": {
+            "layer-open": layer_phase(0, 70, "opacity-from", 0.0, "standard-decel"),
+            "layer-close": layer_phase(0, 60, "opacity-to", 0.0, "menu-accel"),
+        },
+        "process_menu": {
+            "layer-open": layer_phase(0, 60, "opacity-from", 0.0, "standard-decel"),
+            "layer-close": layer_phase(0, 50, "opacity-to", 0.0, "menu-accel"),
+        },
+        "toast": {
+            "layer-open": layer_phase(0, 80, "opacity-from", 0.0, "standard-decel"),
+            "layer-close": layer_phase(0, 60, "opacity-to", 0.0, "menu-accel"),
+        },
+    },
+}
 
 
 def build_writable_field_specs() -> dict[str, dict[str, str]]:
@@ -852,6 +1054,14 @@ def build_writable_field_specs() -> dict[str, dict[str, str]]:
         "single output block",
     )
 
+    add(
+        "animations.profile",
+        "animations + tahoe layer-rule animations",
+        ", ".join(MOTION_PROFILE_NAMES),
+        "motion profile name whitelist; applies a managed multi-field profile",
+        "animations",
+    )
+
     for action in ANIM_ACTIONS:
         action_field = action.replace("-", "_")
         for param in ANIM_SPRING_PARAMS:
@@ -920,7 +1130,7 @@ def read_animations_text(text: str) -> dict[str, Any]:
             "stiffness": normalize_number(vals["stiffness"]),
             "epsilon": normalize_number(vals["epsilon"]),
         }
-    return {"actions": actions}
+    return {"actions": actions, "profile": detect_motion_profile(text), "availableProfiles": MOTION_PROFILE_NAMES}
 
 
 def set_anim_spring(lines: list[str], anim: tuple[int, int], action: str, param: str, value: float) -> None:
@@ -948,6 +1158,155 @@ def set_anim_spring(lines: list[str], anim: tuple[int, int], action: str, param:
     # Action block exists but has no spring line (e.g. an easing/shader action);
     # do not invent a spring line for it.
     raise KdlEditError(f"action {action} has no spring line to edit")
+
+
+def valid_motion_profile(raw_value: str) -> str:
+    profile = str(raw_value).strip().lower()
+    if profile not in MOTION_PROFILE_NAMES:
+        raise KdlEditError(f"unsupported motion profile: {raw_value}")
+    return profile
+
+
+def layer_rule_namespaces(lines: list[str], block: tuple[int, int]) -> tuple[str, ...]:
+    namespaces: list[str] = []
+    for index in iter_depth_lines(lines, block[0], block[1], 1):
+        body = uncommented_body(lines[index])
+        match = re.match(r'^\s*match\s+namespace\s*=\s*"([^"]+)"\s*$', body)
+        if not match:
+            continue
+        namespace = match.group(1)
+        if namespace.startswith("^"):
+            namespace = namespace[1:]
+        if namespace.endswith("$"):
+            namespace = namespace[:-1]
+        namespaces.append(namespace)
+    return tuple(namespaces)
+
+
+def find_layer_rule_for_group(lines: list[str], group: str) -> tuple[int, int]:
+    expected = LAYER_PROFILE_GROUPS[group]
+    matches = [
+        block
+        for block in find_top_level_blocks(lines, "layer-rule")
+        if layer_rule_namespaces(lines, block) == expected
+        and find_child_block(lines, block[0], block[1], "animations") is not None
+    ]
+    if len(matches) != 1:
+        raise KdlEditError(
+            f"refusing profile write: expected exactly one layer-rule for {group}, found {len(matches)}"
+        )
+    return matches[0]
+
+
+def find_layer_phase_block(lines: list[str], layer_rule: tuple[int, int], phase: str) -> tuple[int, int]:
+    anim = find_child_block(lines, layer_rule[0], layer_rule[1], "animations")
+    if anim is None:
+        raise KdlEditError(f"layer-rule {layer_rule_namespaces(lines, layer_rule)} has no animations block")
+    block = find_child_block(lines, anim[0], anim[1], phase)
+    if block is None:
+        raise KdlEditError(f"layer-rule {layer_rule_namespaces(lines, layer_rule)} has no {phase} block")
+    return block
+
+
+def phase_number(lines: list[str], block: tuple[int, int], key: str) -> float | None:
+    node_re = re.compile(rf"^\s*{re.escape(key)}\b\s+(.+?)\s*$")
+    for index in iter_depth_lines(lines, block[0], block[1], 1):
+        body = uncommented_body(lines[index])
+        if "{" in body:
+            continue
+        match = node_re.match(body)
+        if match:
+            return parse_number(match.group(1), default=float("nan"))
+    return None
+
+
+def phase_string(lines: list[str], block: tuple[int, int], key: str) -> str | None:
+    node_re = re.compile(rf'^\s*{re.escape(key)}\b\s+"([^"]+)"\s*$')
+    for index in iter_depth_lines(lines, block[0], block[1], 1):
+        body = uncommented_body(lines[index])
+        match = node_re.match(body)
+        if match:
+            return match.group(1)
+    return None
+
+
+def format_layer_profile_value(value: int | float | str) -> str:
+    if isinstance(value, str):
+        return f'"{value}"'
+    if isinstance(value, int):
+        return str(value)
+    return format_float(value)
+
+
+def apply_layer_profile(lines: list[str], profile: str) -> None:
+    for group, phase_values in MOTION_PROFILE_LAYERS[profile].items():
+        layer_rule = find_layer_rule_for_group(lines, group)
+        for phase, values in phase_values.items():
+            block = find_layer_phase_block(lines, layer_rule, phase)
+            for key, value in values.items():
+                set_leaf_value(lines, block, key, format_layer_profile_value(value))
+
+
+def profile_springs_match(lines: list[str], anim: tuple[int, int], profile: str) -> bool:
+    for action, expected in MOTION_PROFILE_SPRINGS[profile].items():
+        block = find_child_block(lines, anim[0], anim[1], action)
+        if block is None:
+            return False
+        actual: dict[str, float] | None = None
+        for index in iter_depth_lines(lines, block[0], block[1], 2):
+            body = uncommented_body(lines[index])
+            if re.match(r"^\s*spring\b", body):
+                actual = parse_spring_line(body)
+                break
+        if actual is None:
+            return False
+        for param, value in expected.items():
+            if abs(actual[param] - value) > 1e-9:
+                return False
+    return True
+
+
+def profile_layers_match(lines: list[str], profile: str) -> bool:
+    try:
+        for group, phase_values in MOTION_PROFILE_LAYERS[profile].items():
+            layer_rule = find_layer_rule_for_group(lines, group)
+            for phase, values in phase_values.items():
+                block = find_layer_phase_block(lines, layer_rule, phase)
+                for key, expected in values.items():
+                    if isinstance(expected, str):
+                        if phase_string(lines, block, key) != expected:
+                            return False
+                    else:
+                        actual = phase_number(lines, block, key)
+                        if actual is None or abs(actual - float(expected)) > 1e-9:
+                            return False
+        return True
+    except KdlEditError:
+        return False
+
+
+def detect_motion_profile(text: str) -> str:
+    lines = text.splitlines(True)
+    anim = find_top_level_block_or_none(lines, "animations")
+    if anim is None:
+        return "custom"
+    for profile in MOTION_PROFILE_NAMES:
+        if profile_springs_match(lines, anim, profile) and profile_layers_match(lines, profile):
+            return profile
+    return "custom"
+
+
+def update_motion_profile_text(text: str, raw_value: str) -> str:
+    profile = valid_motion_profile(raw_value)
+    lines = text.splitlines(True)
+    anim = find_top_level_block(lines, "animations")
+
+    for action, values in MOTION_PROFILE_SPRINGS[profile].items():
+        for param, value in values.items():
+            set_anim_spring(lines, anim, action, param, value)
+
+    apply_layer_profile(lines, profile)
+    return "".join(lines)
 
 
 # --- binds (S5.4, read-only) ---------------------------------------------
@@ -1061,6 +1420,9 @@ def update_field(text: str, field: str, raw_value: str) -> str:
         return "".join(lines)
 
     if field.startswith("animations."):
+        if field == "animations.profile":
+            return update_motion_profile_text(text, raw_value)
+
         parts = field.split(".")
         if len(parts) != 3:
             raise KdlEditError(f"unsupported animations field: {field}")

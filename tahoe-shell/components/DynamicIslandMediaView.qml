@@ -281,7 +281,7 @@ Item {
                 color: root.textPrimary
 
                 Behavior on width {
-                    NumberAnimation { duration: 180; easing.type: IslandMotion.overlayProgressEasing }
+                    NumberAnimation { duration: IslandMotion.overlayProgressDuration; easing.type: IslandMotion.overlayProgressEasing }
                 }
             }
         }
@@ -330,6 +330,8 @@ Item {
         height: hit
         scale: mouse.pressed ? pressScale : 1
 
+        // Local exception: press feedback must be shorter than overlay content
+        // fades; the component still reuses the Dynamic Island easing token.
         Behavior on scale {
             NumberAnimation { duration: 100; easing.type: IslandMotion.overlayColorEasing }
         }

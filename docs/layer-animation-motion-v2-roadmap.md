@@ -261,10 +261,10 @@ opacity-delay-ms 0
 - open：从 edge 方向外侧或靠近边缘的位置 reveal 到最终位置。
 - close：向 edge 方向收回。
 - 与 `slide` 的区别：
-  - `slide` 表示整块 surface 平移。
-  - `edge-reveal` 表示更像从 bar / edge 处展开，位移更短，透明度更弱，适合 popup / panel。
+  - `slide` 表示按配置 `distance` 做固定距离 surface 平移。
+  - `edge-reveal` 表示从 bar / edge 处 reveal/retract，当前运行时按 surface 宽/高完成完整收回；`distance` 仅保留解析和兼容语义，不是短滑动距离调参。
 
-第一阶段实现可以近似为短距离 slide + opacity 分离，不必立刻做裁剪 reveal。
+当前实现使用 edge offset + 裁剪 reveal；不要用 `distance` 调 edge-reveal 的短位移。
 
 后续增强可以支持 clip reveal：
 
@@ -736,7 +736,7 @@ git diff --check
 
 1. 在 config 增加 open style：`edge-reveal`。
 2. 在 config 增加 close style：`edge-reveal`。
-3. 第一阶段实现为短距离 edge slide + 分离 opacity，不做 clip reveal。
+3. 当前 GOAL-6 语义修正后，`edge-reveal` 保持完整 surface reveal/retract；短距离平移应继续使用 `slide`。
 4. 支持 edge：
    - top
    - right
@@ -744,7 +744,7 @@ git diff --check
    - left
 5. 与 `slide` 的区别写入代码注释和文档：
    - `slide` 是较完整的平移进入。
-   - `edge-reveal` 是短距离从边缘展开，透明度更弱。
+   - `edge-reveal` 从边缘 reveal/retract，运行时按 surface 宽/高移动，透明度可独立调节。
 
 验收：
 
@@ -762,8 +762,8 @@ git diff --check
 13E 记录：
 
 - `LayerOpenAnimationStyle` / `LayerCloseAnimationStyle` 新增 `EdgeReveal`，KDL 支持 `style "edge-reveal"`。
-- open / close runtime 已接入 `edge-reveal`，第一阶段复用 edge offset 通道：open 从指定 edge 的短距离 offset 进入，close 向指定 edge 的短距离 offset 收回；不做 clip reveal。
-- 代码注释已标明：`slide` 表示完整 surface 平移，`edge-reveal` 当前复用 offset primitive，但语义上用于短距离 edge-attached motion，并保留后续 clip reveal hook。
+- open / close runtime 已接入 `edge-reveal`。GOAL-6 语义修正后，edge-reveal 按 surface extent reveal/retract；KDL `distance` 不再作为短位移调参说明。
+- 代码注释已标明：`slide` 表示按 configured distance 平移，`edge-reveal` 表示完整 surface edge reveal/retract。
 - 自动测试覆盖配置解析、resolved layer rules，以及 `edge-reveal top` 打断 open 时从当前负 Y offset 连续进入 close。
 - 验证通过：`cargo fmt --check`、`cargo check -p niri`、`cargo test -p niri-config parse_layer_rule_animation`、`cargo test -p niri layer_rule_animations`、`cargo test -p niri layer_close_animation`、`git diff --check`。
 
@@ -944,6 +944,14 @@ git diff --check
 ### 任务 13J：决定默认开启范围
 
 目标：明确哪些 surface 可以长期默认使用 compositor animation。
+
+2026-07-06 GOAL-10 decision:
+
+- Default motion profile remains `balanced`.
+- New shell state keeps `DesktopSettings.compositorLayerAnimations` default `false`; compositor layer animation remains opt-in.
+- QML outer animation fallback remains the first-run compatibility path and user rollback path.
+- Launchpad、Dock、TaskSwitcher、WindowOverview 继续保持 QML path，不强行 compositor 化。
+- Policy source: `tahoe-shell/docs/tahoe-motion-default-policy.md`。
 
 操作：
 

@@ -113,7 +113,7 @@ PanelWindow {
             Behavior on x {
                 enabled: !root.compositorLayerAnimations
                 NumberAnimation {
-                    duration: root.open ? Motion.panelEnterDuration : Motion.panelExitDuration
+                    duration: root.open ? Motion.panelEnter(root.settingsService) : Motion.panelExit(root.settingsService)
                     easing.type: root.open ? Motion.emphasizedDecel : Motion.standardDecel
                 }
             }
@@ -224,6 +224,7 @@ PanelWindow {
                     visible: root.currentTab === "system"
                     systemStats: root.systemStatsService
                     batteryService: root.batteryService
+                    settingsService: root.settingsService
                     sidebarPanel: root
                     darkMode: root.darkMode
                     monoFontFamily: root.monoFontFamily

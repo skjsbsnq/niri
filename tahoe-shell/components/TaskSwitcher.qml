@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Wayland
+import "Motion.js" as Motion
 import "TahoeGlass.js" as GlassStyle
 
 PanelWindow {
@@ -12,6 +13,7 @@ PanelWindow {
     property var windowsService
     property var thumbnailProvider
     property var appsService
+    property var settingsService
     property int selectedIndex: 0
     property string selectedWindowKey: ""
     property bool keyboardMode: false
@@ -303,11 +305,11 @@ PanelWindow {
         scale: root.open ? 1 : 0.98
 
         Behavior on opacity {
-            NumberAnimation { duration: 130; easing.type: Easing.OutCubic }
+            NumberAnimation { duration: Motion.elementMove(root.settingsService); easing.type: Motion.emphasizedDecel }
         }
 
         Behavior on scale {
-            NumberAnimation { duration: 150; easing.type: Easing.OutCubic }
+            NumberAnimation { duration: Motion.menuEnter(root.settingsService); easing.type: Motion.emphasizedDecel }
         }
 
         MouseArea {

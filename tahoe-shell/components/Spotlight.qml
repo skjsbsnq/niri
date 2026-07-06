@@ -103,11 +103,11 @@ PanelWindow {
         scale: root.compositorLayerAnimations ? 1 : (root.open ? 1 : 1.04)
 
         Behavior on opacity {
-            NumberAnimation { duration: Motion.fadeFastDuration; easing.type: Motion.standardDecel }
+            NumberAnimation { duration: Motion.fadeFast(root.settingsService); easing.type: Motion.standardDecel }
         }
 
         Behavior on scale {
-            NumberAnimation { duration: Motion.panelEnterDuration; easing.type: Motion.emphasizedDecel }
+            NumberAnimation { duration: Motion.panelEnter(root.settingsService); easing.type: Motion.emphasizedDecel }
         }
 
         MouseArea {
@@ -258,7 +258,7 @@ PanelWindow {
             visible: opacity > 0.01
 
             Behavior on opacity {
-                NumberAnimation { duration: Motion.fadeFastDuration; easing.type: Motion.standardDecel }
+                NumberAnimation { duration: Motion.fadeFast(root.settingsService); easing.type: Motion.standardDecel }
             }
 
             Column {

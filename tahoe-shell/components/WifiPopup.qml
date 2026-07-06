@@ -234,7 +234,7 @@ PanelWindow {
                 color: "#ffffff"
 
                 Behavior on x {
-                    NumberAnimation { duration: Motion.elementMoveDuration; easing.type: Motion.emphasizedDecel }
+                    NumberAnimation { duration: Motion.elementMove(root.settingsService); easing.type: Motion.emphasizedDecel }
                 }
             }
         }

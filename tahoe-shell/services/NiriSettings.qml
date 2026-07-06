@@ -77,6 +77,13 @@ Item {
         "window_resize":     { damping_ratio: 0.96, stiffness: 700, epsilon: 0.0005 },
         "overview_open_close": { damping_ratio: 0.95, stiffness: 760, epsilon: 0.0005 }
     })
+    property string motionProfile: "balanced"
+    readonly property var motionProfileModel: [
+        { value: "fast", label: "Fast" },
+        { value: "balanced", label: "Balanced" },
+        { value: "liquid", label: "Liquid" },
+        { value: "reduced", label: "Reduced" }
+    ]
 
     // S5.4 binds mirror (read-only). binds is a replace-on-conflict authoritative
     // block; the GUI never writes it. bindsList holds {combo, action, protected}
@@ -338,6 +345,19 @@ Item {
         root.writeField("animations." + action + "." + param, String(number));
     }
 
+    function validMotionProfile(profile) {
+        var text = String(profile || "");
+        return text === "fast" || text === "balanced" || text === "liquid" || text === "reduced";
+    }
+
+    function setMotionProfile(profile) {
+        var next = validMotionProfile(profile) ? String(profile) : "balanced";
+        if (root.motionProfile === next)
+            return;
+        root.motionProfile = next;
+        root.writeField("animations.profile", next);
+    }
+
     function writeField(field, value) {
         root.lastError = "";
         var next = root.pending;
@@ -445,6 +465,10 @@ Item {
         if (!anim || !anim.actions)
             return;
         root.animSprings = anim.actions;
+        if (anim.profile && root.validMotionProfile(anim.profile))
+            root.motionProfile = String(anim.profile);
+        else if (anim.profile)
+            root.motionProfile = "custom";
     }
 
     function applyBinds(binds) {

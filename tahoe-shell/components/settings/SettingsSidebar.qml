@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Layouts
+import "../Motion.js" as Motion
 import "SettingsModel.js" as SettingsModel
 import "controls" as Controls
 
@@ -118,8 +119,10 @@ Rectangle {
             border.color: searchInput.activeFocus ? sidebar.fieldStrokeFocus : sidebar.fieldStroke
             border.width: searchInput.activeFocus ? 2 : 1
 
+            // Local exception: focus border feedback is intentionally shorter
+            // than fadeFast so typing focus feels immediate.
             Behavior on border.width {
-                NumberAnimation { duration: 80; easing.type: Easing.OutCubic }
+                NumberAnimation { duration: 80; easing.type: Motion.emphasizedDecel }
             }
 
             RowLayout {

@@ -2,11 +2,13 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Layouts
+import "../../Motion.js" as Motion
 
 Item {
     id: sw
 
     property var theme
+    property var settingsService
     property bool checked: false
 
     readonly property color accentBlue: theme ? theme.accentBlue : "#007ff7"
@@ -29,7 +31,7 @@ Item {
             color: "#ffffff"
 
             Behavior on x {
-                NumberAnimation { duration: 130; easing.type: Easing.OutCubic }
+                NumberAnimation { duration: Motion.elementMove(sw.settingsService); easing.type: Motion.emphasizedDecel }
             }
         }
     }

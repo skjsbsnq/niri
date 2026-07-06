@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import "Motion.js" as Motion
 
 Item {
     id: root
@@ -9,6 +10,7 @@ Item {
     property var windowsService
     property var thumbnailProvider
     property var appsService
+    property var settingsService
     property var dockWindow
     property var dockSurfaceItem
     property int thumbnailMaxWidth: 320
@@ -192,11 +194,11 @@ Item {
         }
 
         Behavior on opacity {
-            NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
+            NumberAnimation { duration: Motion.panelExit(root.settingsService); easing.type: Motion.emphasizedDecel }
         }
 
         Behavior on y {
-            NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
+            NumberAnimation { duration: Motion.panelExit(root.settingsService); easing.type: Motion.emphasizedDecel }
         }
     }
 
@@ -231,7 +233,9 @@ Item {
         onTriggered: root.bounceOffset = 0
     }
 
+    // Local exception: minimized-thumbnail bounce is shorter than the dock icon
+    // fallback because the thumbnail shelf has less vertical travel.
     Behavior on bounceOffset {
-        NumberAnimation { duration: 170; easing.type: Easing.OutCubic }
+        NumberAnimation { duration: 170; easing.type: Motion.emphasizedDecel }
     }
 }

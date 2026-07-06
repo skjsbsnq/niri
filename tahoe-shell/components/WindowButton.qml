@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import "Motion.js" as Motion
 
 Item {
     id: root
@@ -9,6 +10,7 @@ Item {
     property var toplevel: windowModel ? windowModel.toplevel : null
     property var windowsService
     property var appsService
+    property var settingsService
     property bool showTitle: true
     property int iconSize: 38
     // See Dock.qml useSpring. Spring on icon geometry corrupts the Image
@@ -213,11 +215,11 @@ Item {
         }
 
         Behavior on opacity {
-            NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
+            NumberAnimation { duration: Motion.panelExit(root.settingsService); easing.type: Motion.emphasizedDecel }
         }
 
         Behavior on y {
-            NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
+            NumberAnimation { duration: Motion.panelExit(root.settingsService); easing.type: Motion.emphasizedDecel }
         }
     }
 
@@ -272,7 +274,7 @@ Item {
     // VMware/software GPUs. NumberAnimation is the safe default.
     Behavior on bounceOffset {
         enabled: !root.useSpring
-        NumberAnimation { duration: 220; easing.type: Easing.OutCubic }
+        NumberAnimation { duration: 220; easing.type: Motion.emphasizedDecel }
     }
     Behavior on bounceOffset {
         enabled: root.useSpring
@@ -288,7 +290,7 @@ Item {
     // the pinned half. Same useSpring gate as bounce.
     Behavior on magnification {
         enabled: !root.useSpring
-        NumberAnimation { duration: 130; easing.type: Easing.OutCubic }
+        NumberAnimation { duration: Motion.elementMove(root.settingsService); easing.type: Motion.emphasizedDecel }
     }
     Behavior on magnification {
         enabled: root.useSpring

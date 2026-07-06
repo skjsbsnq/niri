@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Wayland
+import "Motion.js" as Motion
 import "TahoeGlass.js" as GlassStyle
 
 PanelWindow {
@@ -329,8 +330,10 @@ PanelWindow {
 
     TahoeGlass.regions: [dockSurface.region]
 
+    // Local exception: dock auto-hide slide is tuned to the reveal zone and
+    // stays distinct from panel enter/exit tokens until profile write support.
     Behavior on dockSlideOffset {
-        NumberAnimation { duration: 190; easing.type: Easing.OutCubic }
+        NumberAnimation { duration: 190; easing.type: Motion.emphasizedDecel }
     }
 
     MouseArea {
@@ -564,11 +567,11 @@ PanelWindow {
                                     }
 
                                     Behavior on opacity {
-                                        NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
+                                        NumberAnimation { duration: Motion.panelExit(root.settingsService); easing.type: Motion.emphasizedDecel }
                                     }
 
                                     Behavior on y {
-                                        NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
+                                        NumberAnimation { duration: Motion.panelExit(root.settingsService); easing.type: Motion.emphasizedDecel }
                                     }
                                 }
 
@@ -665,7 +668,7 @@ PanelWindow {
                                 // tween — no overshoot, but no texture loss on VMs either.
                                 Behavior on bounceOffset {
                                     enabled: !root.useSpring
-                                    NumberAnimation { duration: 220; easing.type: Easing.OutCubic }
+                                    NumberAnimation { duration: 220; easing.type: Motion.emphasizedDecel }
                                 }
                                 Behavior on bounceOffset {
                                     enabled: root.useSpring
@@ -682,7 +685,7 @@ PanelWindow {
                                 // NumberAnimation everywhere else.
                                 Behavior on magnification {
                                     enabled: !root.useSpring
-                                    NumberAnimation { duration: 130; easing.type: Easing.OutCubic }
+                                    NumberAnimation { duration: Motion.elementMove(root.settingsService); easing.type: Motion.emphasizedDecel }
                                 }
                                 Behavior on magnification {
                                     enabled: root.useSpring
@@ -746,6 +749,7 @@ PanelWindow {
                                 toplevel: modelData ? modelData.toplevel : null
                                 windowsService: root.niriService
                                 appsService: root.appsService
+                                settingsService: root.settingsService
                                 useSpring: root.useSpring
                                 iconSize: root.dockWindowButtonsShowTitle ? 36 : 38
                                 showTitle: root.dockWindowButtonsShowTitle
@@ -785,6 +789,7 @@ PanelWindow {
                 windowsService: root.niriService
                 thumbnailProvider: root.thumbnailProvider
                 appsService: root.appsService
+                settingsService: root.settingsService
                 dockWindow: root
                 dockSurfaceItem: dockSurface
                 thumbnailWidth: root.dockMinimizedThumbnailWidth
@@ -857,11 +862,11 @@ PanelWindow {
             }
 
             Behavior on opacity {
-                NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
+                NumberAnimation { duration: Motion.panelExit(root.settingsService); easing.type: Motion.emphasizedDecel }
             }
 
             Behavior on y {
-                NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
+                NumberAnimation { duration: Motion.panelExit(root.settingsService); easing.type: Motion.emphasizedDecel }
             }
         }
     }
@@ -934,11 +939,11 @@ PanelWindow {
             }
 
             Behavior on opacity {
-                NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
+                NumberAnimation { duration: Motion.panelExit(root.settingsService); easing.type: Motion.emphasizedDecel }
             }
 
             Behavior on y {
-                NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
+                NumberAnimation { duration: Motion.panelExit(root.settingsService); easing.type: Motion.emphasizedDecel }
             }
         }
 

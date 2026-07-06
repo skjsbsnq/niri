@@ -196,11 +196,11 @@ PanelWindow {
                     // panel's implicitHeight, which is the glass-region
                     // geometry; a spring overshoot here is the same crash
                     // class as animating panel.y/scale directly.
-                    NumberAnimation { duration: Motion.elementResizeDuration; easing.type: Motion.emphasizedDecel }
+                    NumberAnimation { duration: Motion.elementResize(root.settingsService); easing.type: Motion.emphasizedDecel }
                 }
 
                 Behavior on opacity {
-                    NumberAnimation { duration: Motion.panelExitDuration; easing.type: Motion.standardDecel }
+                    NumberAnimation { duration: Motion.panelExit(root.settingsService); easing.type: Motion.standardDecel }
                 }
 
                     UtilityButton {

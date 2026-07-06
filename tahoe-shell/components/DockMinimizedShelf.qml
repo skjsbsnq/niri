@@ -9,6 +9,7 @@ Item {
     property var windowsService
     property var thumbnailProvider
     property var appsService
+    property var settingsService
     property var dockWindow
     property var dockSurfaceItem
     property int thumbnailWidth: 112
@@ -59,6 +60,7 @@ Item {
                     windowsService: root.windowsService
                     thumbnailProvider: root.thumbnailProvider
                     appsService: root.appsService
+                    settingsService: root.settingsService
                     dockWindow: root.dockWindow
                     dockSurfaceItem: root.dockSurfaceItem
                     onDockPointerMoved: function(x, buttons) {

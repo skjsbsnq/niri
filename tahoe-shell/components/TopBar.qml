@@ -5,6 +5,7 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Widgets
 import Quickshell.Wayland
+import "Motion.js" as Motion
 import "TahoeGlass.js" as GlassStyle
 import "DynamicIslandMotion.js" as IslandMotion
 
@@ -133,8 +134,10 @@ PanelWindow {
         glassEnabled: opacity > 0.01
         opacity: 1
 
+        // Local exception: topbar glass fade is slightly shorter than panelEnter
+        // so clock/status reveal does not lag behind compositor layer motion.
         Behavior on opacity {
-            NumberAnimation { duration: 170; easing.type: Easing.OutCubic }
+            NumberAnimation { duration: 170; easing.type: Motion.emphasizedDecel }
         }
 
         Item {

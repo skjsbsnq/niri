@@ -54,10 +54,13 @@ Item {
     property string lastError: ""
     property var cache: ({})
     property var queuedKeys: ({})
+    // Cursor-backed queue avoids copying the whole array for each thumbnail burst step.
     property var queue: []
+    property int queueHead: 0
+    property int pendingQueueLength: 0
     property var activeJob: null
 
-    readonly property int pendingCount: queue.length
+    readonly property int pendingCount: pendingQueueLength
     readonly property bool running: thumbnailProcess.running
     readonly property string thumbnailDirectory: runtimeDirectory() + "/tahoe/window-thumbnails"
 
@@ -66,28 +69,41 @@ Item {
         return dir.length > 0 ? dir : "/tmp";
     }
 
-    function copyObject(source) {
-        var out = {};
-        var value = source || {};
-        for (var key in value)
-            out[key] = value[key];
-        return out;
-    }
-
     function setCacheState(key, state) {
-        var next = copyObject(root.cache);
-        next[key] = state;
-        root.cache = next;
+        root.cache[key] = state;
     }
 
     function deleteCacheState(key) {
-        var next = copyObject(root.cache);
-        delete next[key];
-        root.cache = next;
+        delete root.cache[key];
     }
 
     function touch() {
         root.revision += 1;
+    }
+
+    function queuePendingCount() {
+        return Math.max(0, root.queue.length - root.queueHead);
+    }
+
+    function refreshPendingCount() {
+        root.pendingQueueLength = queuePendingCount();
+    }
+
+    function compactQueueStorage() {
+        if (root.queueHead <= 0) {
+            refreshPendingCount();
+            return;
+        }
+
+        if (root.queueHead >= root.queue.length) {
+            root.queue = [];
+            root.queueHead = 0;
+        } else if (root.queueHead >= 32 && root.queueHead * 2 >= root.queue.length) {
+            root.queue = root.queue.slice(root.queueHead);
+            root.queueHead = 0;
+        }
+
+        refreshPendingCount();
     }
 
     function windowFromIdOrObject(idOrWindow) {
@@ -170,16 +186,14 @@ Item {
         if (key.length === 0)
             return;
 
-        var nextQueue = [];
-        for (var i = 0; i < root.queue.length; i++) {
+        for (var i = root.queue.length - 1; i >= root.queueHead; i--) {
             if (String(root.queue[i]) !== key)
-                nextQueue.push(root.queue[i]);
+                continue;
+            root.queue.splice(i, 1);
         }
-        root.queue = nextQueue;
+        compactQueueStorage();
 
-        var nextKeys = copyObject(root.queuedKeys);
-        delete nextKeys[key];
-        root.queuedKeys = nextKeys;
+        delete root.queuedKeys[key];
 
         var state = stateForKey(key, false);
         if (state) {
@@ -204,7 +218,7 @@ Item {
             return true;
         }
 
-        if (root.queue.length >= root.maxQueueLength) {
+        if (queuePendingCount() >= root.maxQueueLength) {
             state.loading = false;
             state.queued = false;
             state.failed = true;
@@ -216,10 +230,9 @@ Item {
             return false;
         }
 
-        var nextKeys = copyObject(root.queuedKeys);
-        nextKeys[key] = true;
-        root.queuedKeys = nextKeys;
-        root.queue = root.queue.concat([key]);
+        root.queuedKeys[key] = true;
+        root.queue.push(key);
+        refreshPendingCount();
         state.queued = true;
         state.status = "queued";
         pumpTimer.restart();
@@ -328,12 +341,11 @@ Item {
         if (thumbnailProcess.running || root.activeJob)
             return;
 
-        while (root.queue.length > 0) {
-            var key = String(root.queue[0]);
-            root.queue = root.queue.slice(1);
-            var nextKeys = copyObject(root.queuedKeys);
-            delete nextKeys[key];
-            root.queuedKeys = nextKeys;
+        while (queuePendingCount() > 0) {
+            var key = String(root.queue[root.queueHead]);
+            root.queueHead += 1;
+            delete root.queuedKeys[key];
+            compactQueueStorage();
 
             var state = stateForKey(key, false);
             if (!state || state.path.length === 0)

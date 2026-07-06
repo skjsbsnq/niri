@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Layouts
+import "Motion.js" as Motion
 
 // 左侧边栏天气页。
 //
@@ -874,6 +875,8 @@ Item {
             font.family: root.iconFont
             font.pixelSize: 18
 
+            // Local exception: busy spinner uses a constant rotation period,
+            // not shell enter/exit motion.
             NumberAnimation on rotation {
                 running: button.busy
                 loops: Animation.Infinite
@@ -1060,7 +1063,7 @@ Item {
         border.color: root.cardStroke
         border.width: 1
 
-        Behavior on color { ColorAnimation { duration: 120 } }
+        Behavior on color { ColorAnimation { duration: Motion.fadeFast(root.settingsService) } }
 
         Column {
             anchors.fill: parent
@@ -1285,7 +1288,7 @@ Item {
         border.color: root.cardStroke
         border.width: 1
 
-        Behavior on color { ColorAnimation { duration: 120 } }
+        Behavior on color { ColorAnimation { duration: Motion.fadeFast(root.settingsService) } }
 
         Row {
             anchors.left: parent.left
@@ -1454,6 +1457,8 @@ Item {
             color: root.accentBlue
             x: -width
 
+            // Local exception: loading shimmer is an ambient loop and keeps
+            // its own InOut timing instead of shell surface motion tokens.
             SequentialAnimation on x {
                 running: stripe.visible
                 loops: Animation.Infinite

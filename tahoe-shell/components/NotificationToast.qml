@@ -79,7 +79,7 @@ PanelWindow {
     }
 
     Behavior on toastMaterialAlpha {
-        NumberAnimation { duration: Motion.fadeFastDuration; easing.type: Motion.standardDecel }
+        NumberAnimation { duration: Motion.fadeFast(root.settingsService); easing.type: Motion.standardDecel }
     }
 
     // Urgency accent. Normal = neutral hairline; Critical gets a warm red
@@ -134,11 +134,11 @@ PanelWindow {
         // Slide + fade in from the right. This card is the glass-region item,
         // so geometry must never be driven by SpringAnimation.
         Behavior on x {
-            NumberAnimation { duration: Motion.panelEnterDuration; easing.type: Motion.emphasizedDecel }
+            NumberAnimation { duration: Motion.panelEnter(root.settingsService); easing.type: Motion.emphasizedDecel }
         }
 
         Behavior on height {
-            NumberAnimation { duration: Motion.elementResizeDuration; easing.type: Motion.emphasizedDecel }
+            NumberAnimation { duration: Motion.elementResize(root.settingsService); easing.type: Motion.emphasizedDecel }
         }
 
         Column {

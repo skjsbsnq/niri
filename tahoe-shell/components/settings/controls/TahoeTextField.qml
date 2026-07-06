@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Layouts
+import "../../Motion.js" as Motion
 
 Rectangle {
     id: field
@@ -24,8 +25,10 @@ Rectangle {
     border.color: input.activeFocus ? field.fieldStrokeFocus : field.fieldStroke
     border.width: input.activeFocus ? 2 : 1
 
+    // Local exception: focus border feedback is intentionally shorter than
+    // fadeFast so text entry feels immediate.
     Behavior on border.width {
-        NumberAnimation { duration: 80; easing.type: Easing.OutCubic }
+        NumberAnimation { duration: 80; easing.type: Motion.emphasizedDecel }
     }
 
     TextInput {

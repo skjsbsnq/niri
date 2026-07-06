@@ -158,6 +158,51 @@ ShellRoot {
         toggleTopBarPopup("notificationCenter", screen, dynamicIslandAnchorRect(screen));
     }
 
+    function ipcScreen() {
+        return screenByName(navigationScreenName());
+    }
+
+    function topBarIpcAnchorRect(screen, slot) {
+        var width = Math.max(1, Number(screen && screen.width) || 1);
+        var button = 38;
+        var gap = 8;
+        var rightMargin = 12;
+        var index = Math.max(0, Math.round(Number(slot) || 0));
+        return {
+            "x": Math.round(Math.max(0, width - rightMargin - button - index * (button + gap))),
+            "y": 0,
+            "width": button,
+            "height": 38
+        };
+    }
+
+    function openTopBarPopupForIpc(popupName, slot) {
+        var screen = ipcScreen();
+        if (!screen)
+            return;
+
+        prepareTopBarPopup(screen, topBarIpcAnchorRect(screen, slot));
+        closeTopBarPopups(popupName);
+        setTopBarPopupOpen(popupName, true);
+        closeLaunchpadAndSpotlight();
+    }
+
+    function toggleTopBarPopupForIpc(popupName, slot) {
+        var screen = ipcScreen();
+        if (!screen)
+            return;
+
+        toggleTopBarPopup(popupName, screen, topBarIpcAnchorRect(screen, slot));
+    }
+
+    function closeMotionSamplingSurfaces() {
+        closeTopBarPopups("");
+        closeLaunchpadAndSpotlight();
+        closeTaskSwitcher();
+        closeWindowOverview();
+        closeLeftSidebar();
+    }
+
     function requestLock(source) {
         lastLockSource = String(source || "unknown");
         if (power && power.requestAction) {
@@ -477,6 +522,36 @@ ShellRoot {
         function openWindowOverview(): void { shell.openWindowOverview(); }
         function toggleWindowOverview(): void { shell.toggleWindowOverview(); }
         function closeWindowOverview(): void { shell.closeWindowOverview(); }
+        function openControlCenter(): void { shell.openTopBarPopupForIpc("controlCenter", 4); }
+        function toggleControlCenter(): void { shell.toggleTopBarPopupForIpc("controlCenter", 4); }
+        function closeControlCenter(): void { shell.controlCenterOpen = false; }
+        function openNotificationCenter(): void { shell.openTopBarPopupForIpc("notificationCenter", 5); }
+        function toggleNotificationCenter(): void { shell.toggleTopBarPopupForIpc("notificationCenter", 5); }
+        function closeNotificationCenter(): void { shell.notificationCenterOpen = false; }
+        function openBatteryPopup(): void { shell.openTopBarPopupForIpc("battery", 3); }
+        function toggleBatteryPopup(): void { shell.toggleTopBarPopupForIpc("battery", 3); }
+        function closeBatteryPopup(): void { shell.batteryPopupOpen = false; }
+        function openWifiPopup(): void { shell.openTopBarPopupForIpc("wifi", 2); }
+        function toggleWifiPopup(): void { shell.toggleTopBarPopupForIpc("wifi", 2); }
+        function closeWifiPopup(): void { shell.wifiPopupOpen = false; }
+        function openFanPopup(): void { shell.openTopBarPopupForIpc("fan", 1); }
+        function toggleFanPopup(): void { shell.toggleTopBarPopupForIpc("fan", 1); }
+        function closeFanPopup(): void { shell.fanPopupOpen = false; }
+        function openClipboardPopup(): void { shell.openTopBarPopupForIpc("clipboard", 0); }
+        function toggleClipboardPopup(): void { shell.toggleTopBarPopupForIpc("clipboard", 0); }
+        function closeClipboardPopup(): void { shell.clipboardPopupOpen = false; }
+        function openSpotlight(): void {
+            shell.closeTopBarPopups("spotlight");
+            shell.launchpadOpen = false;
+            shell.spotlightOpen = true;
+        }
+        function toggleSpotlight(): void {
+            shell.closeTopBarPopups("spotlight");
+            shell.launchpadOpen = false;
+            shell.spotlightOpen = !shell.spotlightOpen;
+        }
+        function closeSpotlight(): void { shell.spotlightOpen = false; }
+        function closeMotionSamplingSurfaces(): void { shell.closeMotionSamplingSurfaces(); }
         function openSettings(): void { shell.openSettingsPanel("settings"); }
         function openAbout(): void { shell.openSettingsPanel("about"); }
         function openSystemHealth(): void { shell.openSettingsPanel("health"); }
@@ -575,6 +650,16 @@ ShellRoot {
 
     NiriSettings {
         id: niriSettings
+    }
+
+    Connections {
+        target: niriSettings
+
+        function onMotionProfileChanged() {
+            if (desktopSettings.validMotionProfile(niriSettings.motionProfile)
+                    && desktopSettings.motionProfile !== niriSettings.motionProfile)
+                desktopSettings.setMotionProfile(niriSettings.motionProfile);
+        }
     }
 
     Power {
@@ -953,6 +1038,7 @@ ShellRoot {
                 windowsService: niri
                 thumbnailProvider: thumbnailProvider
                 appsService: apps
+                settingsService: desktopSettings
                 open: shell.navigationOpenFor(shell.taskSwitcherOpen, shell.taskSwitcherScreenName, modelData)
                 onCloseRequested: shell.closeTaskSwitcher()
             }
@@ -976,6 +1062,7 @@ ShellRoot {
                 windowsService: niri
                 thumbnailProvider: thumbnailProvider
                 appsService: apps
+                settingsService: desktopSettings
                 open: shell.navigationOpenFor(shell.windowOverviewOpen, shell.windowOverviewScreenName, modelData)
                 onCloseRequested: shell.closeWindowOverview()
             }

@@ -35,6 +35,7 @@ Item {
     readonly property bool screenshotOfferActions: settingsAdapter.screenshotOfferActions
     readonly property string startupNote: settingsAdapter.startupNote
     readonly property bool compositorLayerAnimations: settingsAdapter.compositorLayerAnimations
+    readonly property string motionProfile: settingsAdapter.motionProfile
     readonly property bool dynamicIslandEnabled: settingsAdapter.dynamicIslandEnabled
     readonly property bool dynamicIslandHideTopbarTime: settingsAdapter.dynamicIslandHideTopbarTime
     readonly property string dynamicIslandLeftClickAction: settingsAdapter.dynamicIslandLeftClickAction
@@ -118,6 +119,13 @@ Item {
             || value === "papirus-dark"
             || value === "papirus-light"
             || value === "custom";
+    }
+
+    function validMotionProfile(value) {
+        return value === "fast"
+            || value === "balanced"
+            || value === "liquid"
+            || value === "reduced";
     }
 
     function cleanIconThemeName(value) {
@@ -346,6 +354,15 @@ Item {
         settingsFile.writeAdapter();
     }
 
+    function setMotionProfile(profile) {
+        var next = validMotionProfile(profile) ? String(profile) : "balanced";
+        if (settingsAdapter.motionProfile === next)
+            return;
+
+        settingsAdapter.motionProfile = next;
+        settingsFile.writeAdapter();
+    }
+
     function setDynamicIslandEnabled(enabled) {
         var next = !!enabled;
         if (settingsAdapter.dynamicIslandEnabled === next)
@@ -571,6 +588,11 @@ Item {
             changed = true;
         }
 
+        if (!validMotionProfile(settingsAdapter.motionProfile)) {
+            settingsAdapter.motionProfile = "balanced";
+            changed = true;
+        }
+
         var iconTheme = cleanIconThemeName(settingsAdapter.customIconTheme);
         if (settingsAdapter.customIconTheme !== iconTheme) {
             settingsAdapter.customIconTheme = iconTheme;
@@ -706,6 +728,7 @@ Item {
             property bool screenshotOfferActions: true
             property string startupNote: ""
             property bool compositorLayerAnimations: false
+            property string motionProfile: "balanced"
             property bool dynamicIslandEnabled: true
             property bool dynamicIslandHideTopbarTime: true
             property string dynamicIslandLeftClickAction: "toggle_media"

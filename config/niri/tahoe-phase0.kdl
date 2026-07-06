@@ -409,6 +409,7 @@ layer-rule {
         layer-open {
             style "edge-reveal"
             edge "top"
+            // edge-reveal uses the layer surface extent; this is not a short-travel knob.
             distance 24
             opacity-from 0.84
             transform-duration-ms 210
@@ -419,6 +420,7 @@ layer-rule {
         layer-close {
             style "edge-reveal"
             edge "top"
+            // edge-reveal uses the layer surface extent; this is not a short-travel knob.
             distance 24
             opacity-to 1
             transform-duration-ms 210
@@ -437,6 +439,7 @@ layer-rule {
         layer-open {
             style "edge-reveal"
             edge "top"
+            // edge-reveal uses the layer surface extent; this is not a short-travel knob.
             distance 24
             opacity-from 0.86
             transform-duration-ms 210
@@ -447,6 +450,7 @@ layer-rule {
         layer-close {
             style "edge-reveal"
             edge "top"
+            // edge-reveal uses the layer surface extent; this is not a short-travel knob.
             distance 24
             opacity-to 1
             transform-duration-ms 210
@@ -544,8 +548,8 @@ layer-rule {
     }
 }
 
-// Layer animation Small Popup profile. Top-bar popups use short top-edge
-// reveal motion because niri cannot know the exact dynamic button origin.
+// Layer animation Small Popup profile. Top-bar popups use top-edge
+// reveal/retract because niri cannot know the exact dynamic button origin.
 layer-rule {
     match namespace="^tahoe-battery-popup$"
     match namespace="^tahoe-wifi-popup$"
@@ -559,6 +563,7 @@ layer-rule {
         layer-open {
             style "edge-reveal"
             edge "top"
+            // edge-reveal uses the layer surface extent; this is not a short-travel knob.
             distance 18
             opacity-from 0.82
             transform-duration-ms 180
@@ -569,6 +574,7 @@ layer-rule {
         layer-close {
             style "edge-reveal"
             edge "top"
+            // edge-reveal uses the layer surface extent; this is not a short-travel knob.
             distance 18
             opacity-to 1
             transform-duration-ms 180
@@ -589,6 +595,7 @@ layer-rule {
         layer-open {
             style "edge-reveal"
             edge "bottom"
+            // edge-reveal uses the layer surface extent; this is not a short-travel knob.
             distance 18
             opacity-from 0.82
             transform-duration-ms 180
@@ -599,6 +606,7 @@ layer-rule {
         layer-close {
             style "edge-reveal"
             edge "bottom"
+            // edge-reveal uses the layer surface extent; this is not a short-travel knob.
             distance 18
             opacity-to 1
             transform-duration-ms 180

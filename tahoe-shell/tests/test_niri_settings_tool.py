@@ -11,8 +11,10 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = ROOT.parent
 TOOL_PATH = ROOT / "services" / "niri_settings_tool.py"
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "niri-settings"
+TAHOE_PHASE0 = REPO_ROOT / "config" / "niri" / "tahoe-phase0.kdl"
 
 spec = importlib.util.spec_from_file_location("niri_settings_tool", TOOL_PATH)
 assert spec and spec.loader
@@ -39,7 +41,7 @@ class NiriSettingsToolTests(unittest.TestCase):
     def test_writable_field_specs_are_an_explicit_whitelist(self) -> None:
         fields = set(niri_settings_tool.WRITABLE_FIELD_SPECS)
 
-        self.assertEqual(len(fields), 70)
+        self.assertEqual(len(fields), 71)
         for field in (
             "layout.gaps",
             "glass.panel.refraction",
@@ -47,6 +49,7 @@ class NiriSettingsToolTests(unittest.TestCase):
             "blur.saturation",
             "input.touchpad.accel_speed",
             "output.scale",
+            "animations.profile",
             "animations.overview_open_close.epsilon",
         ):
             spec = niri_settings_tool.WRITABLE_FIELD_SPECS[field]
@@ -59,6 +62,35 @@ class NiriSettingsToolTests(unittest.TestCase):
         self.assertFalse(any(field.startswith("binds.") for field in fields))
         self.assertNotIn("glass.panel.xray", fields)
         self.assertNotIn("animations.window_open.duration_ms", fields)
+
+    def test_motion_profile_write_updates_springs_and_layer_rules(self) -> None:
+        original = TAHOE_PHASE0.read_text(encoding="utf-8")
+        self.assertEqual(niri_settings_tool.read_animations_text(original)["profile"], "balanced")
+
+        fast = niri_settings_tool.update_field(original, "animations.profile", "fast")
+        anim = niri_settings_tool.read_animations_text(fast)
+        self.assertEqual(anim["profile"], "fast")
+        self.assertEqual(anim["actions"]["workspace_switch"], {
+            "damping_ratio": 1,
+            "stiffness": 860,
+            "epsilon": 0.0001,
+        })
+        self.assertIn("transform-duration-ms 170", fast)
+        self.assertIn("opacity-duration-ms 80", fast)
+        self.assertIn("transform-duration-ms 140", fast)
+
+        balanced = niri_settings_tool.update_field(fast, "animations.profile", "balanced")
+        self.assertEqual(niri_settings_tool.read_animations_text(balanced)["profile"], "balanced")
+        self.assertEqual(balanced, original)
+
+    def test_motion_profile_write_requires_known_layer_animation_groups(self) -> None:
+        original = TAHOE_PHASE0.read_text(encoding="utf-8")
+        broken = original.replace('match namespace="^tahoe-process-menu$"', 'match namespace="^tahoe-other-menu$"')
+
+        with self.assertRaises(niri_settings_tool.KdlEditError) as raised:
+            niri_settings_tool.update_field(broken, "animations.profile", "fast")
+
+        self.assertIn("expected exactly one layer-rule for process_menu", str(raised.exception))
 
     def test_layout_write_matches_golden_and_preserves_unmanaged_block(self) -> None:
         original = read_fixture("managed.kdl")

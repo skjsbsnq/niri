@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Wayland
+import "Motion.js" as Motion
 import "TahoeGlass.js" as GlassStyle
 
 PanelWindow {
@@ -12,6 +13,7 @@ PanelWindow {
     property var windowsService
     property var thumbnailProvider
     property var appsService
+    property var settingsService
     property string selectedWindowKey: ""
     property var selectedCardItem: null
     readonly property var windowChoices: windowsService && windowsService.windowList ? windowsService.windowList : []
@@ -317,7 +319,7 @@ PanelWindow {
         opacity: root.open ? 1 : 0
 
         Behavior on opacity {
-            NumberAnimation { duration: 120; easing.type: Easing.OutCubic }
+            NumberAnimation { duration: Motion.fadeFast(root.settingsService); easing.type: Motion.emphasizedDecel }
         }
     }
 
@@ -360,11 +362,13 @@ PanelWindow {
         scale: root.open ? 1 : 0.985
 
         Behavior on opacity {
-            NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
+            NumberAnimation { duration: Motion.panelExit(root.settingsService); easing.type: Motion.emphasizedDecel }
         }
 
+        // Local exception: overview keeps its existing 160ms scale settle while
+        // opacity uses shared tokens, preserving the pre-GOAL-4 visual timing.
         Behavior on scale {
-            NumberAnimation { duration: 160; easing.type: Easing.OutCubic }
+            NumberAnimation { duration: 160; easing.type: Motion.emphasizedDecel }
         }
 
         MouseArea {

@@ -9,7 +9,7 @@
 | Area | Decision | Source |
 | --- | --- | --- |
 | Default motion profile | `balanced` | `config/niri/tahoe-phase0.kdl`, `NiriSettings.qml`, `DesktopSettings.qml`, `Motion.js`, `niri_settings_tool.py` |
-| New shell state default for compositor layer animations | `false` / opt-in | `DesktopSettings.qml` `JsonAdapter.compositorLayerAnimations` |
+| New shell state default for compositor layer animations | `true` / default-on | `DesktopSettings.qml` `JsonAdapter.compositorLayerAnimations` |
 | Conservative user profile | `reduced` | Existing `animations.profile` writer and settings page selector |
 | Baseline rollback profile | `balanced` | GOAL-5 byte-for-byte rollback check |
 
@@ -27,14 +27,14 @@
 
 ## Layer Animation Default
 
-`compositorLayerAnimations` remains `false` for new `desktop-settings.json` state. Users can opt in from the Niri animations page.
+`compositorLayerAnimations` is `true` for new `desktop-settings.json` state. Users can turn it off from the Niri animations page.
 
 Reasons:
 
-- The compositor layer animation path has stronger automated lifecycle coverage after GOAL-7, but live DRM/TTY visual acceptance is still partial.
-- The active user state may choose `true`; this policy only defines the source default for new or reset shell state.
-- Keeping the default off preserves the QML outer animation fallback as the first-run compatibility path.
-- The KDL layer animation rules remain present, validated, and ready for opt-in.
+- The compositor layer animation path has automated lifecycle coverage after GOAL-7, including fast toggle, interrupt, and snapshot release tests.
+- The KDL layer animation rules remain present and validated, and `balanced` remains the rollback profile.
+- The active user state may choose `false`; this policy only defines the source default for new or reset shell state.
+- Turning the setting off preserves the QML outer animation fallback as the user rollback path.
 
 ## Fallback Retention Plan
 
@@ -82,5 +82,5 @@ python3 tahoe-shell/services/niri_settings_tool.py write --config "$HOME/.config
 - Do not let QML components write niri KDL directly.
 - Keep `Motion.js` profile names synchronized with `niri_settings_tool.py`.
 - Keep `DesktopSettings.qml` source defaults aligned with this document.
-- If the default `compositorLayerAnimations` value changes to `true`, update this document, the GOAL acceptance record, and tests in the same change.
+- If the default `compositorLayerAnimations` value changes again, update this document, the GOAL acceptance record, and tests in the same change.
 - If a fallback is removed, document the measured evidence, affected surfaces, and user rollback path in a new goal.

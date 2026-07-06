@@ -355,7 +355,7 @@ Flickable {
             Controls.TahoeListRow {
                 theme: page.theme
                 label: "使用 compositor layer 动画"
-                detail: "将 Tahoe 面板的打开/关闭交给 niri layer animation；关闭时保留 QML 外层 fallback，内部按钮、列表和切页动画仍由 QML 处理。"
+                detail: "默认开启：将 Tahoe 面板的打开/关闭交给 niri layer animation；关闭时保留 QML 外层 fallback，内部按钮、列表和切页动画仍由 QML 处理。"
                 iconCode: "\ue8d1"
                 checkable: true
                 checked: page.desktopSettings && page.desktopSettings.compositorLayerAnimations

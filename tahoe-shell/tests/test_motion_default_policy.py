@@ -31,7 +31,7 @@ class MotionDefaultPolicyTests(unittest.TestCase):
 
         for needle in (
             "| Default motion profile | `balanced` |",
-            "| New shell state default for compositor layer animations | `false` / opt-in |",
+            "| New shell state default for compositor layer animations | `true` / default-on |",
             "| Conservative user profile | `reduced` |",
             "Do not remove any fallback until a later, explicit goal",
             '"compositorLayerAnimations": false',
@@ -45,7 +45,7 @@ class MotionDefaultPolicyTests(unittest.TestCase):
         niri = self.read(NIRI_SETTINGS)
         motion = self.read(MOTION_JS)
 
-        self.assertIn("property bool compositorLayerAnimations: false", desktop)
+        self.assertIn("property bool compositorLayerAnimations: true", desktop)
         self.assertIn('property string motionProfile: "balanced"', desktop)
         self.assertIn('property string motionProfile: "balanced"', niri)
         self.assertEqual(
@@ -58,6 +58,7 @@ class MotionDefaultPolicyTests(unittest.TestCase):
 
         self.assertIn("默认平衡：Tahoe 当前 KDL/QML token timing，可作为回退基线", text)
         self.assertIn("保守回退：layer transform 归零，保留必要 opacity feedback", text)
+        self.assertIn("默认开启：将 Tahoe 面板的打开/关闭交给 niri layer animation", text)
         self.assertIn("关闭时保留 QML 外层 fallback", text)
 
     def test_layer_roadmap_points_to_policy_decision(self) -> None:

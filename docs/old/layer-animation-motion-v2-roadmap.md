@@ -948,8 +948,8 @@ git diff --check
 2026-07-06 GOAL-10 decision:
 
 - Default motion profile remains `balanced`.
-- New shell state keeps `DesktopSettings.compositorLayerAnimations` default `false`; compositor layer animation remains opt-in.
-- QML outer animation fallback remains the first-run compatibility path and user rollback path.
+- New shell state sets `DesktopSettings.compositorLayerAnimations` default `true`; compositor layer animation is default-on.
+- QML outer animation fallback remains the user rollback path when the setting is turned off.
 - Launchpad、Dock、TaskSwitcher、WindowOverview 继续保持 QML path，不强行 compositor 化。
 - Policy source: `tahoe-shell/docs/tahoe-motion-default-policy.md`。
 

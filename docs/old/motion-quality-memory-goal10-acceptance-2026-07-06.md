@@ -8,7 +8,7 @@
 
 - 新增 `tahoe-shell/docs/tahoe-motion-default-policy.md`：
   - 默认 motion profile 决策：`balanced`。
-  - 新 shell state 的 compositor layer animation 默认：`false` / opt-in。
+  - 新 shell state 的 compositor layer animation 默认：`true` / default-on。
   - 保守 profile：`reduced`。
   - 回退基线：`balanced`。
   - 记录 QML fallback、TahoeGlass fallback、thumbnail fallback 和未迁移 surface 的保留计划。
@@ -31,11 +31,11 @@
 | 项 | 决策 | 原因 |
 | --- | --- | --- |
 | Motion profile | `balanced` | GOAL-0 baseline，GOAL-5 已证明 `fast -> balanced` byte-for-byte rollback，当前 config read 检出 `balanced` |
-| Compositor layer animation source default | `false` / opt-in | GOAL-7 有自动生命周期测试，但 live DRM/TTY 视觉验收和 post-deploy RSS 仍需后续实机确认 |
+| Compositor layer animation source default | `true` / default-on | GOAL-7 有 fast toggle、interrupt 和 snapshot release 自动测试；关闭开关仍可回到 QML fallback |
 | Conservative profile | `reduced` | 复用现有 profile writer，降低空间 transform，保留必要 opacity feedback |
 | Fallback removal | 不删除 | QML fallback、TahoeGlass fallback 和 thumbnail fallback 都仍是用户可恢复路径 |
 
-注意：active user state 可以选择 `compositorLayerAnimations=true`；本 gate 决定的是 new/reset shell state 的 source default，不覆盖用户已有选择。
+注意：active user state 可以选择 `compositorLayerAnimations=false`；本 gate 决定的是 new/reset shell state 的 source default，不覆盖用户已有选择。
 
 ## 用户回退路径
 
@@ -52,7 +52,6 @@
 
 ## 没有做什么
 
-- 没有把 compositor layer animation 默认改成 `true`。
 - 没有删除 QML 外层 fallback。
 - 没有删除 TahoeGlass / BackgroundEffect fallback。
 - 没有删除 thumbnail fallback。
@@ -101,7 +100,7 @@ git diff --check
 ## 剩余风险
 
 - 本 gate 没有重启 live Tahoe shell，也没有做鼠标/键盘实机设置页验收；验证是 source/test/config 级。
-- 如果未来要把 `compositorLayerAnimations` 默认改成 `true`，需要新的 live visual、frame-time/RSS 记录和 rollback 验收。
+- `compositorLayerAnimations=true` 已成为新/reset state 的 source default；live visual、frame-time/RSS 仍建议在实机会话中继续复测。
 - `reduced` 不是全局 no-animation 开关；它是低空间位移 profile，仍保留必要 opacity feedback。
 - Active user state 可能与 source default 不同；这是用户选择，不应被本 policy 覆盖。
 
@@ -112,4 +111,4 @@ git diff --check
 - Delete `tahoe-shell/tests/test_motion_default_policy.py`。
 - Delete this acceptance document and revert the GOAL-10 status row。
 
-No runtime config rollback is required because this gate did not change KDL values or source defaults.
+No KDL rollback is required because this gate did not change KDL values. User-level rollback is turning off `compositorLayerAnimations` in settings or setting `compositorLayerAnimations: false` in state JSON.

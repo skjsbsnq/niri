@@ -727,7 +727,7 @@ Item {
             property bool screenshotCopyToClipboard: true
             property bool screenshotOfferActions: true
             property string startupNote: ""
-            property bool compositorLayerAnimations: false
+            property bool compositorLayerAnimations: true
             property string motionProfile: "balanced"
             property bool dynamicIslandEnabled: true
             property bool dynamicIslandHideTopbarTime: true

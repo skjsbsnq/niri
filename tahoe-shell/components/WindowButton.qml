@@ -127,9 +127,9 @@ Item {
         anchors.fill: parent
         anchors.margins: 2
         radius: 16
-        color: root.active ? "#70ffffff" : root.minimized ? "#24ffffff" : "transparent"
-        border.color: root.active ? "#66ffffff" : "transparent"
-        border.width: 1
+        color: "transparent"
+        border.color: "transparent"
+        border.width: 0
     }
 
     Image {

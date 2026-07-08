@@ -59,6 +59,7 @@ PanelWindow {
     readonly property color statusAttention: "#ff453a"
     readonly property int statusItemHeight: 22
     readonly property int statusIconWidth: 26
+    readonly property int batteryItemMinWidth: 66
     readonly property int statusRadius: 7
     readonly property color buttonFill: "transparent"
     readonly property color buttonHover: darkMode ? "#24ffffff" : "#26ffffff"
@@ -329,7 +330,7 @@ PanelWindow {
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
                 height: parent.height
-                spacing: 6
+                spacing: 9
                 clip: true
 
                 Item {
@@ -494,7 +495,7 @@ PanelWindow {
             Item {
                 id: batteryButton
 
-                Layout.preferredWidth: visible ? 54 : 0
+                Layout.preferredWidth: visible ? Math.max(root.batteryItemMinWidth, batteryContent.implicitWidth + 12) : 0
                 Layout.preferredHeight: root.statusItemHeight
                 Layout.alignment: Qt.AlignVCenter
                 visible: root.batteryAvailable
@@ -507,53 +508,56 @@ PanelWindow {
                     border.width: 1
                 }
 
-                Text {
-                    anchors.left: parent.left
-                    anchors.leftMargin: 6
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: root.batteryService ? root.batteryService.roundedPercentage + "%" : ""
-                    color: root.statusText
-                    font.pixelSize: 11
-                    font.weight: Font.DemiBold
-                }
+                RowLayout {
+                    id: batteryContent
 
-                Item {
-                    width: 20
-                    height: 12
-                    anchors.right: parent.right
-                    anchors.rightMargin: 6
-                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.centerIn: parent
+                    spacing: 5
 
-                    Rectangle {
-                        id: batteryOutline
-                        x: 0
-                        y: 2
-                        width: 17
-                        height: 9
-                        radius: 3
-                        color: "transparent"
-                        border.color: root.statusTextFaint
-                        border.width: 1
-
-                        Rectangle {
-                            x: 2
-                            y: 2
-                            width: root.batteryService ? Math.max(2, (parent.width - 4) * root.batteryService.roundedPercentage / 100) : 2
-                            height: parent.height - 4
-                            radius: 2
-                            color: root.batteryService && root.batteryService.roundedPercentage <= 15 && root.batteryService.onBattery
-                                ? root.statusAttention
-                                : root.statusText
-                        }
+                    Text {
+                        text: root.batteryService ? root.batteryService.roundedPercentage + "%" : ""
+                        color: root.statusText
+                        font.pixelSize: 11
+                        font.weight: Font.Medium
+                        Layout.alignment: Qt.AlignVCenter
                     }
 
-                    Rectangle {
-                        x: 18
-                        y: 5
-                        width: 2
-                        height: 3
-                        radius: 1
-                        color: root.statusTextFaint
+                    Item {
+                        Layout.preferredWidth: 20
+                        Layout.preferredHeight: 12
+                        Layout.alignment: Qt.AlignVCenter
+
+                        Rectangle {
+                            id: batteryOutline
+                            x: 0
+                            y: 2
+                            width: 17
+                            height: 9
+                            radius: 3
+                            color: "transparent"
+                            border.color: root.statusTextFaint
+                            border.width: 1
+
+                            Rectangle {
+                                x: 2
+                                y: 2
+                                width: root.batteryService ? Math.max(2, (parent.width - 4) * root.batteryService.roundedPercentage / 100) : 2
+                                height: parent.height - 4
+                                radius: 2
+                                color: root.batteryService && root.batteryService.roundedPercentage <= 15 && root.batteryService.onBattery
+                                    ? root.statusAttention
+                                    : root.statusText
+                            }
+                        }
+
+                        Rectangle {
+                            x: 18
+                            y: 5
+                            width: 2
+                            height: 3
+                            radius: 1
+                            color: root.statusTextFaint
+                        }
                     }
                 }
 

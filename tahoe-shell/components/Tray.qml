@@ -126,7 +126,7 @@ Item {
         id: trayRow
 
         anchors.verticalCenter: parent.verticalCenter
-        spacing: 4
+        spacing: 6
 
         Repeater {
             model: ScriptModel {

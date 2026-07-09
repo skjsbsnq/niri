@@ -771,6 +771,12 @@ def read_input_text(text: str) -> dict[str, Any]:
 # writer rewrites that whole line (preserving all three params) and skips the
 # rewrite when the target param is unchanged. window-open/close carry custom
 # GLSL shaders and are intentionally never touched by the GUI.
+#
+# T03: the layer-rule profile tables additionally manage the layer-open
+# main-channel spring line (rewritten in place) and use `None` values to keep
+# the open transform override channel absent, so the transform inherits the
+# spring. Only `reduced` writes `transform-duration-ms 0` back in; switching
+# away removes that leaf again, keeping profile round-trips byte-identical.
 
 ANIM_ACTIONS = ["workspace-switch", "window-movement", "window-resize", "overview-open-close"]
 ANIM_SPRING_PARAMS = ["damping-ratio", "stiffness", "epsilon"]
@@ -827,9 +833,41 @@ def layer_phase(
     opacity_key: str,
     opacity_value: float,
     opacity_curve: str | None = None,
-) -> dict[str, int | float | str]:
-    values: dict[str, int | float | str] = {
+) -> dict[str, int | float | str | dict[str, float] | None]:
+    values: dict[str, int | float | str | dict[str, float] | None] = {
         "transform-duration-ms": transform_ms,
+        "opacity-duration-ms": opacity_ms,
+        opacity_key: opacity_value,
+    }
+    if opacity_curve is not None:
+        values["opacity-curve"] = opacity_curve
+    return values
+
+
+def spring_phase(
+    damping_ratio: float,
+    stiffness: float,
+    epsilon: float,
+    opacity_ms: int,
+    opacity_key: str,
+    opacity_value: float,
+    opacity_curve: str | None = None,
+) -> dict[str, int | float | str | dict[str, float] | None]:
+    """Phase whose main channel is a spring (T03 vocabulary).
+
+    The transform override channel must stay ABSENT so it inherits the
+    main-channel spring: `None` means "remove this leaf if present" for the
+    writer and "this leaf must be absent" for profile detection. Only the
+    `reduced` profile writes `transform-duration-ms 0` back in (its transform
+    override wins over the inert spring line, which stays untouched).
+    """
+    values: dict[str, int | float | str | dict[str, float] | None] = {
+        "spring": {
+            "damping-ratio": damping_ratio,
+            "stiffness": stiffness,
+            "epsilon": epsilon,
+        },
+        "transform-duration-ms": None,
         "opacity-duration-ms": opacity_ms,
         opacity_key: opacity_value,
     }
@@ -841,114 +879,114 @@ def layer_phase(
 MOTION_PROFILE_LAYERS = {
     "balanced": {
         "control_center": {
-            "layer-open": layer_phase(210, 110, "opacity-from", 0.84, "standard-decel"),
-            "layer-close": layer_phase(210, 0, "opacity-to", 1.0),
+            "layer-open": spring_phase(0.85, 380, 0.0005, 110, "opacity-from", 0.84, "standard-decel"),
+            "layer-close": {**layer_phase(210, 0, "opacity-to", 1.0), "opacity-curve": None},
         },
         "notification_center": {
-            "layer-open": layer_phase(210, 100, "opacity-from", 0.86, "standard-decel"),
-            "layer-close": layer_phase(210, 0, "opacity-to", 1.0),
+            "layer-open": spring_phase(0.85, 380, 0.0005, 100, "opacity-from", 0.86, "standard-decel"),
+            "layer-close": {**layer_phase(210, 0, "opacity-to", 1.0), "opacity-curve": None},
         },
         "left_sidebar": {
-            "layer-open": layer_phase(210, 0, "opacity-from", 1.0),
+            "layer-open": spring_phase(0.85, 380, 0.0005, 0, "opacity-from", 1.0),
             "layer-close": layer_phase(180, 0, "opacity-to", 1.0),
         },
         "spotlight": {
-            "layer-open": layer_phase(180, 120, "opacity-from", 0.0, "standard-decel"),
-            "layer-close": layer_phase(110, 80, "opacity-to", 0.0, "menu-accel"),
+            "layer-open": spring_phase(0.88, 500, 0.001, 120, "opacity-from", 0.0, "standard-decel"),
+            "layer-close": layer_phase(110, 80, "opacity-to", 0.0, "emphasized-accel"),
         },
         "small_popup": {
-            "layer-open": layer_phase(180, 90, "opacity-from", 0.82, "standard-decel"),
-            "layer-close": layer_phase(180, 0, "opacity-to", 1.0),
+            "layer-open": spring_phase(0.88, 500, 0.001, 90, "opacity-from", 0.0, "standard-decel"),
+            "layer-close": layer_phase(180, 180, "opacity-to", 0.0, "emphasized-accel"),
         },
         "dock_menu": {
-            "layer-open": layer_phase(180, 90, "opacity-from", 0.82, "standard-decel"),
-            "layer-close": layer_phase(180, 0, "opacity-to", 1.0),
+            "layer-open": spring_phase(0.88, 500, 0.001, 90, "opacity-from", 0.0, "standard-decel"),
+            "layer-close": layer_phase(180, 180, "opacity-to", 0.0, "emphasized-accel"),
         },
         "process_menu": {
-            "layer-open": layer_phase(120, 80, "opacity-from", 0.88, "standard-decel"),
-            "layer-close": layer_phase(90, 70, "opacity-to", 0.3, "menu-accel"),
+            "layer-open": spring_phase(0.88, 500, 0.001, 90, "opacity-from", 0.0, "standard-decel"),
+            "layer-close": layer_phase(180, 180, "opacity-to", 0.0, "emphasized-accel"),
         },
         "toast": {
-            "layer-open": layer_phase(180, 100, "opacity-from", 0.75, "standard-decel"),
-            "layer-close": layer_phase(110, 80, "opacity-to", 0.35, "menu-accel"),
+            "layer-open": spring_phase(0.8, 320, 0.0005, 100, "opacity-from", 0.75, "standard-decel"),
+            "layer-close": layer_phase(110, 80, "opacity-to", 0.35, "emphasized-accel"),
         },
     },
     "fast": {
         "control_center": {
-            "layer-open": layer_phase(170, 80, "opacity-from", 0.84, "standard-decel"),
-            "layer-close": layer_phase(140, 0, "opacity-to", 1.0),
+            "layer-open": spring_phase(0.9, 520, 0.0005, 80, "opacity-from", 0.84, "standard-decel"),
+            "layer-close": {**layer_phase(140, 0, "opacity-to", 1.0), "opacity-curve": None},
         },
         "notification_center": {
-            "layer-open": layer_phase(170, 80, "opacity-from", 0.86, "standard-decel"),
-            "layer-close": layer_phase(140, 0, "opacity-to", 1.0),
+            "layer-open": spring_phase(0.9, 520, 0.0005, 80, "opacity-from", 0.86, "standard-decel"),
+            "layer-close": {**layer_phase(140, 0, "opacity-to", 1.0), "opacity-curve": None},
         },
         "left_sidebar": {
-            "layer-open": layer_phase(170, 0, "opacity-from", 1.0),
+            "layer-open": spring_phase(0.9, 520, 0.0005, 0, "opacity-from", 1.0),
             "layer-close": layer_phase(140, 0, "opacity-to", 1.0),
         },
         "spotlight": {
-            "layer-open": layer_phase(140, 80, "opacity-from", 0.0, "standard-decel"),
-            "layer-close": layer_phase(90, 60, "opacity-to", 0.0, "menu-accel"),
+            "layer-open": spring_phase(0.95, 750, 0.001, 80, "opacity-from", 0.0, "standard-decel"),
+            "layer-close": layer_phase(90, 60, "opacity-to", 0.0, "emphasized-accel"),
         },
         "small_popup": {
-            "layer-open": layer_phase(140, 70, "opacity-from", 0.82, "standard-decel"),
-            "layer-close": layer_phase(110, 0, "opacity-to", 1.0),
+            "layer-open": spring_phase(0.95, 750, 0.001, 70, "opacity-from", 0.0, "standard-decel"),
+            "layer-close": layer_phase(140, 140, "opacity-to", 0.0, "emphasized-accel"),
         },
         "dock_menu": {
-            "layer-open": layer_phase(140, 70, "opacity-from", 0.82, "standard-decel"),
-            "layer-close": layer_phase(110, 0, "opacity-to", 1.0),
+            "layer-open": spring_phase(0.95, 750, 0.001, 70, "opacity-from", 0.0, "standard-decel"),
+            "layer-close": layer_phase(140, 140, "opacity-to", 0.0, "emphasized-accel"),
         },
         "process_menu": {
-            "layer-open": layer_phase(100, 60, "opacity-from", 0.88, "standard-decel"),
-            "layer-close": layer_phase(80, 50, "opacity-to", 0.3, "menu-accel"),
+            "layer-open": spring_phase(0.95, 750, 0.001, 70, "opacity-from", 0.0, "standard-decel"),
+            "layer-close": layer_phase(140, 140, "opacity-to", 0.0, "emphasized-accel"),
         },
         "toast": {
-            "layer-open": layer_phase(140, 80, "opacity-from", 0.75, "standard-decel"),
-            "layer-close": layer_phase(90, 60, "opacity-to", 0.35, "menu-accel"),
+            "layer-open": spring_phase(0.85, 450, 0.0005, 80, "opacity-from", 0.75, "standard-decel"),
+            "layer-close": layer_phase(90, 60, "opacity-to", 0.35, "emphasized-accel"),
         },
     },
     "liquid": {
         "control_center": {
-            "layer-open": layer_phase(240, 130, "opacity-from", 0.84, "standard-decel"),
-            "layer-close": layer_phase(210, 0, "opacity-to", 1.0),
+            "layer-open": spring_phase(0.82, 300, 0.0005, 130, "opacity-from", 0.84, "standard-decel"),
+            "layer-close": {**layer_phase(210, 0, "opacity-to", 1.0), "opacity-curve": None},
         },
         "notification_center": {
-            "layer-open": layer_phase(240, 130, "opacity-from", 0.86, "standard-decel"),
-            "layer-close": layer_phase(210, 0, "opacity-to", 1.0),
+            "layer-open": spring_phase(0.82, 300, 0.0005, 130, "opacity-from", 0.86, "standard-decel"),
+            "layer-close": {**layer_phase(210, 0, "opacity-to", 1.0), "opacity-curve": None},
         },
         "left_sidebar": {
-            "layer-open": layer_phase(240, 0, "opacity-from", 1.0),
+            "layer-open": spring_phase(0.82, 300, 0.0005, 0, "opacity-from", 1.0),
             "layer-close": layer_phase(210, 0, "opacity-to", 1.0),
         },
         "spotlight": {
-            "layer-open": layer_phase(220, 130, "opacity-from", 0.0, "standard-decel"),
-            "layer-close": layer_phase(150, 90, "opacity-to", 0.0, "menu-accel"),
+            "layer-open": spring_phase(0.82, 420, 0.001, 130, "opacity-from", 0.0, "standard-decel"),
+            "layer-close": layer_phase(150, 90, "opacity-to", 0.0, "emphasized-accel"),
         },
         "small_popup": {
-            "layer-open": layer_phase(210, 110, "opacity-from", 0.82, "standard-decel"),
-            "layer-close": layer_phase(170, 0, "opacity-to", 1.0),
+            "layer-open": spring_phase(0.82, 420, 0.001, 110, "opacity-from", 0.0, "standard-decel"),
+            "layer-close": layer_phase(210, 210, "opacity-to", 0.0, "emphasized-accel"),
         },
         "dock_menu": {
-            "layer-open": layer_phase(210, 110, "opacity-from", 0.82, "standard-decel"),
-            "layer-close": layer_phase(170, 0, "opacity-to", 1.0),
+            "layer-open": spring_phase(0.82, 420, 0.001, 110, "opacity-from", 0.0, "standard-decel"),
+            "layer-close": layer_phase(210, 210, "opacity-to", 0.0, "emphasized-accel"),
         },
         "process_menu": {
-            "layer-open": layer_phase(150, 90, "opacity-from", 0.88, "standard-decel"),
-            "layer-close": layer_phase(120, 70, "opacity-to", 0.3, "menu-accel"),
+            "layer-open": spring_phase(0.82, 420, 0.001, 110, "opacity-from", 0.0, "standard-decel"),
+            "layer-close": layer_phase(210, 210, "opacity-to", 0.0, "emphasized-accel"),
         },
         "toast": {
-            "layer-open": layer_phase(220, 120, "opacity-from", 0.75, "standard-decel"),
-            "layer-close": layer_phase(150, 90, "opacity-to", 0.35, "menu-accel"),
+            "layer-open": spring_phase(0.78, 260, 0.0005, 120, "opacity-from", 0.75, "standard-decel"),
+            "layer-close": layer_phase(150, 90, "opacity-to", 0.35, "emphasized-accel"),
         },
     },
     "reduced": {
         "control_center": {
             "layer-open": layer_phase(0, 80, "opacity-from", 0.0, "standard-decel"),
-            "layer-close": layer_phase(0, 60, "opacity-to", 0.0, "menu-accel"),
+            "layer-close": layer_phase(0, 60, "opacity-to", 0.0, "emphasized-accel"),
         },
         "notification_center": {
             "layer-open": layer_phase(0, 80, "opacity-from", 0.0, "standard-decel"),
-            "layer-close": layer_phase(0, 60, "opacity-to", 0.0, "menu-accel"),
+            "layer-close": layer_phase(0, 60, "opacity-to", 0.0, "emphasized-accel"),
         },
         "left_sidebar": {
             "layer-open": layer_phase(0, 0, "opacity-from", 1.0),
@@ -956,23 +994,23 @@ MOTION_PROFILE_LAYERS = {
         },
         "spotlight": {
             "layer-open": layer_phase(0, 80, "opacity-from", 0.0, "standard-decel"),
-            "layer-close": layer_phase(0, 60, "opacity-to", 0.0, "menu-accel"),
+            "layer-close": layer_phase(0, 60, "opacity-to", 0.0, "emphasized-accel"),
         },
         "small_popup": {
             "layer-open": layer_phase(0, 70, "opacity-from", 0.0, "standard-decel"),
-            "layer-close": layer_phase(0, 60, "opacity-to", 0.0, "menu-accel"),
+            "layer-close": layer_phase(0, 60, "opacity-to", 0.0, "emphasized-accel"),
         },
         "dock_menu": {
             "layer-open": layer_phase(0, 70, "opacity-from", 0.0, "standard-decel"),
-            "layer-close": layer_phase(0, 60, "opacity-to", 0.0, "menu-accel"),
+            "layer-close": layer_phase(0, 60, "opacity-to", 0.0, "emphasized-accel"),
         },
         "process_menu": {
             "layer-open": layer_phase(0, 60, "opacity-from", 0.0, "standard-decel"),
-            "layer-close": layer_phase(0, 50, "opacity-to", 0.0, "menu-accel"),
+            "layer-close": layer_phase(0, 50, "opacity-to", 0.0, "emphasized-accel"),
         },
         "toast": {
             "layer-open": layer_phase(0, 80, "opacity-from", 0.0, "standard-decel"),
-            "layer-close": layer_phase(0, 60, "opacity-to", 0.0, "menu-accel"),
+            "layer-close": layer_phase(0, 60, "opacity-to", 0.0, "emphasized-accel"),
         },
     },
 }
@@ -1230,6 +1268,50 @@ def phase_string(lines: list[str], block: tuple[int, int], key: str) -> str | No
     return None
 
 
+def phase_leaf_index(lines: list[str], block: tuple[int, int], key: str) -> int | None:
+    node_re = re.compile(rf"^\s*{re.escape(key)}\b\s+")
+    for index in iter_depth_lines(lines, block[0], block[1], 1):
+        body = uncommented_body(lines[index])
+        if "{" in body:
+            continue
+        if node_re.match(body):
+            return index
+    return None
+
+
+def remove_leaf(lines: list[str], block: tuple[int, int], name: str) -> None:
+    index = phase_leaf_index(lines, block, name)
+    if index is not None:
+        del lines[index]
+
+
+def phase_spring(lines: list[str], block: tuple[int, int]) -> dict[str, float] | None:
+    for index in iter_depth_lines(lines, block[0], block[1], 1):
+        body = uncommented_body(lines[index])
+        if re.match(r"^\s*spring\b", body):
+            return parse_spring_line(body)
+    return None
+
+
+def set_phase_spring(lines: list[str], block: tuple[int, int], vals: dict[str, float]) -> None:
+    for index in iter_depth_lines(lines, block[0], block[1], 1):
+        body = uncommented_body(lines[index])
+        if not re.match(r"^\s*spring\b", body):
+            continue
+        current = parse_spring_line(body)
+        if all(abs(current[param] - vals[param]) <= 1e-9 for param in ANIM_SPRING_PARAMS):
+            return  # unchanged: preserve original token
+        merged = dict(current)
+        merged.update(vals)
+        _, comment, newline = split_line_comment(lines[index])
+        indent = leading_indent(lines[index])
+        gap = " " if comment else ""
+        lines[index] = f"{indent}{format_spring(merged)}{gap}{comment}{newline}"
+        return
+    indent = block_child_indent(lines, block)
+    lines.insert(block[1], f"{indent}{format_spring(vals)}\n")
+
+
 def format_layer_profile_value(value: int | float | str) -> str:
     if isinstance(value, str):
         return f'"{value}"'
@@ -1239,12 +1321,20 @@ def format_layer_profile_value(value: int | float | str) -> str:
 
 
 def apply_layer_profile(lines: list[str], profile: str) -> None:
+    # Re-find the rule and phase block for every key: `spring`/`None` writes can
+    # insert or delete lines, which would leave previously computed block
+    # bounds stale within the same profile application.
     for group, phase_values in MOTION_PROFILE_LAYERS[profile].items():
-        layer_rule = find_layer_rule_for_group(lines, group)
         for phase, values in phase_values.items():
-            block = find_layer_phase_block(lines, layer_rule, phase)
             for key, value in values.items():
-                set_leaf_value(lines, block, key, format_layer_profile_value(value))
+                layer_rule = find_layer_rule_for_group(lines, group)
+                block = find_layer_phase_block(lines, layer_rule, phase)
+                if key == "spring":
+                    set_phase_spring(lines, block, value)
+                elif value is None:
+                    remove_leaf(lines, block, key)
+                else:
+                    set_leaf_value(lines, block, key, format_layer_profile_value(value))
 
 
 def profile_springs_match(lines: list[str], anim: tuple[int, int], profile: str) -> bool:
@@ -1273,7 +1363,17 @@ def profile_layers_match(lines: list[str], profile: str) -> bool:
             for phase, values in phase_values.items():
                 block = find_layer_phase_block(lines, layer_rule, phase)
                 for key, expected in values.items():
-                    if isinstance(expected, str):
+                    if key == "spring":
+                        actual_spring = phase_spring(lines, block)
+                        if actual_spring is None:
+                            return False
+                        for param, value in expected.items():
+                            if abs(actual_spring[param] - value) > 1e-9:
+                                return False
+                    elif expected is None:
+                        if phase_leaf_index(lines, block, key) is not None:
+                            return False
+                    elif isinstance(expected, str):
                         if phase_string(lines, block, key) != expected:
                             return False
                     else:

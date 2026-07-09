@@ -2,6 +2,7 @@
 """Source-level checks for GOAL-6 edge-reveal tuning semantics."""
 
 from pathlib import Path
+import re
 import unittest
 
 
@@ -31,6 +32,24 @@ class EdgeRevealSemanticsTests(unittest.TestCase):
 
         self.assertIn("layer_close_edge_reveal_moves_full_surface_extent", text)
         self.assertIn("should fully retract that surface", text)
+
+    def test_layer_open_spring_main_channel_has_no_transform_override(self) -> None:
+        # T03: menus/popovers pop out of their anchor on a main-channel spring,
+        # panels ride edge-reveal springs. The open transform override channel
+        # must stay absent wherever a spring line exists, or the easing
+        # override would silently replace the spring.
+        text = CONFIG.read_text(encoding="utf-8")
+
+        self.assertIn('origin "anchor"', text)
+        self.assertIn("scale-from 0.94", text)
+        self.assertIn("spring damping-ratio=0.88 stiffness=500 epsilon=0.001", text)
+
+        open_blocks = re.findall(r"layer-open \{[^}]*\}", text)
+        spring_opens = [block for block in open_blocks if "spring damping-ratio" in block]
+        self.assertGreaterEqual(len(spring_opens), 8)
+        for block in spring_opens:
+            self.assertNotIn("transform-duration-ms", block)
+            self.assertNotIn("transform-curve", block)
 
 
 if __name__ == "__main__":

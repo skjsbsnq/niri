@@ -75,11 +75,28 @@ class NiriSettingsToolTests(unittest.TestCase):
             "stiffness": 860,
             "epsilon": 0.0001,
         })
-        self.assertIn("transform-duration-ms 170", fast)
-        self.assertIn("opacity-duration-ms 80", fast)
+        # T03: layer-open transform channels ride per-profile main-channel
+        # springs; closes stay easing-based.
+        self.assertIn("spring damping-ratio=0.9 stiffness=520 epsilon=0.0005", fast)
+        self.assertIn("spring damping-ratio=0.95 stiffness=750 epsilon=0.001", fast)
+        self.assertIn("opacity-duration-ms 70", fast)
         self.assertIn("transform-duration-ms 140", fast)
 
         balanced = niri_settings_tool.update_field(fast, "animations.profile", "balanced")
+        self.assertEqual(niri_settings_tool.read_animations_text(balanced)["profile"], "balanced")
+        self.assertEqual(balanced, original)
+
+    def test_motion_profile_reduced_roundtrip_stays_byte_identical(self) -> None:
+        original = TAHOE_PHASE0.read_text(encoding="utf-8")
+
+        reduced = niri_settings_tool.update_field(original, "animations.profile", "reduced")
+        self.assertEqual(niri_settings_tool.read_animations_text(reduced)["profile"], "reduced")
+        # reduced zeroes the transform override channel; the now-inert spring
+        # main-channel line is left untouched.
+        self.assertIn("transform-duration-ms 0", reduced)
+        self.assertIn("spring damping-ratio=0.88 stiffness=500 epsilon=0.001", reduced)
+
+        balanced = niri_settings_tool.update_field(reduced, "animations.profile", "balanced")
         self.assertEqual(niri_settings_tool.read_animations_text(balanced)["profile"], "balanced")
         self.assertEqual(balanced, original)
 

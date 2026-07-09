@@ -428,6 +428,8 @@ layer-rule {
 
 // Layer animation Control Center profile. The panel opens from the top bar
 // using edge-attached motion instead of scaling the whole glass surface.
+// The open transform channel deliberately has no transform-duration-ms /
+// transform-curve override: it inherits the main-channel spring below.
 layer-rule {
     match namespace="^tahoe-control-center$"
 
@@ -438,8 +440,7 @@ layer-rule {
             // edge-reveal uses the layer surface extent; this is not a short-travel knob.
             distance 24
             opacity-from 0.84
-            transform-duration-ms 210
-            transform-curve "emphasized-decel"
+            spring damping-ratio=0.85 stiffness=380 epsilon=0.0005
             opacity-duration-ms 110
             opacity-curve "standard-decel"
         }
@@ -448,7 +449,7 @@ layer-rule {
             edge "top"
             // edge-reveal uses the layer surface extent; this is not a short-travel knob.
             distance 24
-            opacity-to 1
+            opacity-to 1.0
             transform-duration-ms 210
             transform-curve "emphasized-accel"
             opacity-duration-ms 0
@@ -468,8 +469,7 @@ layer-rule {
             // edge-reveal uses the layer surface extent; this is not a short-travel knob.
             distance 24
             opacity-from 0.86
-            transform-duration-ms 210
-            transform-curve "emphasized-decel"
+            spring damping-ratio=0.85 stiffness=380 epsilon=0.0005
             opacity-duration-ms 100
             opacity-curve "standard-decel"
         }
@@ -478,7 +478,7 @@ layer-rule {
             edge "top"
             // edge-reveal uses the layer surface extent; this is not a short-travel knob.
             distance 24
-            opacity-to 1
+            opacity-to 1.0
             transform-duration-ms 210
             transform-curve "emphasized-accel"
             opacity-duration-ms 0
@@ -497,8 +497,7 @@ layer-rule {
             style "edge-reveal"
             edge "left"
             opacity-from 1
-            transform-duration-ms 210
-            transform-curve "emphasized-decel"
+            spring damping-ratio=0.85 stiffness=380 epsilon=0.0005
             opacity-duration-ms 0
         }
         layer-close {
@@ -520,10 +519,9 @@ layer-rule {
     animations {
         layer-open {
             style "popin"
-            scale-from 0.985
+            scale-from 0.96
             opacity-from 0
-            transform-duration-ms 180
-            transform-curve "emphasized-decel"
+            spring damping-ratio=0.88 stiffness=500 epsilon=0.001
             opacity-duration-ms 120
             opacity-curve "standard-decel"
             origin "center"
@@ -533,9 +531,9 @@ layer-rule {
             scale-to 0.992
             opacity-to 0
             transform-duration-ms 110
-            transform-curve "menu-accel"
+            transform-curve "emphasized-accel"
             opacity-duration-ms 80
-            opacity-curve "menu-accel"
+            opacity-curve "emphasized-accel"
             origin "center"
         }
     }
@@ -574,8 +572,11 @@ layer-rule {
     }
 }
 
-// Layer animation Small Popup profile. Top-bar popups use top-edge
-// reveal/retract because niri cannot know the exact dynamic button origin.
+// Layer animation Small Popup / Menu profile. These surfaces are top+left
+// anchored right under their top-bar button, so `origin "anchor"` scales the
+// popin out of the button corner like a macOS menu. The open transform channel
+// deliberately has no transform-duration-ms: it inherits the main-channel
+// spring. Close is a fast pure fade with a slight contraction.
 layer-rule {
     match namespace="^tahoe-battery-popup$"
     match namespace="^tahoe-wifi-popup$"
@@ -587,92 +588,90 @@ layer-rule {
 
     animations {
         layer-open {
-            style "edge-reveal"
-            edge "top"
-            // edge-reveal uses the layer surface extent; this is not a short-travel knob.
-            distance 18
-            opacity-from 0.82
-            transform-duration-ms 180
-            transform-curve "emphasized-decel"
+            style "popin"
+            origin "anchor"
+            scale-from 0.94
+            opacity-from 0
+            spring damping-ratio=0.88 stiffness=500 epsilon=0.001
             opacity-duration-ms 90
             opacity-curve "standard-decel"
         }
         layer-close {
-            style "edge-reveal"
-            edge "top"
-            // edge-reveal uses the layer surface extent; this is not a short-travel knob.
-            distance 18
-            opacity-to 1
+            style "popout"
+            origin "anchor"
+            scale-to 0.98
+            opacity-to 0
             transform-duration-ms 180
             transform-curve "emphasized-accel"
-            opacity-duration-ms 0
+            opacity-duration-ms 180
+            opacity-curve "emphasized-accel"
         }
     }
 }
 
-// Layer animation Dock Menu candidate profile. Dock menu origin is dynamic;
-// use a conservative bottom edge-reveal until visual tuning decides whether
-// these should stay compositor-driven or return to QML outer animation.
+// Layer animation Dock Menu profile. Same spring popin vocabulary as the
+// top-bar menus, but these surfaces are top+left anchored while the dock icon
+// sits below the menu, so `origin "anchor"` would grow away from the icon.
+// Use `origin "center"` until T22 adds a pointer-based origin.
 layer-rule {
     match namespace="^tahoe-dock-app-menu$"
     match namespace="^tahoe-dock-window-menu$"
 
     animations {
         layer-open {
-            style "edge-reveal"
-            edge "bottom"
-            // edge-reveal uses the layer surface extent; this is not a short-travel knob.
-            distance 18
-            opacity-from 0.82
-            transform-duration-ms 180
-            transform-curve "emphasized-decel"
+            style "popin"
+            origin "center"
+            scale-from 0.94
+            opacity-from 0
+            spring damping-ratio=0.88 stiffness=500 epsilon=0.001
             opacity-duration-ms 90
             opacity-curve "standard-decel"
         }
         layer-close {
-            style "edge-reveal"
-            edge "bottom"
-            // edge-reveal uses the layer surface extent; this is not a short-travel knob.
-            distance 18
-            opacity-to 1
+            style "popout"
+            origin "center"
+            scale-to 0.98
+            opacity-to 0
             transform-duration-ms 180
             transform-curve "emphasized-accel"
-            opacity-duration-ms 0
+            opacity-duration-ms 180
+            opacity-curve "emphasized-accel"
         }
     }
 }
 
-// Layer animation Process Menu profile. It is a small context menu with dynamic
-// margins, so avoid edge motion and use a tight pop animation.
+// Layer animation Process Menu profile. This context menu is top+left anchored
+// at the click point, so `origin "anchor"` pops it out of the cursor corner.
+// Same spring popin vocabulary as the other menus.
 layer-rule {
     match namespace="^tahoe-process-menu$"
 
     animations {
         layer-open {
             style "popin"
-            scale-from 0.985
-            opacity-from 0.88
-            transform-duration-ms 120
-            transform-curve "emphasized-decel"
-            opacity-duration-ms 80
+            origin "anchor"
+            scale-from 0.94
+            opacity-from 0
+            spring damping-ratio=0.88 stiffness=500 epsilon=0.001
+            opacity-duration-ms 90
             opacity-curve "standard-decel"
-            origin "center"
         }
         layer-close {
             style "popout"
-            scale-to 0.992
-            opacity-to 0.3
-            transform-duration-ms 90
-            transform-curve "menu-accel"
-            opacity-duration-ms 70
-            opacity-curve "menu-accel"
-            origin "center"
+            origin "anchor"
+            scale-to 0.98
+            opacity-to 0
+            transform-duration-ms 180
+            transform-curve "emphasized-accel"
+            opacity-duration-ms 180
+            opacity-curve "emphasized-accel"
         }
     }
 }
 
-// Layer animation Toast profile. Toasts slide from the right with a short
-// fade so they register without pulling focus from the current work.
+// Layer animation Toast profile. Toasts slide from the right on a spring
+// (the transform channel inherits the main-channel spring) with a short fade
+// so they register without pulling focus from the current work.
 layer-rule {
     match namespace="^tahoe-notification-toast$"
 
@@ -682,8 +681,7 @@ layer-rule {
             edge "right"
             distance 28
             opacity-from 0.75
-            transform-duration-ms 180
-            transform-curve "emphasized-decel"
+            spring damping-ratio=0.8 stiffness=320 epsilon=0.0005
             opacity-duration-ms 100
             opacity-curve "standard-decel"
         }
@@ -695,7 +693,7 @@ layer-rule {
             transform-duration-ms 110
             transform-curve "emphasized-accel"
             opacity-duration-ms 80
-            opacity-curve "menu-accel"
+            opacity-curve "emphasized-accel"
         }
     }
 }

@@ -23,6 +23,17 @@ byte-for-byte rollback property is a round-trip guarantee of the profile
 writer, not a freeze of `balanced` values; rollback for the retiming itself is
 `git revert` of the T01 commit.
 
+2026-07-09 update (motion-visual-overhaul T03): compositor layer-rule
+animations now open on spring main channels (menus/popovers `popin origin
+"anchor"` dr=0.88 st=500; CC/NC/left-sidebar edge-reveal dr=0.85 st=380; toast
+slide dr=0.8 st=320; spotlight popin dr=0.88 st=500, scale-from 0.96). The
+profile writer manages those spring lines per profile and keeps the layer-open
+transform override channel absent so the transform inherits the spring.
+`reduced` keeps its conservative shape — it zeroes the layer transform channel
+(`transform-duration-ms 0`, opacity-only feedback) and leaves the inert spring
+line untouched — and every profile round-trips back to `balanced`
+byte-identically. Rollback is `git revert` of the T03 commit.
+
 ## Why Balanced Stays Default
 
 `balanced` remains the default because it is the only profile with all of the following evidence:

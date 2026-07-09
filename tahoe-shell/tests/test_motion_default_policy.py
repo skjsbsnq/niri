@@ -13,7 +13,7 @@ DESKTOP_SETTINGS = SHELL_ROOT / "services" / "DesktopSettings.qml"
 NIRI_SETTINGS = SHELL_ROOT / "services" / "NiriSettings.qml"
 MOTION_JS = SHELL_ROOT / "components" / "Motion.js"
 NIRI_ANIMATIONS_PAGE = SHELL_ROOT / "components" / "settings" / "pages" / "NiriAnimationsPage.qml"
-LAYER_ROADMAP = REPO_ROOT / "docs" / "layer-animation-motion-v2-roadmap.md"
+LAYER_ROADMAP = REPO_ROOT / "docs" / "old" / "layer-animation-motion-v2-roadmap.md"
 TOOL_PATH = SHELL_ROOT / "services" / "niri_settings_tool.py"
 
 spec = importlib.util.spec_from_file_location("niri_settings_tool", TOOL_PATH)

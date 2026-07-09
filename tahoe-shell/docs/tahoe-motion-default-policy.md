@@ -13,6 +13,16 @@
 | Conservative user profile | `reduced` | Existing `animations.profile` writer and settings page selector |
 | Baseline rollback profile | `balanced` | GOAL-5 byte-for-byte rollback check |
 
+2026-07-09 update (motion-visual-overhaul T01): `balanced` now carries the
+Tahoe Motion 2.0 timings (menuEnter 180 / menuExit 160 / panelEnter 320 /
+panelExit 200) and `Motion.js` additionally exports the spring vocabulary
+(`springSnappy`/`springSmooth`/`springPanel`/`springBouncy`) plus the press
+tokens (`pressDuration` 120 / `pressScale` 0.96). No new profile was added;
+`fast`/`liquid` scale proportionally and `reduced` stays minimal. The
+byte-for-byte rollback property is a round-trip guarantee of the profile
+writer, not a freeze of `balanced` values; rollback for the retiming itself is
+`git revert` of the T01 commit.
+
 ## Why Balanced Stays Default
 
 `balanced` remains the default because it is the only profile with all of the following evidence:

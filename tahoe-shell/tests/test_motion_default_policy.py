@@ -61,6 +61,27 @@ class MotionDefaultPolicyTests(unittest.TestCase):
         self.assertIn("默认开启：将 Tahoe 面板的打开/关闭交给 niri layer animation", text)
         self.assertIn("关闭时保留 QML 外层 fallback", text)
 
+    def test_balanced_profile_carries_motion_2_timings(self) -> None:
+        motion = self.read(MOTION_JS)
+
+        self.assertIn("var menuEnterDuration = 180;", motion)
+        self.assertIn("var menuExitDuration = 160;", motion)
+        self.assertIn("var panelEnterDuration = 320;", motion)
+        self.assertIn("var panelExitDuration = 200;", motion)
+
+    def test_reduced_profile_stays_minimal(self) -> None:
+        motion = self.read(MOTION_JS)
+
+        block = re.search(r'"reduced":\s*\{(.*?)\}', motion, re.S)
+        self.assertIsNotNone(block)
+        assert block
+        values = [int(v) for v in re.findall(r":\s*(\d+)", block.group(1))]
+        self.assertTrue(values)
+        self.assertTrue(
+            all(v <= 80 for v in values),
+            f"reduced profile must stay minimal, got {values}",
+        )
+
     def test_layer_roadmap_points_to_policy_decision(self) -> None:
         text = self.read(LAYER_ROADMAP)
 

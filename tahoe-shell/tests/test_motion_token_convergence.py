@@ -50,6 +50,32 @@ class MotionTokenConvergenceTests(unittest.TestCase):
         self.assertIn('property string motionProfile: "balanced"', desktop_text)
         self.assertIn("function setMotionProfile(profile)", desktop_text)
 
+    def test_motion_exports_tahoe_motion_2_spring_vocabulary(self) -> None:
+        text = MOTION_JS.read_text(encoding="utf-8")
+
+        expected = {
+            "springSnappy": ("4.2", "0.30", "damping-ratio=0.88 stiffness=500"),
+            "springSmooth": ("3.0", "0.40", "damping-ratio=1.0 stiffness=250"),
+            "springPanel": ("2.5", "0.28", "damping-ratio=0.85 stiffness=160"),
+            "springBouncy": ("2.5", "0.22", "damping-ratio=0.70 stiffness=160"),
+        }
+        for token, (spring, damping, niri_params) in expected.items():
+            block = re.search(rf"var {token} = \{{(.*?)\}};", text, re.S)
+            self.assertIsNotNone(block, f"missing spring token {token}")
+            assert block
+            body = block.group(1)
+            self.assertIn(f"spring: {spring}", body, token)
+            self.assertIn(f"damping: {damping}", body, token)
+            # The niri-side KDL annotation must stay in sync with the QML group.
+            self.assertIn(niri_params, body, token)
+
+    def test_motion_exports_press_tokens_as_single_outlet(self) -> None:
+        text = MOTION_JS.read_text(encoding="utf-8")
+
+        self.assertIn("var pressDuration = 120;", text)
+        self.assertIn("var pressScale = 0.96;", text)
+        self.assertIn("var pressEasing = QtQuick.Easing.OutQuad;", text)
+
 
 if __name__ == "__main__":
     unittest.main()

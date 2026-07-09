@@ -164,8 +164,8 @@ TaskSwitcher：opacity 130ms + scale 150ms（:307-312）——真 cmd+tab 无入
 
 - 实现：`niri/src/layout/minimize_window_animation.rs` + `niri/src/render_helpers/shaders/genie.frag`（另有 genie_prelude/epilogue 可组合段）。
 - 数据链：Dock 通过 foreign-toplevel `setRectangle` 提供目标矩形（`DockMinimizedWindow.qml:62-75` 恢复前回写矩形；`Windows.qml` setRectangle）。
-- 时序：最小化沿用 `window-close` 配置、恢复沿用 `window-open` 配置；**有效目标矩形时强制"更平滑曲线 + ≥320ms"下限**（`genie-minimize-phase7-8-acceptance-2026-06-21.md:19`，测试 `genie_animation_config_slows_valid_target_rect`）。
-- 形变特征（phase7 记录）：底边先行、顶边滞后但克制、**末 12% 才淡出**、目标侧轻微压扁。
+- 时序：最小化沿用 `window-close` 配置、恢复沿用 `window-open` 配置。~~有效目标矩形时强制"更平滑曲线 + ≥320ms"下限~~ **(2026-07-09 T02 核查更正:该"320ms 下限"从未存在于代码——`git log --all -S "from_millis(320"` 全历史零命中,引用的测试 `genie_animation_config_slows_valid_target_rect` 全仓不存在;旧验收文档该行失实。真实现状 = 裸继承 close/open,无任何下限。T04 已按此理解落地解耦。)**
+- 形变特征(phase7 记录):底边先行、顶边滞后但克制、末段淡出(T04 前为末 18%:`smoothstep(0.82,1.0)`,phase7 文档记为 12% 亦不准)、目标侧轻微压扁。
 - 可中断反转：`reverse_to_restore/reverse_to_minimize` 带进度接力（:243-267）。
 - 性能护栏：绘制区域 = 窗口∪目标 + 24px padding（:416-430），有单元测试保护；动画期间持有最多 3 张全窗纹理（contents / blocked-out / blocked-out-bg，:187-218），结束即随对象释放（快照生命周期有 GOAL-7 pytest 覆盖）。
 - fallback 链完整：无矩形→普通淡出；跨输出矩形→过滤；shader 编译失败→纹理淡出（acceptance doc :21-26）。

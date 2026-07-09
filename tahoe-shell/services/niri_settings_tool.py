@@ -770,7 +770,8 @@ def read_input_text(text: str) -> dict[str, Any]:
 # node holds a single `spring damping-ratio=X stiffness=Y epsilon=Z` line; the
 # writer rewrites that whole line (preserving all three params) and skips the
 # rewrite when the target param is unchanged. window-open/close carry custom
-# GLSL shaders and are intentionally never touched by the GUI.
+# GLSL shaders and are intentionally never touched by the GUI; the T04
+# window-minimize/window-restore genie nodes are likewise not profile-managed.
 #
 # T03: the layer-rule profile tables additionally manage the layer-open
 # main-channel spring line (rewritten in place) and use `None` values to keep

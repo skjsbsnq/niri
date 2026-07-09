@@ -53,7 +53,7 @@
 | --- | --- | --- | --- | --- |
 | GOAL-00 | T00 基线锁定 | S | DONE | [acceptance/T00-baseline-2026-07-09.md](acceptance/T00-baseline-2026-07-09.md) |
 | GOAL-01 | T01 Motion.js 2.0 弹簧 token + 治理测试同步 | M | DONE | [acceptance/T01-motion-tokens-2026-07-09.md](acceptance/T01-motion-tokens-2026-07-09.md) |
-| GOAL-02 | T02 窗口/工作区动画 + 阴影/圆角 KDL 重写 | M | PENDING | — |
+| GOAL-02 | T02 窗口/工作区动画 + 阴影/圆角 KDL 重写 | M | DONE | [acceptance/T02-window-animations-2026-07-09.md](acceptance/T02-window-animations-2026-07-09.md) |
 | GOAL-03 | T03 layer-rule 全面弹簧化 + anchor popin | M | PENDING | — |
 | GOAL-04 | T04 Genie（神灯）动画专项优化 | M–L | PENDING | — |
 | GOAL-05 | T05 全局按下态铺开 | M | PENDING | — |

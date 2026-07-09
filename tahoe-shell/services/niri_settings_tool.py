@@ -783,8 +783,8 @@ MOTION_PROFILE_SPRINGS = {
         "overview-open-close": {"damping-ratio": 0.98, "stiffness": 820, "epsilon": 0.0005},
     },
     "balanced": {
-        "workspace-switch": {"damping-ratio": 1.0, "stiffness": 780, "epsilon": 0.0001},
-        "window-movement": {"damping-ratio": 0.86, "stiffness": 620, "epsilon": 0.001},
+        "workspace-switch": {"damping-ratio": 0.92, "stiffness": 420, "epsilon": 0.0001},
+        "window-movement": {"damping-ratio": 0.8, "stiffness": 480, "epsilon": 0.001},
         "window-resize": {"damping-ratio": 0.96, "stiffness": 700, "epsilon": 0.0005},
         "overview-open-close": {"damping-ratio": 0.95, "stiffness": 760, "epsilon": 0.0005},
     },

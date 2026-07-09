@@ -42,10 +42,10 @@ layout {
 
     shadow {
         on
-        softness 36
-        spread 4
-        offset x=0 y=10
-        color "#0006"
+        softness 60
+        spread 6
+        offset x=0 y=18
+        color "#0007"
         inactive-color "#0004"
     }
 
@@ -254,49 +254,67 @@ spawn-sh-at-startup "command -v /usr/lib/polkit-gnome/polkit-gnome-authenticatio
 // tahoe-managed: begin animations
 animations {
     workspace-switch {
-        spring damping-ratio=1.0 stiffness=780 epsilon=0.0001
+        spring damping-ratio=0.92 stiffness=420 epsilon=0.0001
     }
 
+    // window-open/close are intentionally not motion-profile managed (they
+    // carry custom GLSL shaders; see niri_settings_tool.py ANIM_ACTIONS).
+    // Genie minimize/restore currently inherit these two configs directly
+    // (no duration floor in the fork); T04 decouples them via dedicated
+    // window-minimize / window-restore nodes.
     window-open {
-        duration-ms 120
-        curve "ease-out-cubic"
+        spring damping-ratio=0.85 stiffness=300 epsilon=0.001
         custom-shader r#"
 vec4 open_color(vec3 coords_geo, vec3 size_geo) {
-    if (coords_geo.x < 0.0 || coords_geo.y < 0.0 ||
-        coords_geo.x > size_geo.x || coords_geo.y > size_geo.y) {
+    // Spring main channel drives progress. The window settles from
+    // scale 0.965 to 1.0 around its center while the fade-in completes
+    // by 70% of the travel, so the pop reads scale-first like macOS.
+    float progress = niri_clamped_progress;
+    float scale = mix(0.965, 1.0, progress);
+
+    vec2 center = size_geo.xy * 0.5;
+    vec2 coords = (coords_geo.xy - center) / scale + center;
+
+    if (coords.x < 0.0 || coords.y < 0.0 ||
+        coords.x > size_geo.x || coords.y > size_geo.y) {
         return vec4(0.0);
     }
 
-    vec3 coords_tex = niri_geo_to_tex * vec3(coords_geo.xy, 1.0);
+    vec3 coords_tex = niri_geo_to_tex * vec3(coords, 1.0);
     vec4 color = texture2D(niri_tex, coords_tex.st);
-    float opacity = smoothstep(0.0, 1.0, niri_clamped_progress);
-    color *= opacity;
+    color *= clamp(progress / 0.7, 0.0, 1.0);
     return color;
 }
 "#
     }
 
     window-close {
-        duration-ms 100
+        duration-ms 140
         curve "ease-out-quad"
         custom-shader r#"
 vec4 close_color(vec3 coords_geo, vec3 size_geo) {
-    if (coords_geo.x < 0.0 || coords_geo.y < 0.0 ||
-        coords_geo.x > size_geo.x || coords_geo.y > size_geo.y) {
+    // Quick fade-out with a slight contraction to 0.97 around the center.
+    float progress = niri_clamped_progress;
+    float scale = mix(1.0, 0.97, progress);
+
+    vec2 center = size_geo.xy * 0.5;
+    vec2 coords = (coords_geo.xy - center) / scale + center;
+
+    if (coords.x < 0.0 || coords.y < 0.0 ||
+        coords.x > size_geo.x || coords.y > size_geo.y) {
         return vec4(0.0);
     }
 
-    vec3 coords_tex = niri_geo_to_tex * vec3(coords_geo.xy, 1.0);
+    vec3 coords_tex = niri_geo_to_tex * vec3(coords, 1.0);
     vec4 color = texture2D(niri_tex, coords_tex.st);
-    float opacity = 1.0 - smoothstep(0.0, 1.0, niri_clamped_progress);
-    color *= opacity;
+    color *= 1.0 - progress;
     return color;
 }
 "#
     }
 
     window-movement {
-        spring damping-ratio=0.86 stiffness=620 epsilon=0.001
+        spring damping-ratio=0.8 stiffness=480 epsilon=0.001
     }
 
     window-resize {
@@ -311,15 +329,17 @@ vec4 close_color(vec3 coords_geo, vec3 size_geo) {
 
 window-rule {
     open-floating true
-    geometry-corner-radius 18
+    geometry-corner-radius 22
     clip-to-geometry true
 
+    // Keep in sync with layout.shadow: this rule matches every window, so its
+    // shadow is the effective one.
     shadow {
         on
-        softness 36
-        spread 4
-        offset x=0 y=10
-        color "#0006"
+        softness 60
+        spread 6
+        offset x=0 y=18
+        color "#0007"
         inactive-color "#0004"
     }
 
@@ -335,7 +355,7 @@ window-rule {
     }
 
     popups {
-        geometry-corner-radius 14
+        geometry-corner-radius 16
 
         background-effect {
             blur true
@@ -351,6 +371,12 @@ window-rule {
 
 window-rule {
     match is-active=false
+
+    // Inactive windows carry a visibly weaker shadow (ShadowRule merge
+    // overrides softness only; color comes from inactive-color above).
+    shadow {
+        softness 40
+    }
 
     background-effect {
         blur true

@@ -267,7 +267,7 @@ vec4 open_color(vec3 coords_geo, vec3 size_geo) {
     // scale 0.965 to 1.0 around its center while the fade-in completes
     // by 70% of the travel, so the pop reads scale-first like macOS.
     float progress = niri_clamped_progress;
-    float scale = mix(0.965, 1.0, progress);
+    float scale = mix(0.92, 1.0, progress);
 
     vec2 center = size_geo.xy * 0.5;
     vec2 coords = (coords_geo.xy - center) / scale + center;
@@ -279,20 +279,19 @@ vec4 open_color(vec3 coords_geo, vec3 size_geo) {
 
     vec3 coords_tex = niri_geo_to_tex * vec3(coords, 1.0);
     vec4 color = texture2D(niri_tex, coords_tex.st);
-    color *= clamp(progress / 0.7, 0.0, 1.0);
+    color *= clamp(progress / 0.55, 0.0, 1.0);
     return color;
 }
 "#
     }
 
     window-close {
-        duration-ms 140
-        curve "ease-out-quad"
+        spring damping-ratio=0.82 stiffness=340 epsilon=0.001
         custom-shader r#"
 vec4 close_color(vec3 coords_geo, vec3 size_geo) {
     // Quick fade-out with a slight contraction to 0.97 around the center.
     float progress = niri_clamped_progress;
-    float scale = mix(1.0, 0.97, progress);
+    float scale = mix(1.0, 0.90, progress);
 
     vec2 center = size_geo.xy * 0.5;
     vec2 coords = (coords_geo.xy - center) / scale + center;
@@ -318,12 +317,12 @@ vec4 close_color(vec3 coords_geo, vec3 size_geo) {
     // window-close/open (when these nodes are absent the fork falls back to
     // close/open). Like window-open/close they are not motion-profile managed.
     window-minimize {
-        duration-ms 420
+        duration-ms 280
         curve "cubic-bezier" 0.32 0.0 0.18 1.0
     }
 
     window-restore {
-        duration-ms 360
+        duration-ms 260
         curve "emphasized-decel"
     }
 
@@ -598,8 +597,10 @@ layer-rule {
 
     animations {
         layer-open {
-            style "popin"
+            style "pop-slide"
             origin "anchor"
+            edge "top"
+            distance 10
             scale-from 0.94
             opacity-from 0
             spring damping-ratio=0.88 stiffness=500 epsilon=0.001
@@ -607,8 +608,10 @@ layer-rule {
             opacity-curve "standard-decel"
         }
         layer-close {
-            style "popout"
+            style "pop-slide"
             origin "anchor"
+            edge "top"
+            distance 10
             scale-to 0.98
             opacity-to 0
             transform-duration-ms 180
@@ -658,8 +661,10 @@ layer-rule {
 
     animations {
         layer-open {
-            style "popin"
+            style "pop-slide"
             origin "anchor"
+            edge "top"
+            distance 10
             scale-from 0.94
             opacity-from 0
             spring damping-ratio=0.88 stiffness=500 epsilon=0.001
@@ -667,8 +672,10 @@ layer-rule {
             opacity-curve "standard-decel"
         }
         layer-close {
-            style "popout"
+            style "pop-slide"
             origin "anchor"
+            edge "top"
+            distance 10
             scale-to 0.98
             opacity-to 0
             transform-duration-ms 180

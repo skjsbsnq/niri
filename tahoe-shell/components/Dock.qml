@@ -759,6 +759,7 @@ PanelWindow {
                                 labelClipContentX: windowViewport.contentX
                                 dockWindow: root
                                 dockSurfaceItem: dockSurface
+                                dockSlideOffset: root.dockSlideOffset
                                 onDockPointerMoved: function(x, buttons) {
                                     root.updateWindowHoverLabelGeometry(windowButton);
                                     root.updateDockHoverFromButtons(x, buttons === undefined ? Qt.NoButton : buttons);
@@ -792,6 +793,7 @@ PanelWindow {
                 settingsService: root.settingsService
                 dockWindow: root
                 dockSurfaceItem: dockSurface
+                dockSlideOffset: root.dockSlideOffset
                 thumbnailWidth: root.dockMinimizedThumbnailWidth
                 onDockPointerMoved: function(x, buttons) {
                     root.updateDockHoverFromButtons(x, buttons === undefined ? Qt.NoButton : buttons);

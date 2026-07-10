@@ -257,56 +257,20 @@ animations {
         spring damping-ratio=0.92 stiffness=420 epsilon=0.0001
     }
 
-    // window-open/close are intentionally not motion-profile managed (they
-    // carry custom GLSL shaders; see niri_settings_tool.py ANIM_ACTIONS).
+    // Window open/close use niri's bounded native scale+fade path. Keeping
+    // these finite avoids the large custom-shader draw areas and spring tails
+    // that made short lifecycle animations stutter at high refresh rates.
+    // They remain intentionally outside motion-profile management.
     window-open {
-        spring damping-ratio=0.85 stiffness=300 epsilon=0.001
-        custom-shader r#"
-vec4 open_color(vec3 coords_geo, vec3 size_geo) {
-    // Spring main channel drives progress. The window settles from
-    // scale 0.965 to 1.0 around its center while the fade-in completes
-    // by 70% of the travel, so the pop reads scale-first like macOS.
-    float progress = niri_clamped_progress;
-    float scale = mix(0.92, 1.0, progress);
-
-    vec2 center = size_geo.xy * 0.5;
-    vec2 coords = (coords_geo.xy - center) / scale + center;
-
-    if (coords.x < 0.0 || coords.y < 0.0 ||
-        coords.x > size_geo.x || coords.y > size_geo.y) {
-        return vec4(0.0);
-    }
-
-    vec3 coords_tex = niri_geo_to_tex * vec3(coords, 1.0);
-    vec4 color = texture2D(niri_tex, coords_tex.st);
-    color *= clamp(progress / 0.55, 0.0, 1.0);
-    return color;
-}
-"#
+        duration-ms 220
+        curve "ease-out-cubic"
+        scale-from 0.97
     }
 
     window-close {
-        spring damping-ratio=0.82 stiffness=340 epsilon=0.001
-        custom-shader r#"
-vec4 close_color(vec3 coords_geo, vec3 size_geo) {
-    // Quick fade-out with a slight contraction to 0.97 around the center.
-    float progress = niri_clamped_progress;
-    float scale = mix(1.0, 0.90, progress);
-
-    vec2 center = size_geo.xy * 0.5;
-    vec2 coords = (coords_geo.xy - center) / scale + center;
-
-    if (coords.x < 0.0 || coords.y < 0.0 ||
-        coords.x > size_geo.x || coords.y > size_geo.y) {
-        return vec4(0.0);
-    }
-
-    vec3 coords_tex = niri_geo_to_tex * vec3(coords, 1.0);
-    vec4 color = texture2D(niri_tex, coords_tex.st);
-    color *= 1.0 - progress;
-    return color;
-}
-"#
+        duration-ms 180
+        curve "ease-out-cubic"
+        scale-to 0.97
     }
 
     window-movement {
@@ -322,8 +286,11 @@ vec4 close_color(vec3 coords_geo, vec3 size_geo) {
     }
 
     window-restore {
-        duration-ms 260
-        curve "emphasized-decel"
+        // The genie shader already owns the two-phase shape easing. A linear
+        // driver preserves its Dock-sized first frame instead of jumping to
+        // ~20% progress on the first 240 Hz presentation.
+        duration-ms 300
+        curve "linear"
     }
 
     window-resize {
@@ -581,11 +548,9 @@ layer-rule {
     }
 }
 
-// Layer animation Small Popup / Menu profile. These surfaces are top+left
-// anchored right under their top-bar button, so `origin "anchor"` scales the
-// popin out of the button corner like a macOS menu. The open transform channel
-// deliberately has no transform-duration-ms: it inherits the main-channel
-// spring. Close is a fast pure fade with a slight contraction.
+// Top-bar popups use the same full-surface top edge reveal as Control Center.
+// Their layer-shell anchor is the popup's left edge, not the clicked button,
+// so scaling from `origin "anchor"` stretches glass from the wrong point.
 layer-rule {
     match namespace="^tahoe-battery-popup$"
     match namespace="^tahoe-wifi-popup$"
@@ -597,27 +562,24 @@ layer-rule {
 
     animations {
         layer-open {
-            style "pop-slide"
-            origin "anchor"
+            style "edge-reveal"
             edge "top"
-            distance 10
-            scale-from 0.94
-            opacity-from 0
-            spring damping-ratio=0.88 stiffness=500 epsilon=0.001
-            opacity-duration-ms 90
+            // edge-reveal uses the layer surface extent; this is not a short-travel knob.
+            distance 24
+            opacity-from 0.84
+            spring damping-ratio=0.85 stiffness=380 epsilon=0.0005
+            opacity-duration-ms 110
             opacity-curve "standard-decel"
         }
         layer-close {
-            style "pop-slide"
-            origin "anchor"
+            style "edge-reveal"
             edge "top"
-            distance 10
-            scale-to 0.98
-            opacity-to 0
-            transform-duration-ms 180
+            // edge-reveal uses the layer surface extent; this is not a short-travel knob.
+            distance 24
+            opacity-to 1.0
+            transform-duration-ms 210
             transform-curve "emphasized-accel"
-            opacity-duration-ms 180
-            opacity-curve "emphasized-accel"
+            opacity-duration-ms 0
         }
     }
 }

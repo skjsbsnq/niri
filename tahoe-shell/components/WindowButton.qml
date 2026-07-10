@@ -23,6 +23,7 @@ Item {
     property real bounceOffset: 0
     property var dockWindow
     property var dockSurfaceItem
+    property real dockSlideOffset: 0
     property var labelClipItem: null
     property real labelClipContentX: 0
     property bool hoverLabelEnabled: true
@@ -47,22 +48,33 @@ Item {
     width: showTitle ? 132 : 56
     height: 58
 
-    function updateDockRectangle(mouseX, mouseY) {
+    function updateDockRectangle() {
         if (!root.dockWindow)
             return;
 
-        var point = root.mapToItem(null, 0, 0);
+        // The foreign-toplevel hint is the icon itself, not this delegate's
+        // hit target. Mapping both corners includes hover magnification/lift.
+        // Remove Dock's autohide translation so cached hints always refer to
+        // the stable, fully revealed Dock position rather than off-screen.
+        var topLeft = icon.mapToItem(null, 0, 0);
+        var bottomRight = icon.mapToItem(null, icon.width, icon.height);
+        var left = Math.floor(Math.min(topLeft.x, bottomRight.x));
+        var top = Math.floor(Math.min(topLeft.y, bottomRight.y) - root.dockSlideOffset);
+        var right = Math.ceil(Math.max(topLeft.x, bottomRight.x));
+        var bottom = Math.ceil(Math.max(topLeft.y, bottomRight.y) - root.dockSlideOffset);
+        var targetWidth = Math.max(1, right - left);
+        var targetHeight = Math.max(1, bottom - top);
         if (root.windowsService && root.windowModel) {
             root.windowsService.setRectangle(
                 root.windowModel,
                 root.dockWindow,
-                Math.round(point.x),
-                Math.round(point.y),
-                Math.round(root.width),
-                Math.round(root.height)
+                left,
+                top,
+                targetWidth,
+                targetHeight
             );
         } else if (root.toplevel && root.toplevel.setRectangle) {
-            root.toplevel.setRectangle(root.dockWindow, Qt.rect(Math.round(point.x), Math.round(point.y), Math.round(root.width), Math.round(root.height)));
+            root.toplevel.setRectangle(root.dockWindow, Qt.rect(left, top, targetWidth, targetHeight));
         }
     }
 
@@ -74,7 +86,7 @@ Item {
         if (!root.windowModel && !root.toplevel)
             return;
 
-        updateDockRectangle(0, 0);
+        updateDockRectangle();
 
         if (root.windowsService && root.windowModel) {
             if (root.windowModel.isMinimized) {
@@ -101,7 +113,7 @@ Item {
         if (!root.windowModel && !root.toplevel)
             return;
 
-        updateDockRectangle(0, 0);
+        updateDockRectangle();
         if (root.windowsService && root.windowModel)
             root.windowsService.minimize(root.windowModel);
         else
@@ -113,6 +125,7 @@ Item {
     onYChanged: scheduleDockRectangleUpdate()
     onWidthChanged: scheduleDockRectangleUpdate()
     onHeightChanged: scheduleDockRectangleUpdate()
+    onIconSizeChanged: scheduleDockRectangleUpdate()
     onDockWindowChanged: scheduleDockRectangleUpdate()
     onWindowModelChanged: scheduleDockRectangleUpdate()
     onToplevelChanged: scheduleDockRectangleUpdate()
@@ -122,7 +135,7 @@ Item {
         id: dockRectangleRefresh
         interval: 0
         repeat: false
-        onTriggered: root.updateDockRectangle(0, 0)
+        onTriggered: root.updateDockRectangle()
     }
 
     Rectangle {
@@ -239,13 +252,15 @@ Item {
         onEntered: root.dockPointerEntered()
         onExited: root.dockPointerExited()
         onClicked: function(mouse) {
-            root.bounce();
             if (mouse.button === Qt.RightButton) {
+                root.bounce();
                 root.contextMenuRequested(root.windowModel || root.toplevel);
             } else if (mouse.button === Qt.MiddleButton) {
                 root.minimize();
+                root.bounce();
             } else {
                 root.restoreOrActivate();
+                root.bounce();
             }
         }
     }

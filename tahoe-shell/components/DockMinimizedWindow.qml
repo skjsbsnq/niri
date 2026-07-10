@@ -13,6 +13,7 @@ Item {
     property var settingsService
     property var dockWindow
     property var dockSurfaceItem
+    property real dockSlideOffset: 0
     property int thumbnailMaxWidth: 320
     property int thumbnailMaxHeight: 220
     property real bounceOffset: 0
@@ -63,14 +64,23 @@ Item {
         if (!root.dockWindow || !root.windowsService || !root.windowModel)
             return;
 
-        var point = root.mapToItem(null, 0, 0);
+        // Report the visible preview at its stable, fully revealed Dock
+        // position. Autohide translates the whole Dock, and the click bounce
+        // translates the preview, neither of which belongs in the restore
+        // destination cached by foreign-toplevel.
+        var topLeft = previewFrame.mapToItem(null, 0, 0);
+        var bottomRight = previewFrame.mapToItem(null, previewFrame.width, previewFrame.height);
+        var left = Math.floor(Math.min(topLeft.x, bottomRight.x));
+        var top = Math.floor(Math.min(topLeft.y, bottomRight.y) - root.dockSlideOffset + root.bounceOffset);
+        var right = Math.ceil(Math.max(topLeft.x, bottomRight.x));
+        var bottom = Math.ceil(Math.max(topLeft.y, bottomRight.y) - root.dockSlideOffset + root.bounceOffset);
         root.windowsService.setRectangle(
             root.windowModel,
             root.dockWindow,
-            Math.round(point.x),
-            Math.round(point.y),
-            Math.round(root.width),
-            Math.round(root.height)
+            left,
+            top,
+            Math.max(1, right - left),
+            Math.max(1, bottom - top)
         );
     }
 
@@ -218,11 +228,13 @@ Item {
         onEntered: root.dockPointerEntered()
         onExited: root.dockPointerExited()
         onClicked: function(mouse) {
-            root.bounce();
-            if (mouse.button === Qt.RightButton)
+            if (mouse.button === Qt.RightButton) {
+                root.bounce();
                 root.contextMenuRequested(root.windowModel, root);
-            else
+            } else {
                 root.restoreWindow();
+                root.bounce();
+            }
         }
     }
 

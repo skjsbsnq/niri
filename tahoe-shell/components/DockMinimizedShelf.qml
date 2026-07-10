@@ -12,6 +12,7 @@ Item {
     property var settingsService
     property var dockWindow
     property var dockSurfaceItem
+    property real dockSlideOffset: 0
     property int thumbnailWidth: 112
     readonly property var minimizedWindows: windowsService && windowsService.minimizedWindowList
         ? windowsService.minimizedWindowList
@@ -63,6 +64,7 @@ Item {
                     settingsService: root.settingsService
                     dockWindow: root.dockWindow
                     dockSurfaceItem: root.dockSurfaceItem
+                    dockSlideOffset: root.dockSlideOffset
                     onDockPointerMoved: function(x, buttons) {
                         root.dockPointerMoved(x, buttons === undefined ? Qt.NoButton : buttons);
                     }

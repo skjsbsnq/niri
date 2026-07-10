@@ -51,6 +51,8 @@
 - **验收**：`cargo test -p niri genie_area minimize_restore_with_rect` + 新增节点解码测试；`scripts/check-genie-minimize-phase7-8.sh` 全绿；手测矩阵（floating/scrolling/多输出/分数缩放/快速连点/Dock 重启）；pytest 内存治理测试通过；RSS 对照（阶段 A 末检查点）。
 - **依赖**：T03。
 
+> **2026-07-10 二次修正：** 第一次 T04-fix 的自动化通过但实机逐帧验收失败。最终修正改用真实 Dock 图标矩形与线性 restore 驱动，窗口开关改为有界原生 scale+fade，顶栏七类弹层统一为控制中心同款 top edge-reveal，并补 layer close→reopen 状态续接。详见 `acceptance/T04-fix2-animations-2026-07-10.md`；该修正取代本节和第一次 fix 记录中冲突的实现参数。
+
 ---
 
 ## 阶段 B：交互手感（QML 微交互）

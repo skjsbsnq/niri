@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Layouts
+import "../../Motion.js" as Motion
 
 Item {
     id: btn
@@ -28,11 +29,21 @@ Item {
     Layout.preferredWidth: iconOnly ? 32 : Math.max(minimumWidth, labelText.implicitWidth + (btn.iconCode.length > 0 ? 34 : 20))
     Layout.preferredHeight: iconOnly ? 32 : 30
     opacity: enabled ? 1 : 0.45
+    scale: Motion.pressScaleFor(theme && theme.settingsService ? theme.settingsService : null, buttonMouse.pressed && enabled)
+
+    Behavior on scale {
+        NumberAnimation {
+            duration: Motion.pressDurationFor(btn.theme && btn.theme.settingsService ? btn.theme.settingsService : null)
+            easing.type: Motion.pressEasing
+        }
+    }
 
     Rectangle {
         anchors.fill: parent
         radius: 8
-        color: btn.primaryState ? btn.accentFill : (buttonMouse.containsMouse && btn.enabled ? btn.rowFillHover : btn.buttonFill)
+        color: buttonMouse.pressed && btn.enabled
+            ? Qt.darker(btn.primaryState ? btn.accentFill : btn.buttonFill, 1.18)
+            : btn.primaryState ? btn.accentFill : (buttonMouse.containsMouse && btn.enabled ? btn.rowFillHover : btn.buttonFill)
         border.color: btn.primaryState ? btn.accentStroke : btn.buttonStroke
         border.width: 1
     }

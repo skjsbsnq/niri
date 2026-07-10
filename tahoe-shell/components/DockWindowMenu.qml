@@ -318,11 +318,14 @@ PanelWindow {
         Layout.fillWidth: true
         Layout.preferredHeight: 30
         opacity: enabledRow ? 1 : 0.52
+        scale: Motion.pressScaleFor(root.settingsService, rowMouse.pressed && row.enabledRow)
+
+        Behavior on scale { NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing } }
 
         Rectangle {
             anchors.fill: parent
             radius: 8
-            color: rowMouse.containsMouse && row.enabledRow ? "#70ffffff" : "transparent"
+            color: rowMouse.pressed && row.enabledRow ? "#52ffffff" : (rowMouse.containsMouse && row.enabledRow ? "#70ffffff" : "transparent")
         }
 
         Text {

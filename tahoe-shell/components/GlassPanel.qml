@@ -11,6 +11,7 @@ Rectangle {
     property bool blur: true
     property bool shadow: true
     property real interaction: 0
+    property bool pressInteractionEnabled: true
     property real materialAlpha: 1
     property bool glassClip: true
     property bool glassEnabled: true
@@ -43,9 +44,17 @@ Rectangle {
         blur: root.blur
         shadow: root.shadow
         clip: root.regionClip
-        interaction: root.interaction
+        interaction: Math.max(root.interaction, pressHandler.active ? 1 : 0)
         materialAlpha: root.materialAlpha
         enabled: root.regionEnabled
+    }
+
+    PointHandler {
+        id: pressHandler
+
+        enabled: root.pressInteractionEnabled
+        acceptedButtons: Qt.LeftButton
+        target: null
     }
 
     Rectangle {

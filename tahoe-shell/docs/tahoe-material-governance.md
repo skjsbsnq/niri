@@ -47,6 +47,11 @@
 | MenuPopup | 1 | `menu` | 小面积 menu；清晰度优先 |
 | SettingsPanel | 1 | `panel` | 大面板；region 绑定 panel surface safe area |
 
+`GlassPanel` 保留每个 surface 提供的 baseline `interaction`，并用被动
+`PointHandler` 把面板内左键按压合成为 `max(baseline, 1)`。该反馈只改变材质
+强度，不改变 region 几何，也不会抢占子 `MouseArea` 的点击或拖拽；baseline
+已经为 `1` 的 surface 不再额外叠加强度。
+
 当前 protocol 硬上限：
 
 - 每个 Wayland surface 最多 32 个 TahoeGlass region。

@@ -883,6 +883,7 @@ ShellRoot {
                 screen: modelData
                 proc: shell.processMenuProc
                 anchorRect: shell.processMenuAnchorRect
+                settingsService: desktopSettings
                 darkMode: shell.darkMode
                 monoFontFamily: shell.monoFontFamily
                 open: shell.processMenuOpenFor(modelData)

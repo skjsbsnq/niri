@@ -218,15 +218,21 @@ PanelWindow {
                 }
 
                 delegate: Item {
+                    id: categoryButton
                     required property var modelData
 
                     width: 34
                     height: 30
+                    scale: Motion.pressScaleFor(root.settingsService, categoryMouse.pressed)
+
+                    Behavior on scale { NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing } }
 
                     Rectangle {
                         anchors.fill: parent
                         radius: 9
-                        color: root.category === modelData.id ? "#78ffffff" : categoryMouse.containsMouse ? "#50ffffff" : "#28ffffff"
+                        color: categoryMouse.pressed
+                            ? "#3cffffff"
+                            : root.category === modelData.id ? "#78ffffff" : categoryMouse.containsMouse ? "#50ffffff" : "#28ffffff"
                         border.color: root.category === modelData.id ? GlassStyle.StrokePanelBright : "#30ffffff"
                         border.width: 1
                     }
@@ -283,12 +289,15 @@ PanelWindow {
 
                         width: grid.width / grid.columns
                         height: 94
+                        scale: Motion.pressScaleFor(root.settingsService, appMouse.pressed)
+
+                        Behavior on scale { NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing } }
 
                         Rectangle {
                             anchors.fill: parent
                             anchors.margins: 4
                             radius: 15
-                            color: appMouse.containsMouse ? "#38ffffff" : "transparent"
+                            color: appMouse.pressed ? "#28ffffff" : (appMouse.containsMouse ? "#38ffffff" : "transparent")
                             border.color: appMouse.containsMouse ? "#40ffffff" : "transparent"
                             border.width: 1
                         }

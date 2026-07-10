@@ -185,6 +185,8 @@ class TahoeMaterialGovernanceTests(unittest.TestCase):
         self.assertIn("config/niri/tahoe-phase0.kdl", text)
         self.assertIn("niri/niri-config/src/tahoe_glass.rs", text)
         self.assertIn("不做 GPU/渲染能力自适应", text)
+        self.assertIn("PointHandler", text)
+        self.assertIn("max(baseline, 1)", text)
 
 
 if __name__ == "__main__":

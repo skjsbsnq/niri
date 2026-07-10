@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Layouts
+import "../../Motion.js" as Motion
 
 // macOS-style segmented control: a row of equal-width toggle segments used to
 // pick one value (e.g. the glass material). Reads theme tokens, uses no spring
@@ -36,12 +37,22 @@ RowLayout {
             Layout.preferredHeight: 30
             // Round only the outer corners so adjacent segments form a pill.
             radius: 8
-            color: segment.active ? control.accentBlue : control.buttonFill
+            color: segmentMouse.pressed
+                ? Qt.darker(segment.active ? control.accentBlue : control.buttonFill, 1.18)
+                : segment.active ? control.accentBlue : control.buttonFill
             border.color: control.buttonStroke
             border.width: 1
             visible: index < control.model.length
+            scale: Motion.pressScaleFor(control.theme && control.theme.settingsService ? control.theme.settingsService : null, segmentMouse.pressed)
 
             readonly property bool active: control.value === segment.modelData.value
+
+            Behavior on scale {
+                NumberAnimation {
+                    duration: Motion.pressDurationFor(control.theme && control.theme.settingsService ? control.theme.settingsService : null)
+                    easing.type: Motion.pressEasing
+                }
+            }
 
             // Clip the inner corners against neighbours for a contiguous bar.
             Rectangle {
@@ -72,6 +83,7 @@ RowLayout {
             }
 
             MouseArea {
+                id: segmentMouse
                 anchors.fill: parent
                 cursorShape: Qt.PointingHandCursor
                 onClicked: control.selected(segment.modelData.value)

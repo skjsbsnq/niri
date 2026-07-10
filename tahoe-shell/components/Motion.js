@@ -105,6 +105,18 @@ function normalizedProfileName(settingsService) {
     return profileDurations[name] ? name : "balanced";
 }
 
+function reducedMotion(settingsService) {
+    return normalizedProfileName(settingsService) === "reduced";
+}
+
+function pressDurationFor(settingsService) {
+    return reducedMotion(settingsService) ? 0 : pressDuration;
+}
+
+function pressScaleFor(settingsService, pressed) {
+    return pressed && !reducedMotion(settingsService) ? pressScale : 1.0;
+}
+
 function profileDuration(settingsService, key) {
     var profile = profileDurations[normalizedProfileName(settingsService)];
     return profile[key];

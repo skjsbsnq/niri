@@ -4,17 +4,18 @@ import QtQuick
 import Quickshell
 import Quickshell.Services.SystemTray
 import Quickshell.Widgets
+import "Motion.js" as Motion
 
 Item {
     id: root
 
     property var panelWindow
+    property var settingsService
     property bool darkMode: false
     readonly property int itemCount: SystemTray.items ? SystemTray.items.values.length : 0
     readonly property var orderedItems: sortedItems(itemCount)
     readonly property color trayText: darkMode ? "#f5f7fb" : "#1d1d1f"
     readonly property color trayHoverFill: darkMode ? "#24ffffff" : "#26ffffff"
-    readonly property color trayHoverStroke: darkMode ? "#32ffffff" : "#28ffffff"
     readonly property color trayAttention: "#ff453a"
 
     signal openMenuRequested(var item, var anchorRect)
@@ -140,6 +141,11 @@ Item {
 
                 width: 24
                 height: 22
+                scale: Motion.pressScaleFor(root.settingsService, trayMouse.pressed)
+                opacity: trayMouse.pressed ? 0.75 : 1
+
+                Behavior on scale { NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing } }
+                Behavior on opacity { NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing } }
 
                 Rectangle {
                     anchors.fill: parent
@@ -147,8 +153,8 @@ Item {
                     color: trayMouse.containsMouse ? root.trayHoverFill : "transparent"
                     border.color: root.isAttention(trayItem.modelData)
                         ? root.trayAttention
-                        : (trayMouse.containsMouse ? root.trayHoverStroke : "transparent")
-                    border.width: 1
+                        : "transparent"
+                    border.width: root.isAttention(trayItem.modelData) ? 1 : 0
                 }
 
                 IconImage {

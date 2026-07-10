@@ -20,6 +20,7 @@ Item {
     // The SpringAnimation Behavior below eases it toward the target so the
     // running-window half of the dock waves together with the pinned half.
     property real magnification: 1.0
+    property real pressScale: Motion.pressScaleFor(settingsService, windowMouse.pressed)
     property real bounceOffset: 0
     property var dockWindow
     property var dockSurfaceItem
@@ -153,15 +154,24 @@ Item {
         y: Math.round((parent.height - height) / 2 - root.lift - root.bounceOffset)
         width: root.iconSize
         height: root.iconSize
-        scale: root.magnification
+        scale: root.magnification * root.pressScale
         source: root.appsService ? root.appsService.iconForToplevel(root.windowModel || root.toplevel) : ""
         fillMode: Image.PreserveAspectFit
         smooth: true
         mipmap: false
         sourceSize.width: 96
         sourceSize.height: 96
-        opacity: root.minimized ? 0.58 : 1.0
+        opacity: (root.minimized ? 0.58 : 1.0) * (windowMouse.pressed ? 0.75 : 1.0)
         transformOrigin: Item.Center
+
+
+        Behavior on opacity {
+            NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing }
+        }
+    }
+
+    Behavior on pressScale {
+        NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing }
     }
 
     Text {

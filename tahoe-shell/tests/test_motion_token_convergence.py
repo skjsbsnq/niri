@@ -75,6 +75,50 @@ class MotionTokenConvergenceTests(unittest.TestCase):
         self.assertIn("var pressDuration = 120;", text)
         self.assertIn("var pressScale = 0.96;", text)
         self.assertIn("var pressEasing = QtQuick.Easing.OutQuad;", text)
+        self.assertIn('return normalizedProfileName(settingsService) === "reduced";', text)
+        self.assertIn("function pressDurationFor(settingsService)", text)
+        self.assertIn("function pressScaleFor(settingsService, pressed)", text)
+
+    def test_phase_b_press_feedback_uses_motion_single_outlet(self) -> None:
+        required_counts = {
+            "TopBar.qml": 11,
+            "Tray.qml": 1,
+            "Dock.qml": 2,
+            "WindowButton.qml": 1,
+            "DockMinimizedWindow.qml": 1,
+            "ControlCenter.qml": 8,
+            "Spotlight.qml": 2,
+            "Launchpad.qml": 2,
+            "MenuPopup.qml": 1,
+            "AppMenuPopup.qml": 2,
+            "TrayMenu.qml": 1,
+            "DockAppMenu.qml": 1,
+            "DockWindowMenu.qml": 1,
+            "ProcessMenu.qml": 1,
+            "settings/controls/TahoeButton.qml": 1,
+            "settings/controls/TahoeListRow.qml": 1,
+            "settings/controls/TahoeSidebarButton.qml": 1,
+            "settings/controls/TahoeSegmented.qml": 1,
+        }
+
+        for relative, expected_count in required_counts.items():
+            with self.subTest(component=relative):
+                text = (COMPONENTS_ROOT / relative).read_text(encoding="utf-8")
+                self.assertEqual(text.count("Motion.pressScaleFor"), expected_count)
+                self.assertIn("Motion.pressDurationFor", text)
+
+    def test_glass_panel_press_drives_material_interaction(self) -> None:
+        text = (COMPONENTS_ROOT / "GlassPanel.qml").read_text(encoding="utf-8")
+
+        self.assertIn("property bool pressInteractionEnabled: true", text)
+        self.assertIn("PointHandler {", text)
+        self.assertIn("target: null", text)
+        self.assertIn("Math.max(root.interaction, pressHandler.active ? 1 : 0)", text)
+
+    def test_topbar_hover_capsules_do_not_use_outline_token(self) -> None:
+        text = (COMPONENTS_ROOT / "TopBar.qml").read_text(encoding="utf-8")
+
+        self.assertNotIn("buttonBorder", text)
 
 
 if __name__ == "__main__":

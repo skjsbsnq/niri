@@ -64,7 +64,6 @@ PanelWindow {
     readonly property color buttonFill: "transparent"
     readonly property color buttonHover: darkMode ? "#24ffffff" : "#26ffffff"
     readonly property color buttonOpen: darkMode ? "#34ffffff" : "#34ffffff"
-    readonly property color buttonBorder: darkMode ? "#32ffffff" : "#28ffffff"
 
     signal toggleAppMenu(var anchorRect)
     signal toggleApplicationMenu(var anchorRect)
@@ -176,12 +175,17 @@ PanelWindow {
 
                     width: 30
                     height: 24
+                    scale: Motion.pressScaleFor(root.settingsService, niriMenuMouse.pressed)
+                    opacity: niriMenuMouse.pressed ? 0.75 : 1
+
+                    Behavior on scale { NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing } }
+                    Behavior on opacity { NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing } }
 
                     Rectangle {
                         anchors.fill: parent
                         radius: 12
                         color: root.appMenuOpen ? "#32ffffff" : "transparent"
-                        border.color: root.appMenuOpen ? "#42ffffff" : "transparent"
+                        border.width: 0
                     }
 
                     Image {
@@ -195,6 +199,7 @@ PanelWindow {
                     }
 
                     MouseArea {
+                        id: niriMenuMouse
                         anchors.fill: parent
                         cursorShape: Qt.PointingHandCursor
                         onClicked: root.toggleAppMenu(root.anchorRectFor(niriMenuButton))
@@ -206,13 +211,17 @@ PanelWindow {
 
                     width: 30
                     height: 24
+                    scale: Motion.pressScaleFor(root.settingsService, leftSidebarMouse.pressed)
+                    opacity: leftSidebarMouse.pressed ? 0.75 : 1
+
+                    Behavior on scale { NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing } }
+                    Behavior on opacity { NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing } }
 
                     Rectangle {
                         anchors.fill: parent
                         radius: 12
                         color: root.leftSidebarOpen ? root.buttonOpen : (leftSidebarMouse.containsMouse ? root.buttonHover : "transparent")
-                        border.color: root.leftSidebarOpen ? root.buttonBorder : "transparent"
-                        border.width: 1
+                        border.width: 0
                     }
 
                     Text {
@@ -248,12 +257,17 @@ PanelWindow {
                     width: visible ? Math.min(applicationMenuLabel.implicitWidth + 18, root.width < 1500 ? 112 : 152) : 0
                     height: 24
                     visible: !!root.appMenuService
+                    scale: Motion.pressScaleFor(root.settingsService, applicationMenuMouse.pressed)
+                    opacity: applicationMenuMouse.pressed ? 0.75 : 1
+
+                    Behavior on scale { NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing } }
+                    Behavior on opacity { NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing } }
 
                     Rectangle {
                         anchors.fill: parent
                         radius: 12
                         color: root.applicationMenuOpen ? "#32ffffff" : (applicationMenuMouse.containsMouse ? "#24ffffff" : "transparent")
-                        border.color: root.applicationMenuOpen ? "#42ffffff" : "transparent"
+                        border.width: 0
                     }
 
                     Text {
@@ -292,6 +306,11 @@ PanelWindow {
 
                             width: 28
                             height: 20
+                            scale: Motion.pressScaleFor(root.settingsService, workspaceMouse.pressed && modelData.canActivate)
+                            opacity: workspaceMouse.pressed && modelData.canActivate ? 0.75 : 1
+
+                            Behavior on scale { NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing } }
+                            Behavior on opacity { NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing } }
 
                             Rectangle {
                                 anchors.fill: parent
@@ -310,6 +329,7 @@ PanelWindow {
                             }
 
                             MouseArea {
+                                id: workspaceMouse
                                 anchors.fill: parent
                                 cursorShape: modelData.canActivate ? Qt.PointingHandCursor : Qt.ArrowCursor
                                 onClicked: {
@@ -339,6 +359,7 @@ PanelWindow {
 
             Tray {
                 panelWindow: root
+                settingsService: root.settingsService
                 darkMode: root.darkMode
                 Layout.preferredWidth: visible ? implicitWidth : 0
                 Layout.preferredHeight: implicitHeight
@@ -354,13 +375,17 @@ PanelWindow {
                 Layout.preferredWidth: root.statusIconWidth
                 Layout.preferredHeight: root.statusItemHeight
                 Layout.alignment: Qt.AlignVCenter
+                scale: Motion.pressScaleFor(root.settingsService, badgeMouse.pressed)
+                opacity: badgeMouse.pressed ? 0.75 : 1
+
+                Behavior on scale { NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing } }
+                Behavior on opacity { NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing } }
 
                 Rectangle {
                     anchors.fill: parent
                     radius: root.statusRadius
                     color: root.notificationCenterOpen ? root.buttonOpen : (badgeMouse.containsMouse ? root.buttonHover : root.buttonFill)
-                    border.color: root.notificationCenterOpen || badgeMouse.containsMouse ? root.buttonBorder : "transparent"
-                    border.width: 1
+                    border.width: 0
                 }
 
                 Text {
@@ -410,13 +435,17 @@ PanelWindow {
                 Layout.preferredHeight: root.statusItemHeight
                 Layout.alignment: Qt.AlignVCenter
                 visible: !!root.clipboardService
+                scale: Motion.pressScaleFor(root.settingsService, clipboardMouse.pressed)
+                opacity: clipboardMouse.pressed ? 0.75 : 1
+
+                Behavior on scale { NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing } }
+                Behavior on opacity { NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing } }
 
                 Rectangle {
                     anchors.fill: parent
                     radius: root.statusRadius
                     color: root.clipboardPopupOpen ? root.buttonOpen : (clipboardMouse.containsMouse ? root.buttonHover : root.buttonFill)
-                    border.color: root.clipboardPopupOpen || clipboardMouse.containsMouse ? root.buttonBorder : "transparent"
-                    border.width: 1
+                    border.width: 0
                 }
 
                 Text {
@@ -465,13 +494,17 @@ PanelWindow {
                 Layout.preferredHeight: root.statusItemHeight
                 Layout.alignment: Qt.AlignVCenter
                 visible: !!root.fanService
+                scale: Motion.pressScaleFor(root.settingsService, fanMouse.pressed)
+                opacity: fanMouse.pressed ? 0.75 : 1
+
+                Behavior on scale { NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing } }
+                Behavior on opacity { NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing } }
 
                 Rectangle {
                     anchors.fill: parent
                     radius: root.statusRadius
                     color: root.fanPopupOpen ? root.buttonOpen : (fanMouse.containsMouse ? root.buttonHover : root.buttonFill)
-                    border.color: root.fanPopupOpen || fanMouse.containsMouse ? root.buttonBorder : "transparent"
-                    border.width: 1
+                    border.width: 0
                 }
 
                 Text {
@@ -499,13 +532,17 @@ PanelWindow {
                 Layout.preferredHeight: root.statusItemHeight
                 Layout.alignment: Qt.AlignVCenter
                 visible: root.batteryAvailable
+                scale: Motion.pressScaleFor(root.settingsService, batteryMouse.pressed)
+                opacity: batteryMouse.pressed ? 0.75 : 1
+
+                Behavior on scale { NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing } }
+                Behavior on opacity { NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing } }
 
                 Rectangle {
                     anchors.fill: parent
                     radius: root.statusRadius
                     color: root.batteryPopupOpen ? root.buttonOpen : (batteryMouse.containsMouse ? root.buttonHover : root.buttonFill)
-                    border.color: root.batteryPopupOpen || batteryMouse.containsMouse ? root.buttonBorder : "transparent"
-                    border.width: 1
+                    border.width: 0
                 }
 
                 RowLayout {
@@ -577,13 +614,17 @@ PanelWindow {
                 Layout.preferredHeight: root.statusItemHeight
                 Layout.alignment: Qt.AlignVCenter
                 visible: !!root.controlsService
+                scale: Motion.pressScaleFor(root.settingsService, wifiMouse.pressed)
+                opacity: wifiMouse.pressed ? 0.75 : 1
+
+                Behavior on scale { NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing } }
+                Behavior on opacity { NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing } }
 
                 Rectangle {
                     anchors.fill: parent
                     radius: root.statusRadius
                     color: root.wifiPopupOpen ? root.buttonOpen : (wifiMouse.containsMouse ? root.buttonHover : root.buttonFill)
-                    border.color: root.wifiPopupOpen || wifiMouse.containsMouse ? root.buttonBorder : "transparent"
-                    border.width: 1
+                    border.width: 0
                 }
 
                 Text {
@@ -609,13 +650,17 @@ PanelWindow {
                 Layout.preferredWidth: root.statusIconWidth
                 Layout.preferredHeight: root.statusItemHeight
                 Layout.alignment: Qt.AlignVCenter
+                scale: Motion.pressScaleFor(root.settingsService, spotlightMouse.pressed)
+                opacity: spotlightMouse.pressed ? 0.75 : 1
+
+                Behavior on scale { NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing } }
+                Behavior on opacity { NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing } }
 
                 Rectangle {
                     anchors.fill: parent
                     radius: root.statusRadius
                     color: root.spotlightOpen ? root.buttonOpen : (spotlightMouse.containsMouse ? root.buttonHover : root.buttonFill)
-                    border.color: root.spotlightOpen || spotlightMouse.containsMouse ? root.buttonBorder : "transparent"
-                    border.width: 1
+                    border.width: 0
                 }
 
                 Text {
@@ -640,13 +685,17 @@ PanelWindow {
                 Layout.preferredWidth: root.statusIconWidth
                 Layout.preferredHeight: root.statusItemHeight
                 Layout.alignment: Qt.AlignVCenter
+                scale: Motion.pressScaleFor(root.settingsService, statusMouse.pressed)
+                opacity: statusMouse.pressed ? 0.75 : 1
+
+                Behavior on scale { NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing } }
+                Behavior on opacity { NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing } }
 
                 Rectangle {
                     anchors.fill: parent
                     radius: root.statusRadius
                     color: root.controlCenterOpen ? root.buttonOpen : (statusMouse.containsMouse ? root.buttonHover : root.buttonFill)
-                    border.color: root.controlCenterOpen || statusMouse.containsMouse ? root.buttonBorder : "transparent"
-                    border.width: 1
+                    border.width: 0
                 }
 
                 Item {

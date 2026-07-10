@@ -204,11 +204,14 @@ PanelWindow {
 
                         width: 38
                         height: 38
+                        scale: Motion.pressScaleFor(root.settingsService, shortcutMouse.pressed)
+
+                        Behavior on scale { NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing } }
 
                         Rectangle {
                             anchors.fill: parent
                             radius: 19
-                            color: shortcutMouse.containsMouse ? "#70ffffff" : "#40ffffff"
+                            color: shortcutMouse.pressed ? "#52ffffff" : (shortcutMouse.containsMouse ? "#70ffffff" : "#40ffffff")
                             border.color: "#55ffffff"
                             border.width: 1
                         }
@@ -281,11 +284,14 @@ PanelWindow {
 
                         width: resultsColumn.width
                         height: 54
+                        scale: Motion.pressScaleFor(root.settingsService, resultMouse.pressed)
+
+                        Behavior on scale { NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing } }
 
                         Rectangle {
                             anchors.fill: parent
                             radius: 12
-                            color: resultMouse.containsMouse ? "#44ffffff" : "transparent"
+                            color: resultMouse.pressed ? "#30ffffff" : (resultMouse.containsMouse ? "#44ffffff" : "transparent")
                         }
 
                         Image {

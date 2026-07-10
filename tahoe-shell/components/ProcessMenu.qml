@@ -5,6 +5,7 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
 import "TahoeGlass.js" as GlassStyle
+import "Motion.js" as Motion
 import "PopupGeometry.js" as PopupGeometry
 
 // LS07: 进程列表右键菜单。
@@ -26,6 +27,7 @@ PanelWindow {
     property bool open: false
     property var proc: null
     property var anchorRect: null
+    property var settingsService
     property bool darkMode: false
     property string monoFontFamily: "Noto Sans Mono CJK SC"
 
@@ -247,11 +249,14 @@ PanelWindow {
         Layout.fillWidth: true
         Layout.preferredHeight: 30
         opacity: enabledRow ? 1 : 0.52
+        scale: Motion.pressScaleFor(root.settingsService, rowMouse.pressed && row.enabledRow)
+
+        Behavior on scale { NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing } }
 
         Rectangle {
             anchors.fill: parent
             radius: 8
-            color: rowMouse.containsMouse && row.enabledRow ? root.rowHover : "transparent"
+            color: rowMouse.pressed && row.enabledRow ? Qt.darker(root.rowHover, 1.18) : (rowMouse.containsMouse && row.enabledRow ? root.rowHover : "transparent")
         }
 
         Text {

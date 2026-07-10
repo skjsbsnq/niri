@@ -106,11 +106,15 @@ PanelWindow {
                 }
 
                 Rectangle {
+                    id: closeButton
                     Layout.preferredWidth: 24
                     Layout.preferredHeight: 24
                     radius: 12
-                    color: root.glassInnerFill
+                    color: closeMouse.pressed ? Qt.darker(root.glassInnerFill, 1.2) : root.glassInnerFill
                     border.color: "#36ffffff"
+                    scale: Motion.pressScaleFor(root.settingsService, closeMouse.pressed)
+
+                    Behavior on scale { NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing } }
 
                     Text {
                         anchors.centerIn: parent
@@ -121,6 +125,7 @@ PanelWindow {
                     }
 
                     MouseArea {
+                        id: closeMouse
                         anchors.fill: parent
                         cursorShape: Qt.PointingHandCursor
                         onClicked: root.closeRequested()
@@ -257,9 +262,12 @@ PanelWindow {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 28
                 radius: 14
-                color: editMouse.containsMouse ? "#40ffffff" : "#59ffffff"
+                color: editMouse.pressed ? "#34ffffff" : (editMouse.containsMouse ? "#40ffffff" : "#59ffffff")
                 border.color: "#30ffffff"
                 border.width: 1
+                scale: Motion.pressScaleFor(root.settingsService, editMouse.pressed)
+
+                Behavior on scale { NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing } }
 
                 Text {
                     anchors.centerIn: parent
@@ -311,11 +319,16 @@ PanelWindow {
 
         implicitWidth: 48
         implicitHeight: 48
+        scale: Motion.pressScaleFor(root.settingsService, toggleMouse.pressed && tc.enabled)
+
+        Behavior on scale { NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing } }
 
         Rectangle {
             anchors.fill: parent
             radius: width / 2
-            color: tc.active ? tc.activeColor : "#59ffffff"
+            color: toggleMouse.pressed && tc.enabled
+                ? Qt.darker(tc.active ? tc.activeColor : "#59ffffff", 1.18)
+                : tc.active ? tc.activeColor : "#59ffffff"
             border.color: "#30ffffff"
             border.width: 1
             opacity: tc.enabled ? 1 : 0.4
@@ -342,6 +355,7 @@ PanelWindow {
         }
 
         MouseArea {
+            id: toggleMouse
             anchors.fill: parent
             cursorShape: tc.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
             onClicked: {
@@ -356,11 +370,14 @@ PanelWindow {
     component ConnectivityTile: Item {
         id: ct
         property var controls
+        scale: Motion.pressScaleFor(root.settingsService, wifiTileMouse.pressed)
+
+        Behavior on scale { NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing } }
 
         Rectangle {
             anchors.fill: parent
             radius: 22
-            color: root.tileFill
+            color: wifiTileMouse.pressed ? Qt.darker(root.tileFill, 1.12) : root.tileFill
             border.color: root.tileStroke
             border.width: 1
 
@@ -378,6 +395,7 @@ PanelWindow {
             // row controls so Bluetooth/AirDrop clicks do not fall through
             // to Wi-Fi.
             MouseArea {
+                id: wifiTileMouse
                 anchors.fill: parent
                 cursorShape: Qt.PointingHandCursor
                 z: 0
@@ -477,6 +495,7 @@ PanelWindow {
                     Item { Layout.fillWidth: true }
 
                     Text {
+                        id: previousButton
                         text: ct.controls && ct.controls.airplaneMode
                               ? "飞行模式"
                               : ct.controls && ct.controls.bluetoothEnabled
@@ -590,8 +609,12 @@ PanelWindow {
                         font.family: root.iconFont
                         font.pixelSize: 20
                         opacity: (mt.controls && mt.controls.canPrev) ? 1 : 0.4
+                        scale: Motion.pressScaleFor(root.settingsService, previousMouse.pressed && mt.controls && mt.controls.canPrev)
+
+                        Behavior on scale { NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing } }
 
                         MouseArea {
+                            id: previousMouse
                             anchors.fill: parent
                             cursorShape: (mt.controls && mt.controls.canPrev) ? Qt.PointingHandCursor : Qt.ArrowCursor
                             onClicked: {
@@ -602,12 +625,16 @@ PanelWindow {
                     }
 
                     Rectangle {
+                        id: playButton
                         Layout.preferredWidth: 34
                         Layout.preferredHeight: 34
                         radius: 17
-                        color: "#66ffffff"
+                        color: playMouse.pressed ? "#4affffff" : "#66ffffff"
                         border.color: "#30ffffff"
                         border.width: 1
+                        scale: Motion.pressScaleFor(root.settingsService, playMouse.pressed && mt.controls && mt.controls.canPlayPause)
+
+                        Behavior on scale { NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing } }
 
                         Text {
                             anchors.centerIn: parent
@@ -618,6 +645,7 @@ PanelWindow {
                         }
 
                         MouseArea {
+                            id: playMouse
                             anchors.fill: parent
                             cursorShape: (mt.controls && mt.controls.canPlayPause) ? Qt.PointingHandCursor : Qt.ArrowCursor
                             onClicked: {
@@ -628,13 +656,18 @@ PanelWindow {
                     }
 
                     Text {
+                        id: nextButton
                         text: "\ue044" // skip_next
                         color: (mt.controls && mt.controls.canNext) ? root.textPrimary : root.textTertiary
                         font.family: root.iconFont
                         font.pixelSize: 20
                         opacity: (mt.controls && mt.controls.canNext) ? 1 : 0.4
+                        scale: Motion.pressScaleFor(root.settingsService, nextMouse.pressed && mt.controls && mt.controls.canNext)
+
+                        Behavior on scale { NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing } }
 
                         MouseArea {
+                            id: nextMouse
                             anchors.fill: parent
                             cursorShape: (mt.controls && mt.controls.canNext) ? Qt.PointingHandCursor : Qt.ArrowCursor
                             onClicked: {
@@ -764,11 +797,16 @@ PanelWindow {
 
         implicitWidth: 48
         implicitHeight: 48
+        scale: Motion.pressScaleFor(root.settingsService, ubMouse.pressed && ub.enabled)
+
+        Behavior on scale { NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing } }
 
         Rectangle {
             anchors.fill: parent
             radius: width / 2
-            color: ub.active ? root.accentActive : (ubMouse.containsMouse ? "#66ffffff" : "#59ffffff")
+            color: ubMouse.pressed && ub.enabled
+                ? Qt.darker(ub.active ? root.accentActive : "#59ffffff", 1.18)
+                : ub.active ? root.accentActive : (ubMouse.containsMouse ? "#66ffffff" : "#59ffffff")
             border.color: "#30ffffff"
             border.width: 1
             opacity: ub.enabled ? 1 : 0.4

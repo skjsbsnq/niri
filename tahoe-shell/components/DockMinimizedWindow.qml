@@ -42,6 +42,11 @@ Item {
 
     width: 112
     height: 62
+    scale: Motion.pressScaleFor(root.settingsService, thumbnailMouse.pressed)
+    opacity: thumbnailMouse.pressed ? 0.75 : 1
+
+    Behavior on scale { NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing } }
+    Behavior on opacity { NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing } }
 
     function scheduleThumbnailRefresh() {
         refreshTimer.restart();

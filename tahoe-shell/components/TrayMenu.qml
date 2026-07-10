@@ -178,6 +178,9 @@ PanelWindow {
 
         Layout.preferredHeight: separator ? 7 : 28
         opacity: enabledEntry ? 1 : 0.45
+        scale: Motion.pressScaleFor(root.settingsService, entryMouse.pressed && row.enabledEntry && !row.separator)
+
+        Behavior on scale { NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing } }
 
         Rectangle {
             anchors.left: parent.left
@@ -191,7 +194,7 @@ PanelWindow {
         Rectangle {
             anchors.fill: parent
             radius: 8
-            color: entryMouse.containsMouse && row.enabledEntry ? "#70ffffff" : "transparent"
+            color: entryMouse.pressed && row.enabledEntry ? "#52ffffff" : (entryMouse.containsMouse && row.enabledEntry ? "#70ffffff" : "transparent")
             visible: !row.separator
         }
 

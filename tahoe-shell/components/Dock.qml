@@ -437,6 +437,7 @@ PanelWindow {
                                 // Kept writable (not readonly) so the Behavior reliably
                                 // intercepts binding updates.
                                 property real magnification: root.proximityScale(pinnedButton)
+                                property real pressScale: Motion.pressScaleFor(root.settingsService, iconMouse.pressed && !pinnedButton.reorderActive)
                                 readonly property int pinnedIndex: pinnedButton.index
                                 readonly property string appId: root.appsService ? root.appsService.pinnedIdForVisualIndex(pinnedButton.pinnedIndex, modelData) : ""
                                 readonly property var appModel: root.appsService ? root.appsService.resolveApplication(pinnedButton.appId, modelData) : modelData
@@ -511,8 +512,8 @@ PanelWindow {
                                     y: 9 - pinnedButton.lift - pinnedButton.bounceOffset
                                     width: 46
                                     height: 46
-                                    scale: pinnedButton.magnification
-                                    opacity: pinnedButton.reorderActive ? 0.58 : 1
+                                    scale: pinnedButton.magnification * pinnedButton.pressScale
+                                    opacity: (pinnedButton.reorderActive ? 0.58 : 1) * (iconMouse.pressed ? 0.75 : 1)
                                     source: root.appsService ? root.appsService.iconForApp(pinnedButton.appModel || pinnedButton.appId) : ""
                                     fillMode: Image.PreserveAspectFit
                                     smooth: true
@@ -521,6 +522,14 @@ PanelWindow {
                                     sourceSize.height: root.dockIconSourceSize
                                     asynchronous: true
                                     transformOrigin: Item.Center
+
+                                    Behavior on opacity {
+                                        NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing }
+                                    }
+                                }
+
+                                Behavior on pressScale {
+                                    NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing }
                                 }
 
                                 Rectangle {
@@ -885,13 +894,18 @@ PanelWindow {
 
         width: 54
         height: 64
+        scale: Motion.pressScaleFor(root.settingsService, toolMouse.pressed)
+        opacity: toolMouse.pressed ? 0.75 : 1
+
+        Behavior on scale { NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing } }
+        Behavior on opacity { NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing } }
 
         Rectangle {
             anchors.fill: parent
             anchors.margins: 3
             radius: 16
             color: toolMouse.containsMouse ? "#30ffffff" : "transparent"
-            border.color: toolMouse.containsMouse ? "#40ffffff" : "transparent"
+            border.color: "transparent"
         }
 
         Image {

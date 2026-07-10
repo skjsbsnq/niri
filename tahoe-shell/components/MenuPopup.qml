@@ -240,11 +240,14 @@ PanelWindow {
 
         Layout.fillWidth: true
         Layout.preferredHeight: 30
+        scale: Motion.pressScaleFor(root.settingsService, rowMouse.pressed)
+
+        Behavior on scale { NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing } }
 
         Rectangle {
             anchors.fill: parent
             radius: 8
-            color: rowMouse.containsMouse ? "#70ffffff" : "transparent"
+            color: rowMouse.pressed ? "#52ffffff" : (rowMouse.containsMouse ? "#70ffffff" : "transparent")
         }
 
         Text {

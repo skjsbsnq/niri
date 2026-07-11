@@ -26,18 +26,6 @@ PanelWindow {
     // Unified grid enter 0→1 (all icons together). Avoid per-icon opacity:0
     // cascade that looked like "one icon, then the rest".
     property real gridEnter: 0
-    // Custom inverted paging (finger right → content left → next page).
-    // Flickable is NOT interactive; pageDragArea owns the gesture so we can
-    // invert drag 1:1 and snap with a smooth ease (no Flickable coast fight).
-    property int pageDragStartPage: 0
-    property real pageDragStartContentX: 0
-    property real pageDragStartFingerX: 0
-    property real pageDragLastFingerX: 0
-    property real pageDragLastMs: 0
-    property real pageFingerVelocity: 0
-    property real pagePeakFingerVelocity: 0
-    property bool pageSnapPending: false
-    property bool pageGestureActive: false
 
     readonly property var filteredApps: root.appsService
         ? root.appsService.filteredLaunchpadApps(root.query, "all")
@@ -82,64 +70,19 @@ PanelWindow {
         return Math.max(0, Math.min(pageCount - 1, Math.round(Number(page) || 0)));
     }
 
-    // Standard LTR strip: page 0 at contentX=0, page 1 at +width, …
-    // Finger right → contentX increases → next page slides in from the right
-    // (content moves left on screen). Implemented by inverted drag in pageDragArea.
-    function contentXForPage(page) {
-        var pageW = Math.max(1, pageFlick.width);
-        return clampPage(page) * pageW;
-    }
-
-    function pageFromContentX(x) {
-        var pageW = Math.max(1, pageFlick.width);
-        if (pageW <= 0 || pageCount <= 0)
-            return 0;
-        return clampPage(Math.round(Number(x) / pageW));
-    }
-
-    function minContentX() {
-        return 0;
-    }
-
-    function maxContentX() {
-        return Math.max(0, (pageCount - 1) * Math.max(1, pageFlick.width));
-    }
-
-    // Rubber-band past ends (diminishing resistance).
-    function clampContentXWithRubber(x) {
-        var lo = minContentX();
-        var hi = maxContentX();
-        if (x < lo)
-            return lo + (x - lo) * 0.35;
-        if (x > hi)
-            return hi + (x - hi) * 0.35;
-        return x;
-    }
-
     function goToPage(page, animated) {
         currentPage = clampPage(page);
-        var target = contentXForPage(currentPage);
+        var pageW = Math.max(1, pageFlick.width);
+        var target = currentPage * pageW;
         if (animated === false || Motion.reducedMotion(settingsService)) {
             pageSnapAnim.stop();
             pageFlick.contentX = target;
-            pageSnapPending = false;
-            return;
-        }
-        if (Math.abs(pageFlick.contentX - target) < 0.5) {
-            pageSnapAnim.stop();
-            pageFlick.contentX = target;
-            pageSnapPending = false;
             return;
         }
         pageSnapAnim.stop();
         pageSnapAnim.from = pageFlick.contentX;
         pageSnapAnim.to = target;
-        // Distance-scaled duration feels smoother on short bounces vs full pages.
-        var dist = Math.abs(pageSnapAnim.to - pageSnapAnim.from);
-        var pageW = Math.max(1, pageFlick.width);
-        var base = Motion.launchpadPageSnapDuration(settingsService);
-        pageSnapAnim.duration = Math.max(180, Math.min(base, base * (0.45 + 0.55 * Math.min(1, dist / pageW))));
-        pageSnapPending = true;
+        pageSnapAnim.duration = Motion.launchpadPageSnapDuration(settingsService);
         pageSnapAnim.restart();
     }
 
@@ -159,29 +102,6 @@ PanelWindow {
 
     function launchSelected() {
         launchAt(selectedIndex);
-    }
-
-    // Map a point in pageFlick to a global app index and launch (tap path).
-    function launchAtPoint(x, y) {
-        var pageW = Math.max(1, pageFlick.width);
-        var pageH = Math.max(1, pageFlick.height);
-        if (x < 0 || y < 0 || x > pageW || y > pageH)
-            return;
-        var page = pageFromContentX(pageFlick.contentX);
-        // Grid is centered in the page.
-        var gridLeft = (pageW - gridWidth) / 2;
-        var gridTop = (pageH - gridHeight) / 2;
-        var lx = x - gridLeft;
-        var ly = y - gridTop;
-        if (lx < 0 || ly < 0 || lx >= gridWidth || ly >= gridHeight)
-            return;
-        var col = Math.floor(lx / cellWidth);
-        var row = Math.floor(ly / cellHeight);
-        if (col < 0 || row < 0 || col >= gridCols || row >= gridRows)
-            return;
-        var idx = page * cellsPerPage + row * gridCols + col;
-        if (idx >= 0 && idx < appCount)
-            launchAt(idx);
     }
 
     function pageOfIndex(index) {
@@ -282,7 +202,7 @@ PanelWindow {
                 if (!root.open)
                     return;
                 pageSnapAnim.stop();
-                pageFlick.contentX = root.contentXForPage(0);
+                pageFlick.contentX = 0;
                 searchInput.forceActiveFocus();
                 playGridEnter();
             });
@@ -297,8 +217,9 @@ PanelWindow {
         currentPage = 0;
         if (pageFlick.width > 0) {
             pageSnapAnim.stop();
-            pageFlick.contentX = root.contentXForPage(0);
+            pageFlick.contentX = 0;
         }
+        // Re-play a short enter when filtering reshuffles the grid.
         if (root.open)
             playGridEnter();
     }
@@ -307,14 +228,6 @@ PanelWindow {
         if (selectedIndex >= appCount)
             selectedIndex = Math.max(0, appCount - 1);
         currentPage = clampPage(currentPage);
-        if (open && pageFlick.width > 0 && !pageSnapPending)
-            pageFlick.contentX = contentXForPage(currentPage);
-    }
-
-    onPageCountChanged: {
-        currentPage = clampPage(currentPage);
-        if (open && pageFlick.width > 0 && !pageSnapPending && !pageGestureActive)
-            pageFlick.contentX = contentXForPage(currentPage);
     }
 
     // Full-screen glass region for blur backdrop (static geometry = surface).
@@ -452,8 +365,7 @@ PanelWindow {
             }
         }
 
-        // Horizontal paging surface (standard LTR: page0 | page1 | page2).
-        // Drag is inverted via pageDragArea: finger right → contentX up → next.
+        // Horizontal paging surface
         Flickable {
             id: pageFlick
             anchors.left: parent.left
@@ -466,26 +378,44 @@ PanelWindow {
             contentWidth: Math.max(width, width * Math.max(1, root.pageCount))
             contentHeight: height
             clip: true
-            // We own drag/snap ourselves for inverted feel + smooth settle.
-            interactive: false
+            interactive: root.pageCount > 1
             flickableDirection: Flickable.HorizontalFlick
-            boundsBehavior: Flickable.StopAtBounds
+            boundsBehavior: Flickable.DragAndOvershootBounds
+            // Snappier horizontal paging feel.
+            flickDeceleration: 3500
+            maximumFlickVelocity: 4000
+            pressDelay: 0
+            rebound: Transition {
+                NumberAnimation {
+                    properties: "x"
+                    duration: 280
+                    easing.type: Motion.emphasizedDecel
+                }
+            }
+
+            // Live page index while dragging (dots follow).
+            onContentXChanged: {
+                if (moving || dragging || flicking) {
+                    var pageW = Math.max(1, width);
+                    root.currentPage = root.clampPage(Math.round(contentX / pageW));
+                }
+            }
+            onMovementEnded: root.snapToNearestPage()
+            onFlickEnded: root.snapToNearestPage()
 
             NumberAnimation {
                 id: pageSnapAnim
                 target: pageFlick
                 property: "contentX"
                 duration: Motion.launchpadPageSnapDuration(root.settingsService)
-                // Smooth settle via Motion.emphasizedDecel (shared token).
                 easing.type: Motion.emphasizedDecel
                 onStopped: {
-                    root.pageSnapPending = false;
-                    root.pageGestureActive = false;
                     if (pageFlick.width > 0)
-                        root.currentPage = root.pageFromContentX(pageFlick.contentX);
+                        root.currentPage = root.clampPage(Math.round(pageFlick.contentX / pageFlick.width));
                 }
             }
 
+            // Unified enter for the whole icon field (opacity + soft scale).
             opacity: root.gridEnter
             transform: Scale {
                 origin.x: pageFlick.width / 2
@@ -506,8 +436,6 @@ PanelWindow {
                     delegate: Item {
                         id: pageDelegate
                         required property int index
-                        // Standard LTR: visual index === logical page.
-                        readonly property int logicalPage: pageDelegate.index
 
                         width: pageFlick.width
                         height: pageFlick.height
@@ -529,16 +457,18 @@ PanelWindow {
                                     id: cell
                                     required property int index
 
-                                    readonly property int globalIndex: pageDelegate.logicalPage * root.cellsPerPage + cell.index
+                                    readonly property int globalIndex: pageDelegate.index * root.cellsPerPage + cell.index
                                     readonly property var app: root.appAt(cell.globalIndex)
                                     readonly property bool hasApp: !!cell.app
                                     readonly property bool selected: root.selectedIndex === cell.globalIndex && cell.hasApp
 
                                     width: root.cellWidth
                                     height: root.cellHeight
+                                    // Always visible when app exists — enter is on pageFlick.
                                     visible: cell.hasApp
                                     opacity: 1
 
+                                    // Press + selection chrome
                                     Item {
                                         anchors.fill: parent
                                         scale: Motion.pressScaleFor(root.settingsService, appMouse.pressed)
@@ -578,6 +508,7 @@ PanelWindow {
                                             mipmap: true
                                             sourceSize.width: 128
                                             sourceSize.height: 128
+                                            // Sync decode avoids empty first frame cascade.
                                             asynchronous: false
                                             cache: true
                                         }
@@ -609,27 +540,9 @@ PanelWindow {
                                             anchors.fill: parent
                                             hoverEnabled: true
                                             cursorShape: Qt.PointingHandCursor
-                                            // pageDragArea is above us for horizontal pans;
-                                            // keep click-to-launch for taps.
-                                            z: 0
-                                            property real pressX: 0
-                                            property real pressY: 0
-                                            property bool moved: false
-
-                                            onPressed: function(mouse) {
-                                                pressX = mouse.x;
-                                                pressY = mouse.y;
-                                                moved = false;
-                                            }
-                                            onPositionChanged: function(mouse) {
-                                                if (!pressed)
-                                                    return;
-                                                if (Math.abs(mouse.x - pressX) > 8 || Math.abs(mouse.y - pressY) > 8)
-                                                    moved = true;
-                                            }
+                                            // Let horizontal flicks pass to pageFlick.
+                                            preventStealing: false
                                             onClicked: {
-                                                if (moved || root.pageGestureActive)
-                                                    return;
                                                 root.selectedIndex = cell.globalIndex;
                                                 root.launchAt(cell.globalIndex);
                                             }
@@ -643,121 +556,6 @@ PanelWindow {
                             }
                         }
                     }
-                }
-            }
-
-            // Full-surface drag: invert finger → content so finger right moves
-            // content left (next page slides in from the right).
-            MouseArea {
-                id: pageDragArea
-                anchors.fill: parent
-                z: 10
-                acceptedButtons: Qt.LeftButton
-                // Only steal when horizontal pan is clear; otherwise clicks
-                // fall through to icon MouseAreas (propagateComposedEvents).
-                propagateComposedEvents: true
-                preventStealing: false
-                property bool panning: false
-                property real pressX: 0
-                property real pressY: 0
-
-                onPressed: function(mouse) {
-                    if (root.pageCount <= 1) {
-                        mouse.accepted = false;
-                        return;
-                    }
-                    pageSnapAnim.stop();
-                    root.pageSnapPending = false;
-                    panning = false;
-                    pressX = mouse.x;
-                    pressY = mouse.y;
-                    root.pageDragStartFingerX = mouse.x;
-                    root.pageDragLastFingerX = mouse.x;
-                    root.pageDragLastMs = Date.now();
-                    root.pageFingerVelocity = 0;
-                    root.pagePeakFingerVelocity = 0;
-                    root.pageDragStartContentX = pageFlick.contentX;
-                    root.pageDragStartPage = root.pageFromContentX(pageFlick.contentX);
-                    root.currentPage = root.pageDragStartPage;
-                    root.pageGestureActive = false;
-                    // Don't accept yet — wait for horizontal threshold so taps launch.
-                    mouse.accepted = true;
-                }
-
-                onPositionChanged: function(mouse) {
-                    if (!pressed || root.pageCount <= 1)
-                        return;
-                    var dx = mouse.x - pressX;
-                    var dy = mouse.y - pressY;
-                    if (!panning) {
-                        if (Math.abs(dx) < 8 && Math.abs(dy) < 8)
-                            return;
-                        if (Math.abs(dy) > Math.abs(dx) * 1.15) {
-                            // Vertical-ish: let go (no pan).
-                            mouse.accepted = false;
-                            return;
-                        }
-                        panning = true;
-                        root.pageGestureActive = true;
-                    }
-
-                    var now = Date.now();
-                    var dt = Math.max(1, now - root.pageDragLastMs);
-                    var fingerDx = mouse.x - root.pageDragLastFingerX;
-                    var v = fingerDx / dt * 1000.0;
-                    root.pageFingerVelocity = v;
-                    if (Math.abs(v) > Math.abs(root.pagePeakFingerVelocity))
-                        root.pagePeakFingerVelocity = v;
-                    root.pageDragLastFingerX = mouse.x;
-                    root.pageDragLastMs = now;
-
-                    // Invert: finger right (positive) → contentX increases → next page.
-                    var fingerTravel = mouse.x - root.pageDragStartFingerX;
-                    var rawX = root.pageDragStartContentX + fingerTravel;
-                    pageFlick.contentX = root.clampContentXWithRubber(rawX);
-
-                    // Live page-dot preview from finger travel.
-                    var pageW = Math.max(1, pageFlick.width);
-                    var commitPx = Math.max(
-                        Motion.launchpadPageCommitMinPx,
-                        pageW * Motion.launchpadPageCommitRatio
-                    );
-                    var preview = root.pageDragStartPage;
-                    if (fingerTravel > commitPx * 0.45)
-                        preview = root.pageDragStartPage + 1;
-                    else if (fingerTravel < -commitPx * 0.45)
-                        preview = root.pageDragStartPage - 1;
-                    root.currentPage = root.clampPage(preview);
-                }
-
-                onReleased: function(mouse) {
-                    if (root.pageCount <= 1) {
-                        root.launchAtPoint(mouse.x, mouse.y);
-                        return;
-                    }
-                    if (!panning) {
-                        // Tap: launch the icon under the press point.
-                        root.pageGestureActive = false;
-                        root.launchAtPoint(pressX, pressY);
-                        return;
-                    }
-                    // Final velocity sample.
-                    var now = Date.now();
-                    var dt = Math.max(1, now - root.pageDragLastMs);
-                    var fingerDx = mouse.x - root.pageDragLastFingerX;
-                    var v = fingerDx / dt * 1000.0;
-                    if (Math.abs(v) > Math.abs(root.pagePeakFingerVelocity))
-                        root.pagePeakFingerVelocity = v;
-                    root.pageFingerVelocity = root.pagePeakFingerVelocity;
-                    root.finishPageGesture(mouse.x - root.pageDragStartFingerX);
-                    panning = false;
-                }
-
-                onCanceled: {
-                    if (panning || root.pageGestureActive)
-                        root.finishPageGesture(root.pageDragLastFingerX - root.pageDragStartFingerX);
-                    panning = false;
-                    root.pageGestureActive = false;
                 }
             }
         }
@@ -809,45 +607,25 @@ PanelWindow {
         }
     }
 
-    // fingerDelta = finger end X − start X (right positive).
-    // content animates so finger-right → next page slides in from the right.
-    function finishPageGesture(fingerDelta) {
-        if (pageFlick.width <= 0 || pageCount <= 1) {
-            pageGestureActive = false;
+    function snapToNearestPage() {
+        if (pageFlick.width <= 0)
             return;
-        }
-        if (pageSnapPending)
-            return;
-
-        pageSnapPending = true;
-        pageGestureActive = false;
-
-        var pageW = Math.max(1, pageFlick.width);
-        var d = Number(fingerDelta);
-        if (!isFinite(d))
-            d = pageDragLastFingerX - pageDragStartFingerX;
-        var vel = pagePeakFingerVelocity;
-        if (Math.abs(pageFingerVelocity) > Math.abs(vel))
-            vel = pageFingerVelocity;
-
-        var page = Motion.launchpadResolvePage(
-            pageDragStartPage,
-            pageCount,
-            d,
-            vel,
-            pageW
-        );
+        var pageW = pageFlick.width;
+        var raw = pageFlick.contentX / pageW;
+        // Prefer velocity direction on light flicks past mid-threshold.
+        var page = clampPage(Math.round(raw));
+        var frac = raw - Math.floor(raw);
+        if (pageFlick.horizontalVelocity < -400 && frac > 0.15)
+            page = clampPage(Math.floor(raw) + 1);
+        else if (pageFlick.horizontalVelocity > 400 && frac < 0.85)
+            page = clampPage(Math.floor(raw));
         goToPage(page, true);
-
+        // Keep selection on the visible page.
         var base = page * cellsPerPage;
         if (selectedIndex < base || selectedIndex >= base + cellsPerPage) {
             var idx = Math.min(appCount - 1, base);
             if (idx >= 0)
                 selectedIndex = idx;
         }
-    }
-
-    function snapToNearestPage() {
-        finishPageGesture(pageDragLastFingerX - pageDragStartFingerX);
     }
 }

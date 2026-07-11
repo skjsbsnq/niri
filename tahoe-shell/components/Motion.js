@@ -166,36 +166,7 @@ var launchpadWallpaperMs = 400;
 // Soft unified enter (whole grid), not per-icon cascade.
 var launchpadIconEnterMs = 280;
 var launchpadIconEnterScaleFrom = 0.92;
-// Smooth page settle (eased, slightly longer than elementMove).
-var launchpadPageSnapMs = 340;
-// Desktop-style: finger RIGHT → next (content slides LEFT, page comes from right);
-// finger LEFT → prev (content slides RIGHT). Standard LTR strip (page0|page1|…).
-// dragDelta = fingerEndX - fingerStartX (screen space, NOT contentX).
-// velocity = finger px/s (positive = finger moving right).
-var launchpadPageCommitRatio = 0.10;
-var launchpadPageCommitMinPx = 36;
-var launchpadPageFlickVelocity = 120;
-
-// Pure page-intent resolver (testable).
-// dragDelta/velocity are in *finger* space: right = positive.
-function launchpadResolvePage(startPage, pageCount, dragDelta, velocity, pageWidth) {
-    var n = Math.max(1, Math.round(Number(pageCount) || 1));
-    var page = Math.max(0, Math.min(n - 1, Math.round(Number(startPage) || 0)));
-    var w = Math.max(1, Number(pageWidth) || 1);
-    var d = Number(dragDelta) || 0;
-    var v = Number(velocity) || 0;
-    var commitPx = Math.max(launchpadPageCommitMinPx, w * launchpadPageCommitRatio);
-    var flickV = launchpadPageFlickVelocity;
-    var next = page;
-    // Finger right / vel > 0 → next; finger left / vel < 0 → prev.
-    if (Math.abs(v) >= flickV)
-        next = v > 0 ? page + 1 : page - 1;
-    else if (d > commitPx)
-        next = page + 1;
-    else if (d < -commitPx)
-        next = page - 1;
-    return Math.max(0, Math.min(n - 1, next));
-}
+var launchpadPageSnapMs = 320;
 var launchpadStaggerPerPxMs = 0; // disabled cascade (kept for API/tests)
 var launchpadStaggerBudgetMs = 450;
 var launchpadStaggerMaxItems = 40;

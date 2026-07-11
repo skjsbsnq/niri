@@ -47,9 +47,9 @@ Item {
     // Fixed width. Must NOT depend on magnification — Dock feeds wave scale via
     // analytical helpers (index-only), and width is the rest slot size so the
     // running-window half can still use a simple Row without binding loops.
-    // Icon-only mode: 68 (matches Dock.dockWindowIconWidth); titled: 132.
-    width: showTitle ? 132 : 68
-    height: 64
+    // Icon-only mode: 60 (matches Dock.dockWindowIconWidth); titled: 132.
+    width: showTitle ? 132 : 60
+    height: 60
 
     function updateDockRectangle() {
         if (!root.dockWindow)

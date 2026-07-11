@@ -88,7 +88,7 @@ class MotionTokenConvergenceTests(unittest.TestCase):
     def test_motion_exports_dock_magnification_tokens(self) -> None:
         text = MOTION_JS.read_text(encoding="utf-8")
 
-        self.assertIn("var dockMagPeak = 1.7;", text)
+        self.assertIn("var dockMagPeak = 1.55;", text)
         self.assertIn("var dockMagRangeIcons = 2.5;", text)
         self.assertIn("var dockMagSpring = {", text)
         self.assertIn("function dockCosineScale(distancePx, iconSizePx)", text)
@@ -135,10 +135,14 @@ class MotionTokenConvergenceTests(unittest.TestCase):
         # Pinned container is Item (explicit x), not Row.
         self.assertIn("Item {\n                        id: pinnedRow", dock)
 
-        # Icon base 56 + exclusiveZone/surface recompute.
-        self.assertIn("readonly property int dockIconSize: 56", dock)
-        self.assertIn("exclusiveZone: 112", dock)
+        # Icon base 48 (T08-fix from T07's 56) + exclusiveZone/surface recompute.
+        self.assertIn("readonly property int dockIconSize: 48", dock)
+        self.assertIn("exclusiveZone: 100", dock)
         self.assertIn("height: root.dockSurfaceHeight", dock)
+        self.assertIn("dockSlideDistance", dock)
+        self.assertIn("function pinnedWaveLeftExtra()", dock)
+        self.assertIn("function dockWaveSurfaceBias()", dock)
+        self.assertIn("function syncPinnedViewportToCursor()", dock)
 
         # Unified hover label: one capsule, 13px, no y-slide Behavior.
         self.assertIn("id: dockHoverLabel", dock)
@@ -166,7 +170,7 @@ class MotionTokenConvergenceTests(unittest.TestCase):
         self.assertIn("id: bounceSpring", dock)
         self.assertIn("Motion.dockMagSpring", window_button)
         self.assertIn("magnificationTarget", window_button)
-        self.assertIn("width: showTitle ? 132 : 68", window_button)
+        self.assertIn("width: showTitle ? 132 : 60", window_button)
         # No dual Behavior on the same property (T00 interceptor 待办 closed).
         self.assertEqual(dock.count("Behavior on magnification"), 0)
         self.assertEqual(dock.count("Behavior on bounceOffset"), 0)
@@ -203,7 +207,11 @@ class MotionTokenConvergenceTests(unittest.TestCase):
         self.assertIn("id: dockRevealDebounceTimer", dock)
         self.assertIn("Motion.dockRevealDebounceMs", dock)
         self.assertIn("Motion.dockAutohideSlidePx", dock)
+        self.assertIn("dockSlideDistance", dock)
         self.assertEqual(dock.count("Behavior on dockSlideOffset"), 0)
+        # T08-fix: glass stays active during slide-out (no immediate dockGlassActive=false).
+        self.assertIn("onDockVisibleHeightChanged", dock)
+        self.assertNotIn("dockGlassActive = false;\n            dockVisualHidden = true", dock)
 
         # Running indicator 2px glow (sibling halo, no GraphicalEffects).
         self.assertIn("id: runningDot", dock)

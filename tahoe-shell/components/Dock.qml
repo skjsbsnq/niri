@@ -48,28 +48,31 @@ PanelWindow {
     property bool dockGlassActive: !dockHidden
     // Writable; animated toward dockSlideTarget via springSmooth / ease dual branch (T08).
     property real dockSlideOffset: 0
-    readonly property real dockSlideTarget: dockVisualHidden ? Motion.dockAutohideSlidePx : 0
-    readonly property real dockVisibleAmount: 1 - Math.min(1, Math.max(0, dockSlideOffset / Motion.dockAutohideSlidePx))
+    // T08-fix: slide at least the full surface height so the panel never leaves a
+    // residual strip at the bottom (surface grew to 96 while token stayed 88).
+    readonly property real dockSlideDistance: Math.max(Motion.dockAutohideSlidePx, dockSurfaceHeight)
+    readonly property real dockSlideTarget: dockVisualHidden ? dockSlideDistance : 0
+    readonly property real dockVisibleAmount: 1 - Math.min(1, Math.max(0, dockSlideOffset / Math.max(1, dockSlideDistance)))
     readonly property real dockGlassInteraction: dockHovered ? dockVisibleAmount : 0.0
     readonly property real dockVisibleHeight: Math.max(0, Math.min(dockSurface.height, dockSurface.height - dockSlideOffset))
-    // T07 dock metrics — icon base 56 (was 46); slots grow with analytical push.
-    readonly property int dockIconSize: 56
+    // T08-fix: icon base 56→48 after hand-test (T07 56 felt oversized with peak mag).
+    readonly property int dockIconSize: 48
     readonly property int dockOuterMargin: 28
-    readonly property int dockSurfacePadding: 36
+    readonly property int dockSurfacePadding: 32
     readonly property int dockItemSpacing: 8
-    readonly property int dockPinnedButtonWidth: 72
+    readonly property int dockPinnedButtonWidth: 64
     readonly property int dockWindowTitleWidth: 132
-    readonly property int dockWindowIconWidth: 68
+    readonly property int dockWindowIconWidth: 60
     readonly property int dockMinimizedThumbnailWidth: 112
     readonly property int dockMinimizedMinimumWidth: 76
-    readonly property int dockToolButtonWidth: 64
+    readonly property int dockToolButtonWidth: 56
     readonly property int dockSeparatorWidth: 1
     readonly property int dockIconSourceSize: 128
     readonly property int dockToolIconSourceSize: 96
-    readonly property int dockSurfaceHeight: 96
-    readonly property int dockPinnedRowHeight: 78
-    readonly property int dockWindowRowHeight: 64
-    readonly property real dockLiftFactor: 16
+    readonly property int dockSurfaceHeight: 84
+    readonly property int dockPinnedRowHeight: 70
+    readonly property int dockWindowRowHeight: 60
+    readonly property real dockLiftFactor: 14
     readonly property int dockSurfaceMaxWidth: Math.max(1, root.width - dockOuterMargin)
     readonly property int dockContentMaxWidth: Math.max(1, dockSurfaceMaxWidth - dockSurfacePadding)
     readonly property int pinnedAppCount: root.appsService && root.appsService.pinnedApps ? root.appsService.pinnedApps.length : 0
@@ -91,15 +94,21 @@ PanelWindow {
         : Math.min(pinnedContentWidth, dockFlexibleSectionsBudget)
     // When only pinned icons are present, the dock surface grows with the
     // analytical wave so magnified icons are not clipped. With window sections
-    // the budget stays fixed and the Flickable absorbs overflow.
+    // the rest budget stays fixed — but while the wave is active we still grow
+    // the pinned viewport up to the flexible budget (T08-fix) so left/right
+    // icons are not pushed out of the glass by a fixed clip rect.
     readonly property real pinnedDisplayedWidth: {
         var _dep = dockMouseX + pinnedAppCount + (dockHovered ? 1 : 0) + (pointerDragActive ? 0 : 1);
-        if (hasNonMinimizedWindows || hasMinimizedWindows)
-            return pinnedViewportWidth;
         var wave = pinnedWaveContentWidth();
+        if (hasNonMinimizedWindows || hasMinimizedWindows) {
+            if (dockWaveActive())
+                return Math.min(dockFlexibleSectionsBudget, Math.max(pinnedViewportWidth, wave));
+            return pinnedViewportWidth;
+        }
         return Math.min(dockFlexibleSectionsBudget, Math.max(pinnedContentWidth, wave));
     }
-    readonly property int dockRemainingFlexibleWidth: Math.max(0, dockFlexibleSectionsBudget - pinnedViewportWidth)
+    // Window/minimized sections yield space to the live wave width (not only rest).
+    readonly property int dockRemainingFlexibleWidth: Math.max(0, dockFlexibleSectionsBudget - Math.ceil(pinnedDisplayedWidth))
     readonly property int availableWindowViewportWidth: hasNonMinimizedWindows ? Math.max(0, dockRemainingFlexibleWidth - minimumMinimizedViewportWidth) : 0
     readonly property bool dockWindowButtonsShowTitle: hasNonMinimizedWindows
         && !(settingsService && settingsService.dockForceIconOnly)
@@ -122,7 +131,9 @@ PanelWindow {
         dockRevealPrepareTimer.stop();
 
         if (dockHidden) {
-            dockGlassActive = false;
+            // T08-fix: keep glassActive true while the slide-out runs so blur
+            // does not drop to pure transparent mid-animation. glassEnabled
+            // still gates on dockVisibleHeight > 0 (see dockSurface).
             dockVisualHidden = true;
         } else {
             dockGlassActive = true;
@@ -132,6 +143,15 @@ PanelWindow {
 
     onDockSlideTargetChanged: root.animateDockSlideTo(dockSlideTarget)
     Component.onCompleted: root.dockSlideOffset = root.dockSlideTarget
+
+    // Drop glass only after the panel has fully left the screen (or is about
+    // to). Re-enable as soon as any visible height remains during reveal.
+    onDockVisibleHeightChanged: {
+        if (root.dockVisibleHeight > 0.5)
+            root.dockGlassActive = true;
+        else if (root.dockHidden && root.dockVisibleHeight <= 0.5)
+            root.dockGlassActive = false;
+    }
 
     // T08: autohide slide uses springSmooth (critically damped — no overshoot).
     // Glass region geometry stays clamped via dockVisibleHeight; only the
@@ -217,6 +237,63 @@ PanelWindow {
         return total;
     }
 
+    // T08-fix: how much extra width the wave inserts to the left of the cursor
+    // (rest geometry). Used to keep the pointer's icon screen-stable while
+    // neighbors expand away from it — stops left-side icons being shoved out
+    // of the glass when the surface is center-anchored.
+    function pinnedWaveLeftExtra() {
+        if (!dockWaveActive() || pinnedAppCount <= 0)
+            return 0;
+        var cursor = pinnedCursorX();
+        var extra = 0;
+        var step = dockPinnedButtonWidth + dockItemSpacing;
+        for (var i = 0; i < pinnedAppCount; i++) {
+            var restLeft = i * step;
+            var restRight = restLeft + dockPinnedButtonWidth;
+            var dw = pinnedItemWidthAt(i) - dockPinnedButtonWidth;
+            if (dw < 0)
+                dw = 0;
+            if (cursor >= restRight) {
+                extra += dw;
+            } else if (cursor > restLeft) {
+                extra += dw * ((cursor - restLeft) / Math.max(1, dockPinnedButtonWidth));
+                break;
+            } else {
+                break;
+            }
+        }
+        return extra;
+    }
+
+    // Bias dock surface from horizontal center so growth is around the cursor
+    // (rightExtra - leftExtra) / 2, not symmetric about the panel midpoint.
+    function dockWaveSurfaceBias() {
+        if (!dockWaveActive())
+            return 0;
+        var leftExtra = pinnedWaveLeftExtra();
+        var totalExtra = Math.max(0, pinnedWaveContentWidth() - pinnedContentWidth);
+        var rightExtra = Math.max(0, totalExtra - leftExtra);
+        return (rightExtra - leftExtra) / 2;
+    }
+
+    // Keep the magnified region inside the pinned Flickable when the wave is
+    // wider than the viewport (window sections present, or many pinned apps).
+    function syncPinnedViewportToCursor() {
+        if (!pinnedViewport)
+            return;
+        var viewW = pinnedViewport.width;
+        var contentW = pinnedViewport.contentWidth;
+        if (!dockWaveActive() || contentW <= viewW + 0.5) {
+            if (pinnedViewport.contentX !== 0)
+                pinnedViewport.contentX = 0;
+            return;
+        }
+        var cursorInContent = pinnedCursorX();
+        var target = cursorInContent - viewW / 2;
+        var maxX = Math.max(0, contentW - viewW);
+        pinnedViewport.contentX = Math.max(0, Math.min(maxX, target));
+    }
+
     function windowRestCenter(index) {
         var w = dockWindowButtonsShowTitle ? dockWindowTitleWidth : dockWindowIconWidth;
         return index * (w + dockItemSpacing) + w / 2;
@@ -259,6 +336,7 @@ PanelWindow {
         dockRevealDebounceTimer.stop();
         root.dockHovered = true;
         root.pointerDragActive = false;
+        root.syncPinnedViewportToCursor();
     }
 
     function updateDockHoverFromButtons(x, buttons) {
@@ -287,6 +365,8 @@ PanelWindow {
         root.dockHovered = false;
         root.dockMouseX = -10000;
         root.clearDockHoverLabel();
+        if (pinnedViewport)
+            pinnedViewport.contentX = 0;
     }
 
     function showDockHoverLabel(text, item, yOffset) {
@@ -455,9 +535,9 @@ PanelWindow {
         bottom: true
     }
 
-    exclusiveZone: 112
+    exclusiveZone: 100
     exclusionMode: dockAutoHide ? ExclusionMode.Ignore : ExclusionMode.Normal
-    implicitHeight: 150
+    implicitHeight: 140
     color: "transparent"
     WlrLayershell.namespace: "tahoe-dock"
 
@@ -501,7 +581,16 @@ PanelWindow {
     GlassPanel {
         id: dockSurface
 
-        anchors.horizontalCenter: parent.horizontalCenter
+        // T08-fix: explicit x (not horizontalCenter) so we can bias growth
+        // around the cursor. Clamped to outer margins so left icons are not
+        // shoved past the screen edge when the wave expands.
+        x: {
+            var _dep = root.dockMouseX + root.pinnedAppCount + (root.dockHovered ? 1 : 0) + (root.pointerDragActive ? 0 : 1);
+            var centered = (parent.width - width) / 2;
+            var bias = root.dockWaveSurfaceBias();
+            var margin = Math.max(6, Math.round(root.dockOuterMargin / 2));
+            return Math.round(Math.max(margin, Math.min(parent.width - width - margin, centered + bias)));
+        }
         anchors.bottom: parent.bottom
         anchors.bottomMargin: 0
         width: Math.min(root.dockSurfaceMaxWidth, dockRow.implicitWidth + root.dockSurfacePadding)
@@ -520,7 +609,8 @@ PanelWindow {
         regionHeight: Math.round(root.dockVisibleHeight)
         interaction: root.dockGlassInteraction
         materialAlpha: 1.0
-        glassEnabled: root.dockGlassActive && root.dockVisibleHeight > 0.001
+        // Keep blur alive for the whole slide; only drop when fully off-screen.
+        glassEnabled: root.dockGlassActive && root.dockVisibleHeight > 0.5
 
         transform: Translate {
             y: root.dockSlideOffset
@@ -560,7 +650,9 @@ PanelWindow {
                         return Math.max(root.pinnedContentWidth, root.pinnedWaveContentWidth());
                     }
                     contentHeight: height
-                    clip: true
+                    // Only clip when the wave overflows the viewport; otherwise
+                    // let edge icons paint into the surface padding (T08-fix).
+                    clip: contentWidth > width + 1
                     boundsBehavior: Flickable.StopAtBounds
                     flickableDirection: Flickable.HorizontalFlick
 
@@ -1098,7 +1190,7 @@ PanelWindow {
 
             DockMinimizedShelf {
                 width: root.minimizedViewportWidth
-                height: 64
+                height: root.dockWindowRowHeight
                 visible: root.hasMinimizedWindows && width > 0
                 windowsService: root.niriService
                 thumbnailProvider: root.thumbnailProvider
@@ -1212,9 +1304,9 @@ PanelWindow {
 
         Image {
             anchors.horizontalCenter: parent.horizontalCenter
-            y: 10
-            width: 48
-            height: 48
+            y: 8
+            width: 40
+            height: 40
             source: tool.iconSource
             fillMode: Image.PreserveAspectFit
             smooth: true

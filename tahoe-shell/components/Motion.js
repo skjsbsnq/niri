@@ -39,7 +39,9 @@ var menuFlashCount = 2;
 //   scale(d) = 1 + (peak − 1) · cos²(πd / 2R)   for d < R, else 1
 // R is measured in icon widths (dockMagRangeIcons × iconSize). Analytical
 // push positions use the same curve; never drive glass region geometry with it.
-var dockMagPeak = 1.7;
+// T08-fix: peak 1.7→1.55 and icon base 56→48 after hand-test (icons felt oversized;
+// left-edge clip under push). Keep range 2.5 icon-widths.
+var dockMagPeak = 1.55;
 var dockMagRangeIcons = 2.5;
 // Critically-damped settle for magnification / push-x (QML SpringAnimation).
 // Distinct from springBouncy (click bounce) so the wave does not overshoot.
@@ -56,12 +58,12 @@ var dockLaunchBounceHeightFactor = 0.7;
 var dockLaunchBouncePeriodMs = 550;
 var dockLaunchBounceTimeoutMs = 10000;
 var dockRevealDebounceMs = 150;
-// Autohide slide distance (px). Spring uses springSmooth (critically damped —
-// no overshoot into glass region geometry beyond the existing clamps).
+// Autohide slide distance fallback (px). Dock.qml uses max(this, surfaceHeight)
+// so a taller panel never leaves a strip at the bottom (T08-fix).
 var dockAutohideSlidePx = 88;
 
 function dockLaunchBounceHeight(iconSizePx) {
-    var size = iconSizePx > 0 ? iconSizePx : 56;
+    var size = iconSizePx > 0 ? iconSizePx : 48;
     return size * dockLaunchBounceHeightFactor;
 }
 
@@ -188,7 +190,7 @@ function elementResize(settingsService) {
 // Cosine-bell dock magnification. Pure function of distance in px;
 // Dock keeps layout sizes local and only imports peak/range from here.
 function dockCosineScale(distancePx, iconSizePx) {
-    var size = iconSizePx > 0 ? iconSizePx : 56;
+    var size = iconSizePx > 0 ? iconSizePx : 48;
     var R = dockMagRangeIcons * size;
     if (R <= 0)
         return 1.0;

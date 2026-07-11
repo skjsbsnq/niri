@@ -24,8 +24,11 @@ PanelWindow {
     property bool pointerDragActive: false
     property int dragTargetVisualIndex: -1
     property var hoveredWindowButton: null
-    property real windowHoverLabelCenterX: 0
-    property real windowHoverLabelY: -22
+    // Unified hover label (T07): one capsule for pinned / window / tool.
+    property string dockHoverLabelText: ""
+    property real dockHoverLabelCenterX: 0
+    property real dockHoverLabelY: -28
+    property bool dockHoverLabelVisible: false
     readonly property bool dockMinimizedShelfEnabled: !!(settingsService && settingsService.dockMinimizedShelfEnabled)
     readonly property var dockWindowList: root.niriService
         ? (root.dockMinimizedShelfEnabled && root.niriService.nonMinimizedWindowList
@@ -47,18 +50,24 @@ PanelWindow {
     readonly property real dockVisibleAmount: 1 - Math.min(1, Math.max(0, dockSlideOffset / 88))
     readonly property real dockGlassInteraction: dockHovered ? dockVisibleAmount : 0.0
     readonly property real dockVisibleHeight: Math.max(0, Math.min(dockSurface.height, dockSurface.height - dockSlideOffset))
+    // T07 dock metrics — icon base 56 (was 46); slots grow with analytical push.
+    readonly property int dockIconSize: 56
     readonly property int dockOuterMargin: 28
-    readonly property int dockSurfacePadding: 34
+    readonly property int dockSurfacePadding: 36
     readonly property int dockItemSpacing: 8
-    readonly property int dockPinnedButtonWidth: 62
+    readonly property int dockPinnedButtonWidth: 72
     readonly property int dockWindowTitleWidth: 132
-    readonly property int dockWindowIconWidth: 56
+    readonly property int dockWindowIconWidth: 68
     readonly property int dockMinimizedThumbnailWidth: 112
     readonly property int dockMinimizedMinimumWidth: 76
-    readonly property int dockToolButtonWidth: 54
+    readonly property int dockToolButtonWidth: 64
     readonly property int dockSeparatorWidth: 1
-    readonly property int dockIconSourceSize: 96
+    readonly property int dockIconSourceSize: 128
     readonly property int dockToolIconSourceSize: 96
+    readonly property int dockSurfaceHeight: 96
+    readonly property int dockPinnedRowHeight: 78
+    readonly property int dockWindowRowHeight: 64
+    readonly property real dockLiftFactor: 16
     readonly property int dockSurfaceMaxWidth: Math.max(1, root.width - dockOuterMargin)
     readonly property int dockContentMaxWidth: Math.max(1, dockSurfaceMaxWidth - dockSurfacePadding)
     readonly property int pinnedAppCount: root.appsService && root.appsService.pinnedApps ? root.appsService.pinnedApps.length : 0
@@ -78,6 +87,16 @@ PanelWindow {
     readonly property int pinnedViewportWidth: hasNonMinimizedWindows || hasMinimizedWindows
         ? Math.min(pinnedContentWidth, Math.max(0, dockFlexibleSectionsBudget - minimumWindowViewportWidth - minimumMinimizedViewportWidth))
         : Math.min(pinnedContentWidth, dockFlexibleSectionsBudget)
+    // When only pinned icons are present, the dock surface grows with the
+    // analytical wave so magnified icons are not clipped. With window sections
+    // the budget stays fixed and the Flickable absorbs overflow.
+    readonly property real pinnedDisplayedWidth: {
+        var _dep = dockMouseX + pinnedAppCount + (dockHovered ? 1 : 0) + (pointerDragActive ? 0 : 1);
+        if (hasNonMinimizedWindows || hasMinimizedWindows)
+            return pinnedViewportWidth;
+        var wave = pinnedWaveContentWidth();
+        return Math.min(dockFlexibleSectionsBudget, Math.max(pinnedContentWidth, wave));
+    }
     readonly property int dockRemainingFlexibleWidth: Math.max(0, dockFlexibleSectionsBudget - pinnedViewportWidth)
     readonly property int availableWindowViewportWidth: hasNonMinimizedWindows ? Math.max(0, dockRemainingFlexibleWidth - minimumMinimizedViewportWidth) : 0
     readonly property bool dockWindowButtonsShowTitle: hasNonMinimizedWindows
@@ -87,11 +106,6 @@ PanelWindow {
     readonly property int windowViewportWidth: hasNonMinimizedWindows ? Math.min(activeWindowContentWidth, availableWindowViewportWidth) : 0
     readonly property int availableMinimizedViewportWidth: hasMinimizedWindows ? Math.max(0, dockRemainingFlexibleWidth - windowViewportWidth) : 0
     readonly property int minimizedViewportWidth: hasMinimizedWindows ? Math.min(minimizedWindowContentWidth, availableMinimizedViewportWidth) : 0
-    readonly property string windowHoverLabelText: hoveredWindowButton ? String(hoveredWindowButton.label || "") : ""
-    readonly property bool windowHoverLabelVisible: hoveredWindowButton
-        && hoveredWindowButton.hovered
-        && !hoveredWindowButton.showTitle
-        && windowHoverLabelText.length > 0
     readonly property color glassFill: darkMode ? "#d01d1f24" : GlassStyle.FillDock
     readonly property color glassStroke: darkMode ? "#38ffffff" : GlassStyle.StrokeDock
     readonly property color dockText: darkMode ? "#f5f7fb" : "#202124"
@@ -114,25 +128,80 @@ PanelWindow {
         }
     }
 
-    // Spring-smoothed dock magnification.
+    // T07 · Cosine-bell dock wave + analytical push.
     //
-    // This returns the *target* scale for an icon given the pointer
-    // position. The actual magnification property on each delegate has a
-    // SpringAnimation Behavior (see the delegate), so the icon eases toward
-    // this target every frame instead of snapping. The web dock does the
-    // same thing with requestAnimationFrame + exponential lerp (script.js
-    // 358-404); here the spring plays the role of the lerp.
+    // Scale and slot geometry are pure functions of (index, cursorX) against
+    // rest centers — NEVER read delegate geometry here. That is what used to
+    // create the width→magnification→width binding loop. Each delegate binds
+    // magnification/x/width to these helpers; SpringAnimation Behaviors ease
+    // toward the targets (useSpring dual branch preserved).
     //
-    // Range ~135px (web uses 195), peak scale 1.34. This keeps the wave
-    // visible without pushing icons into the dock viewport clip.
-    function proximityScale(item) {
-        if (pointerDragActive || !dockHovered || !item || !dockSurface)
-            return 1.0;
+    // scale(d) = 1 + (peak−1)·cos²(πd/2R), peak=Motion.dockMagPeak, R=2.5·icon.
+    function dockWaveActive() {
+        return dockHovered && !pointerDragActive;
+    }
 
-        var point = item.mapToItem(dockSurface, item.width / 2, item.height / 2);
-        var distance = Math.abs(dockMouseX - point.x);
-        var influence = Math.max(0, 1 - distance / 135);
-        return 1.0 + influence * 0.34;
+    function pinnedRestCenter(index) {
+        return index * (dockPinnedButtonWidth + dockItemSpacing) + dockPinnedButtonWidth / 2;
+    }
+
+    function pinnedCursorX() {
+        if (!dockSurface || !pinnedViewport)
+            return -10000;
+        // Viewport origin is stable (does not depend on icon magnification).
+        var origin = pinnedViewport.mapToItem(dockSurface, 0, 0);
+        return dockMouseX - origin.x + pinnedViewport.contentX;
+    }
+
+    function pinnedScaleAt(index) {
+        if (!dockWaveActive())
+            return 1.0;
+        return Motion.dockCosineScale(pinnedCursorX() - pinnedRestCenter(index), dockIconSize);
+    }
+
+    function pinnedItemWidthAt(index) {
+        return dockPinnedButtonWidth * pinnedScaleAt(index);
+    }
+
+    function pinnedItemXAt(index) {
+        var x = 0;
+        for (var j = 0; j < index; j++)
+            x += pinnedItemWidthAt(j) + dockItemSpacing;
+        return x;
+    }
+
+    function pinnedWaveContentWidth() {
+        var n = pinnedAppCount;
+        if (n <= 0)
+            return 0;
+        var total = 0;
+        for (var i = 0; i < n; i++)
+            total += pinnedItemWidthAt(i);
+        total += Math.max(0, n - 1) * dockItemSpacing;
+        return total;
+    }
+
+    function windowRestCenter(index) {
+        var w = dockWindowButtonsShowTitle ? dockWindowTitleWidth : dockWindowIconWidth;
+        return index * (w + dockItemSpacing) + w / 2;
+    }
+
+    function windowCursorX() {
+        if (!dockSurface || !windowViewport)
+            return -10000;
+        var origin = windowViewport.mapToItem(dockSurface, 0, 0);
+        return dockMouseX - origin.x + windowViewport.contentX;
+    }
+
+    function windowScaleAt(index) {
+        if (!dockWaveActive() || dockWindowButtonsShowTitle)
+            return 1.0;
+        return Motion.dockCosineScale(windowCursorX() - windowRestCenter(index), dockIconSize);
+    }
+
+    // Back-compat name used nowhere after T07, kept as alias for any external call.
+    function proximityScale(item) {
+        return 1.0;
     }
 
     function markDockHovered() {
@@ -170,30 +239,55 @@ PanelWindow {
         hoverExitTimer.stop();
         root.dockHovered = false;
         root.dockMouseX = -10000;
-        root.clearWindowHoverLabel(null);
+        root.clearDockHoverLabel();
+    }
+
+    function showDockHoverLabel(text, item, yOffset) {
+        if (!item || !dockSurface)
+            return;
+        var label = String(text || "");
+        if (label.length === 0) {
+            root.clearDockHoverLabel();
+            return;
+        }
+        var center = item.mapToItem(dockSurface, item.width / 2, 0);
+        root.dockHoverLabelText = label;
+        root.dockHoverLabelCenterX = center.x;
+        root.dockHoverLabelY = Math.round(center.y + (yOffset !== undefined ? yOffset : -30));
+        root.dockHoverLabelVisible = true;
+    }
+
+    function updateDockHoverLabelGeometry(item, yOffset) {
+        if (!item || !dockSurface || !root.dockHoverLabelVisible)
+            return;
+        var center = item.mapToItem(dockSurface, item.width / 2, 0);
+        root.dockHoverLabelCenterX = center.x;
+        root.dockHoverLabelY = Math.round(center.y + (yOffset !== undefined ? yOffset : -30));
+    }
+
+    function clearDockHoverLabel() {
+        root.dockHoverLabelVisible = false;
+        root.dockHoverLabelText = "";
+        root.hoveredWindowButton = null;
     }
 
     function updateWindowHoverLabelGeometry(button) {
-        if (!button || root.hoveredWindowButton !== button || !dockSurface)
+        if (!button || root.hoveredWindowButton !== button)
             return;
-
-        var center = button.mapToItem(dockSurface, button.width / 2, 0);
-        root.windowHoverLabelCenterX = center.x;
-        root.windowHoverLabelY = Math.round(center.y - 30);
+        root.updateDockHoverLabelGeometry(button, -30);
     }
 
     function showWindowHoverLabel(button) {
         var label = button ? String(button.label || "") : "";
         if (!button || button.showTitle || label.length === 0)
             return;
-
         root.hoveredWindowButton = button;
-        root.updateWindowHoverLabelGeometry(button);
+        root.showDockHoverLabel(label, button, -30);
     }
 
     function clearWindowHoverLabel(button) {
         if (!button || root.hoveredWindowButton === button)
-            root.hoveredWindowButton = null;
+            root.clearDockHoverLabel();
     }
 
     function seriesWidth(count, itemWidth) {
@@ -305,9 +399,9 @@ PanelWindow {
         bottom: true
     }
 
-    exclusiveZone: 98
+    exclusiveZone: 112
     exclusionMode: dockAutoHide ? ExclusionMode.Ignore : ExclusionMode.Normal
-    implicitHeight: 132
+    implicitHeight: 150
     color: "transparent"
     WlrLayershell.namespace: "tahoe-dock"
 
@@ -358,7 +452,7 @@ PanelWindow {
         anchors.bottom: parent.bottom
         anchors.bottomMargin: 0
         width: Math.min(root.dockSurfaceMaxWidth, dockRow.implicitWidth + root.dockSurfacePadding)
-        height: 84
+        height: root.dockSurfaceHeight
         material: GlassStyle.MaterialDock
         radius: GlassStyle.RadiusDock
         fillColor: root.glassFill
@@ -396,27 +490,40 @@ PanelWindow {
             spacing: root.dockItemSpacing
 
             Item {
-                width: root.pinnedViewportWidth
-                height: 70
+                width: root.pinnedDisplayedWidth
+                height: root.dockPinnedRowHeight
 
                 Flickable {
                     id: pinnedViewport
 
                     x: 0
-                    y: -34
+                    y: -40
                     width: parent.width
-                    height: parent.height + 34
-                    contentWidth: pinnedRow.implicitWidth
+                    height: parent.height + 40
+                    // contentWidth tracks the analytical wave; rest width is the idle floor.
+                    // Explicit dockMouseX dep so the binding reevaluates every move.
+                    contentWidth: {
+                        var _dep = root.dockMouseX + root.pinnedAppCount + (root.dockHovered ? 1 : 0);
+                        return Math.max(root.pinnedContentWidth, root.pinnedWaveContentWidth());
+                    }
                     contentHeight: height
                     clip: true
                     boundsBehavior: Flickable.StopAtBounds
                     flickableDirection: Flickable.HorizontalFlick
 
-                    Row {
+                    // Explicit-x container (not Row): each icon's x/width come from
+                    // analytical helpers so the wave can push neighbors without
+                    // reading live delegate geometry (binding-loop free).
+                    Item {
                         id: pinnedRow
 
-                        y: 34
-                        spacing: root.dockItemSpacing
+                        y: 40
+                        width: {
+                            var _dep = root.dockMouseX + root.pinnedAppCount + (root.dockHovered ? 1 : 0);
+                            return Math.max(root.pinnedContentWidth, root.pinnedWaveContentWidth());
+                        }
+                        height: root.dockPinnedRowHeight
+                        implicitWidth: width
 
                         Repeater {
                             model: ScriptModel {
@@ -428,38 +535,19 @@ PanelWindow {
 
                                 required property var modelData
                                 required property int index
-                                // Magnification tracks the pointer position via
-                                // proximityScale(); the SpringAnimation Behavior below
-                                // eases it toward that target every frame, so neighbors
-                                // couple into a wave instead of snapping. This mirrors
-                                // the web dock's requestAnimationFrame + exponential
-                                // lerp (script.js 358-404) — the spring plays the lerp.
-                                // Kept writable (not readonly) so the Behavior reliably
-                                // intercepts binding updates.
-                                property real magnification: root.proximityScale(pinnedButton)
+                                // pressScale still uses Behavior (single) via Motion press token.
                                 property real pressScale: Motion.pressScaleFor(root.settingsService, iconMouse.pressed && !pinnedButton.reorderActive)
                                 readonly property int pinnedIndex: pinnedButton.index
                                 readonly property string appId: root.appsService ? root.appsService.pinnedIdForVisualIndex(pinnedButton.pinnedIndex, modelData) : ""
                                 readonly property var appModel: root.appsService ? root.appsService.resolveApplication(pinnedButton.appId, modelData) : modelData
-                                property real bounceOffset: 0
                                 property bool suppressNextClick: false
                                 readonly property bool hovered: !root.pointerDragActive && iconMouse.containsMouse
                                 readonly property bool running: (!appModel || appModel.shellAction !== "launchpad")
                                     && root.appsService
                                     && root.niriService
                                     && root.appsService.appHasRunningWindow(appModel, root.niriService.windowList)
-                                readonly property real lift: (magnification - 1.0) * 16 + (hovered ? 2 : 0)
-
-                                // Fixed width. NOTE: width must NOT depend on
-                                // magnification — proximityScale() reads this delegate's
-                                // geometry to compute the icon center, so a
-                                // magnification-driven width creates a binding loop
-                                // (width -> magnification -> proximityScale -> width)
-                                // that runs away and crashes Quickshell. The wave feel
-                                // comes from the icon scale + lift + Row spacing spring
-                                // instead.
-                                width: root.dockPinnedButtonWidth
-                                height: 70
+                                readonly property real lift: (magnification - 1.0) * root.dockLiftFactor + (hovered ? 2 : 0)
+                                height: root.dockPinnedRowHeight
 
                                 property bool reorderPressed: false
                                 property bool reorderActive: false
@@ -489,11 +577,11 @@ PanelWindow {
                                 }
 
                                 Rectangle {
-                                    x: 4
+                                    anchors.horizontalCenter: parent.horizontalCenter
                                     y: 8
-                                    width: 54
-                                    height: 54
-                                    radius: 16
+                                    width: root.dockIconSize + 8
+                                    height: root.dockIconSize + 8
+                                    radius: 18
                                     color: root.launchpadOpen && pinnedButton.appId === "launchpad" ? "#70ffffff" : "transparent"
                                 }
 
@@ -509,9 +597,9 @@ PanelWindow {
                                 Image {
                                     id: appIcon
                                     anchors.horizontalCenter: parent.horizontalCenter
-                                    y: 9 - pinnedButton.lift - pinnedButton.bounceOffset
-                                    width: 46
-                                    height: 46
+                                    y: 10 - pinnedButton.lift - pinnedButton.bounceOffset
+                                    width: root.dockIconSize
+                                    height: root.dockIconSize
                                     scale: pinnedButton.magnification * pinnedButton.pressScale
                                     opacity: (pinnedButton.reorderActive ? 0.58 : 1) * (iconMouse.pressed ? 0.75 : 1)
                                     source: root.appsService ? root.appsService.iconForApp(pinnedButton.appModel || pinnedButton.appId) : ""
@@ -541,49 +629,6 @@ PanelWindow {
                                     color: "#99000000"
                                 }
 
-                                Rectangle {
-                                    id: hoverLabel
-                                    readonly property real labelMaxWidth: Math.max(42, Math.min(280, pinnedViewport.width - 12))
-                                    z: 10
-                                    x: Math.max(
-                                        pinnedViewport.contentX - pinnedButton.x + 6,
-                                        Math.min(
-                                            pinnedViewport.contentX + pinnedViewport.width - width - pinnedButton.x - 6,
-                                            (pinnedButton.width - width) / 2
-                                        )
-                                    )
-                                    y: pinnedButton.hovered ? -34 : -24
-                                    width: Math.min(Math.max(labelText.implicitWidth + 18, 42), labelMaxWidth)
-                                    height: 24
-                                    radius: 7
-                                    color: "#d9f7f8fb"
-                                    border.color: "#70ffffff"
-                                    opacity: pinnedButton.hovered ? 1 : 0
-                                    visible: opacity > 0.01
-
-                                    Text {
-                                        id: labelText
-                                        anchors.left: parent.left
-                                        anchors.right: parent.right
-                                        anchors.verticalCenter: parent.verticalCenter
-                                        anchors.leftMargin: 9
-                                        anchors.rightMargin: 9
-                                        text: root.appsService ? root.appsService.appLabel(pinnedButton.appModel || pinnedButton.appId) : ""
-                                        color: root.dockText
-                                        font.pixelSize: 11
-                                        elide: Text.ElideRight
-                                        maximumLineCount: 1
-                                    }
-
-                                    Behavior on opacity {
-                                        NumberAnimation { duration: Motion.panelExit(root.settingsService); easing.type: Motion.emphasizedDecel }
-                                    }
-
-                                    Behavior on y {
-                                        NumberAnimation { duration: Motion.panelExit(root.settingsService); easing.type: Motion.emphasizedDecel }
-                                    }
-                                }
-
                                 MouseArea {
                                     id: iconMouse
                                     anchors.fill: parent
@@ -609,9 +654,20 @@ PanelWindow {
 
                                         var point = pinnedButton.mapToItem(dockSurface, mouse.x, mouse.y);
                                         root.updateDockHoverFromMouse(point.x, mouse);
+                                        if (pinnedButton.hovered) {
+                                            var label = root.appsService ? root.appsService.appLabel(pinnedButton.appModel || pinnedButton.appId) : "";
+                                            root.showDockHoverLabel(label, pinnedButton, -34);
+                                        }
                                     }
-                                    onEntered: root.markDockHovered()
-                                    onExited: root.scheduleDockHoverReset()
+                                    onEntered: {
+                                        root.markDockHovered();
+                                        var label = root.appsService ? root.appsService.appLabel(pinnedButton.appModel || pinnedButton.appId) : "";
+                                        root.showDockHoverLabel(label, pinnedButton, -34);
+                                    }
+                                    onExited: {
+                                        root.clearDockHoverLabel();
+                                        root.scheduleDockHoverReset();
+                                    }
                                     onPressed: function(mouse) {
                                         if (mouse.button === Qt.LeftButton && pinnedButton.appId !== "launchpad") {
                                             pinnedButton.reorderPressed = true;
@@ -654,55 +710,144 @@ PanelWindow {
                                     }
                                 }
 
-                                // Spring bounce on click — kick bounceOffset to an
-                                // overshoot then let the Behavior spring below settle
-                                // it (1.5 oscillations). A single-shot Timer does the
-                                // kick→release so the spring sees a real change.
+                                // T07: explicit dual-branch animations (useSpring gate).
+                                // A single property may only have ONE Behavior interceptor;
+                                // dual Behavior{} was ignored for the second and spammed
+                                // "another interceptor" warnings (T00 待办). Drive settle
+                                // with explicit SpringAnimation / NumberAnimation instead.
+                                readonly property real magnificationTarget: root.pinnedScaleAt(pinnedButton.index)
+                                readonly property real xTarget: root.pinnedItemXAt(pinnedButton.index)
+                                readonly property real widthTarget: root.pinnedItemWidthAt(pinnedButton.index)
+
+                                // Writable animated values (not bound) so animations own them.
+                                property real magnification: 1.0
+                                property real bounceOffset: 0
+                                // x/width still need initial layout; animate toward targets.
+                                x: 0
+                                width: root.dockPinnedButtonWidth
+
+                                onMagnificationTargetChanged: pinnedButton.animateMagnification()
+                                onXTargetChanged: pinnedButton.animateX()
+                                onWidthTargetChanged: pinnedButton.animateWidth()
+                                Component.onCompleted: {
+                                    pinnedButton.magnification = pinnedButton.magnificationTarget;
+                                    pinnedButton.x = pinnedButton.xTarget;
+                                    pinnedButton.width = pinnedButton.widthTarget;
+                                }
+
+                                function animateMagnification() {
+                                    if (root.useSpring) {
+                                        magSpring.to = magnificationTarget;
+                                        magSpring.restart();
+                                    } else {
+                                        magEase.to = magnificationTarget;
+                                        magEase.restart();
+                                    }
+                                }
+                                function animateX() {
+                                    if (root.useSpring) {
+                                        xSpring.to = xTarget;
+                                        xSpring.restart();
+                                    } else {
+                                        xEase.to = xTarget;
+                                        xEase.restart();
+                                    }
+                                }
+                                function animateWidth() {
+                                    if (root.useSpring) {
+                                        widthSpring.to = widthTarget;
+                                        widthSpring.restart();
+                                    } else {
+                                        widthEase.to = widthTarget;
+                                        widthEase.restart();
+                                    }
+                                }
+
+                                SpringAnimation {
+                                    id: magSpring
+                                    target: pinnedButton
+                                    property: "magnification"
+                                    spring: Motion.dockMagSpring.spring
+                                    damping: Motion.dockMagSpring.damping
+                                    epsilon: Motion.dockMagSpring.epsilon
+                                }
+                                NumberAnimation {
+                                    id: magEase
+                                    target: pinnedButton
+                                    property: "magnification"
+                                    duration: Motion.elementMove(root.settingsService)
+                                    easing.type: Motion.emphasizedDecel
+                                }
+                                SpringAnimation {
+                                    id: xSpring
+                                    target: pinnedButton
+                                    property: "x"
+                                    spring: Motion.dockMagSpring.spring
+                                    damping: Motion.dockMagSpring.damping
+                                    epsilon: Motion.dockMagSpring.epsilon
+                                }
+                                NumberAnimation {
+                                    id: xEase
+                                    target: pinnedButton
+                                    property: "x"
+                                    duration: Motion.elementMove(root.settingsService)
+                                    easing.type: Motion.emphasizedDecel
+                                }
+                                SpringAnimation {
+                                    id: widthSpring
+                                    target: pinnedButton
+                                    property: "width"
+                                    spring: Motion.dockMagSpring.spring
+                                    damping: Motion.dockMagSpring.damping
+                                    epsilon: Motion.dockMagSpring.epsilon
+                                }
+                                NumberAnimation {
+                                    id: widthEase
+                                    target: pinnedButton
+                                    property: "width"
+                                    duration: Motion.elementMove(root.settingsService)
+                                    easing.type: Motion.emphasizedDecel
+                                }
+
+                                // Bounce: kick to 14 then settle to 0 via dual-branch anims.
                                 Timer {
                                     id: bounceTimer
                                     interval: 16
                                     repeat: false
-                                    onTriggered: pinnedButton.bounceOffset = 0
+                                    onTriggered: pinnedButton.animateBounceTo(0)
                                 }
 
                                 function bounce() {
+                                    bounceSpring.stop();
+                                    bounceEase.stop();
                                     pinnedButton.bounceOffset = 14;
                                     bounceTimer.restart();
                                 }
-
-                                // Bounce on click. Spring (underdamped, ~1.5 oscillations)
-                                // gives the macOS feel but corrupts the icon's Image texture
-                                // on VMware/software GPUs while it runs, so it's gated behind
-                                // useSpring. The default NumberAnimation is a single safe
-                                // tween — no overshoot, but no texture loss on VMs either.
-                                Behavior on bounceOffset {
-                                    enabled: !root.useSpring
-                                    NumberAnimation { duration: 220; easing.type: Motion.emphasizedDecel }
-                                }
-                                Behavior on bounceOffset {
-                                    enabled: root.useSpring
-                                    SpringAnimation {
-                                        spring: 380
-                                        damping: 0.32
-                                        mass: 0.9
-                                        epsilon: 0.01
+                                function animateBounceTo(value) {
+                                    if (root.useSpring) {
+                                        bounceSpring.to = value;
+                                        bounceSpring.restart();
+                                    } else {
+                                        bounceEase.to = value;
+                                        bounceEase.restart();
                                     }
                                 }
 
-                                // Magnification easing (icon scale + lift track the pointer).
-                                // Same useSpring gate as bounce: spring on real GPUs,
-                                // NumberAnimation everywhere else.
-                                Behavior on magnification {
-                                    enabled: !root.useSpring
-                                    NumberAnimation { duration: Motion.elementMove(root.settingsService); easing.type: Motion.emphasizedDecel }
+                                SpringAnimation {
+                                    id: bounceSpring
+                                    target: pinnedButton
+                                    property: "bounceOffset"
+                                    spring: 380
+                                    damping: 0.32
+                                    mass: 0.9
+                                    epsilon: 0.01
                                 }
-                                Behavior on magnification {
-                                    enabled: root.useSpring
-                                    SpringAnimation {
-                                        spring: 260
-                                        damping: 1.0
-                                        epsilon: 0.01
-                                    }
+                                NumberAnimation {
+                                    id: bounceEase
+                                    target: pinnedButton
+                                    property: "bounceOffset"
+                                    duration: 220
+                                    easing.type: Motion.emphasizedDecel
                                 }
                             }
                         }
@@ -712,7 +857,7 @@ PanelWindow {
 
             Rectangle {
                 width: 1
-                height: 46
+                height: root.dockIconSize
                 radius: 1
                 color: root.darkMode ? "#40ffffff" : "#3d000000"
                 visible: root.hasDockWindowSection
@@ -721,16 +866,16 @@ PanelWindow {
 
             Item {
                 width: root.windowViewportWidth
-                height: 58
+                height: root.dockWindowRowHeight
                 visible: root.hasNonMinimizedWindows && width > 0
 
                 Flickable {
                     id: windowViewport
 
                     x: 0
-                    y: -30
+                    y: -36
                     width: parent.width
-                    height: parent.height + 30
+                    height: parent.height + 36
                     contentWidth: windowRow.implicitWidth
                     contentHeight: height
                     clip: true
@@ -740,7 +885,7 @@ PanelWindow {
                     Row {
                         id: windowRow
 
-                        y: 30
+                        y: 36
                         spacing: root.dockItemSpacing
 
                         Repeater {
@@ -753,6 +898,7 @@ PanelWindow {
                                 id: windowButton
 
                                 required property var modelData
+                                required property int index
 
                                 windowModel: modelData
                                 toplevel: modelData ? modelData.toplevel : null
@@ -760,9 +906,9 @@ PanelWindow {
                                 appsService: root.appsService
                                 settingsService: root.settingsService
                                 useSpring: root.useSpring
-                                iconSize: root.dockWindowButtonsShowTitle ? 36 : 38
+                                iconSize: root.dockWindowButtonsShowTitle ? 40 : root.dockIconSize
                                 showTitle: root.dockWindowButtonsShowTitle
-                                magnification: root.proximityScale(windowButton)
+                                magnificationTarget: root.windowScaleAt(windowButton.index)
                                 hoverLabelEnabled: false
                                 labelClipItem: windowViewport
                                 labelClipContentX: windowViewport.contentX
@@ -817,7 +963,7 @@ PanelWindow {
 
             Rectangle {
                 width: 1
-                height: 46
+                height: root.dockIconSize
                 radius: 1
                 color: root.darkMode ? "#40ffffff" : "#3d000000"
                 anchors.verticalCenter: parent.verticalCenter
@@ -840,44 +986,42 @@ PanelWindow {
             }
         }
 
+        // T07 unified hover label — one capsule for pinned / window / tool.
+        // Instant appear (no y-slide); 13px; fade only on opacity.
         Rectangle {
-            id: windowHoverLabel
+            id: dockHoverLabel
 
             readonly property real labelMaxWidth: Math.max(48, Math.min(280, dockSurface.width - 12))
 
             z: 20
-            x: Math.max(6, Math.min(dockSurface.width - width - 6, root.windowHoverLabelCenterX - width / 2))
-            y: root.windowHoverLabelVisible ? root.windowHoverLabelY : root.windowHoverLabelY + 10
-            width: Math.min(Math.max(windowHoverLabelTextItem.implicitWidth + 18, 48), labelMaxWidth)
-            height: 24
+            x: Math.max(6, Math.min(dockSurface.width - width - 6, root.dockHoverLabelCenterX - width / 2))
+            y: root.dockHoverLabelY
+            width: Math.min(Math.max(dockHoverLabelTextItem.implicitWidth + 18, 48), labelMaxWidth)
+            height: 26
             radius: 7
             color: "#d9f7f8fb"
             border.color: "#70ffffff"
-            opacity: root.windowHoverLabelVisible ? 1 : 0
+            opacity: root.dockHoverLabelVisible ? 1 : 0
             visible: opacity > 0.01
 
             Text {
-                id: windowHoverLabelTextItem
+                id: dockHoverLabelTextItem
 
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
                 anchors.leftMargin: 9
                 anchors.rightMargin: 9
-                text: root.windowHoverLabelText
+                text: root.dockHoverLabelText
                 color: root.dockText
-                font.pixelSize: 11
+                font.pixelSize: 13
                 elide: Text.ElideRight
                 maximumLineCount: 1
                 horizontalAlignment: Text.AlignHCenter
             }
 
             Behavior on opacity {
-                NumberAnimation { duration: Motion.panelExit(root.settingsService); easing.type: Motion.emphasizedDecel }
-            }
-
-            Behavior on y {
-                NumberAnimation { duration: Motion.panelExit(root.settingsService); easing.type: Motion.emphasizedDecel }
+                NumberAnimation { duration: Motion.fadeFast(root.settingsService); easing.type: Motion.emphasizedDecel }
             }
         }
     }
@@ -892,8 +1036,8 @@ PanelWindow {
         signal activated()
         signal urlsDropped(var urls)
 
-        width: 54
-        height: 64
+        width: root.dockToolButtonWidth
+        height: root.dockPinnedRowHeight - 8
         scale: Motion.pressScaleFor(root.settingsService, toolMouse.pressed)
         opacity: toolMouse.pressed ? 0.75 : 1
 
@@ -910,57 +1054,16 @@ PanelWindow {
 
         Image {
             anchors.horizontalCenter: parent.horizontalCenter
-            y: 8
-            width: 40
-            height: 40
+            y: 10
+            width: 48
+            height: 48
             source: tool.iconSource
             fillMode: Image.PreserveAspectFit
             smooth: true
             mipmap: false
             sourceSize.width: root.dockToolIconSourceSize
             sourceSize.height: root.dockToolIconSourceSize
-        }
-
-        Rectangle {
-            id: toolLabel
-            readonly property real labelMaxWidth: Math.max(42, Math.min(280, dockSurface.width - 12))
-            x: Math.max(
-                -tool.mapToItem(dockSurface, 0, 0).x + 6,
-                Math.min(
-                    dockSurface.width - tool.mapToItem(dockSurface, 0, 0).x - width - 6,
-                    (tool.width - width) / 2
-                )
-            )
-            y: toolMouse.containsMouse ? -32 : -22
-            width: Math.min(Math.max(toolLabelText.implicitWidth + 18, 42), labelMaxWidth)
-            height: 24
-            radius: 7
-            color: "#d9f7f8fb"
-            border.color: "#70ffffff"
-            opacity: toolMouse.containsMouse ? 1 : 0
-            visible: opacity > 0.01
-
-            Text {
-                id: toolLabelText
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.verticalCenter: parent.verticalCenter
-                anchors.leftMargin: 9
-                anchors.rightMargin: 9
-                text: tool.label
-                color: root.dockText
-                font.pixelSize: 11
-                elide: Text.ElideRight
-                maximumLineCount: 1
-            }
-
-            Behavior on opacity {
-                NumberAnimation { duration: Motion.panelExit(root.settingsService); easing.type: Motion.emphasizedDecel }
-            }
-
-            Behavior on y {
-                NumberAnimation { duration: Motion.panelExit(root.settingsService); easing.type: Motion.emphasizedDecel }
-            }
+            asynchronous: true
         }
 
         DropArea {
@@ -981,6 +1084,20 @@ PanelWindow {
             anchors.fill: parent
             hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
+            onEntered: {
+                root.markDockHovered();
+                root.showDockHoverLabel(tool.label, tool, -34);
+            }
+            onPositionChanged: function(mouse) {
+                var point = tool.mapToItem(dockSurface, mouse.x, mouse.y);
+                root.updateDockHoverFromMouse(point.x, mouse);
+                if (toolMouse.containsMouse)
+                    root.showDockHoverLabel(tool.label, tool, -34);
+            }
+            onExited: {
+                root.clearDockHoverLabel();
+                root.scheduleDockHoverReset();
+            }
             onClicked: tool.activated()
         }
     }

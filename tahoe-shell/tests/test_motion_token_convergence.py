@@ -85,6 +85,83 @@ class MotionTokenConvergenceTests(unittest.TestCase):
         self.assertIn("var menuFlashInterval = 70;", text)
         self.assertIn("var menuFlashCount = 2;", text)
 
+    def test_motion_exports_dock_magnification_tokens(self) -> None:
+        text = MOTION_JS.read_text(encoding="utf-8")
+
+        self.assertIn("var dockMagPeak = 1.7;", text)
+        self.assertIn("var dockMagRangeIcons = 2.5;", text)
+        self.assertIn("var dockMagSpring = {", text)
+        self.assertIn("function dockCosineScale(distancePx, iconSizePx)", text)
+        # Cosine-bell formula must stay the single outlet.
+        self.assertIn("Math.cos(Math.PI * d / (2 * R))", text)
+        self.assertIn("(dockMagPeak - 1.0) * c * c", text)
+        block = re.search(r"var dockMagSpring = \{(.*?)\};", text, re.S)
+        self.assertIsNotNone(block)
+        assert block
+        body = block.group(1)
+        self.assertIn("spring: 3.2", body)
+        self.assertIn("damping: 0.42", body)
+        self.assertIn("epsilon: 0.001", body)
+
+    def test_dock_uses_analytical_cosine_wave_and_unified_label(self) -> None:
+        dock = (COMPONENTS_ROOT / "Dock.qml").read_text(encoding="utf-8")
+        window_button = (COMPONENTS_ROOT / "WindowButton.qml").read_text(encoding="utf-8")
+
+        # Cosine-bell via Motion token; no legacy linear triangle.
+        self.assertIn("Motion.dockCosineScale", dock)
+        self.assertIn("function pinnedScaleAt(index)", dock)
+        self.assertIn("function pinnedItemXAt(index)", dock)
+        self.assertIn("function pinnedItemWidthAt(index)", dock)
+        self.assertIn("function windowScaleAt(index)", dock)
+        self.assertNotIn("1 - distance / 135", dock)
+        self.assertNotIn("influence * 0.34", dock)
+
+        # Analytical push: explicit x/width targets on pinned delegates, not Row auto-layout.
+        self.assertIn("readonly property real xTarget: root.pinnedItemXAt(pinnedButton.index)", dock)
+        self.assertIn("readonly property real widthTarget: root.pinnedItemWidthAt(pinnedButton.index)", dock)
+        self.assertIn("readonly property real magnificationTarget: root.pinnedScaleAt(pinnedButton.index)", dock)
+        self.assertIn("id: pinnedRow", dock)
+        # Pinned container is Item (explicit x), not Row.
+        self.assertIn("Item {\n                        id: pinnedRow", dock)
+
+        # Icon base 56 + exclusiveZone/surface recompute.
+        self.assertIn("readonly property int dockIconSize: 56", dock)
+        self.assertIn("exclusiveZone: 112", dock)
+        self.assertIn("height: root.dockSurfaceHeight", dock)
+
+        # Unified hover label: one capsule, 13px, no y-slide Behavior.
+        self.assertIn("id: dockHoverLabel", dock)
+        self.assertIn("function showDockHoverLabel", dock)
+        self.assertIn("font.pixelSize: 13", dock)
+        self.assertEqual(dock.count("id: hoverLabel"), 0)
+        self.assertEqual(dock.count("id: toolLabel"), 0)
+        self.assertEqual(dock.count("id: windowHoverLabel"), 0)
+        # No y Behavior on the unified label (instant appear).
+        hover_block = re.search(
+            r"id: dockHoverLabel.*?Behavior on opacity \{.*?\}",
+            dock,
+            re.S,
+        )
+        self.assertIsNotNone(hover_block)
+        assert hover_block
+        self.assertNotIn("Behavior on y", hover_block.group(0))
+
+        # useSpring dual branch still present for mag + bounce via explicit
+        # SpringAnimation / NumberAnimation (dual Behavior{} is unsupported).
+        self.assertIn("root.useSpring", dock)
+        self.assertIn("Motion.dockMagSpring", dock)
+        self.assertIn("id: magSpring", dock)
+        self.assertIn("id: magEase", dock)
+        self.assertIn("id: bounceSpring", dock)
+        self.assertIn("Motion.dockMagSpring", window_button)
+        self.assertIn("magnificationTarget", window_button)
+        self.assertIn("width: showTitle ? 132 : 68", window_button)
+        # No dual Behavior on the same property (T00 interceptor 待办 closed).
+        self.assertEqual(dock.count("Behavior on magnification"), 0)
+        self.assertEqual(dock.count("Behavior on bounceOffset"), 0)
+        self.assertEqual(window_button.count("Behavior on magnification"), 0)
+        self.assertEqual(window_button.count("Behavior on bounceOffset"), 0)
+
     def test_phase_b_press_feedback_uses_motion_single_outlet(self) -> None:
         # T06 moved menu press feedback into the shared MenuRow.qml outlet.
         required_counts = {

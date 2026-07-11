@@ -16,9 +16,10 @@ Item {
     // See Dock.qml useSpring. Spring on icon geometry corrupts the Image
     // texture on VMware/software GPUs. Dock forwards its own useSpring here.
     property bool useSpring: false
-    // Magnification is fed in by the Dock (proximityScale of the pointer).
-    // The SpringAnimation Behavior below eases it toward the target so the
-    // running-window half of the dock waves together with the pinned half.
+    // Magnification target is fed by Dock (cosine-bell wave, T07). The actual
+    // magnification is animated toward the target via explicit dual-branch
+    // Spring/Number animations (useSpring gate) — dual Behavior{} is unsupported.
+    property real magnificationTarget: 1.0
     property real magnification: 1.0
     property real pressScale: Motion.pressScaleFor(settingsService, windowMouse.pressed)
     property real bounceOffset: 0
@@ -27,7 +28,9 @@ Item {
     property real dockSlideOffset: 0
     property var labelClipItem: null
     property real labelClipContentX: 0
-    property bool hoverLabelEnabled: true
+    // Per-button hover label is disabled when Dock owns the unified capsule
+    // (T07). Keep the property so external callers can still opt in.
+    property bool hoverLabelEnabled: false
     readonly property bool hovered: windowMouse.containsMouse
     readonly property bool active: windowModel ? !!windowModel.isFocused : !!(toplevel && toplevel.activated)
     readonly property bool minimized: windowModel ? !!windowModel.isMinimized : !!(toplevel && toplevel.minimized)
@@ -41,13 +44,12 @@ Item {
     signal dockPointerEntered()
     signal dockPointerExited()
 
-    // Fixed width. Must NOT depend on magnification — WindowButton is fed
-    // into Dock's proximityScale() which reads its geometry, so a
-    // magnification-driven width is a binding loop that crashes Quickshell
-    // (same trap as the pinned-icon delegate; see Dock.qml). The wave feel
-    // comes from the icon scale + lift spring, not from reflowing the Row.
-    width: showTitle ? 132 : 56
-    height: 58
+    // Fixed width. Must NOT depend on magnification — Dock feeds wave scale via
+    // analytical helpers (index-only), and width is the rest slot size so the
+    // running-window half can still use a simple Row without binding loops.
+    // Icon-only mode: 68 (matches Dock.dockWindowIconWidth); titled: 132.
+    width: showTitle ? 132 : 68
+    height: 64
 
     function updateDockRectangle() {
         if (!root.dockWindow)
@@ -130,7 +132,11 @@ Item {
     onDockWindowChanged: scheduleDockRectangleUpdate()
     onWindowModelChanged: scheduleDockRectangleUpdate()
     onToplevelChanged: scheduleDockRectangleUpdate()
-    Component.onCompleted: scheduleDockRectangleUpdate()
+    onMagnificationTargetChanged: root.animateMagnification()
+    Component.onCompleted: {
+        root.magnification = root.magnificationTarget;
+        root.scheduleDockRectangleUpdate();
+    }
 
     Timer {
         id: dockRectangleRefresh
@@ -213,9 +219,10 @@ Item {
             var right = root.labelClipContentX + root.labelClipItem.width - width - root.x - 6;
             return Math.max(left, Math.min(right, centered));
         }
-        y: root.showHoverLabel ? -30 : -20
+        // Instant appear (T07) — no y-slide; Dock's unified label is preferred.
+        y: -30
         width: Math.min(Math.max(hoverLabelText.implicitWidth + 18, 48), labelMaxWidth)
-        height: 24
+        height: 26
         radius: 7
         color: "#d9f7f8fb"
         border.color: "#70ffffff"
@@ -232,17 +239,13 @@ Item {
             anchors.rightMargin: 9
             text: root.label
             color: "#202124"
-            font.pixelSize: 11
+            font.pixelSize: 13
             elide: Text.ElideRight
             maximumLineCount: 1
         }
 
         Behavior on opacity {
-            NumberAnimation { duration: Motion.panelExit(root.settingsService); easing.type: Motion.emphasizedDecel }
-        }
-
-        Behavior on y {
-            NumberAnimation { duration: Motion.panelExit(root.settingsService); easing.type: Motion.emphasizedDecel }
+            NumberAnimation { duration: Motion.fadeFast(root.settingsService); easing.type: Motion.emphasizedDecel }
         }
     }
 
@@ -275,54 +278,71 @@ Item {
         }
     }
 
-    // Spring bounce on click — kick bounceOffset to an overshoot then let
-    // the underdamped spring below settle it (1.5 oscillations), matching
-    // the Dock and real macOS. A single-shot Timer does the kick→release
-    // so the Behavior spring sees a real property change (setting to 14
-    // then 0 in the same JS frame would coalesce and never animate).
+    // Explicit dual-branch animations (useSpring). Dual Behavior{} on the same
+    // property is unsupported in Qt Quick and only the first interceptor sticks.
+    function animateMagnification() {
+        if (root.useSpring) {
+            magSpring.to = magnificationTarget;
+            magSpring.restart();
+        } else {
+            magEase.to = magnificationTarget;
+            magEase.restart();
+        }
+    }
+
+    SpringAnimation {
+        id: magSpring
+        target: root
+        property: "magnification"
+        spring: Motion.dockMagSpring.spring
+        damping: Motion.dockMagSpring.damping
+        epsilon: Motion.dockMagSpring.epsilon
+    }
+    NumberAnimation {
+        id: magEase
+        target: root
+        property: "magnification"
+        duration: Motion.elementMove(root.settingsService)
+        easing.type: Motion.emphasizedDecel
+    }
+
     Timer {
         id: bounceTimer
         interval: 16
         repeat: false
-        onTriggered: root.bounceOffset = 0
+        onTriggered: root.animateBounceTo(0)
     }
 
     function bounce() {
-        // Disable the Behavior momentarily is unnecessary: jumping to 14
-        // then back to 0 in two steps gives the spring a target to chase.
+        bounceSpring.stop();
+        bounceEase.stop();
         root.bounceOffset = 14;
         bounceTimer.restart();
     }
-
-    // Bounce on click. Spring (underdamped) on real GPUs, gated by useSpring
-    // because springing the icon Image's geometry corrupts its texture on
-    // VMware/software GPUs. NumberAnimation is the safe default.
-    Behavior on bounceOffset {
-        enabled: !root.useSpring
-        NumberAnimation { duration: 220; easing.type: Motion.emphasizedDecel }
-    }
-    Behavior on bounceOffset {
-        enabled: root.useSpring
-        SpringAnimation {
-            spring: 380
-            damping: 0.32
-            mass: 0.9
-            epsilon: 0.01
+    function animateBounceTo(value) {
+        if (root.useSpring) {
+            bounceSpring.to = value;
+            bounceSpring.restart();
+        } else {
+            bounceEase.to = value;
+            bounceEase.restart();
         }
     }
 
-    // Magnification easing so the running-window half of the dock waves with
-    // the pinned half. Same useSpring gate as bounce.
-    Behavior on magnification {
-        enabled: !root.useSpring
-        NumberAnimation { duration: Motion.elementMove(root.settingsService); easing.type: Motion.emphasizedDecel }
+    SpringAnimation {
+        id: bounceSpring
+        target: root
+        property: "bounceOffset"
+        spring: 380
+        damping: 0.32
+        mass: 0.9
+        epsilon: 0.01
     }
-    Behavior on magnification {
-        enabled: root.useSpring
-        SpringAnimation {
-            spring: 260
-            damping: 1.0
-            epsilon: 0.01
-        }
+    NumberAnimation {
+        id: bounceEase
+        target: root
+        property: "bounceOffset"
+        duration: 220
+        easing.type: Motion.emphasizedDecel
     }
 }

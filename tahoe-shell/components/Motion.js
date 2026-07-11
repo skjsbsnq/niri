@@ -35,6 +35,20 @@ var pressEasing = QtQuick.Easing.OutQuad;
 var menuFlashInterval = 70;
 var menuFlashCount = 2;
 
+// Dock magnification wave (T07). Cosine-bell attenuation:
+//   scale(d) = 1 + (peak − 1) · cos²(πd / 2R)   for d < R, else 1
+// R is measured in icon widths (dockMagRangeIcons × iconSize). Analytical
+// push positions use the same curve; never drive glass region geometry with it.
+var dockMagPeak = 1.7;
+var dockMagRangeIcons = 2.5;
+// Critically-damped settle for magnification / push-x (QML SpringAnimation).
+// Distinct from springBouncy (click bounce) so the wave does not overshoot.
+var dockMagSpring = {
+    spring: 3.2,
+    damping: 0.42,
+    epsilon: 0.001
+};
+
 // Spring vocabulary — QML SpringAnimation parameter groups. Glass region
 // geometry must never use these (guardrail 0704ea4); springs are only for
 // content transforms/opacity inside panels, compositor-side channels, and
@@ -153,4 +167,18 @@ function elementMove(settingsService) {
 
 function elementResize(settingsService) {
     return profileDuration(settingsService, "elementResize");
+}
+
+// Cosine-bell dock magnification. Pure function of distance in px;
+// Dock keeps layout sizes local and only imports peak/range from here.
+function dockCosineScale(distancePx, iconSizePx) {
+    var size = iconSizePx > 0 ? iconSizePx : 56;
+    var R = dockMagRangeIcons * size;
+    if (R <= 0)
+        return 1.0;
+    var d = Math.abs(distancePx);
+    if (d >= R)
+        return 1.0;
+    var c = Math.cos(Math.PI * d / (2 * R));
+    return 1.0 + (dockMagPeak - 1.0) * c * c;
 }

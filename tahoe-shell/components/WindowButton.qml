@@ -16,8 +16,8 @@ Item {
     // See Dock.qml useSpring. Spring on icon geometry corrupts the Image
     // texture on VMware/software GPUs. Dock forwards its own useSpring here.
     property bool useSpring: false
-    // T08-fix9: mag/push track analytical targets with a short continuous
-    // Behavior (not per-move Spring.restart — that jittered the bar).
+    // T08-fix9: mag/push track analytical targets via SmoothedAnimation
+    // (not per-move Spring.restart — that jittered the bar).
     property real magnificationTarget: 1.0
     property real magnification: 1.0
     // Slot x/width are REST geometry only (never wave-driven).
@@ -151,16 +151,18 @@ Item {
 
     Behavior on magnification {
         enabled: !Motion.reducedMotion(root.settingsService)
-        NumberAnimation {
+        SmoothedAnimation {
             duration: Motion.dockMagFollowMs
-            easing.type: Motion.emphasizedDecel
+            velocity: -1
+            easing.type: Easing.InOutQuad
         }
     }
     Behavior on pushX {
         enabled: !Motion.reducedMotion(root.settingsService)
-        NumberAnimation {
+        SmoothedAnimation {
             duration: Motion.dockMagFollowMs
-            easing.type: Motion.emphasizedDecel
+            velocity: -1
+            easing.type: Easing.InOutQuad
         }
     }
 

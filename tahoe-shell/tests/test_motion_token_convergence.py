@@ -88,9 +88,9 @@ class MotionTokenConvergenceTests(unittest.TestCase):
     def test_motion_exports_dock_magnification_tokens(self) -> None:
         text = MOTION_JS.read_text(encoding="utf-8")
 
-        self.assertIn("var dockMagPeak = 1.65;", text)
-        self.assertIn("var dockMagFollowMs = 90;", text)
-        self.assertIn("var dockMagRangeIcons = 2.75;", text)
+        self.assertIn("var dockMagPeak = 1.62;", text)
+        self.assertIn("var dockMagFollowMs = 170;", text)
+        self.assertIn("var dockMagRangeIcons = 3.2;", text)
         self.assertIn("var dockMagSpring = {", text)
         self.assertIn("function dockCosineScale(distancePx, iconSizePx)", text)
         # Cosine-bell formula must stay the single outlet.
@@ -100,8 +100,8 @@ class MotionTokenConvergenceTests(unittest.TestCase):
         self.assertIsNotNone(block)
         assert block
         body = block.group(1)
-        self.assertIn("spring: 3.6", body)
-        self.assertIn("damping: 0.48", body)
+        self.assertIn("spring: 3.2", body)
+        self.assertIn("damping: 0.52", body)
         self.assertIn("epsilon: 0.001", body)
 
     def test_motion_exports_dock_launch_and_autohide_tokens(self) -> None:
@@ -128,10 +128,14 @@ class MotionTokenConvergenceTests(unittest.TestCase):
         self.assertNotIn("1 - distance / 135", dock)
         self.assertNotIn("influence * 0.34", dock)
 
-        # T08-fix8/9: rest slots + visual pushX (direct bind, full cosine scales).
+        # T08-fix8/9: rest slots + visual pushX; fix9 = SmoothedAnimation follow.
         self.assertIn("root.pinnedScaleAt(pinnedButton.index)", dock)
         self.assertIn("root.pinnedPushXAt(pinnedButton.index)", dock)
         self.assertIn("var _w = root.pinnedWave;", dock)
+        self.assertIn("SmoothedAnimation", dock)
+        self.assertIn("SmoothedAnimation", window_button)
+        self.assertIn("velocity: -1", dock)
+        self.assertIn("velocity: -1", window_button)
         self.assertIn("function computeSectionWave(", dock)
         # Must NOT zero scales to fit host (that killed the wave).
         self.assertNotIn("scales[i] = 1.0;", dock)
@@ -215,7 +219,7 @@ class MotionTokenConvergenceTests(unittest.TestCase):
         self.assertIn("if (!dockRevealDebounceTimer.running)", dock)
         self.assertNotIn("dockRevealDebounceTimer.restart()", dock)
         # No dual Behavior on the same property (T00 interceptor 待办 closed).
-        # Wave mag/push use a single short Behavior (T08-fix9 continuous follow).
+        # Wave mag/push: one SmoothedAnimation Behavior each (T08-fix9).
         # Dual Behavior on the same property is still forbidden.
         self.assertEqual(dock.count("Behavior on magnification"), 1)
         self.assertEqual(dock.count("Behavior on pushX"), 1)
@@ -223,6 +227,9 @@ class MotionTokenConvergenceTests(unittest.TestCase):
         self.assertEqual(window_button.count("Behavior on magnification"), 1)
         self.assertEqual(window_button.count("Behavior on pushX"), 1)
         self.assertEqual(window_button.count("Behavior on bounceOffset"), 0)
+        # Mag/push must use SmoothedAnimation, not NumberAnimation+emphasizedDecel.
+        self.assertGreaterEqual(dock.count("SmoothedAnimation"), 2)
+        self.assertGreaterEqual(window_button.count("SmoothedAnimation"), 2)
 
     def test_dock_launch_bounce_and_autohide_spring(self) -> None:
         dock = (COMPONENTS_ROOT / "Dock.qml").read_text(encoding="utf-8")

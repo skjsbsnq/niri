@@ -40,21 +40,24 @@ var menuFlashCount = 2;
 // R is measured in icon widths (dockMagRangeIcons × iconSize). Analytical
 // push positions use the same curve; never drive glass region geometry with it.
 //
-// Hand-feel targets (macOS-like):
-//  - peak ≈1.65 so the hovered icon clearly "pops" above the shelf
-//  - range ≈2.75 icon-widths for a soft multi-icon wave (not a single spike)
-// Glass stays rest-sized; icons paint above the shelf (glassClip false in Dock).
-var dockMagPeak = 1.65;
-var dockMagRangeIcons = 2.75;
-// Short continuous settle for mag/push (Behavior). Keep critically damped —
-// no overshoot. Not used as per-move restart() (that caused jitter).
+// Hand-feel targets (macOS-like sweep):
+//  - peak ≈1.62 — clear pop without a harsh spike
+//  - range ≈3.2 icon-widths — soft multi-icon skirt so neighbors blend
+//  - follow ≈170ms SmoothedAnimation — continuous retarget (not 90ms
+//    OutCubic NumberAnimation restarts, which felt fast and choppy)
+// Glass stays rest-sized; mag/push never drive glass geometry.
+var dockMagPeak = 1.62;
+var dockMagRangeIcons = 3.2;
+// Legacy spring group kept for tests / optional future use. Wave path uses
+// SmoothedAnimation (duration-based, velocity=-1) — never Spring.restart().
 var dockMagSpring = {
-    spring: 3.6,
-    damping: 0.48,
+    spring: 3.2,
+    damping: 0.52,
     epsilon: 0.001
 };
-// Wave follow duration when useSpring is false (NumberAnimation Behavior).
-var dockMagFollowMs = 90;
+// Approximate settle time for mag/push SmoothedAnimation (velocity: -1).
+// Longer + InOutQuad → elegant cross-icon blend while sweeping.
+var dockMagFollowMs = 170;
 
 // Dock launch bounce loop + autohide (T08). Parabolic cycle while an app is
 // launching: height ≈ factor×icon, period ms, InQuad up / OutQuad down.

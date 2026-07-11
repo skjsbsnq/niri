@@ -203,7 +203,7 @@ PanelWindow {
     //  4. Cosine scales stay FULL strength (never zeroed to fit).
     //  5. Neighbor push repositions icons; if the ideal pack is wider than the
     //     section, positions are *remapped* into the host (gaps shrink), scales stay.
-    //  6. mag/push bind DIRECTLY (no spring chase).
+    //  6. mag/push track targets via SmoothedAnimation (no Spring.restart).
     //  7. Section clip is a hard fence against bleeding into minimized/tools.
     //
     // Returns { scales:[], pushX:[], packedW } or null.
@@ -1190,13 +1190,11 @@ PanelWindow {
                                     }
                                 }
 
-                                // T08-fix8: mag/push bind DIRECTLY to analytical wave.
-                                // SpringAnimation.restart() on every mouse move caused
-                                // lag/overshoot that looked like the whole dock shaking.
+                                // T08-fix9: mag/push follow analytical targets with
+                                // SmoothedAnimation (duration-based). Continuous retarget
+                                // blends mid-sweep; Spring.restart() / short OutCubic
+                                // NumberAnimation both felt fast or choppy.
                                 // Slot x/width remain immutable rest geometry.
-                                // Reference pinnedWave so the binding tracks cursor deps.
-                                // Short Behavior (not per-move Spring.restart) for macOS-like
-                                // continuous follow without bar jitter.
                                 readonly property real magnificationTarget: {
                                     var _w = root.pinnedWave;
                                     return root.pinnedScaleAt(pinnedButton.index);
@@ -1226,16 +1224,18 @@ PanelWindow {
 
                                 Behavior on magnification {
                                     enabled: !Motion.reducedMotion(root.settingsService)
-                                    NumberAnimation {
+                                    SmoothedAnimation {
                                         duration: Motion.dockMagFollowMs
-                                        easing.type: Motion.emphasizedDecel
+                                        velocity: -1
+                                        easing.type: Easing.InOutQuad
                                     }
                                 }
                                 Behavior on pushX {
                                     enabled: !Motion.reducedMotion(root.settingsService)
-                                    NumberAnimation {
+                                    SmoothedAnimation {
                                         duration: Motion.dockMagFollowMs
-                                        easing.type: Motion.emphasizedDecel
+                                        velocity: -1
+                                        easing.type: Easing.InOutQuad
                                     }
                                 }
 

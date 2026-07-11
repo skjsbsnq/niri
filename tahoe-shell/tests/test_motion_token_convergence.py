@@ -235,6 +235,53 @@ class MotionTokenConvergenceTests(unittest.TestCase):
         self.assertIn("var ccMorphSiblingOffsetPx = 8;", text)
         self.assertIn("var ccMorphListMaxHeight = 220;", text)
 
+    def test_dynamic_island_morph_spring_tokens_and_wiring(self) -> None:
+        motion = (COMPONENTS_ROOT / "DynamicIslandMotion.js").read_text(encoding="utf-8")
+        overlay = (COMPONENTS_ROOT / "DynamicIslandOverlay.qml").read_text(encoding="utf-8")
+        shell = (SHELL_ROOT / "shell.qml").read_text(encoding="utf-8")
+        chip = (COMPONENTS_ROOT / "DynamicIslandChip.qml").read_text(encoding="utf-8")
+
+        # Tokens: springBouncy group for content; geometry morph stays eased.
+        self.assertIn("overlayContentSpring", motion)
+        self.assertIn("Motion.springBouncy", motion)
+        self.assertIn("overlayContentEnterScale = 0.9", motion)
+        self.assertIn("var overlayMorphDuration = 380", motion)
+        self.assertIn("OutCubic", motion)
+        # Chip fine-tune (slightly snappier than pre-T12 280/220/180).
+        self.assertIn("var chipColorDuration = 260", motion)
+        self.assertIn("var chipScaleDuration = 200", motion)
+        self.assertIn("var chipContentDuration = 160", motion)
+
+        # Overlay: radius always height/2; glass geometry Behaviors are NumberAnimation.
+        self.assertIn("return h / 2", overlay)
+        self.assertIn("property bool useSpring", overlay)
+        self.assertIn("contentScaleSpring", overlay)
+        self.assertIn("IslandMotion.overlayContentSpring", overlay)
+        self.assertIn("IslandMotion.overlayContentEnterScale", overlay)
+        self.assertIn("root.useSpring", overlay)
+        # Swipe IPC path still wired (debug + settle).
+        self.assertIn("beginSwipe", overlay)
+        self.assertIn("advanceSwipe", overlay)
+        self.assertIn("resolveSwipe", overlay)
+        self.assertIn("cancelSwipe", overlay)
+
+        # Glass geometry: no SpringAnimation on islandSurface width/height/x/radius.
+        # Only contentScaleSpring may be a SpringAnimation element.
+        self.assertEqual(overlay.count("SpringAnimation {"), 1)
+        self.assertIn('property: "contentScale"', overlay)
+        # Explicit comment guard for glass region.
+        self.assertIn("Geometry → TahoeGlassRegion", overlay)
+        self.assertIn("eased NumberAnimation only", overlay)
+
+        # shell forwards useSpring + settingsService.
+        self.assertIn("DynamicIslandOverlay", shell)
+        self.assertIn("useSpring: shell.useSpring", shell)
+        self.assertIn("settingsService: desktopSettings", shell)
+
+        # Chip still consumes IslandMotion chip tokens.
+        self.assertIn("IslandMotion.chipScaleDuration", chip)
+        self.assertIn("IslandMotion.chipColorDuration", chip)
+
     def test_control_center_module_morph_expand(self) -> None:
         cc = (COMPONENTS_ROOT / "ControlCenter.qml").read_text(encoding="utf-8")
 

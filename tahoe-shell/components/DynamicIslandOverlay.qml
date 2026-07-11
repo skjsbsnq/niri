@@ -4,12 +4,17 @@ import QtQuick
 import Quickshell
 import Quickshell.Wayland
 import "DynamicIslandMotion.js" as IslandMotion
+import "Motion.js" as Motion
 import "TahoeGlass.js" as GlassStyle
 
 PanelWindow {
     id: root
 
     property var dynamicIslandService
+    property var settingsService
+    // useSpring dual-branch for content-scale only. Glass region geometry
+    // (islandSurface x/width/height/radius) must never use SpringAnimation.
+    property bool useSpring: false
     property bool darkMode: false
     readonly property string islandState: dynamicIslandService ? String(dynamicIslandService.state || "resting_time") : "resting_time"
     readonly property string geometryState: islandState
@@ -127,10 +132,11 @@ PanelWindow {
     }
 
     function radiusForState(stateName, itemHeight) {
-        if (stateName === "expanded_media" || stateName === "expanded_summary")
-            return 30;
-
-        return itemHeight / 2;
+        // T12: radius always tracks height/2 for continuous capsule morph.
+        var h = Number(itemHeight);
+        if (!isFinite(h) || h <= 0)
+            return 19;
+        return h / 2;
     }
 
     function isRestingState(stateName) {
@@ -193,6 +199,7 @@ PanelWindow {
         regionEnabled: root.capsuleShown || islandSurface.opacity > 0.01
         opacity: root.capsuleShown ? 1 : 0
 
+        // Geometry → TahoeGlassRegion: eased NumberAnimation only (no Spring).
         Behavior on x {
             NumberAnimation { duration: root.swipeWidthDuration; easing.type: root.swipeWidthEasing }
         }
@@ -221,43 +228,89 @@ PanelWindow {
             NumberAnimation { duration: IslandMotion.overlayContentDuration; easing.type: IslandMotion.overlayColorEasing }
         }
 
-       DynamicIslandContent {
-           anchors.fill: parent
-           islandState: root.contentState
-           displayText: root.contentDisplayText
-           secondaryText: root.contentSecondaryText
-           iconCode: root.contentIconCode
-           progress: root.progress
-           compactResting: root.compactResting
-           compactContentVisible: root.compactContentVisible
-           mediaExpandedContentVisible: root.mediaContentVisible
-           summaryExpandedContentVisible: root.summaryContentVisible
-           showSecondaryText: root.showSecondaryText
-           textPrimary: root.textPrimary
-           textSecondary: root.textSecondary
-            mediaArtUrl: root.mediaArtUrl
-            mediaTrackTitle: root.mediaTrackTitle
-            mediaTrackArtist: root.mediaTrackArtist
-            mediaPlaying: root.mediaPlaying
-            mediaPosition: root.mediaPosition
-            mediaLength: root.mediaLength
-            mediaProgress: root.mediaProgress
-            mediaPositionSupported: root.mediaPositionSupported
-            mediaLengthSupported: root.mediaLengthSupported
-            canPlayPause: root.canPlayPause
-            canPrev: root.canPrev
-            canNext: root.canNext
-            summaryBatteryPercent: root.summaryBatteryPercent
-            summaryBatteryCharging: root.summaryBatteryCharging
-            summaryVolume: root.summaryVolume
-            summaryMuted: root.summaryMuted
-            summaryBrightness: root.summaryBrightness
-            summaryBrightnessAvailable: root.summaryBrightnessAvailable
-            summaryWorkspaceLabel: root.summaryWorkspaceLabel
-            onMediaPreviousRequested: if (root.dynamicIslandService) root.dynamicIslandService.mediaPrevious()
-            onMediaPlayPauseRequested: if (root.dynamicIslandService) root.dynamicIslandService.mediaTogglePlayPause()
-            onMediaNextRequested: if (root.dynamicIslandService) root.dynamicIslandService.mediaNext()
-            onMediaControlPressed: if (root.dynamicIslandService) root.dynamicIslandService.setUserInteracting(true)
+        // Content layer: scale 0.9→1 on state switch (springBouncy when allowed).
+        // Content opacity fade remains inside DynamicIslandContent views.
+        Item {
+            id: contentHost
+            anchors.fill: parent
+            property string contentKey: root.contentState
+            property real contentScale: 1.0
+            scale: contentScale
+            transformOrigin: Item.Center
+
+            onContentKeyChanged: {
+                contentScaleSpring.stop();
+                contentScaleEase.stop();
+                if (Motion.reducedMotion(root.settingsService)) {
+                    contentHost.contentScale = 1.0;
+                    return;
+                }
+                contentHost.contentScale = IslandMotion.overlayContentEnterScale;
+                if (root.useSpring) {
+                    contentScaleSpring.to = 1.0;
+                    contentScaleSpring.restart();
+                } else {
+                    contentScaleEase.from = IslandMotion.overlayContentEnterScale;
+                    contentScaleEase.to = 1.0;
+                    contentScaleEase.start();
+                }
+            }
+
+            SpringAnimation {
+                id: contentScaleSpring
+                target: contentHost
+                property: "contentScale"
+                spring: IslandMotion.overlayContentSpring.spring
+                damping: IslandMotion.overlayContentSpring.damping
+                epsilon: IslandMotion.overlayContentSpring.epsilon
+            }
+
+            NumberAnimation {
+                id: contentScaleEase
+                target: contentHost
+                property: "contentScale"
+                duration: IslandMotion.overlayContentScaleDuration
+                easing.type: IslandMotion.overlayContentScaleEasing
+            }
+
+            DynamicIslandContent {
+                anchors.fill: parent
+                islandState: root.contentState
+                displayText: root.contentDisplayText
+                secondaryText: root.contentSecondaryText
+                iconCode: root.contentIconCode
+                progress: root.progress
+                compactResting: root.compactResting
+                compactContentVisible: root.compactContentVisible
+                mediaExpandedContentVisible: root.mediaContentVisible
+                summaryExpandedContentVisible: root.summaryContentVisible
+                showSecondaryText: root.showSecondaryText
+                textPrimary: root.textPrimary
+                textSecondary: root.textSecondary
+                mediaArtUrl: root.mediaArtUrl
+                mediaTrackTitle: root.mediaTrackTitle
+                mediaTrackArtist: root.mediaTrackArtist
+                mediaPlaying: root.mediaPlaying
+                mediaPosition: root.mediaPosition
+                mediaLength: root.mediaLength
+                mediaProgress: root.mediaProgress
+                mediaPositionSupported: root.mediaPositionSupported
+                mediaLengthSupported: root.mediaLengthSupported
+                canPlayPause: root.canPlayPause
+                canPrev: root.canPrev
+                canNext: root.canNext
+                summaryBatteryPercent: root.summaryBatteryPercent
+                summaryBatteryCharging: root.summaryBatteryCharging
+                summaryVolume: root.summaryVolume
+                summaryMuted: root.summaryMuted
+                summaryBrightness: root.summaryBrightness
+                summaryBrightnessAvailable: root.summaryBrightnessAvailable
+                summaryWorkspaceLabel: root.summaryWorkspaceLabel
+                onMediaPreviousRequested: if (root.dynamicIslandService) root.dynamicIslandService.mediaPrevious()
+                onMediaPlayPauseRequested: if (root.dynamicIslandService) root.dynamicIslandService.mediaTogglePlayPause()
+                onMediaNextRequested: if (root.dynamicIslandService) root.dynamicIslandService.mediaNext()
+                onMediaControlPressed: if (root.dynamicIslandService) root.dynamicIslandService.setUserInteracting(true)
+            }
         }
 
         MouseArea {

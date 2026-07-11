@@ -63,7 +63,7 @@
 | GOAL-09 | T09 通知堆叠与滑出 | M | DONE | [acceptance/T09-notification-stack-swipe-2026-07-11.md](acceptance/T09-notification-stack-swipe-2026-07-11.md)（含审查 follow-up） |
 | GOAL-10 | T10 控制中心去 chrome + 控件手感 | M | DONE | [acceptance/T10-control-center-feel-2026-07-11.md](acceptance/T10-control-center-feel-2026-07-11.md) |
 | GOAL-11 | T11 控制中心模块 morph 展开 | L | DONE | [acceptance/T11-control-center-morph-2026-07-11.md](acceptance/T11-control-center-morph-2026-07-11.md) |
-| GOAL-12 | T12 灵动岛 morph 弹簧化 | S | PENDING | — |
+| GOAL-12 | T12 灵动岛 morph 弹簧化 | S | DONE | [acceptance/T12-dynamic-island-spring-2026-07-11.md](acceptance/T12-dynamic-island-spring-2026-07-11.md) |
 | GOAL-13 | T13 图标体系迁移 | L | PENDING | — |
 | GOAL-14 | T14 颜色语义化 + accent 系统 | M | PENDING | — |
 | GOAL-15 | T15 设置外壳重设计 | L | PENDING | — |

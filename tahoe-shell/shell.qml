@@ -850,6 +850,8 @@ ShellRoot {
             DynamicIslandOverlay {
                 screen: modelData
                 dynamicIslandService: dynamicIsland
+                settingsService: desktopSettings
+                useSpring: shell.useSpring
                 darkMode: shell.darkMode
             }
 

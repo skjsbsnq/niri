@@ -523,7 +523,8 @@ class MotionTokenConvergenceTests(unittest.TestCase):
             "ControlCenter.qml": 8,
             # T17: shortcut chips removed; one press outlet remains on result rows.
             "Spotlight.qml": 1,
-            "Launchpad.qml": 2,
+            # T18: category chips removed; one press outlet on app cells.
+            "Launchpad.qml": 1,
             "MenuRow.qml": 1,
             "settings/controls/TahoeButton.qml": 1,
             "settings/controls/TahoeListRow.qml": 1,

@@ -757,6 +757,7 @@ ShellRoot {
                 screen: modelData
                 appsService: apps
                 settingsService: desktopSettings
+                launchpadOpen: shell.launchpadOpen
             }
 
             PopupDismissLayer {
@@ -1019,6 +1020,7 @@ ShellRoot {
                 appsService: apps
                 settingsService: desktopSettings
                 useSpring: shell.useSpring
+                darkMode: shell.darkMode
                 open: shell.launchpadOpen
                 onCloseRequested: shell.launchpadOpen = false
             }

@@ -4,12 +4,15 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
+import "Motion.js" as Motion
 
 PanelWindow {
     id: root
 
     property var appsService
     property var settingsService
+    // T18: Launchpad open drives static wallpaper zoom + dim (content-side only).
+    property bool launchpadOpen: false
 
     readonly property bool settingsReady: settingsService && settingsService.loaded
     readonly property bool dynamicDesired: settingsReady
@@ -347,19 +350,53 @@ PanelWindow {
         syncExternalProcess();
     }
 
-    Image {
+    Item {
+        id: staticLayer
         anchors.fill: parent
-        source: root.staticWallpaperSource()
-        fillMode: Image.PreserveAspectCrop
-        smooth: true
-        asynchronous: true
         visible: root.showStaticWallpaper
-    }
+        clip: true
 
-    Rectangle {
-        anchors.fill: parent
-        color: "#18000000"
-        visible: root.showStaticWallpaper
+        readonly property real zoom: root.launchpadOpen ? Motion.launchpadWallpaperScale : 1.0
+        readonly property real dimOpacity: root.launchpadOpen ? Motion.launchpadWallpaperDim : 0.0
+
+        Image {
+            id: staticImage
+            anchors.centerIn: parent
+            width: parent.width
+            height: parent.height
+            source: root.staticWallpaperSource()
+            fillMode: Image.PreserveAspectCrop
+            smooth: true
+            asynchronous: true
+            scale: staticLayer.zoom
+            transformOrigin: Item.Center
+
+            Behavior on scale {
+                NumberAnimation {
+                    duration: Motion.launchpadWallpaperDuration(root.settingsService)
+                    easing.type: Motion.emphasizedDecel
+                }
+            }
+        }
+
+        // Base vignette (existing subtle darken) + Launchpad extra dim.
+        Rectangle {
+            anchors.fill: parent
+            color: "#18000000"
+        }
+
+        Rectangle {
+            anchors.fill: parent
+            color: "#000000"
+            opacity: staticLayer.dimOpacity
+
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: Motion.launchpadWallpaperDuration(root.settingsService)
+                    easing.type: Motion.emphasizedDecel
+                }
+            }
+        }
     }
 
     Process {

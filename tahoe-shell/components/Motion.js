@@ -166,35 +166,33 @@ var launchpadWallpaperMs = 400;
 // Soft unified enter (whole grid), not per-icon cascade.
 var launchpadIconEnterMs = 280;
 var launchpadIconEnterScaleFrom = 0.92;
-var launchpadPageSnapMs = 240;
-// Desktop-style paging (finger right = next). Requires a reversed page strip
-// in Launchpad (first logical page on the right end of the Flickable):
-//   finger RIGHT / contentX ↓ → NEXT page
-//   finger LEFT  / contentX ↑ → PREV page
-// First page: left-drag rubber-bands; last page: right-drag rubber-bands.
-var launchpadPageCommitRatio = 0.08;
-var launchpadPageCommitMinPx = 28;
-// Capture at finger-up (not after coast). Units ≈ px/s in Flickable.
-var launchpadPageFlickVelocity = 80;
+// Smooth page settle (eased, slightly longer than elementMove).
+var launchpadPageSnapMs = 340;
+// Desktop-style: finger RIGHT → next (content slides LEFT, page comes from right);
+// finger LEFT → prev (content slides RIGHT). Standard LTR strip (page0|page1|…).
+// dragDelta = fingerEndX - fingerStartX (screen space, NOT contentX).
+// velocity = finger px/s (positive = finger moving right).
+var launchpadPageCommitRatio = 0.10;
+var launchpadPageCommitMinPx = 36;
+var launchpadPageFlickVelocity = 120;
 
-// Pure page-intent resolver (testable). delta = contentX - startContentX.
-// velocity: Flickable horizontalVelocity (positive → content moving right → next
-// on the reversed strip).
-function launchpadResolvePage(startPage, pageCount, delta, velocity, pageWidth) {
+// Pure page-intent resolver (testable).
+// dragDelta/velocity are in *finger* space: right = positive.
+function launchpadResolvePage(startPage, pageCount, dragDelta, velocity, pageWidth) {
     var n = Math.max(1, Math.round(Number(pageCount) || 1));
     var page = Math.max(0, Math.min(n - 1, Math.round(Number(startPage) || 0)));
     var w = Math.max(1, Number(pageWidth) || 1);
-    var d = Number(delta) || 0;
+    var d = Number(dragDelta) || 0;
     var v = Number(velocity) || 0;
     var commitPx = Math.max(launchpadPageCommitMinPx, w * launchpadPageCommitRatio);
     var flickV = launchpadPageFlickVelocity;
     var next = page;
-    // Reversed strip: contentX down / vel > 0 → next; contentX up / vel < 0 → prev.
+    // Finger right / vel > 0 → next; finger left / vel < 0 → prev.
     if (Math.abs(v) >= flickV)
         next = v > 0 ? page + 1 : page - 1;
-    else if (d < -commitPx)
-        next = page + 1;
     else if (d > commitPx)
+        next = page + 1;
+    else if (d < -commitPx)
         next = page - 1;
     return Math.max(0, Math.min(n - 1, next));
 }

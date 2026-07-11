@@ -18,43 +18,41 @@ class LaunchpadRefactorTests(unittest.TestCase):
         self.assertNotIn("categoryStrip", text)
         self.assertNotIn("categories:", text)
         self.assertNotIn('category: "all"', text)
-        # Full-screen backdrop material.
         self.assertIn("MaterialBackdrop", text)
         self.assertIn("compositorLayerAnimations: false", text)
-        # Paging + dots + keyboard.
         self.assertIn("pageFlick", text)
         self.assertIn("snapToNearestPage", text)
         self.assertIn("finishPageGesture", text)
         self.assertIn("pageDragStartPage", text)
         self.assertIn("moveSelection", text)
         self.assertIn("Keys.onLeftPressed", text)
-        # Unified grid enter (no per-icon opacity cascade).
         self.assertIn("gridEnter", text)
         self.assertIn("playGridEnter", text)
-        self.assertIn("DragAndOvershootBounds", text)
-        # Intent paging via Motion.launchpadResolvePage (not 50% Math.round only).
+        # Custom inverted drag (not native Flickable interactive).
+        self.assertIn("interactive: false", text)
+        self.assertIn("pageDragArea", text)
         self.assertIn("Motion.launchpadResolvePage", text)
-        self.assertIn("pagePeakVelocity", text)
-        # Reversed strip: finger right = next (contentXForPage / logicalPage).
         self.assertIn("contentXForPage", text)
         self.assertIn("pageFromContentX", text)
-        self.assertIn("logicalPage", text)
+        # Standard LTR strip (not reversed layout).
+        self.assertIn("logicalPage: pageDelegate.index", text)
+        self.assertNotIn("pageCount - 1 - pageDelegate.index", text)
 
     def test_stagger_budget_tokens(self) -> None:
         text = MOTION.read_text(encoding="utf-8")
         self.assertIn("var launchpadWallpaperScale = 1.06;", text)
         self.assertIn("var launchpadWallpaperDim = 0.25;", text)
         self.assertIn("var launchpadIconEnterMs = 280;", text)
-        self.assertIn("var launchpadPageSnapMs = 240;", text)
-        self.assertIn("var launchpadPageCommitRatio = 0.08;", text)
-        self.assertIn("var launchpadPageFlickVelocity = 80;", text)
-        self.assertIn("pagePeakVelocity", LAUNCHPAD.read_text(encoding="utf-8"))
-        self.assertIn("onDraggingChanged", LAUNCHPAD.read_text(encoding="utf-8"))
-        self.assertIn("cancelFlick", LAUNCHPAD.read_text(encoding="utf-8"))
-        self.assertIn("var launchpadGridCols = 7;", text)
-        self.assertIn("var launchpadGridRows = 5;", text)
+        self.assertIn("var launchpadPageSnapMs = 340;", text)
+        self.assertIn("var launchpadPageCommitRatio = 0.10;", text)
+        self.assertIn("var launchpadPageFlickVelocity = 120;", text)
         self.assertIn("function launchpadStaggerDelay", text)
         self.assertIn("function launchpadPageSnapDuration", text)
+        self.assertIn("function launchpadResolvePage", text)
+        lp = LAUNCHPAD.read_text(encoding="utf-8")
+        self.assertIn("pagePeakFingerVelocity", lp)
+        self.assertIn("clampContentXWithRubber", lp)
+        self.assertIn("launchAtPoint", lp)
 
     def test_wallpaper_zoom_driven_by_launchpad(self) -> None:
         wp = WALLPAPER.read_text(encoding="utf-8")
@@ -71,22 +69,25 @@ class LaunchpadRefactorTests(unittest.TestCase):
         text = LAUNCHPAD.read_text(encoding="utf-8")
         self.assertIn("filteredLaunchpadApps(root.query, \"all\")", text)
         self.assertIn("launchApp", text)
-        # Press feedback retained.
         self.assertIn("Motion.pressScaleFor", text)
 
     def test_unified_enter_not_per_icon_cascade(self) -> None:
         text = LAUNCHPAD.read_text(encoding="utf-8")
         self.assertIn("gridEnterAnim", text)
         self.assertIn("Motion.launchpadIconEnterScaleFrom", text)
-        # Icons stay opacity 1; enter is on the page surface.
         self.assertNotIn("staggerTimer", text)
         self.assertNotIn("cellScaleSpring", text)
-        # Press feedback retained on cells.
         self.assertIn("Motion.pressScaleFor", text)
+
+    def test_inverted_drag_maps_finger_right_to_content_increase(self) -> None:
+        text = LAUNCHPAD.read_text(encoding="utf-8")
+        # fingerTravel positive → contentX = start + fingerTravel
+        self.assertIn("root.pageDragStartContentX + fingerTravel", text)
+        self.assertIn("Motion.emphasizedDecel", text)
 
 
 class LaunchpadPageDirectionTests(unittest.TestCase):
-    """Desktop-style: right = next, left = prev. First page left-drag stays."""
+    """Finger right = next, finger left = prev. content slides opposite the finger."""
 
     def _resolve(self):
         text = MOTION.read_text(encoding="utf-8")
@@ -94,19 +95,19 @@ class LaunchpadPageDirectionTests(unittest.TestCase):
         min_px = float(re.search(r"var launchpadPageCommitMinPx = ([0-9.]+);", text).group(1))
         flick_v = float(re.search(r"var launchpadPageFlickVelocity = ([0-9.]+);", text).group(1))
 
-        def resolve(start_page, page_count, delta, velocity, page_width):
+        def resolve(start_page, page_count, drag_delta, velocity, page_width):
             n = max(1, int(page_count))
             page = max(0, min(n - 1, int(round(start_page))))
             w = max(1.0, float(page_width))
-            d = float(delta)
+            d = float(drag_delta)
             v = float(velocity)
             commit = max(min_px, w * ratio)
-            # Inverted desktop mapping (matches Motion.launchpadResolvePage).
+            # Finger-space: right positive → next.
             if abs(v) >= flick_v:
                 nxt = page + 1 if v > 0 else page - 1
-            elif d < -commit:
-                nxt = page + 1
             elif d > commit:
+                nxt = page + 1
+            elif d < -commit:
                 nxt = page - 1
             else:
                 nxt = page
@@ -114,26 +115,23 @@ class LaunchpadPageDirectionTests(unittest.TestCase):
 
         return resolve
 
-    def test_first_page_right_goes_next_left_stays(self) -> None:
+    def test_first_page_finger_right_goes_next(self) -> None:
         resolve = self._resolve()
-        # contentX down (finger right) → next
-        self.assertEqual(resolve(0, 3, -80, 0, 800), 1)
-        # contentX up (finger left) → prev but clamped to 0
-        self.assertEqual(resolve(0, 3, 80, 0, 800), 0)
-        # flick right (vel > 0) → next
-        self.assertEqual(resolve(0, 3, -5, 200, 800), 1)
-        # flick left (vel < 0) → stay on first
-        self.assertEqual(resolve(0, 3, 5, -200, 800), 0)
+        # commit threshold at 800px width = max(36, 80) = 80; need strictly greater.
+        self.assertEqual(resolve(0, 3, 100, 0, 800), 1)
+        self.assertEqual(resolve(0, 3, -100, 0, 800), 0)
+        self.assertEqual(resolve(0, 3, 5, 200, 800), 1)
+        self.assertEqual(resolve(0, 3, -5, -200, 800), 0)
 
     def test_middle_page_both_directions(self) -> None:
         resolve = self._resolve()
-        self.assertEqual(resolve(1, 3, -80, 0, 800), 2)
-        self.assertEqual(resolve(1, 3, 80, 0, 800), 0)
+        self.assertEqual(resolve(1, 3, 100, 0, 800), 2)
+        self.assertEqual(resolve(1, 3, -100, 0, 800), 0)
 
-    def test_last_page_left_goes_prev_right_stays(self) -> None:
+    def test_last_page_finger_left_goes_prev(self) -> None:
         resolve = self._resolve()
-        self.assertEqual(resolve(2, 3, 80, 0, 800), 1)
-        self.assertEqual(resolve(2, 3, -80, 0, 800), 2)
+        self.assertEqual(resolve(2, 3, -100, 0, 800), 1)
+        self.assertEqual(resolve(2, 3, 100, 0, 800), 2)
 
 
 if __name__ == "__main__":

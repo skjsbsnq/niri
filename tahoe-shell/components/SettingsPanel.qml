@@ -48,7 +48,6 @@ PanelWindow {
     readonly property int panelHeight: Math.max(420, Math.min(screenHeight - 64, 540))
     readonly property int panelLeft: Math.round(Math.max(8, (screenWidth - panelWidth) / 2))
     readonly property int panelTop: Math.round(Math.max(42, (screenHeight - panelHeight) / 2))
-    readonly property string iconFont: "Material Icons"
     readonly property color textPrimary: SettingsTheme.textPrimary(darkMode)
     readonly property color textSecondary: SettingsTheme.textSecondary(darkMode)
     readonly property color textMuted: SettingsTheme.textMuted(darkMode)

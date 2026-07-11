@@ -24,7 +24,6 @@ Item {
     readonly property bool hasData: hasWeatherData()
     readonly property bool updating: !!(weatherService && weatherService.updating)
     readonly property string status: weatherService ? String(weatherService.status || "idle") : "idle"
-    readonly property string iconFont: "Material Icons"
 
     readonly property color textPrimary: darkMode ? "#f5f7fb" : "#1d1d1f"
     readonly property color textSecondary: darkMode ? "#c8d0d8" : "#991d1d1f"
@@ -866,24 +865,12 @@ Item {
         border.width: 1
         opacity: enabled ? 1 : 0.55
 
-        Text {
+        TahoeSymbol {
             id: buttonIcon
-
             anchors.centerIn: parent
-            text: button.busy ? "\ue863" : button.iconCode // sync
+            name: button.busy ? "\ue863" : button.iconCode // sync
             color: root.textSecondary
-            font.family: root.iconFont
-            font.pixelSize: 18
-
-            // Local exception: busy spinner uses a constant rotation period,
-            // not shell enter/exit motion.
-            NumberAnimation on rotation {
-                running: button.busy
-                loops: Animation.Infinite
-                from: 0
-                to: 360
-                duration: 900
-            }
+            size: 18
         }
 
         MouseArea {
@@ -942,12 +929,11 @@ Item {
             anchors.rightMargin: 10
             spacing: 7
 
-            Text {
-                text: pill.iconCode
-                color: root.accentBlue
-                font.family: root.iconFont
-                font.pixelSize: 16
+            TahoeSymbol {
                 anchors.verticalCenter: parent.verticalCenter
+                name: pill.iconCode
+                color: root.accentBlue
+                size: 16
             }
 
             Column {
@@ -1299,12 +1285,11 @@ Item {
             anchors.topMargin: 10
             spacing: 7
 
-            Text {
-                text: tile.iconCode
-                color: tile.accent
-                font.family: root.iconFont
-                font.pixelSize: 17
+            TahoeSymbol {
                 anchors.verticalCenter: parent.verticalCenter
+                name: tile.iconCode
+                color: tile.accent
+                size: 17
             }
 
             Text {
@@ -1376,12 +1361,11 @@ Item {
             anchors.rightMargin: 13
             spacing: 10
 
-            Text {
-                text: banner.iconCode
-                color: banner.accent
-                font.family: root.iconFont
-                font.pixelSize: 20
+            TahoeSymbol {
                 anchors.verticalCenter: parent.verticalCenter
+                name: banner.iconCode
+                color: banner.accent
+                size: 20
             }
 
             Column {
@@ -1415,12 +1399,11 @@ Item {
             width: Math.min(parent.width - 40, 320)
             spacing: 10
 
-            Text {
+            TahoeSymbol {
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: "\ue2bd" // wb_cloudy
+                name: "\ue2bd" // wb_cloudy
                 color: root.accentBlue
-                font.family: root.iconFont
-                font.pixelSize: 42
+                size: 42
             }
 
             Text {

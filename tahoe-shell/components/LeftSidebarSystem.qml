@@ -13,7 +13,7 @@ import "Motion.js" as Motion
 // fastDataChanged/mediumDataChanged/slowDataChanged 信号。历史折线是表现层关注点，
 // 与 Canvas 绘制紧耦合，故放在视图里；服务只做无状态数据泵。
 //
-// 视觉：全部 Tahoe 玻璃语言（卡片 radius 18、内嵌描边、深/浅色对、Material Icons
+// 视觉：全部 Tahoe 玻璃语言（卡片 radius 18、内嵌描边、深/浅色对、TahoeSymbol
 // 字形、monoFontFamily 给数字）。不引入 QtQuick.Controls、不引入 MD3 token、
 // 不引入 Lottie/SVG。右键菜单不在本任务，留待 LS07。
 Item {
@@ -56,7 +56,6 @@ Item {
     readonly property color colorBattery: "#a6e3a1"
     readonly property color dangerRed: "#ff453a"
 
-    readonly property string iconFont: "Material Icons"
 
     // --- Section 0.5: 容量 / 历史魔数（提为常量，不散落字面量）---
     readonly property int historyLen: 30
@@ -580,12 +579,11 @@ Item {
                 Layout.fillWidth: true
                 spacing: 8
 
-                Text {
-                    text: "\uf20c" // leaderboard
-                    color: root.accentBlue
-                    font.family: root.iconFont
-                    font.pixelSize: 18
+                TahoeSymbol {
                     Layout.alignment: Qt.AlignVCenter
+                    name: "\uf20c" // leaderboard
+                    color: root.accentBlue
+                    size: 18
                 }
                 Text {
                     text: "进程"
@@ -630,12 +628,11 @@ Item {
                         anchors.rightMargin: 8
                         spacing: 5
 
-                        Text {
-                            text: "\ue8b6" // search
-                            color: root.textTertiary
-                            font.family: root.iconFont
-                            font.pixelSize: 14
+                        TahoeSymbol {
                             anchors.verticalCenter: parent.verticalCenter
+                            name: "\ue8b6" // search
+                            color: root.textTertiary
+                            size: 14
                         }
 
                         TextInput {
@@ -969,12 +966,11 @@ Item {
 
         spacing: 4
 
-        Text {
-            text: parent.iconCode
-            color: parent.color
-            font.family: root.iconFont
-            font.pixelSize: 13
+        TahoeSymbol {
             anchors.verticalCenter: parent.verticalCenter
+            name: parent.iconCode
+            color: parent.color
+            size: 13
         }
         Text {
             text: parent.text
@@ -1036,12 +1032,11 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
             spacing: 7
 
-            Text {
-                text: parent.parent.iconCode
-                color: parent.parent.accent
-                font.family: root.iconFont
-                font.pixelSize: 15
+            TahoeSymbol {
                 anchors.verticalCenter: parent.verticalCenter
+                name: parent.parent.iconCode
+                color: parent.parent.accent
+                size: 15
             }
             Text {
                 text: parent.parent.title + ":"
@@ -1095,12 +1090,11 @@ Item {
                 radius: 12
                 color: Qt.rgba(rootCard.accent.r, rootCard.accent.g, rootCard.accent.b, 0.15)
 
-                Text {
+                TahoeSymbol {
                     anchors.centerIn: parent
-                    text: "\ue1db" // storage (hard_drive 不在此字体，用 storage)
+                    name: "\ue1db" // storage (hard_drive 不在此字体，用 storage)
                     color: rootCard.accent
-                    font.family: root.iconFont
-                    font.pixelSize: 20
+                    size: 20
                 }
             }
 
@@ -1177,15 +1171,11 @@ Item {
                 radius: 12
                 color: Qt.rgba(batCard.accent.r, batCard.accent.g, batCard.accent.b, 0.15)
 
-                Text {
+                TahoeSymbol {
                     anchors.centerIn: parent
-                    // 充电/放电/满电切换字形。
-                    text: root.batteryService && root.batteryService.charging
-                        ? "\ue1a3" // battery_charging_full
-                        : "\ue1a4" // battery_full
+                    name: root.batteryService && root.batteryService.charging
                     color: batCard.accent
-                    font.family: root.iconFont
-                    font.pixelSize: 20
+                    size: 20
                 }
             }
 
@@ -1255,13 +1245,12 @@ Item {
                 font.weight: parent.parent.isActive ? Font.DemiBold : Font.Medium
                 anchors.verticalCenter: parent.verticalCenter
             }
-            Text {
-                text: procSection.sortAsc ? "\ue5d8" : "\ue5db" // arrow_upward / arrow_downward
-                color: root.accentBlue
-                font.family: root.iconFont
-                font.pixelSize: 13
-                visible: parent.parent.isActive
+            TahoeSymbol {
                 anchors.verticalCenter: parent.verticalCenter
+                name: procSection.sortAsc ? "\ue5d8" : "\ue5db" // arrow_upward / arrow_downward
+                color: root.accentBlue
+                size: 13
+                visible: parent.parent.isActive
             }
         }
 

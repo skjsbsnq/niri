@@ -155,14 +155,13 @@ PanelWindow {
                 border.width: 1
             }
 
-            Text {
+            TahoeSymbol {
                 anchors.left: parent.left
                 anchors.leftMargin: 17
                 anchors.verticalCenter: parent.verticalCenter
-                text: "\ue8b6"
+                name: "\ue8b6"
                 color: "#5f6870"
-                font.family: "Material Icons"
-                font.pixelSize: 19
+                size: 19
             }
 
             Text {
@@ -237,12 +236,11 @@ PanelWindow {
                         border.width: 1
                     }
 
-                    Text {
+                    TahoeSymbol {
                         anchors.centerIn: parent
-                        text: modelData.icon
+                        name: modelData.icon
                         color: "#34404a"
-                        font.family: "Material Icons"
-                        font.pixelSize: 17
+                        size: 17
                     }
 
                     MouseArea {

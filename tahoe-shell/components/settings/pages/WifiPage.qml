@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import "../controls" as Controls
+import "../.."
 
 Flickable {
     id: page
@@ -33,7 +34,6 @@ Flickable {
     readonly property color fieldStrokeFocus: theme ? theme.fieldStrokeFocus : "#007ff7"
     readonly property color accentBlue: theme ? theme.accentBlue : "#007ff7"
     readonly property color danger: theme ? theme.danger : "#ff453a"
-    readonly property string iconFont: theme ? theme.iconFont : "Material Icons"
 
     Layout.fillWidth: true
     Layout.fillHeight: true
@@ -444,7 +444,6 @@ Flickable {
         readonly property color rowStroke: theme ? theme.rowStroke : "#72ffffff"
         readonly property color accentBlue: theme ? theme.accentBlue : "#007ff7"
         readonly property color danger: theme ? theme.danger : "#ff453a"
-        readonly property string iconFont: theme ? theme.iconFont : "Material Icons"
 
         signal forgetRequested(var entry)
 
@@ -465,14 +464,12 @@ Flickable {
             anchors.rightMargin: 10
             spacing: 10
 
-            Text {
+            TahoeSymbol {
                 Layout.preferredWidth: 22
                 Layout.alignment: Qt.AlignVCenter
-                text: row.entry && row.entry.active ? "\ue5ca" : "\ue63e"
+                name: row.entry && row.entry.active ? "\ue5ca" : "\ue63e"
                 color: row.entry && row.entry.active ? row.accentBlue : row.textPrimary
-                font.family: row.iconFont
-                font.pixelSize: 18
-                horizontalAlignment: Text.AlignHCenter
+                size: 18
             }
 
             ColumnLayout {
@@ -525,7 +522,6 @@ Flickable {
         readonly property color fieldStroke: theme ? theme.fieldStroke : "#4cffffff"
         readonly property color fieldStrokeFocus: theme ? theme.fieldStrokeFocus : "#007ff7"
         readonly property color accentBlue: theme ? theme.accentBlue : "#007ff7"
-        readonly property string iconFont: theme ? theme.iconFont : "Material Icons"
         readonly property bool canConnectDirectly: !!entry && !entry.connected && (!entry.secured || entry.known)
         readonly property bool canEnterPassword: !!entry && !entry.connected && entry.secured && !entry.known && entry.pskSupported !== false
 
@@ -576,14 +572,12 @@ Flickable {
                     Layout.fillWidth: true
                     spacing: 10
 
-                    Text {
+                    TahoeSymbol {
                         Layout.preferredWidth: 22
                         Layout.alignment: Qt.AlignVCenter
-                        text: row.entry && row.entry.connected ? "\ue5ca" : (row.entry && row.entry.secured ? "\ue897" : "\ue63e")
+                        name: row.entry && row.entry.connected ? "\ue5ca" : (row.entry && row.entry.secured ? "\ue897" : "\ue63e")
                         color: row.entry && row.entry.connected ? row.accentBlue : row.textPrimary
-                        font.family: row.iconFont
-                        font.pixelSize: 18
-                        horizontalAlignment: Text.AlignHCenter
+                        size: 18
                     }
 
                     ColumnLayout {

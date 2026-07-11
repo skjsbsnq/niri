@@ -21,7 +21,6 @@ Item {
     property color geometryFillColor: minimized ? "#5f8c929a" : "#8af7fbff"
     property color geometryBorderColor: focused ? "#202124" : "#66ffffff"
     property string fallbackIconCode: "\ue8d0"
-    property string fallbackIconFamily: "Material Icons"
 
     function rectValue(name, fallback) {
         if (!geometryRect || geometryRect[name] === undefined || geometryRect[name] === null)
@@ -72,12 +71,11 @@ Item {
             visible: root.iconSource.length > 0 && status !== Image.Error
         }
 
-        Text {
+        TahoeSymbol {
             anchors.centerIn: parent
-            text: root.fallbackIconCode
+            name: root.fallbackIconCode
             color: root.placeholderColor
-            font.family: root.fallbackIconFamily
-            font.pixelSize: Math.max(16, Math.round(root.iconSize * 0.58))
+            size: Math.max(16, Math.round(root.iconSize * 0.58))
             visible: !iconImage.visible
         }
     }

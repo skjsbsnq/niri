@@ -468,12 +468,6 @@ ShellRoot {
         closeLeftSidebar();
     }
 
-    // Register the Material Icons font once for the whole shell. Used by the
-    // Control Center (Text { font.family: "Material Icons" }). The font ships
-    // under assets/fonts/ and is resolved through Quickshell.shellPath.
-    FontLoader {
-        source: Quickshell.shellPath("assets/fonts/MaterialIconsRound.ttf")
-    }
 
     Component.onCompleted: {
         Qt.application.font = Qt.font({

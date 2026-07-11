@@ -480,12 +480,11 @@ PanelWindow {
                             color: "#70ffffff"
                             border.color: "#60ffffff"
 
-                            Text {
+                            TahoeSymbol {
                                 anchors.centerIn: parent
-                                text: "\ue7f4"
+                                name: "\ue7f4"
                                 color: "#3c4043"
-                                font.family: "Material Icons"
-                                font.pixelSize: 20
+                                size: 20
                                 visible: !cardRoot.hasIcon
                             }
 
@@ -613,12 +612,11 @@ PanelWindow {
                     border.color: "#50ffffff"
                 }
 
-                Text {
+                TahoeSymbol {
                     anchors.centerIn: parent
-                    text: "\ue5cd"
+                    name: "\ue5cd"
                     color: "#3c4043"
-                    font.family: "Material Icons"
-                    font.pixelSize: 14
+                    size: 14
                 }
 
                 MouseArea {

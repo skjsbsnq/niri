@@ -139,14 +139,13 @@ PanelWindow {
             materialAlpha: root.compositorLayerAnimations ? 1 : spotlightPanel.opacity
             glassEnabled: root.open || spotlightPanel.opacity > 0.01
 
-            Text {
+            TahoeSymbol {
                 anchors.left: parent.left
                 anchors.leftMargin: 25
                 anchors.verticalCenter: parent.verticalCenter
-                text: "\ue8b6"
+                name: "\ue8b6"
                 color: "#4f5963"
-                font.family: "Material Icons"
-                font.pixelSize: 24
+                size: 24
             }
 
             Text {

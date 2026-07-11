@@ -2,8 +2,9 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Layouts
+import "../.."
 
-// Material Icons glyph on a vertically-graded brand-color rounded square —
+// TahoeSymbol on a vertically-graded brand-color rounded square —
 // the macOS System Settings category icon idiom (a glossy squircle whose top
 // reads lighter than its base). Used by the sidebar buttons and the overview
 // summary tiles so a category keeps one identity color in both places.
@@ -11,7 +12,7 @@ import QtQuick.Layouts
 // The gradient uses Rectangle's native `gradient` (basic QtQuick, not a shader
 // effect) and Qt.lighter for the top stop, so it is safe on the VM /
 // software-renderer path. No spring on geometry and no Image, so neither
-// guardrail E (useSpring) nor the VMware icon-vanish failure mode applies.
+// guardrail E (useSpring). Icons use pre-rendered PNGs (T13).
 Item {
     id: icon
 
@@ -27,7 +28,6 @@ Item {
     // category palette (indigo/red/coral/blue/orange/green/gray/teal).
     readonly property color topColor: Qt.lighter(icon.accentColor, 1.2)
 
-    readonly property string iconFont: theme ? theme.iconFont : "Material Icons"
 
     Layout.preferredWidth: square
     Layout.preferredHeight: square
@@ -46,13 +46,10 @@ Item {
         border.width: 1
     }
 
-    Text {
+    TahoeSymbol {
         anchors.centerIn: parent
-        text: icon.iconCode
+        name: icon.iconCode
         color: "#ffffff"
-        font.family: icon.iconFont
-        font.pixelSize: icon.glyphSize
-        // Glyphs sit slightly high optically; nudge down a hair.
-        anchors.verticalCenterOffset: 1
+        size: icon.glyphSize
     }
 }

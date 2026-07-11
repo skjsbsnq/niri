@@ -32,7 +32,6 @@ PanelWindow {
     readonly property color textSecondary: darkMode ? "#c8d0d8" : "#991d1d1f"
     readonly property color textTertiary: darkMode ? "#9da7b1" : "#731d1d1f"
     readonly property color accentBlue: darkMode ? "#2c9cf2" : "#0b6bd3"
-    readonly property string iconFont: "Material Icons"
     readonly property bool compositorLayerAnimations: !!(settingsService && settingsService.compositorLayerAnimations)
     readonly property real closedSlideX: -(panelWidth + 24)
     readonly property bool qmlSlideActive: !compositorLayerAnimations && slideTransform.x > closedSlideX + 0.5
@@ -147,12 +146,11 @@ PanelWindow {
                     border.color: closeMouse.containsMouse ? root.cardStroke : "transparent"
                     border.width: 1
 
-                    Text {
+                    TahoeSymbol {
                         anchors.centerIn: parent
-                        text: "\ue5cd" // close
+                        name: "\ue5cd" // close
                         color: root.textSecondary
-                        font.family: root.iconFont
-                        font.pixelSize: 18
+                        size: 18
                     }
 
                     MouseArea {
@@ -277,12 +275,11 @@ PanelWindow {
             anchors.centerIn: parent
             spacing: 6
 
-            Text {
-                text: tab.iconCode
-                color: tab.active ? root.accentBlue : root.textSecondary
-                font.family: root.iconFont
-                font.pixelSize: 17
+            TahoeSymbol {
                 anchors.verticalCenter: parent.verticalCenter
+                name: tab.iconCode
+                color: tab.active ? root.accentBlue : root.textSecondary
+                size: 17
             }
 
             Text {

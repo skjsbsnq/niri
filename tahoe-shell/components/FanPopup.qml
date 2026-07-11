@@ -16,7 +16,6 @@ PanelWindow {
     property var anchorRect: null
     property var settingsService
 
-    readonly property string iconFont: "Material Icons"
     readonly property int edgePadding: 8
     readonly property int fallbackRight: 164
     readonly property int fallbackTop: 28
@@ -116,12 +115,11 @@ PanelWindow {
                         border.color: "#34ffffff"
                         border.width: 1
 
-                        Text {
+                        TahoeSymbol {
                             anchors.centerIn: parent
-                            text: "\ue332"
+                            name: "\ue332"
                             color: root.available ? "#ffffff" : "#731d1d1f"
-                            font.family: root.iconFont
-                            font.pixelSize: 24
+                            size: 24
                         }
                     }
 
@@ -363,15 +361,13 @@ PanelWindow {
                         color: "#f2ffffff"
                     }
 
-                    Text {
+                    TahoeSymbol {
                         anchors.right: parent.right
                         anchors.rightMargin: 10
                         anchors.verticalCenter: parent.verticalCenter
-                        text: "\ue332"
+                        name: "\ue332"
                         color: "#731d1d1f"
-                        font.family: root.iconFont
-                        font.pixelSize: 15
-                        z: 2
+                        size: 15
                     }
 
                     MouseArea {
@@ -459,12 +455,11 @@ PanelWindow {
             opacity: btn.enabled ? 1 : 0.45
         }
 
-        Text {
+        TahoeSymbol {
             anchors.centerIn: parent
-            text: btn.iconCode
+            name: btn.iconCode
             color: "#1d1d1f"
-            font.family: root.iconFont
-            font.pixelSize: 16
+            size: 16
         }
 
         MouseArea {

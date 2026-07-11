@@ -9,7 +9,6 @@ Item {
     property var theme
     property var item
     readonly property string statusState: item ? String(item.state || "info") : "info"
-    readonly property string iconFont: theme ? theme.iconFont : "Material Icons"
     readonly property color textPrimary: theme ? theme.textPrimary : "#1d1d1f"
     readonly property color textSecondary: theme ? theme.textSecondary : "#721d1d1f"
     readonly property color textMuted: theme ? theme.textMuted : "#5f6870"

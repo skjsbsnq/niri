@@ -16,7 +16,6 @@ PanelWindow {
     property var anchorRect: null
     property var settingsService
 
-    readonly property string iconFont: "Material Icons"
     readonly property var entries: clipboardService ? clipboardService.entries : []
     readonly property var pinnedEntries: clipboardService ? clipboardService.pinnedEntries : []
     readonly property int edgePadding: 8
@@ -264,14 +263,12 @@ PanelWindow {
                 spacing: 8
                 z: 1
 
-                Text {
-                    text: row.entry ? row.entry.icon : "\ue14f"
-                    color: "#731d1d1f"
-                    font.family: root.iconFont
-                    font.pixelSize: 17
+                TahoeSymbol {
                     Layout.preferredWidth: 20
                     Layout.alignment: Qt.AlignTop
-                    horizontalAlignment: Text.AlignHCenter
+                    name: row.entry ? row.entry.icon : "\ue14f"
+                    color: "#731d1d1f"
+                    size: 17
                 }
 
                 Text {
@@ -377,12 +374,11 @@ PanelWindow {
             opacity: btn.enabled ? 1 : 0.45
         }
 
-        Text {
+        TahoeSymbol {
             anchors.centerIn: parent
-            text: btn.iconCode
+            name: btn.iconCode
             color: btn.active ? "#ffffff" : (btn.danger ? "#ccff453a" : "#1d1d1f")
-            font.family: root.iconFont
-            font.pixelSize: 16
+            size: 16
         }
 
         MouseArea {
@@ -423,11 +419,10 @@ PanelWindow {
             anchors.centerIn: parent
             spacing: 4
 
-            Text {
-                text: btn.iconCode
+            TahoeSymbol {
+                name: btn.iconCode
                 color: btn.danger ? "#ccff453a" : "#1d1d1f"
-                font.family: root.iconFont
-                font.pixelSize: 15
+                size: 15
                 visible: btn.iconCode.length > 0
             }
 

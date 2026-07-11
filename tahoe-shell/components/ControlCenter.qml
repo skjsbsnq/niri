@@ -45,7 +45,6 @@ PanelWindow {
     readonly property color textSecondary: darkMode ? "#c8d0d8" : "#991d1d1f"
     readonly property color textTertiary: darkMode ? "#9da7b1" : "#731d1d1f"
     readonly property color sliderFill: darkMode ? "#d8e4f0" : "#f2ffffff"
-    readonly property string iconFont: "Material Icons"
     readonly property var wifiNetworks: controlsService ? controlsService.wifiNetworks : []
     readonly property var bluetoothDevices: controlsService ? controlsService.bluetoothDeviceEntries : []
     readonly property int morphDuration: Motion.reducedMotion(settingsService) ? 0 : Motion.ccMorphDurationMs
@@ -464,20 +463,12 @@ PanelWindow {
             opacity: tc.enabled ? 1 : 0.3
         }
 
-        Text {
+        TahoeSymbol {
             anchors.centerIn: parent
-            text: tc.iconCode
+            name: tc.iconCode
             color: tc.active ? "#ffffff" : root.textPrimary
-            font.family: root.iconFont
-            font.pixelSize: 20
+            size: 20
             opacity: tc.enabled ? 1 : 0.4
-
-            Behavior on color {
-                ColorAnimation {
-                    duration: Motion.reducedMotion(root.settingsService) ? 0 : Motion.ccToggleColorMs
-                    easing.type: Easing.InOutQuad
-                }
-            }
         }
 
         MouseArea {
@@ -563,12 +554,11 @@ PanelWindow {
                         border.color: "#20ffffff"
                         border.width: 1
 
-                        Text {
+                        TahoeSymbol {
                             anchors.centerIn: parent
-                            text: "\ue63e"
+                            name: "\ue63e"
                             color: ct.controls && ct.controls.wifiConnected ? root.accentActive : root.textPrimary
-                            font.family: root.iconFont
-                            font.pixelSize: 16
+                            size: 16
                         }
                     }
 
@@ -708,12 +698,11 @@ PanelWindow {
                             }
                         }
 
-                        Text {
+                        TahoeSymbol {
                             anchors.centerIn: parent
-                            text: "\ue5c4" // chevron_left
+                            name: "\ue5c4" // chevron_left
                             color: root.textPrimary
-                            font.family: root.iconFont
-                            font.pixelSize: 18
+                            size: 18
                         }
 
                         MouseArea {
@@ -921,17 +910,15 @@ PanelWindow {
                                         anchors.fill: parent
                                         spacing: 8
 
-                                        Text {
-                                            text: {
+                                        TahoeSymbol {
+                                            Layout.preferredWidth: 20
+                                            name: {
                                                 if (row.isWifiRow)
                                                     return row.connected ? "\ue5ca" : (row.modelData && row.modelData.secured ? "\ue897" : "\ue63e");
                                                 return row.connected ? "\ue5ca" : "\ue1a7";
                                             }
                                             color: row.connected ? root.accentActive : root.textTertiary
-                                            font.family: root.iconFont
-                                            font.pixelSize: 16
-                                            Layout.preferredWidth: 20
-                                            horizontalAlignment: Text.AlignHCenter
+                                            size: 16
                                         }
 
                                         ColumnLayout {
@@ -1171,12 +1158,11 @@ PanelWindow {
                             sourceSize.height: 76
                         }
 
-                        Text {
+                        TahoeSymbol {
                             anchors.centerIn: parent
-                            text: "\ue405"
+                            name: "\ue405"
                             color: root.textSecondary
-                            font.family: root.iconFont
-                            font.pixelSize: 18
+                            size: 18
                             visible: !(mt.controls && mt.controls.hasMedia && mt.controls.trackArtUrl.length > 0)
                         }
                     }
@@ -1213,12 +1199,9 @@ PanelWindow {
 
                     Item { Layout.fillWidth: true }
 
-                    Text {
-                        text: "\ue045"
-                        color: (mt.controls && mt.controls.canPrev) ? root.textPrimary : root.textTertiary
-                        font.family: root.iconFont
-                        font.pixelSize: 20
-                        opacity: (mt.controls && mt.controls.canPrev) ? 1 : 0.4
+                    Item {
+                        Layout.preferredWidth: 24
+                        Layout.preferredHeight: 24
                         scale: Motion.pressScaleFor(root.settingsService, previousMouse.pressed && mt.controls && mt.controls.canPrev)
 
                         Behavior on scale {
@@ -1226,6 +1209,14 @@ PanelWindow {
                                 duration: Motion.pressDurationFor(root.settingsService)
                                 easing.type: Motion.pressEasing
                             }
+                        }
+
+                        TahoeSymbol {
+                            anchors.centerIn: parent
+                            name: "\ue045"
+                            color: (mt.controls && mt.controls.canPrev) ? root.textPrimary : root.textTertiary
+                            size: 20
+                            opacity: (mt.controls && mt.controls.canPrev) ? 1 : 0.4
                         }
 
                         MouseArea {
@@ -1255,12 +1246,11 @@ PanelWindow {
                             }
                         }
 
-                        Text {
+                        TahoeSymbol {
                             anchors.centerIn: parent
-                            text: (mt.controls && mt.controls.isPlaying) ? "\ue034" : "\ue037"
+                            name: (mt.controls && mt.controls.isPlaying) ? "\ue034" : "\ue037"
                             color: root.textPrimary
-                            font.family: root.iconFont
-                            font.pixelSize: 20
+                            size: 20
                         }
 
                         MouseArea {
@@ -1274,12 +1264,9 @@ PanelWindow {
                         }
                     }
 
-                    Text {
-                        text: "\ue044"
-                        color: (mt.controls && mt.controls.canNext) ? root.textPrimary : root.textTertiary
-                        font.family: root.iconFont
-                        font.pixelSize: 20
-                        opacity: (mt.controls && mt.controls.canNext) ? 1 : 0.4
+                    Item {
+                        Layout.preferredWidth: 24
+                        Layout.preferredHeight: 24
                         scale: Motion.pressScaleFor(root.settingsService, nextMouse.pressed && mt.controls && mt.controls.canNext)
 
                         Behavior on scale {
@@ -1287,6 +1274,14 @@ PanelWindow {
                                 duration: Motion.pressDurationFor(root.settingsService)
                                 easing.type: Motion.pressEasing
                             }
+                        }
+
+                        TahoeSymbol {
+                            anchors.centerIn: parent
+                            name: "\ue044"
+                            color: (mt.controls && mt.controls.canNext) ? root.textPrimary : root.textTertiary
+                            size: 20
+                            opacity: (mt.controls && mt.controls.canNext) ? 1 : 0.4
                         }
 
                         MouseArea {
@@ -1371,15 +1366,13 @@ PanelWindow {
                             color: root.sliderFill
                         }
 
-                        Text {
+                        TahoeSymbol {
                             anchors.right: parent.right
                             anchors.rightMargin: 10
                             anchors.verticalCenter: parent.verticalCenter
-                            text: gs.iconCode
+                            name: gs.iconCode
                             color: root.darkMode ? "#b9c0cc" : "#731d1d1f"
-                            font.family: root.iconFont
-                            font.pixelSize: 15
-                            z: 5
+                            size: 15
                         }
                     }
 
@@ -1475,12 +1468,11 @@ PanelWindow {
             opacity: ub.enabled ? 1 : 0.4
         }
 
-        Text {
+        TahoeSymbol {
             anchors.centerIn: parent
-            text: ub.iconCode
+            name: ub.iconCode
             color: ub.active ? "#ffffff" : root.textPrimary
-            font.family: root.iconFont
-            font.pixelSize: 20
+            size: 20
             opacity: ub.enabled ? 1 : 0.4
         }
 

@@ -224,12 +224,11 @@ PanelWindow {
                         border.width: 0
                     }
 
-                    Text {
+                    TahoeSymbol {
                         anchors.centerIn: parent
-                        text: "\ue2bd" // wb_cloudy
+                        name: "\ue2bd" // wb_cloudy
                         color: root.leftSidebarOpen ? "#0b6bd3" : root.topTextSecondary
-                        font.family: "Material Icons"
-                        font.pixelSize: 16
+                        size: 16
                     }
 
                     MouseArea {
@@ -388,12 +387,11 @@ PanelWindow {
                     border.width: 0
                 }
 
-                Text {
+                TahoeSymbol {
                     anchors.centerIn: parent
-                    text: root.dndEnabled ? "\ue7f6" : "\ue7f4"
+                    name: root.dndEnabled ? "\ue7f6" : "\ue7f4"
                     color: root.statusText
-                    font.family: "Material Icons"
-                    font.pixelSize: 16
+                    size: 16
                     opacity: root.notificationCount > 0 || root.dndEnabled ? 1 : 0.68
                 }
 
@@ -448,12 +446,11 @@ PanelWindow {
                     border.width: 0
                 }
 
-                Text {
+                TahoeSymbol {
                     anchors.centerIn: parent
-                    text: "\ue14f"
+                    name: "\ue14f"
                     color: root.clipboardService && root.clipboardService.available ? root.statusText : root.statusTextDisabled
-                    font.family: "Material Icons"
-                    font.pixelSize: 16
+                    size: 16
                     opacity: root.clipboardService && root.clipboardService.available ? 1 : 0.5
                 }
 
@@ -507,12 +504,11 @@ PanelWindow {
                     border.width: 0
                 }
 
-                Text {
+                TahoeSymbol {
                     anchors.centerIn: parent
-                    text: "\ue332"
+                    name: "\ue332"
                     color: root.statusText
-                    font.family: "Material Icons"
-                    font.pixelSize: 16
+                    size: 16
                     opacity: root.fanService && root.fanService.available ? (root.fanService.autoMode ? 0.76 : 1) : 0.45
                 }
 
@@ -627,12 +623,11 @@ PanelWindow {
                     border.width: 0
                 }
 
-                Text {
+                TahoeSymbol {
                     anchors.centerIn: parent
-                    text: "\ue63e"
+                    name: "\ue63e"
                     color: root.statusText
-                    font.family: "Material Icons"
-                    font.pixelSize: 16
+                    size: 16
                     opacity: root.controlsService && root.controlsService.wifiEnabled ? 1 : 0.45
                 }
 
@@ -663,12 +658,11 @@ PanelWindow {
                     border.width: 0
                 }
 
-                Text {
+                TahoeSymbol {
                     anchors.centerIn: parent
-                    text: "\ue8b6"
+                    name: "\ue8b6"
                     color: root.statusText
-                    font.family: "Material Icons"
-                    font.pixelSize: 16
+                    size: 16
                 }
 
                 MouseArea {

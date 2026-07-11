@@ -4,6 +4,7 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import "../controls" as Controls
+import "../.."
 
 Item {
     id: page
@@ -27,7 +28,6 @@ Item {
     readonly property color fieldStroke: theme ? theme.fieldStroke : "#4cffffff"
     readonly property color fieldStrokeFocus: theme ? theme.fieldStrokeFocus : "#007ff7"
     readonly property color accentBlue: theme ? theme.accentBlue : "#007ff7"
-    readonly property string iconFont: theme ? theme.iconFont : "Material Icons"
 
     Layout.fillWidth: true
     Layout.fillHeight: true
@@ -177,7 +177,6 @@ Item {
         readonly property color fieldStroke: theme ? theme.fieldStroke : "#4cffffff"
         readonly property color fieldStrokeFocus: theme ? theme.fieldStrokeFocus : "#007ff7"
         readonly property color accentBlue: theme ? theme.accentBlue : "#007ff7"
-        readonly property string iconFont: theme ? theme.iconFont : "Material Icons"
 
         signal queryChangedByUser(string value)
 
@@ -188,14 +187,13 @@ Item {
         border.color: input.activeFocus ? search.fieldStrokeFocus : search.fieldStroke
         border.width: input.activeFocus ? 2 : 1
 
-        Text {
+        TahoeSymbol {
             anchors.left: parent.left
             anchors.leftMargin: 9
             anchors.verticalCenter: parent.verticalCenter
-            text: "\ue8b6"
+            name: "\ue8b6"
             color: search.textMuted
-            font.family: search.iconFont
-            font.pixelSize: 15
+            size: 15
         }
 
         Text {

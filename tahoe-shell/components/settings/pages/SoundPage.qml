@@ -4,6 +4,7 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import "../controls" as Controls
+import "../.."
 
 Flickable {
     id: page
@@ -175,7 +176,6 @@ Flickable {
         readonly property color textSecondary: theme ? theme.textSecondary : "#721d1d1f"
         readonly property color rowFill: theme ? theme.rowFill : "#66ffffff"
         readonly property color rowStroke: theme ? theme.rowStroke : "#72ffffff"
-        readonly property string iconFont: theme ? theme.iconFont : "Material Icons"
 
         signal setRequested(var entry)
 
@@ -196,14 +196,12 @@ Flickable {
             anchors.rightMargin: 10
             spacing: 10
 
-            Text {
+            TahoeSymbol {
                 Layout.preferredWidth: 22
                 Layout.alignment: Qt.AlignVCenter
-                text: row.entry && row.entry.type === "source" ? "\ue029" : "\ue050"
+                name: row.entry && row.entry.type === "source" ? "\ue029" : "\ue050"
                 color: row.textPrimary
-                font.family: row.iconFont
-                font.pixelSize: 18
-                horizontalAlignment: Text.AlignHCenter
+                size: 18
             }
 
             ColumnLayout {

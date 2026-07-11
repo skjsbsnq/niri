@@ -16,7 +16,6 @@ PanelWindow {
     property var anchorRect: null
     property var settingsService
     readonly property var networks: controlsService ? controlsService.wifiNetworks : []
-    readonly property string iconFont: "Material Icons"
     readonly property int edgePadding: 8
     readonly property int fallbackRight: 132
     readonly property int fallbackTop: 28
@@ -96,12 +95,11 @@ PanelWindow {
                 visible: root.controlsService && root.controlsService.wifiConnected
                 spacing: 8
 
-                Text {
-                    text: "\ue63e"
-                    color: "#2c9cf2"
-                    font.family: root.iconFont
-                    font.pixelSize: 17
+                TahoeSymbol {
                     Layout.alignment: Qt.AlignVCenter
+                    name: "\ue63e"
+                    color: "#2c9cf2"
+                    size: 17
                 }
 
                 ColumnLayout {
@@ -322,14 +320,12 @@ PanelWindow {
                         anchors.fill: parent
                         spacing: 8
 
-                        Text {
-                            text: row.entry && row.entry.connected ? "\ue5ca" : (row.entry && row.entry.secured ? "\ue897" : "")
-                            color: row.entry && row.entry.connected ? "#2c9cf2" : "#731d1d1f"
-                            font.family: root.iconFont
-                            font.pixelSize: 16
+                        TahoeSymbol {
                             Layout.preferredWidth: 18
                             Layout.alignment: Qt.AlignVCenter
-                            horizontalAlignment: Text.AlignHCenter
+                            name: row.entry && row.entry.connected ? "\ue5ca" : (row.entry && row.entry.secured ? "\ue897" : "")
+                            color: row.entry && row.entry.connected ? "#2c9cf2" : "#731d1d1f"
+                            size: 16
                         }
 
                         ColumnLayout {

@@ -82,12 +82,11 @@ Item {
                 asynchronous: true
             }
 
-            Text {
+            TahoeSymbol {
                 anchors.centerIn: parent
-                text: "\ue405" // music_note
+                name: "\ue405" // music_note
                 color: root.textSecondary
-                font.family: "Material Icons"
-                font.pixelSize: 26
+                size: 26
                 visible: !root.showArt
             }
         }

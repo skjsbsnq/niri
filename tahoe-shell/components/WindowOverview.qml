@@ -431,12 +431,11 @@ PanelWindow {
                     border.width: 1
                 }
 
-                Text {
+                TahoeSymbol {
                     anchors.centerIn: parent
-                    text: "\ue5cd"
+                    name: "\ue5cd"
                     color: "#30343a"
-                    font.family: "Material Icons"
-                    font.pixelSize: 18
+                    size: 18
                 }
 
                 MouseArea {
@@ -669,12 +668,11 @@ PanelWindow {
                                         visible: windowCard.iconSource.length > 0 && status !== Image.Error
                                     }
 
-                                    Text {
+                                    TahoeSymbol {
                                         anchors.centerIn: appIcon
-                                        text: "\ue8d0"
+                                        name: "\ue8d0"
                                         color: "#5a626a"
-                                        font.family: "Material Icons"
-                                        font.pixelSize: 17
+                                        size: 17
                                         visible: !appIcon.visible
                                     }
 

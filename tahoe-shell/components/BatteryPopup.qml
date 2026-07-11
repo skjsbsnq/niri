@@ -20,7 +20,6 @@ PanelWindow {
     readonly property bool available: !!batteryService && batteryService.available
     readonly property int percentage: available ? batteryService.roundedPercentage : 0
     readonly property bool profileAvailable: !!powerProfileService && powerProfileService.available
-    readonly property string iconFont: "Material Icons"
     readonly property int edgePadding: 8
     readonly property int fallbackRight: 92
     readonly property int fallbackTop: 28
@@ -87,11 +86,10 @@ PanelWindow {
                     Layout.fillWidth: true
                 }
 
-                Text {
-                    text: root.available && root.batteryService.charging ? "\ue1a3" : "\ue1a4"
+                TahoeSymbol {
+                    name: root.available && root.batteryService.charging ? "\ue1a3" : "\ue1a4"
                     color: "#1d1d1f"
-                    font.family: root.iconFont
-                    font.pixelSize: 18
+                    size: 18
                     visible: root.available
                 }
             }
@@ -298,12 +296,11 @@ PanelWindow {
             anchors.centerIn: parent
             spacing: 1
 
-            Text {
+            TahoeSymbol {
                 Layout.alignment: Qt.AlignHCenter
-                text: btn.profile ? btn.profile.icon : ""
+                name: btn.profile ? btn.profile.icon : ""
                 color: btn.active ? "#0b6bd3" : "#731d1d1f"
-                font.family: root.iconFont
-                font.pixelSize: 16
+                size: 16
             }
 
             Text {

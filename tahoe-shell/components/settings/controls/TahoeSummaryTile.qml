@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Layouts
+import "../.."
 
 Item {
     id: tile
@@ -12,7 +13,6 @@ Item {
     property string detail: ""
     property color accentColor: theme ? theme.accentBlue : "#2c9cf2"
 
-    readonly property string iconFont: theme ? theme.iconFont : "Material Icons"
     readonly property color textPrimary: theme ? theme.textPrimary : "#1d1d1f"
     readonly property color textSecondary: theme ? theme.textSecondary : "#721d1d1f"
     readonly property color tileFill: theme ? theme.tileFill : "#30ffffff"
@@ -37,16 +37,13 @@ Item {
         anchors.margins: 12
         spacing: 12
 
-        Text {
+        TahoeSymbol {
             Layout.preferredWidth: 42
             Layout.preferredHeight: 42
             Layout.alignment: Qt.AlignVCenter
-            text: tile.iconCode
+            name: tile.iconCode
             color: tile.accentColor
-            font.family: tile.iconFont
-            font.pixelSize: 24
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
+            size: 24
         }
 
         ColumnLayout {
@@ -75,12 +72,11 @@ Item {
             }
         }
 
-        Text {
+        TahoeSymbol {
             Layout.alignment: Qt.AlignVCenter
-            text: "\ue5cc"
+            name: "\ue5cc"
             color: tile.textSecondary
-            font.family: tile.iconFont
-            font.pixelSize: 18
+            size: 18
         }
     }
 

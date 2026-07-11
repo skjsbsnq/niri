@@ -1,11 +1,11 @@
 .pragma library
 
-// WMO 天气码到 Tahoe 天气页可用文案、场景 slug 和 Material Icons 字形。
-// 图标码点来自 assets/fonts/MaterialIconsRound.ttf 的 GSUB ligature 实测结果。
+// WMO weather code → label, scene slug, and symbol key (legacy Material
+// codepoint strings resolved by TahoeSymbols.js → pre-rendered PNG).
 
 var UnknownText = "未知天气";
 var UnknownSlug = "cloudy";
-var UnknownIcon = "\ue2bd"; // Material Icons: cloud
+var UnknownIcon = "\ue2bd"; // cloud
 
 var TextByCode = {
     0: "晴",

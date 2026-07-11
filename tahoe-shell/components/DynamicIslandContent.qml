@@ -100,15 +100,10 @@ Item {
             NumberAnimation { duration: IslandMotion.overlayContentDuration; easing.type: IslandMotion.overlayColorEasing }
         }
 
-        Text {
-            width: 24
-            height: parent.height
-            text: root.iconCode
+        TahoeSymbol {
+            name: root.iconCode
             color: root.textPrimary
-            font.family: "Material Icons"
-            font.pixelSize: 20
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
+            size: 20
         }
 
         Item {
@@ -171,15 +166,10 @@ Item {
             }
         }
 
-        Text {
-            width: 24
-            height: parent.height
-            text: root.iconCode.length > 0 ? root.iconCode : "\ue7f4"
+        TahoeSymbol {
+            name: root.iconCode.length > 0 ? root.iconCode : "\ue7f4"
             color: root.textPrimary
-            font.family: "Material Icons"
-            font.pixelSize: 20
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
+            size: 20
         }
 
         Item {
@@ -239,15 +229,10 @@ Item {
             NumberAnimation { duration: IslandMotion.overlayContentDuration; easing.type: IslandMotion.overlayColorEasing }
         }
 
-        Text {
-            width: 22
-            height: parent.height
-            text: root.iconCode.length > 0 ? root.iconCode : "\ue050"
+        TahoeSymbol {
+            name: root.iconCode.length > 0 ? root.iconCode : "\ue050"
             color: root.textPrimary
-            font.family: "Material Icons"
-            font.pixelSize: 20
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
+            size: 20
         }
 
         Item {

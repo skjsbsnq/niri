@@ -124,15 +124,10 @@ Item {
             anchors.fill: parent
             spacing: 8
 
-            Text {
-                width: 22
-                height: parent.height
-                text: tile.icon
+            TahoeSymbol {
+                name: tile.icon
                 color: tile.textPrimary
-                font.family: "Material Icons"
-                font.pixelSize: 18
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
+                size: 18
             }
 
             Column {

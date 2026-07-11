@@ -4,6 +4,7 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import "../controls" as Controls
+import "../.."
 
 Flickable {
     id: page
@@ -26,7 +27,6 @@ Flickable {
     readonly property color rowStroke: theme ? theme.rowStroke : "#72ffffff"
     readonly property color accentBlue: theme ? theme.accentBlue : "#007ff7"
     readonly property color danger: theme ? theme.danger : "#ff453a"
-    readonly property string iconFont: theme ? theme.iconFont : "Material Icons"
 
     signal backRequested()
 
@@ -367,7 +367,6 @@ Flickable {
         readonly property color textSecondary: theme ? theme.textSecondary : "#721d1d1f"
         readonly property color rowFill: theme ? theme.rowFill : "#66ffffff"
         readonly property color rowStroke: theme ? theme.rowStroke : "#72ffffff"
-        readonly property string iconFont: theme ? theme.iconFont : "Material Icons"
 
         Layout.fillWidth: true
         Layout.preferredHeight: 50
@@ -386,14 +385,12 @@ Flickable {
             anchors.rightMargin: 10
             spacing: 10
 
-            Text {
+            TahoeSymbol {
                 Layout.preferredWidth: 22
                 Layout.alignment: Qt.AlignVCenter
-                text: row.iconCode
+                name: row.iconCode
                 color: row.textPrimary
-                font.family: row.iconFont
-                font.pixelSize: 18
-                horizontalAlignment: Text.AlignHCenter
+                size: 18
             }
 
             ColumnLayout {
@@ -441,7 +438,6 @@ Flickable {
         readonly property color textSecondary: theme ? theme.textSecondary : "#721d1d1f"
         readonly property color rowFill: theme ? theme.rowFill : "#66ffffff"
         readonly property color rowStroke: theme ? theme.rowStroke : "#72ffffff"
-        readonly property string iconFont: theme ? theme.iconFont : "Material Icons"
 
         Layout.fillWidth: true
         Layout.preferredHeight: 50
@@ -460,14 +456,12 @@ Flickable {
             anchors.rightMargin: 10
             spacing: 10
 
-            Text {
+            TahoeSymbol {
                 Layout.preferredWidth: 22
                 Layout.alignment: Qt.AlignVCenter
-                text: "\ue2c7"
+                name: "\ue2c7"
                 color: row.textPrimary
-                font.family: row.iconFont
-                font.pixelSize: 18
-                horizontalAlignment: Text.AlignHCenter
+                size: 18
             }
 
             ColumnLayout {

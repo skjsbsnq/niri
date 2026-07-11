@@ -118,12 +118,11 @@ PanelWindow {
                 Layout.preferredHeight: 30
                 spacing: 8
 
-                Text {
-                    text: "\ueb8e" // terminal
-                    color: root.textTertiary
-                    font.family: "Material Icons"
-                    font.pixelSize: 16
+                TahoeSymbol {
                     Layout.alignment: Qt.AlignVCenter
+                    name: "\ueb8e" // terminal
+                    color: root.textTertiary
+                    size: 16
                 }
 
                 Text {

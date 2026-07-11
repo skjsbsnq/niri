@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import "../controls" as Controls
+import "../.."
 
 Flickable {
     id: page
@@ -28,7 +29,6 @@ Flickable {
     readonly property color rowStroke: theme ? theme.rowStroke : "#72ffffff"
     readonly property color accentBlue: theme ? theme.accentBlue : "#007ff7"
     readonly property color danger: theme ? theme.danger : "#ff453a"
-    readonly property string iconFont: theme ? theme.iconFont : "Material Icons"
 
     Layout.fillWidth: true
     Layout.fillHeight: true
@@ -346,7 +346,6 @@ Flickable {
         readonly property color rowFillHover: theme ? theme.rowFillHover : "#86ffffff"
         readonly property color rowStroke: theme ? theme.rowStroke : "#72ffffff"
         readonly property color accentBlue: theme ? theme.accentBlue : "#007ff7"
-        readonly property string iconFont: theme ? theme.iconFont : "Material Icons"
 
         signal toggleExpanded(string uuid)
         signal saveRequested(var entry, var values)
@@ -401,14 +400,12 @@ Flickable {
                     Layout.fillWidth: true
                     spacing: 10
 
-                    Text {
+                    TahoeSymbol {
                         Layout.preferredWidth: 22
                         Layout.alignment: Qt.AlignVCenter
-                        text: "\ue1bd"
+                        name: "\ue1bd"
                         color: row.entry && row.entry.active ? row.accentBlue : row.textPrimary
-                        font.family: row.iconFont
-                        font.pixelSize: 18
-                        horizontalAlignment: Text.AlignHCenter
+                        size: 18
                     }
 
                     ColumnLayout {
@@ -495,7 +492,6 @@ Flickable {
         readonly property color rowFillHover: theme ? theme.rowFillHover : "#86ffffff"
         readonly property color rowStroke: theme ? theme.rowStroke : "#72ffffff"
         readonly property color accentBlue: theme ? theme.accentBlue : "#007ff7"
-        readonly property string iconFont: theme ? theme.iconFont : "Material Icons"
 
         signal connectRequested(var entry)
         signal disconnectRequested(var entry)
@@ -542,14 +538,12 @@ Flickable {
                     Layout.fillWidth: true
                     spacing: 10
 
-                    Text {
+                    TahoeSymbol {
                         Layout.preferredWidth: 22
                         Layout.alignment: Qt.AlignVCenter
-                        text: "\ue1bd"
+                        name: "\ue1bd"
                         color: row.entry && row.entry.connected ? row.accentBlue : row.textPrimary
-                        font.family: row.iconFont
-                        font.pixelSize: 18
-                        horizontalAlignment: Text.AlignHCenter
+                        size: 18
                     }
 
                     ColumnLayout {
@@ -628,7 +622,6 @@ Flickable {
         readonly property color rowFillHover: theme ? theme.rowFillHover : "#86ffffff"
         readonly property color rowStroke: theme ? theme.rowStroke : "#72ffffff"
         readonly property color accentBlue: theme ? theme.accentBlue : "#007ff7"
-        readonly property string iconFont: theme ? theme.iconFont : "Material Icons"
 
         signal toggleRequested(var entry, bool enabled)
         signal editRequested(var entry)
@@ -673,14 +666,12 @@ Flickable {
                     Layout.fillWidth: true
                     spacing: 10
 
-                    Text {
+                    TahoeSymbol {
                         Layout.preferredWidth: 22
                         Layout.alignment: Qt.AlignVCenter
-                        text: "\ue897"
+                        name: "\ue897"
                         color: row.entry && row.entry.active ? row.accentBlue : row.textPrimary
-                        font.family: row.iconFont
-                        font.pixelSize: 18
-                        horizontalAlignment: Text.AlignHCenter
+                        size: 18
                     }
 
                     ColumnLayout {
@@ -781,7 +772,6 @@ Flickable {
         readonly property color textSecondary: theme ? theme.textSecondary : "#721d1d1f"
         readonly property color rowFill: theme ? theme.rowFill : "#66ffffff"
         readonly property color rowStroke: theme ? theme.rowStroke : "#72ffffff"
-        readonly property string iconFont: theme ? theme.iconFont : "Material Icons"
 
         signal saveRequested(var settings)
 
@@ -824,14 +814,12 @@ Flickable {
                     Layout.fillWidth: true
                     spacing: 10
 
-                    Text {
+                    TahoeSymbol {
                         Layout.preferredWidth: 22
                         Layout.alignment: Qt.AlignVCenter
-                        text: "\ue8d3"
+                        name: "\ue8d3"
                         color: editor.textPrimary
-                        font.family: editor.iconFont
-                        font.pixelSize: 18
-                        horizontalAlignment: Text.AlignHCenter
+                        size: 18
                     }
 
                     ColumnLayout {

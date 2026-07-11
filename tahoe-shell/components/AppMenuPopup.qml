@@ -93,12 +93,11 @@ PanelWindow {
                         color: "#48ffffff"
                         border.color: "#40ffffff"
 
-                        Text {
+                        TahoeSymbol {
                             anchors.centerIn: parent
-                            text: root.nativeMenuAvailable ? "\ue86c" : "\ue8a0"
+                            name: root.nativeMenuAvailable ? "\ue86c" : "\ue8a0"
                             color: root.darkMode ? "#f5f7fb" : "#202124"
-                            font.family: "Material Icons"
-                            font.pixelSize: 16
+                            size: 16
                         }
                     }
 

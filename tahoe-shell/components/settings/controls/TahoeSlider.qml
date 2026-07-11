@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Layouts
+import "../.."
 
 // Full-width slider row: optional leading icon, a label with a right-aligned
 // value, and a fill-bar track (no visible thumb, matching ControlCenter's
@@ -18,7 +19,6 @@ Item {
     property real value: 0 // 0..1
     property bool interactive: true
 
-    readonly property string iconFont: theme ? theme.iconFont : "Material Icons"
     readonly property color textPrimary: theme ? theme.textPrimary : "#1d1d1f"
     readonly property color accentBlue: theme ? theme.accentBlue : "#007ff7"
     readonly property color rowFill: theme ? theme.rowFill : "#28ffffff"
@@ -48,14 +48,12 @@ Item {
         anchors.margins: 12
         spacing: 10
 
-        Text {
+        TahoeSymbol {
             Layout.preferredWidth: slider.iconCode.length > 0 ? 22 : 0
             Layout.alignment: Qt.AlignVCenter
-            text: slider.iconCode
+            name: slider.iconCode
             color: slider.textPrimary
-            font.family: slider.iconFont
-            font.pixelSize: 18
-            horizontalAlignment: Text.AlignHCenter
+            size: 18
             visible: slider.iconCode.length > 0
         }
 

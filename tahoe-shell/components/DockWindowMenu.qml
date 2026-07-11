@@ -160,12 +160,11 @@ PanelWindow {
                         visible: root.windowIcon.length > 0 && status !== Image.Error
                     }
 
-                    Text {
+                    TahoeSymbol {
                         anchors.centerIn: parent
-                        text: "\ue8d0"
+                        name: "\ue8d0"
                         color: root.darkMode ? "#94a0ad" : "#661d1d1f"
-                        font.family: "Material Icons"
-                        font.pixelSize: 16
+                        size: 16
                         visible: !headerIcon.visible
                     }
                 }

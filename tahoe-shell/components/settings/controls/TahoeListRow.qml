@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import "../../Motion.js" as Motion
+import "../.."
 
 Item {
     id: row
@@ -15,7 +16,6 @@ Item {
     property bool checked: false
     default property alias controlData: controlSlot.data
 
-    readonly property string iconFont: theme ? theme.iconFont : "Material Icons"
     readonly property color textPrimary: theme ? theme.textPrimary : "#1d1d1f"
     readonly property color textSecondary: theme ? theme.textSecondary : "#721d1d1f"
     readonly property color rowFill: theme ? theme.rowFill : "#28ffffff"
@@ -50,14 +50,12 @@ Item {
         anchors.rightMargin: 10
         spacing: 10
 
-        Text {
+        TahoeSymbol {
             Layout.preferredWidth: 22
             Layout.alignment: Qt.AlignVCenter
-            text: row.iconCode
+            name: row.iconCode
             color: row.textPrimary
-            font.family: row.iconFont
-            font.pixelSize: 18
-            horizontalAlignment: Text.AlignHCenter
+            size: 18
         }
 
         ColumnLayout {

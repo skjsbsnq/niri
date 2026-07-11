@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import "../../Motion.js" as Motion
+import "../.."
 
 Item {
     id: btn
@@ -14,7 +15,6 @@ Item {
     property bool active: false
     property string badgeText: ""
 
-    readonly property string iconFont: theme ? theme.iconFont : "Material Icons"
     readonly property color textPrimary: theme ? theme.textPrimary : "#1d1d1f"
     readonly property color textSecondary: theme ? theme.textSecondary : "#721d1d1f"
     readonly property color activeFill: theme ? theme.sidebarActiveFill : "#64ffffff"
@@ -52,15 +52,12 @@ Item {
         anchors.rightMargin: 8
         spacing: 10
 
-        Text {
+        TahoeSymbol {
             Layout.preferredWidth: 22
             Layout.alignment: Qt.AlignVCenter
-            text: btn.iconCode
+            name: btn.iconCode
             color: btn.active ? btn.accentBlue : btn.textSecondary
-            font.family: btn.iconFont
-            font.pixelSize: 18
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
+            size: 18
         }
 
         Text {

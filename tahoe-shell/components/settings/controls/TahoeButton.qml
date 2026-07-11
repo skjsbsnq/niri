@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import "../../Motion.js" as Motion
+import "../.."
 
 Item {
     id: btn
@@ -16,7 +17,6 @@ Item {
     property real minimumWidth: iconOnly ? 32 : 54
 
     readonly property bool primaryState: primary || active
-    readonly property string iconFont: theme ? theme.iconFont : "Material Icons"
     readonly property color textPrimary: theme ? theme.textPrimary : "#1d1d1f"
     readonly property color rowFillHover: theme ? theme.rowFillHover : "#48ffffff"
     readonly property color buttonFill: theme ? theme.buttonFill : "#40ffffff"
@@ -53,11 +53,10 @@ Item {
         spacing: 5
         visible: !btn.iconOnly
 
-        Text {
-            text: btn.iconCode
+        TahoeSymbol {
+            name: btn.iconCode
             color: btn.primaryState ? "#ffffff" : btn.textPrimary
-            font.family: btn.iconFont
-            font.pixelSize: 15
+            size: 15
             visible: btn.iconCode.length > 0
         }
 
@@ -70,12 +69,11 @@ Item {
         }
     }
 
-    Text {
+    TahoeSymbol {
         anchors.centerIn: parent
-        text: btn.iconCode
+        name: btn.iconCode
         color: btn.textPrimary
-        font.family: btn.iconFont
-        font.pixelSize: 18
+        size: 18
         visible: btn.iconOnly
     }
 

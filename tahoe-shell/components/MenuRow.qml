@@ -13,7 +13,6 @@ Item {
 
     property string text: ""
     property string icon: ""
-    property string iconFont: "Material Icons"
     property bool enabledRow: true
     property bool destructive: false
     property bool bold: false
@@ -152,27 +151,25 @@ Item {
     }
 
     // Optional checkmark column (tray / native app menus).
-    Text {
+    TahoeSymbol {
         anchors.left: parent.left
         anchors.leftMargin: 8 + row.indent * 14
         anchors.verticalCenter: parent.verticalCenter
-        text: row.checked ? "\ue5ca" : ""
+        name: row.checked ? "\ue5ca" : ""
         color: row.iconColor
-        font.family: row.iconFont
-        font.pixelSize: 15
+        size: 15
         visible: !row.separator && row.showCheckColumn
         opacity: row.checked ? 1 : 0
     }
 
-    // Leading Material icon (static shell menus).
-    Text {
+    // Leading symbol icon (static shell menus).
+    TahoeSymbol {
         anchors.left: parent.left
         anchors.leftMargin: 10
         anchors.verticalCenter: parent.verticalCenter
-        text: row.icon
+        name: row.icon
         color: row.iconColor
-        font.family: row.iconFont
-        font.pixelSize: 16
+        size: 16
         visible: !row.separator && !row.showCheckColumn && row.icon.length > 0
     }
 
@@ -193,17 +190,14 @@ Item {
         visible: !row.separator
     }
 
-    Text {
+    TahoeSymbol {
         id: submenuGlyph
-
         anchors.right: parent.right
         anchors.rightMargin: 8
         anchors.verticalCenter: parent.verticalCenter
-        width: visible ? implicitWidth : 0
-        text: "\ue5cc"
+        name: "\ue5cc"
         color: row.highlight ? "#ffffff" : (row.darkMode ? "#94a0ad" : "#661d1d1f")
-        font.family: row.iconFont
-        font.pixelSize: 15
+        size: 15
         visible: !row.separator && row.hasSubmenu && !row.header
     }
 

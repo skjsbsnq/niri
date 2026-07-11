@@ -21,7 +21,6 @@ PanelWindow {
         ? String(trayItem.tooltipTitle || trayItem.title || trayItem.id || "托盘")
         : "托盘"
     readonly property string iconSource: trayItem ? String(trayItem.icon || "") : ""
-    readonly property string iconFont: "Material Icons"
     readonly property int edgePadding: 8
     readonly property int fallbackRight: 40
     readonly property int fallbackTop: 28
@@ -105,12 +104,11 @@ PanelWindow {
                         visible: root.iconSource.length > 0 && status !== Image.Error
                     }
 
-                    Text {
+                    TahoeSymbol {
                         anchors.centerIn: parent
-                        text: "\ue8b8"
+                        name: "\ue8b8"
                         color: root.darkMode ? "#94a0ad" : "#661d1d1f"
-                        font.family: root.iconFont
-                        font.pixelSize: 16
+                        size: 16
                         visible: !headerIcon.visible
                     }
                 }

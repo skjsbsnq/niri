@@ -27,7 +27,6 @@ PanelWindow {
         return notificationsService.groupedHistory();
     }
     readonly property bool dndEnabled: notificationsService ? notificationsService.dndEnabled : false
-    readonly property string iconFont: "Material Icons"
     readonly property int edgePadding: 8
     readonly property int fallbackRight: 56
     readonly property int fallbackTop: 28
@@ -209,12 +208,11 @@ PanelWindow {
                     anchors.rightMargin: 10
                     spacing: 10
 
-                    Text {
-                        text: root.dndEnabled ? "\ue7f6" : "\ue7f4"
-                        color: "#1d1d1f"
-                        font.family: root.iconFont
-                        font.pixelSize: 18
+                    TahoeSymbol {
                         Layout.alignment: Qt.AlignVCenter
+                        name: root.dndEnabled ? "\ue7f6" : "\ue7f4"
+                        color: "#1d1d1f"
+                        size: 18
                     }
 
                     ColumnLayout {
@@ -480,12 +478,11 @@ PanelWindow {
                         visible: row.iconUrl.length > 0 && status !== Image.Error
                     }
 
-                    Text {
+                    TahoeSymbol {
                         anchors.centerIn: parent
-                        text: "\ue7f4"
+                        name: "\ue7f4"
                         color: "#661d1d1f"
-                        font.family: root.iconFont
-                        font.pixelSize: 17
+                        size: 17
                         visible: !historyIcon.visible
                     }
                 }
@@ -546,12 +543,11 @@ PanelWindow {
                         color: closeMouse.containsMouse ? "#70ffffff" : "transparent"
                     }
 
-                    Text {
+                    TahoeSymbol {
                         anchors.centerIn: parent
-                        text: "\ue5cd"
+                        name: "\ue5cd"
                         color: "#731d1d1f"
-                        font.family: root.iconFont
-                        font.pixelSize: 15
+                        size: 15
                     }
 
                     MouseArea {

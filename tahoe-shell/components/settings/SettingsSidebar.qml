@@ -5,6 +5,7 @@ import QtQuick.Layouts
 import "../Motion.js" as Motion
 import "SettingsModel.js" as SettingsModel
 import "controls" as Controls
+import ".."
 
 Rectangle {
     id: sidebar
@@ -14,7 +15,6 @@ Rectangle {
     property string searchText: ""
     property var navItems: SettingsModel.sidebarItems(searchText)
 
-    readonly property string iconFont: theme ? theme.iconFont : "Material Icons"
     readonly property color textPrimary: theme ? theme.textPrimary : "#1d1d1f"
     readonly property color textSecondary: theme ? theme.textSecondary : "#721d1d1f"
     readonly property color textMuted: theme ? theme.textMuted : "#5f6870"
@@ -131,14 +131,11 @@ Rectangle {
                 anchors.rightMargin: 7
                 spacing: 7
 
-                Text {
+                TahoeSymbol {
                     Layout.preferredWidth: 18
-                    text: "\ue8b6"
+                    name: "\ue8b6"
                     color: sidebar.textSecondary
-                    font.family: sidebar.iconFont
-                    font.pixelSize: 17
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
+                    size: 17
                 }
 
                 Item {
@@ -172,15 +169,17 @@ Rectangle {
                     }
                 }
 
-                Text {
+                Item {
                     Layout.preferredWidth: 18
-                    text: "\ue5cd"
-                    color: clearMouse.containsMouse ? sidebar.textPrimary : sidebar.textSecondary
-                    font.family: sidebar.iconFont
-                    font.pixelSize: 16
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
+                    Layout.preferredHeight: 18
                     visible: sidebar.searchText.length > 0
+
+                    TahoeSymbol {
+                        anchors.centerIn: parent
+                        name: "\ue5cd"
+                        color: clearMouse.containsMouse ? sidebar.textPrimary : sidebar.textSecondary
+                        size: 16
+                    }
 
                     MouseArea {
                         id: clearMouse

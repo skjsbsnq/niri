@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import "../controls" as Controls
+import "../.."
 
 // S5.4: keyboard shortcuts viewer (read-only). niri's `binds {}` is a
 // replace-on-conflict authoritative block — once present it is the whole set —
@@ -35,7 +36,6 @@ Flickable {
     readonly property color danger: theme ? theme.danger : "#ff453a"
     readonly property color rowFill: theme ? theme.rowFill : "#28ffffff"
     readonly property color rowStroke: theme ? theme.rowStroke : "#32ffffff"
-    readonly property string iconFont: theme ? theme.iconFont : "Material Icons"
 
     ColumnLayout {
         id: settingsColumn
@@ -150,12 +150,11 @@ Flickable {
                                 elide: Text.ElideRight
                             }
 
-                            Text {
-                                text: page.lockGlyph
-                                visible: bindRow.modelData.protected
+                            TahoeSymbol {
+                                name: page.lockGlyph
                                 color: page.danger
-                                font.family: page.iconFont
-                                font.pixelSize: 14
+                                size: 14
+                                visible: bindRow.modelData.protected
                             }
 
                             Text {

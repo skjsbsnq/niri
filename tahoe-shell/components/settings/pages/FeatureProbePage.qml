@@ -6,6 +6,7 @@ import Quickshell
 import "../SettingsModel.js" as SettingsModel
 import "../../../services/StatusTypes.js" as StatusTypes
 import "../controls" as Controls
+import "../.."
 
 Flickable {
     id: page
@@ -217,7 +218,6 @@ Flickable {
         readonly property color danger: theme ? theme.danger : "#ff453a"
         readonly property color rowFill: theme ? theme.rowFill : "#66ffffff"
         readonly property color rowStroke: theme ? theme.rowStroke : "#72ffffff"
-        readonly property string iconFont: theme ? theme.iconFont : "Material Icons"
 
         Layout.fillWidth: true
         Layout.preferredHeight: Math.max(52, featureContent.implicitHeight + 14)
@@ -236,14 +236,12 @@ Flickable {
             anchors.rightMargin: 10
             spacing: 10
 
-            Text {
+            TahoeSymbol {
                 Layout.preferredWidth: 22
                 Layout.alignment: Qt.AlignVCenter
-                text: row.iconCode
+                name: row.iconCode
                 color: row.textPrimary
-                font.family: row.iconFont
-                font.pixelSize: 18
-                horizontalAlignment: Text.AlignHCenter
+                size: 18
             }
 
             ColumnLayout {

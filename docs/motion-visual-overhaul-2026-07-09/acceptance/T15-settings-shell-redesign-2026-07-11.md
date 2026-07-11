@@ -54,7 +54,16 @@
 - 无新常驻 layer surface；页面实例数与改前一致（36）
 - 过渡仅 transform/opacity（x + opacity）
 
+## 审查 follow-up（同日）
+
+独立 reviewer 发现：page 层 `anchors.fill` + `x:` 冲突，滑移动画不生效。
+
+**修复：** 全部 36 层改为 `transform: Translate { x: pageHost.layerX(...) }`；治理测试断言禁止顶层 `x: pageHost.layerX`。
+
+中断动画 retarget 可能闪中间页（suggestion，未改逻辑——最终 toId 正确）。
+
 ## 发现待办
 
 - 控件精修（Switch/Slider/Button…）→ **T16**
 - 实机连点/深浅色观感确认（自动化无法覆盖视觉）
+- 中断过渡时 from 页可能短暂满不透明（可选 polish）

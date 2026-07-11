@@ -125,12 +125,13 @@ Item {
 
                     // Soft shadow disc under the white knob.
                     Rectangle {
-                        anchors.centerIn: parent
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.verticalCenterOffset: 1
                         width: parent.width + 4
                         height: parent.height + 4
                         radius: width / 2
                         color: "#30000000"
-                        y: 1
                         z: -1
                     }
 
@@ -148,12 +149,20 @@ Item {
                     anchors.fill: parent
                     enabled: slider.enabled && slider.interactive
                     cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+
+                    // Map pointer x onto the knob-center travel range so ends
+                    // match the visual knob (half-width compensation).
+                    function ratioAt(mx) {
+                        var travel = Math.max(1, width - slider.knobDiameter);
+                        return slider.clampRatio((mx - slider.knobDiameter / 2) / travel);
+                    }
+
                     onPressed: function(mouse) {
-                        slider.userSet(slider.clampRatio(mouse.x / Math.max(1, width)));
+                        slider.userSet(ratioAt(mouse.x));
                     }
                     onPositionChanged: function(mouse) {
                         if (pressed)
-                            slider.userSet(slider.clampRatio(mouse.x / Math.max(1, width)));
+                            slider.userSet(ratioAt(mouse.x));
                     }
                 }
             }

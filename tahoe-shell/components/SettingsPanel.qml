@@ -444,9 +444,9 @@ PanelWindow {
 
                     Item {
                         anchors.fill: parent
-                        x: pageHost.layerX("wifi")
                         opacity: pageHost.layerOpacity("wifi")
                         visible: pageHost.layerVisible("wifi")
+                        transform: Translate { x: pageHost.layerX("wifi") }
                         Pages.WifiPage {
                             anchors.fill: parent
                             panel: root
@@ -457,9 +457,9 @@ PanelWindow {
 
                     Item {
                         anchors.fill: parent
-                        x: pageHost.layerX("network")
                         opacity: pageHost.layerOpacity("network")
                         visible: pageHost.layerVisible("network")
+                        transform: Translate { x: pageHost.layerX("network") }
                         Pages.NetworkPage {
                             anchors.fill: parent
                             panel: root
@@ -470,9 +470,9 @@ PanelWindow {
 
                     Item {
                         anchors.fill: parent
-                        x: pageHost.layerX("bluetooth")
                         opacity: pageHost.layerOpacity("bluetooth")
                         visible: pageHost.layerVisible("bluetooth")
+                        transform: Translate { x: pageHost.layerX("bluetooth") }
                         Pages.BluetoothPage {
                             anchors.fill: parent
                             panel: root
@@ -483,9 +483,9 @@ PanelWindow {
 
                     Item {
                         anchors.fill: parent
-                        x: pageHost.layerX("displays")
                         opacity: pageHost.layerOpacity("displays")
                         visible: pageHost.layerVisible("displays")
+                        transform: Translate { x: pageHost.layerX("displays") }
                         Pages.DisplaysPage {
                             anchors.fill: parent
                             panel: root
@@ -495,9 +495,9 @@ PanelWindow {
 
                     Item {
                         anchors.fill: parent
-                        x: pageHost.layerX("sound")
                         opacity: pageHost.layerOpacity("sound")
                         visible: pageHost.layerVisible("sound")
+                        transform: Translate { x: pageHost.layerX("sound") }
                         Pages.SoundPage {
                             anchors.fill: parent
                             panel: root
@@ -507,9 +507,9 @@ PanelWindow {
 
                     Item {
                         anchors.fill: parent
-                        x: pageHost.layerX("power")
                         opacity: pageHost.layerOpacity("power")
                         visible: pageHost.layerVisible("power")
+                        transform: Translate { x: pageHost.layerX("power") }
                         Pages.PowerPage {
                             anchors.fill: parent
                             panel: root
@@ -519,9 +519,9 @@ PanelWindow {
 
                     Item {
                         anchors.fill: parent
-                        x: pageHost.layerX("multitasking")
                         opacity: pageHost.layerOpacity("multitasking")
                         visible: pageHost.layerVisible("multitasking")
+                        transform: Translate { x: pageHost.layerX("multitasking") }
                         Pages.MultitaskingPage {
                             anchors.fill: parent
                             panel: root
@@ -531,9 +531,9 @@ PanelWindow {
 
                     Item {
                         anchors.fill: parent
-                        x: pageHost.layerX("appearance")
                         opacity: pageHost.layerOpacity("appearance")
                         visible: pageHost.layerVisible("appearance")
+                        transform: Translate { x: pageHost.layerX("appearance") }
                         Pages.AppearancePage {
                             anchors.fill: parent
                             panel: root
@@ -543,9 +543,9 @@ PanelWindow {
 
                     Item {
                         anchors.fill: parent
-                        x: pageHost.layerX("apps")
                         opacity: pageHost.layerOpacity("apps")
                         visible: pageHost.layerVisible("apps")
+                        transform: Translate { x: pageHost.layerX("apps") }
                         Pages.AppsPage {
                             anchors.fill: parent
                             panel: root
@@ -556,9 +556,9 @@ PanelWindow {
 
                     Item {
                         anchors.fill: parent
-                        x: pageHost.layerX("notifications")
                         opacity: pageHost.layerOpacity("notifications")
                         visible: pageHost.layerVisible("notifications")
+                        transform: Translate { x: pageHost.layerX("notifications") }
                         Pages.NotificationsPage {
                             anchors.fill: parent
                             panel: root
@@ -568,9 +568,9 @@ PanelWindow {
 
                     Item {
                         anchors.fill: parent
-                        x: pageHost.layerX("search")
                         opacity: pageHost.layerOpacity("search")
                         visible: pageHost.layerVisible("search")
+                        transform: Translate { x: pageHost.layerX("search") }
                         Pages.FeatureProbePage {
                             anchors.fill: parent
                             panel: root
@@ -581,9 +581,9 @@ PanelWindow {
 
                     Item {
                         anchors.fill: parent
-                        x: pageHost.layerX("online-accounts")
                         opacity: pageHost.layerOpacity("online-accounts")
                         visible: pageHost.layerVisible("online-accounts")
+                        transform: Translate { x: pageHost.layerX("online-accounts") }
                         Pages.ExternalSettingsPage {
                             anchors.fill: parent
                             panel: root
@@ -594,9 +594,9 @@ PanelWindow {
 
                     Item {
                         anchors.fill: parent
-                        x: pageHost.layerX("sharing")
                         opacity: pageHost.layerOpacity("sharing")
                         visible: pageHost.layerVisible("sharing")
+                        transform: Translate { x: pageHost.layerX("sharing") }
                         Pages.FeatureProbePage {
                             anchors.fill: parent
                             panel: root
@@ -607,9 +607,9 @@ PanelWindow {
 
                     Item {
                         anchors.fill: parent
-                        x: pageHost.layerX("wellbeing")
                         opacity: pageHost.layerOpacity("wellbeing")
                         visible: pageHost.layerVisible("wellbeing")
+                        transform: Translate { x: pageHost.layerX("wellbeing") }
                         Pages.ReadOnlyCapabilityPage {
                             anchors.fill: parent
                             panel: root
@@ -620,9 +620,9 @@ PanelWindow {
 
                     Item {
                         anchors.fill: parent
-                        x: pageHost.layerX("mouse-touchpad")
                         opacity: pageHost.layerOpacity("mouse-touchpad")
                         visible: pageHost.layerVisible("mouse-touchpad")
+                        transform: Translate { x: pageHost.layerX("mouse-touchpad") }
                         Pages.MouseTouchpadPage {
                             anchors.fill: parent
                             panel: root
@@ -632,9 +632,9 @@ PanelWindow {
 
                     Item {
                         anchors.fill: parent
-                        x: pageHost.layerX("keyboard")
                         opacity: pageHost.layerOpacity("keyboard")
                         visible: pageHost.layerVisible("keyboard")
+                        transform: Translate { x: pageHost.layerX("keyboard") }
                         Pages.KeyboardPage {
                             anchors.fill: parent
                             panel: root
@@ -644,9 +644,9 @@ PanelWindow {
 
                     Item {
                         anchors.fill: parent
-                        x: pageHost.layerX("color")
                         opacity: pageHost.layerOpacity("color")
                         visible: pageHost.layerVisible("color")
+                        transform: Translate { x: pageHost.layerX("color") }
                         Pages.ExternalSettingsPage {
                             anchors.fill: parent
                             panel: root
@@ -657,9 +657,9 @@ PanelWindow {
 
                     Item {
                         anchors.fill: parent
-                        x: pageHost.layerX("printers")
                         opacity: pageHost.layerOpacity("printers")
                         visible: pageHost.layerVisible("printers")
+                        transform: Translate { x: pageHost.layerX("printers") }
                         Pages.ExternalSettingsPage {
                             anchors.fill: parent
                             panel: root
@@ -670,9 +670,9 @@ PanelWindow {
 
                     Item {
                         anchors.fill: parent
-                        x: pageHost.layerX("accessibility")
                         opacity: pageHost.layerOpacity("accessibility")
                         visible: pageHost.layerVisible("accessibility")
+                        transform: Translate { x: pageHost.layerX("accessibility") }
                         Pages.ExternalSettingsPage {
                             anchors.fill: parent
                             panel: root
@@ -683,9 +683,9 @@ PanelWindow {
 
                     Item {
                         anchors.fill: parent
-                        x: pageHost.layerX("privacy")
                         opacity: pageHost.layerOpacity("privacy")
                         visible: pageHost.layerVisible("privacy")
+                        transform: Translate { x: pageHost.layerX("privacy") }
                         Pages.ReadOnlyCapabilityPage {
                             anchors.fill: parent
                             panel: root
@@ -696,9 +696,9 @@ PanelWindow {
 
                     Item {
                         anchors.fill: parent
-                        x: pageHost.layerX("system")
                         opacity: pageHost.layerOpacity("system")
                         visible: pageHost.layerVisible("system")
+                        transform: Translate { x: pageHost.layerX("system") }
                         Pages.SystemPage {
                             anchors.fill: parent
                             panel: root
@@ -708,9 +708,9 @@ PanelWindow {
 
                     Item {
                         anchors.fill: parent
-                        x: pageHost.layerX("niri")
                         opacity: pageHost.layerOpacity("niri")
                         visible: pageHost.layerVisible("niri")
+                        transform: Translate { x: pageHost.layerX("niri") }
                         Pages.NiriPage {
                             anchors.fill: parent
                             panel: root
@@ -720,9 +720,9 @@ PanelWindow {
 
                     Item {
                         anchors.fill: parent
-                        x: pageHost.layerX("wallpaper")
                         opacity: pageHost.layerOpacity("wallpaper")
                         visible: pageHost.layerVisible("wallpaper")
+                        transform: Translate { x: pageHost.layerX("wallpaper") }
                         Pages.WallpaperPage {
                             anchors.fill: parent
                             panel: root
@@ -732,9 +732,9 @@ PanelWindow {
 
                     Item {
                         anchors.fill: parent
-                        x: pageHost.layerX("dynamic-island")
                         opacity: pageHost.layerOpacity("dynamic-island")
                         visible: pageHost.layerVisible("dynamic-island")
+                        transform: Translate { x: pageHost.layerX("dynamic-island") }
                         Pages.DynamicIslandPage {
                             anchors.fill: parent
                             panel: root
@@ -744,9 +744,9 @@ PanelWindow {
 
                     Item {
                         anchors.fill: parent
-                        x: pageHost.layerX("screenshot")
                         opacity: pageHost.layerOpacity("screenshot")
                         visible: pageHost.layerVisible("screenshot")
+                        transform: Translate { x: pageHost.layerX("screenshot") }
                         Pages.ScreenshotPage {
                             anchors.fill: parent
                             panel: root
@@ -756,9 +756,9 @@ PanelWindow {
 
                     Item {
                         anchors.fill: parent
-                        x: pageHost.layerX("dock")
                         opacity: pageHost.layerOpacity("dock")
                         visible: pageHost.layerVisible("dock")
+                        transform: Translate { x: pageHost.layerX("dock") }
                         Pages.DockPage {
                             anchors.fill: parent
                             panel: root
@@ -768,9 +768,9 @@ PanelWindow {
 
                     Item {
                         anchors.fill: parent
-                        x: pageHost.layerX("weather")
                         opacity: pageHost.layerOpacity("weather")
                         visible: pageHost.layerVisible("weather")
+                        transform: Translate { x: pageHost.layerX("weather") }
                         Pages.WeatherPage {
                             anchors.fill: parent
                             panel: root
@@ -780,9 +780,9 @@ PanelWindow {
 
                     Item {
                         anchors.fill: parent
-                        x: pageHost.layerX("startup")
                         opacity: pageHost.layerOpacity("startup")
                         visible: pageHost.layerVisible("startup")
+                        transform: Translate { x: pageHost.layerX("startup") }
                         Pages.StartupPage {
                             anchors.fill: parent
                             panel: root
@@ -793,9 +793,9 @@ PanelWindow {
 
                     Item {
                         anchors.fill: parent
-                        x: pageHost.layerX("health")
                         opacity: pageHost.layerOpacity("health")
                         visible: pageHost.layerVisible("health")
+                        transform: Translate { x: pageHost.layerX("health") }
                         Pages.HealthPage {
                             anchors.fill: parent
                             panel: root
@@ -805,9 +805,9 @@ PanelWindow {
 
                     Item {
                         anchors.fill: parent
-                        x: pageHost.layerX("about")
                         opacity: pageHost.layerOpacity("about")
                         visible: pageHost.layerVisible("about")
+                        transform: Translate { x: pageHost.layerX("about") }
                         Pages.AboutPage {
                             anchors.fill: parent
                             panel: root
@@ -817,9 +817,9 @@ PanelWindow {
 
                     Item {
                         anchors.fill: parent
-                        x: pageHost.layerX("niri-layout")
                         opacity: pageHost.layerOpacity("niri-layout")
                         visible: pageHost.layerVisible("niri-layout")
+                        transform: Translate { x: pageHost.layerX("niri-layout") }
                         Pages.NiriLayoutPage {
                             anchors.fill: parent
                             panel: root
@@ -829,9 +829,9 @@ PanelWindow {
 
                     Item {
                         anchors.fill: parent
-                        x: pageHost.layerX("niri-glass")
                         opacity: pageHost.layerOpacity("niri-glass")
                         visible: pageHost.layerVisible("niri-glass")
+                        transform: Translate { x: pageHost.layerX("niri-glass") }
                         Pages.NiriGlassPage {
                             anchors.fill: parent
                             panel: root
@@ -841,9 +841,9 @@ PanelWindow {
 
                     Item {
                         anchors.fill: parent
-                        x: pageHost.layerX("niri-input")
                         opacity: pageHost.layerOpacity("niri-input")
                         visible: pageHost.layerVisible("niri-input")
+                        transform: Translate { x: pageHost.layerX("niri-input") }
                         Pages.NiriInputPage {
                             anchors.fill: parent
                             panel: root
@@ -853,9 +853,9 @@ PanelWindow {
 
                     Item {
                         anchors.fill: parent
-                        x: pageHost.layerX("niri-animations")
                         opacity: pageHost.layerOpacity("niri-animations")
                         visible: pageHost.layerVisible("niri-animations")
+                        transform: Translate { x: pageHost.layerX("niri-animations") }
                         Pages.NiriAnimationsPage {
                             anchors.fill: parent
                             panel: root
@@ -865,9 +865,9 @@ PanelWindow {
 
                     Item {
                         anchors.fill: parent
-                        x: pageHost.layerX("niri-keyboard")
                         opacity: pageHost.layerOpacity("niri-keyboard")
                         visible: pageHost.layerVisible("niri-keyboard")
+                        transform: Translate { x: pageHost.layerX("niri-keyboard") }
                         Pages.NiriKeyboardPage {
                             anchors.fill: parent
                             panel: root
@@ -877,9 +877,9 @@ PanelWindow {
 
                     Item {
                         anchors.fill: parent
-                        x: pageHost.layerX("overview")
                         opacity: pageHost.layerOpacity("overview")
                         visible: pageHost.layerVisible("overview")
+                        transform: Translate { x: pageHost.layerX("overview") }
                         Pages.OverviewPage {
                             anchors.fill: parent
                             panel: root

@@ -706,9 +706,11 @@ Flickable {
                             anchors.centerIn: parent
                             theme: row.theme
                             checked: !!(row.entry && row.entry.active)
+                            pressed: vpnSwitchMouse.pressed
                         }
 
                         MouseArea {
+                            id: vpnSwitchMouse
                             anchors.fill: parent
                             cursorShape: Qt.PointingHandCursor
                             onClicked: row.toggleRequested(row.entry, !(row.entry && row.entry.active))

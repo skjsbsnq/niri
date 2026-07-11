@@ -25,6 +25,9 @@ class SettingsControlsPolishTests(unittest.TestCase):
         self.assertIn('color: "#ffffff"', text)
         self.assertIn("knobDiameter", text)
         self.assertIn("#30000000", text)
+        # Hit mapping compensates for knob half-width (visual ends match value).
+        self.assertIn("function ratioAt", text)
+        self.assertIn("knobDiameter / 2", text)
 
     def test_button_primary_accent_secondary_solid(self) -> None:
         text = (CONTROLS / "TahoeButton.qml").read_text(encoding="utf-8")

@@ -48,6 +48,10 @@ class SettingsShellRedesignTests(unittest.TestCase):
         self.assertIn("Motion.settingsPageTransition", panel)
         self.assertIn("settingsPageEnterOffsetPx", panel)
         self.assertIn("settingsPageExitOffsetPx", panel)
+        # Slide must use Translate so anchors.fill does not fight x.
+        self.assertIn("transform: Translate", panel)
+        # No top-level `x:` property on layers (only inside Translate {}).
+        self.assertIsNone(re.search(r"(?m)^\s+x:\s*pageHost\.layerX\(", panel))
 
     def test_motion_page_transition_tokens(self) -> None:
         motion = MOTION.read_text(encoding="utf-8")

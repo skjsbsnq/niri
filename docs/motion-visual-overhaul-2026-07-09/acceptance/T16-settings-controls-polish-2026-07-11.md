@@ -38,7 +38,16 @@
 
 外观、声音/显示滑条、通知开关、Niri 动画编辑器、多任务分段、Wi‑Fi 列表行、键盘、电源。
 
+## 审查 follow-up（同日）
+
+| 问题 | 处置 |
+| --- | --- |
+| Slider 命中映射未补偿 knob 半宽 | **已修** `ratioAt()` 与 knob 行程一致 |
+| Slider 阴影 `anchors.centerIn` + `y` 冲突 | **已修** `verticalCenterOffset: 1` |
+| 独立 TahoeSwitch（NetworkPage VPN）无 pressed | **已修** 绑定 `vpnSwitchMouse.pressed` |
+
 ## 发现待办
 
 - 实机：Switch 按压缩放与 Slider knob 拖动手感
 - TahoeSection / AboutRow 字阶未统一到 13（非本任务清单核心六控件）
+- ListRow 末行分割线可选隐藏（nit）

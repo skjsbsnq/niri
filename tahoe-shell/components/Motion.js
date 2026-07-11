@@ -77,6 +77,43 @@ function dockLaunchBounceHeight(iconSizePx) {
     return size * dockLaunchBounceHeightFactor;
 }
 
+// Notification toast stack + swipe dismiss (T09). Stack count lives in
+// DesktopSettings.notificationToastStackMax (default 3). Glass region geometry
+// still uses eased NumberAnimation only; springPanel drives content transforms.
+var toastStackMaxDefault = 3;
+var toastStackYStep = 8;
+var toastStackScaleStep = 0.04; // index 0 → 1.0, 1 → 0.96, 2 → 0.92
+var toastEnterOffsetPx = 60;
+var toastSwipeEnterThreshold = 0.56; // share DynamicIslandMotion enter feel
+var toastSwipeReturnThreshold = 0.44;
+var toastSwipeVerticalTolerance = 24;
+var toastSwipeDismissPx = 96; // absolute px fallback if width unknown
+var toastClearStaggerMs = 30;
+var toastClearStaggerBudgetMs = 450;
+var toastClearStaggerMaxItems = 40;
+var toastHoverLiftPx = 4;
+
+function toastStackScaleForIndex(stackIndex) {
+    var idx = Math.max(0, Math.round(Number(stackIndex) || 0));
+    return Math.max(0.88, 1.0 - idx * toastStackScaleStep);
+}
+
+function toastStackYForIndex(stackIndex) {
+    var idx = Math.max(0, Math.round(Number(stackIndex) || 0));
+    return idx * toastStackYStep;
+}
+
+function toastClearStaggerDelay(index, total) {
+    var n = Math.min(toastClearStaggerMaxItems, Math.max(0, Math.round(Number(total) || 0)));
+    var i = Math.max(0, Math.round(Number(index) || 0));
+    if (n <= 0 || i >= n)
+        return 0;
+    var step = toastClearStaggerMs;
+    if (step * (n - 1) > toastClearStaggerBudgetMs && n > 1)
+        step = Math.floor(toastClearStaggerBudgetMs / (n - 1));
+    return Math.min(toastClearStaggerBudgetMs, i * step);
+}
+
 // Spring vocabulary — QML SpringAnimation parameter groups. Glass region
 // geometry must never use these (guardrail 0704ea4); springs are only for
 // content transforms/opacity inside panels, compositor-side channels, and

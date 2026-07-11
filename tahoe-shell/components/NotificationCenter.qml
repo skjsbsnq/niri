@@ -18,6 +18,13 @@ PanelWindow {
 
     readonly property var history: notificationsService ? notificationsService.historyModel : []
     readonly property int historyCount: history.length
+    // Re-group whenever history length or model identity changes.
+    readonly property var groupedHistory: {
+        var _watch = root.historyCount;
+        if (!notificationsService || _watch <= 0)
+            return [];
+        return notificationsService.groupedHistory();
+    }
     readonly property bool dndEnabled: notificationsService ? notificationsService.dndEnabled : false
     readonly property string iconFont: "Material Icons"
     readonly property int edgePadding: 8
@@ -29,6 +36,11 @@ PanelWindow {
     readonly property int popupTopMargin: PopupGeometry.popupTop(anchorRect, fallbackTop, popupGap)
     readonly property real popupOriginX: PopupGeometry.originX(anchorRect, popupLeftMargin, root.implicitWidth, screenWidth, fallbackRight)
     signal closeRequested()
+
+    // Clear-all stagger: fly cards out then wipe models (budget ≤450ms, ≤40).
+    property bool clearing: false
+    property int clearTotal: 0
+    property int clearTick: 0
 
     visible: open
     aboveWindows: true
@@ -49,6 +61,45 @@ PanelWindow {
     }
 
     TahoeGlass.regions: [panel.region]
+
+    function startClearAll() {
+        if (!notificationsService || root.clearing)
+            return;
+        if (root.historyCount === 0 && notificationsService.activeCount === 0) {
+            notificationsService.clearEverything();
+            return;
+        }
+        root.clearing = true;
+        root.clearTotal = Math.min(Motion.toastClearStaggerMaxItems, Math.max(1, root.historyCount));
+        root.clearTick = 0;
+        clearStaggerTimer.restart();
+    }
+
+    function finishClearAll() {
+        clearStaggerTimer.stop();
+        root.clearing = false;
+        root.clearTick = 0;
+        root.clearTotal = 0;
+        if (root.notificationsService)
+            root.notificationsService.clearEverything();
+    }
+
+    Timer {
+        id: clearStaggerTimer
+        interval: Math.max(1, Motion.toastClearStaggerMs)
+        repeat: true
+        onTriggered: {
+            root.clearTick += 1;
+            var budgetSteps = Math.max(1, Math.ceil(Motion.toastClearStaggerBudgetMs / Math.max(1, interval)));
+            if (root.clearTick >= root.clearTotal || root.clearTick >= budgetSteps)
+                root.finishClearAll();
+        }
+    }
+
+    onOpenChanged: {
+        if (!open && root.clearing)
+            root.finishClearAll();
+    }
 
     GlassPanel {
         id: panel
@@ -90,7 +141,7 @@ PanelWindow {
                 Item {
                     Layout.preferredWidth: clearLabel.implicitWidth + 18
                     Layout.preferredHeight: 24
-                    visible: root.historyCount > 0
+                    visible: root.historyCount > 0 && !root.clearing
 
                     Rectangle {
                         anchors.fill: parent
@@ -113,10 +164,7 @@ PanelWindow {
                         anchors.fill: parent
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            if (root.notificationsService)
-                                root.notificationsService.clearEverything();
-                        }
+                        onClicked: root.startClearAll()
                     }
                 }
             }
@@ -208,7 +256,7 @@ PanelWindow {
             Item {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 80
-                visible: root.historyCount === 0
+                visible: root.historyCount === 0 && !root.clearing
 
                 Text {
                     anchors.centerIn: parent
@@ -222,7 +270,7 @@ PanelWindow {
             Flickable {
                 Layout.fillWidth: true
                 Layout.preferredHeight: Math.min(360, Math.max(120, historyColumn.implicitHeight))
-                visible: root.historyCount > 0
+                visible: root.historyCount > 0 || root.clearing
                 contentWidth: width
                 contentHeight: historyColumn.implicitHeight
                 clip: true
@@ -232,18 +280,93 @@ PanelWindow {
                     id: historyColumn
 
                     width: parent.width
-                    spacing: 8
+                    spacing: 12
 
                     Repeater {
-                        model: root.history
+                        model: root.groupedHistory
 
-                        delegate: NotificationRow {
+                        delegate: AppGroup {
                             required property var modelData
+                            required property int index
 
                             width: historyColumn.width
-                            entry: modelData
+                            group: modelData
+                            groupIndex: index
                         }
                     }
+                }
+            }
+        }
+    }
+
+    component AppGroup: Column {
+        id: groupRoot
+
+        property var group
+        property int groupIndex: 0
+        readonly property string appName: group ? String(group.appName || "应用") : "应用"
+        readonly property var items: group && group.items ? group.items : []
+        readonly property int itemCount: items.length
+        property bool expanded: itemCount <= 2
+
+        width: parent ? parent.width : 0
+        spacing: 6
+
+        // Group header
+        Item {
+            width: parent.width
+            height: 22
+
+            Text {
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
+                text: groupRoot.appName
+                color: "#991d1d1f"
+                font.pixelSize: 11
+                font.weight: Font.DemiBold
+            }
+
+            Text {
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                text: groupRoot.itemCount > 1
+                    ? (groupRoot.expanded ? "收起" : groupRoot.itemCount + " 条")
+                    : ""
+                color: "#731d1d1f"
+                font.pixelSize: 11
+                visible: groupRoot.itemCount > 1
+
+                MouseArea {
+                    anchors.fill: parent
+                    anchors.margins: -4
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: groupRoot.expanded = !groupRoot.expanded
+                }
+            }
+        }
+
+        Column {
+            width: parent.width
+            spacing: 8
+
+            Repeater {
+                model: groupRoot.items
+
+                delegate: NotificationRow {
+                    required property var modelData
+                    required property int index
+
+                    width: groupRoot.width
+                    entry: modelData
+                    rowIndex: {
+                        // Flat index estimate for stagger: prior groups + index
+                        var base = 0;
+                        var groups = root.groupedHistory;
+                        for (var g = 0; g < groupRoot.groupIndex && g < groups.length; g++)
+                            base += groups[g] && groups[g].items ? groups[g].items.length : 0;
+                        return base + index;
+                    }
+                    collapsedHidden: !groupRoot.expanded && index > 0
                 }
             }
         }
@@ -253,11 +376,42 @@ PanelWindow {
         id: row
 
         property var entry
+        property int rowIndex: 0
+        property bool collapsedHidden: false
         readonly property string iconUrl: root.notificationsService
             ? root.notificationsService.iconUrlForHistory(entry)
             : ""
+        readonly property bool flyOut: root.clearing && rowIndex < root.clearTick
 
-        height: card.implicitHeight
+        height: collapsedHidden ? 0 : card.implicitHeight
+        visible: !collapsedHidden || root.clearing
+        clip: true
+        opacity: flyOut ? 0 : 1
+
+        transform: Translate {
+            x: row.flyOut ? 80 : 0
+            Behavior on x {
+                NumberAnimation {
+                    duration: Motion.elementMove(root.settingsService)
+                    easing.type: Motion.emphasizedAccel
+                }
+            }
+        }
+
+        Behavior on opacity {
+            NumberAnimation {
+                duration: Motion.fadeFast(root.settingsService)
+                easing.type: Motion.standardDecel
+            }
+        }
+
+        Behavior on height {
+            enabled: row.collapsedHidden || (!row.collapsedHidden && height > 0)
+            NumberAnimation {
+                duration: Motion.elementResize(root.settingsService)
+                easing.type: Motion.emphasizedDecel
+            }
+        }
 
         Rectangle {
             id: card
@@ -300,6 +454,7 @@ PanelWindow {
                         sourceSize.height: 20
                         fillMode: Image.PreserveAspectFit
                         smooth: true
+                        asynchronous: true
                         visible: row.iconUrl.length > 0 && status !== Image.Error
                     }
 

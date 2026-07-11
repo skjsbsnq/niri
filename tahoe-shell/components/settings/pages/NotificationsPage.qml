@@ -57,6 +57,39 @@ Flickable {
                 }
             }
 
+            Controls.TahoeListRow {
+                theme: page.theme
+                label: "横幅堆叠"
+                detail: {
+                    var n = page.panel && page.panel.settingsService
+                        ? page.panel.settingsService.notificationToastStackMax
+                        : 3;
+                    return "最多同时显示 " + n + " 条";
+                }
+                iconCode: "\ue8d2"
+                enabled: !!(page.panel && page.panel.settingsService)
+
+                Controls.TahoeSegmented {
+                    theme: page.theme
+                    Layout.preferredWidth: 140
+                    value: {
+                        var n = page.panel && page.panel.settingsService
+                            ? page.panel.settingsService.notificationToastStackMax
+                            : 3;
+                        return String(n);
+                    }
+                    model: [
+                        { value: "1", label: "1" },
+                        { value: "2", label: "2" },
+                        { value: "3", label: "3" }
+                    ]
+                    onSelected: function(value) {
+                        if (page.panel && page.panel.settingsService)
+                            page.panel.settingsService.setNotificationToastStackMax(Number(value));
+                    }
+                }
+            }
+
         }
     }
 }

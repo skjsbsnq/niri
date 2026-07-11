@@ -72,6 +72,7 @@ Item {
 
     property var activeModel: []
     readonly property int activeCount: activeModel.length
+    // Head of FIFO (oldest waiting). Kept for callers that only need "the" toast.
     readonly property var current: activeModel.length > 0 ? activeModel[0] : null
     property var historyModel: []
     property bool dndEnabled: false
@@ -79,6 +80,8 @@ Item {
     readonly property int historyCount: historyModel.length
     readonly property int maxHistory: 60
     property bool stateLoaded: false
+    // id → absolute expire deadline (ms since epoch). Critical ids are absent.
+    property var expireMap: ({})
 
     FileView {
         id: notificationStateFile
@@ -150,14 +153,51 @@ Item {
             return;
         }
 
-        var wasEmpty = root.activeModel.length === 0;
         root.activeModel = root.activeModel.concat([notification]);
 
-        // Only the head is shown, so only the head needs an expire
-        // timer. If this notification became the head (queue was empty)
-        // and is not Critical, arm the timer.
-        if (wasEmpty && !isCritical(notification))
+        // T09: every non-critical toast gets its own expire deadline so a
+        // multi-card stack can dismiss independently without waiting for head.
+        if (!isCritical(notification))
             root.scheduleExpire(id, expireMsFor(notification));
+    }
+
+    // Newest-first slice for the toast stack (macOS: new card on top).
+    // maxCount defaults to 3; DesktopSettings.notificationToastStackMax drives UI.
+    function visibleStack(maxCount) {
+        var max = Math.max(1, Math.min(3, Math.round(Number(maxCount) || 3)));
+        var list = root.activeModel;
+        var n = Math.min(max, list.length);
+        var out = [];
+        for (var i = 0; i < n; i++)
+            out.push(list[list.length - 1 - i]);
+        return out;
+    }
+
+    // Group history by appName, newest group first (first-seen order of apps
+    // following history order which is already newest-first).
+    function groupedHistory() {
+        var groups = [];
+        var indexByApp = {};
+        var list = root.historyModel;
+        for (var i = 0; i < list.length; i++) {
+            var entry = list[i];
+            if (!entry)
+                continue;
+            var app = String(entry.appName || "应用");
+            if (indexByApp[app] === undefined) {
+                indexByApp[app] = groups.length;
+                groups.push({
+                    "appName": app,
+                    "items": [entry],
+                    "count": 1
+                });
+            } else {
+                var g = groups[indexByApp[app]];
+                g.items.push(entry);
+                g.count = g.items.length;
+            }
+        }
+        return groups;
     }
 
     function isCritical(notification) {
@@ -285,8 +325,50 @@ Item {
     }
 
     function scheduleExpire(id, expireMs) {
-        expireTimer.targetId = id;
-        expireTimer.interval = expireMs;
+        var at = Date.now() + Math.max(1, Math.round(Number(expireMs) || root.defaultExpireMs));
+        var map = {};
+        var prev = root.expireMap || {};
+        for (var key in prev) {
+            if (Object.prototype.hasOwnProperty.call(prev, key))
+                map[key] = prev[key];
+        }
+        map[String(id)] = at;
+        root.expireMap = map;
+        root.armSoonestExpire();
+    }
+
+    function clearExpire(id) {
+        var map = {};
+        var prev = root.expireMap || {};
+        var sid = String(id);
+        for (var key in prev) {
+            if (Object.prototype.hasOwnProperty.call(prev, key) && key !== sid)
+                map[key] = prev[key];
+        }
+        root.expireMap = map;
+        root.armSoonestExpire();
+    }
+
+    function armSoonestExpire() {
+        var map = root.expireMap || {};
+        var soonest = Infinity;
+        var soonestId = -1;
+        for (var key in map) {
+            if (!Object.prototype.hasOwnProperty.call(map, key))
+                continue;
+            var at = Number(map[key]);
+            if (isFinite(at) && at < soonest) {
+                soonest = at;
+                soonestId = Number(key);
+            }
+        }
+        if (soonestId < 0 || !isFinite(soonest)) {
+            expireTimer.stop();
+            expireTimer.targetId = -1;
+            return;
+        }
+        expireTimer.targetId = soonestId;
+        expireTimer.interval = Math.max(1, Math.round(soonest - Date.now()));
         expireTimer.restart();
     }
 
@@ -296,10 +378,10 @@ Item {
         interval: root.defaultExpireMs
         repeat: false
         onTriggered: {
-            // Guard: only expire if this id is still the head. If the user
-            // dismissed it already the timer is harmless (dismissId on a
-            // missing id no-ops), but this keeps the intent explicit.
-            root.dismissId(targetId, "expire");
+            var id = targetId;
+            root.clearExpire(id);
+            root.dismissId(id, "expire");
+            // armSoonestExpire runs again from clearExpire / handleClosed.
         }
     }
 
@@ -313,17 +395,7 @@ Item {
                 remaining.push(list[i]);
         }
         root.activeModel = remaining;
-
-        // Re-arm the timer for the new head, if any.
-        if (root.activeModel.length > 0) {
-            var head = root.activeModel[0];
-            if (!isCritical(head))
-                root.scheduleExpire(head.id, expireMsFor(head));
-            else
-                expireTimer.stop();
-        } else {
-            expireTimer.stop();
-        }
+        root.clearExpire(id);
     }
 
     function dismissId(id, mode) {

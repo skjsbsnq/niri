@@ -52,6 +52,8 @@ Item {
     readonly property string weatherLocationName: settingsAdapter.weatherLocationName
     readonly property bool weatherManualOverride: settingsAdapter.weatherManualOverride
     readonly property string weatherTempUnit: settingsAdapter.weatherTempUnit
+    // T09: max simultaneous toast cards in the live stack (1–3).
+    readonly property int notificationToastStackMax: settingsAdapter.notificationToastStackMax
     property var autostartEntries: []
     property string autostartStatus: "unknown"
     property string autostartDetail: "尚未读取启动项"
@@ -363,6 +365,15 @@ Item {
         settingsFile.writeAdapter();
     }
 
+    function setNotificationToastStackMax(value) {
+        var next = clampInt(value, 1, 3, 3);
+        if (settingsAdapter.notificationToastStackMax === next)
+            return;
+
+        settingsAdapter.notificationToastStackMax = next;
+        settingsFile.writeAdapter();
+    }
+
     function setDynamicIslandEnabled(enabled) {
         var next = !!enabled;
         if (settingsAdapter.dynamicIslandEnabled === next)
@@ -593,6 +604,12 @@ Item {
             changed = true;
         }
 
+        var toastStackMax = clampInt(settingsAdapter.notificationToastStackMax, 1, 3, 3);
+        if (settingsAdapter.notificationToastStackMax !== toastStackMax) {
+            settingsAdapter.notificationToastStackMax = toastStackMax;
+            changed = true;
+        }
+
         var iconTheme = cleanIconThemeName(settingsAdapter.customIconTheme);
         if (settingsAdapter.customIconTheme !== iconTheme) {
             settingsAdapter.customIconTheme = iconTheme;
@@ -729,6 +746,7 @@ Item {
             property string startupNote: ""
             property bool compositorLayerAnimations: true
             property string motionProfile: "balanced"
+            property int notificationToastStackMax: 3
             property bool dynamicIslandEnabled: true
             property bool dynamicIslandHideTopbarTime: true
             property string dynamicIslandLeftClickAction: "toggle_media"

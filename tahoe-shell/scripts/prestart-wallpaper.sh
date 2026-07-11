@@ -119,9 +119,14 @@ def external_args(entry, fallback_screen):
             args.extend([option, value])
 
     try:
-        # Default 15; hard-cap 20 for layer=background so a 30fps UX entry does
-        # not force full-screen compositor damage every frame for glass sampling.
-        fps = max(1, min(20, round(float(entry.get("fps", 15)))))
+        # Prefer desktop-settings budget; hard-cap 20 for background layer.
+        default_fps = 15
+        try:
+            default_fps = max(1, min(20, int(round(float(settings.get("wallpaperEngineFps", 15))))))
+        except Exception:
+            default_fps = 15
+        fps = max(1, min(20, round(float(entry.get("fps", default_fps)))))
+        fps = min(fps, default_fps)
     except Exception:
         fps = 15
     args.extend(["--fps", str(fps)])
@@ -139,12 +144,16 @@ def external_args(entry, fallback_screen):
         ("noAutomute", "--noautomute"),
         ("noAudioProcessing", "--no-audio-processing"),
         ("disableMouse", "--disable-mouse"),
-        ("disableParallax", "--disable-parallax"),
-        ("disableParticles", "--disable-particles"),
         ("noFullscreenPause", "--no-fullscreen-pause"),
     ):
         if entry.get(key):
             args.append(option)
+
+    # Default quieter for compositor cost unless UX explicitly enables effects.
+    if entry.get("disableParallax", True):
+        args.append("--disable-parallax")
+    if entry.get("disableParticles", True):
+        args.append("--disable-particles")
 
     assets_dir = os.path.join(
         home,
@@ -159,11 +168,31 @@ def external_args(entry, fallback_screen):
 settings = load_json(settings_file)
 mode = str(settings.get("wallpaperMode", "static")).strip()
 
+
+def settings_fps_budget():
+    try:
+        return max(1, min(20, int(round(float(settings.get("wallpaperEngineFps", 15))))))
+    except Exception:
+        return 15
+
+
+def inject_fps(command, fps):
+    text = str(command or "").strip()
+    if not text:
+        return text
+    import re
+
+    if re.search(r"(^|\s)--fps(\s|=)", text):
+        return re.sub(r"(^|\s)--fps(\s+|=)\d+", rf"\1--fps\2{fps}", text)
+    return f"{text} --fps {fps}"
+
+
 if mode == "dynamic":
     command = str(settings.get("dynamicWallpaperCommand", "")).strip()
     if not command:
         sys.exit(0)
 
+    command = inject_fps(command, settings_fps_budget())
     outputs = niri_outputs()
     if not outputs:
         spawn_shell(command)

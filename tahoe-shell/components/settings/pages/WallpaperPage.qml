@@ -116,7 +116,7 @@ Flickable {
         Controls.TahoeSection {
             theme: page.theme
             title: "动态壁纸"
-            subtitle: "用命令托管，或交给 Linux Wallpaper Engine UX 切换"
+            subtitle: "用命令托管，或交给 Linux Wallpaper Engine UX 切换。日常建议静态；动态模式会在空闲时自动降帧。"
 
             Controls.TahoeListRow {
                 theme: page.theme
@@ -133,6 +133,95 @@ Flickable {
                         enabled: !!(page.panel && page.panel.settingsService)
                         onActivated: page.panel.settingsService.openWallpaperEngineUx()
                     }
+                }
+            }
+
+            Controls.TahoeListRow {
+                theme: page.theme
+                label: "活动帧率"
+                detail: "播放时上限（1–20）。高帧率会抬高 CPU 并拖累毛玻璃采样。"
+                iconCode: "\ue425"
+                enabled: !!(page.panel && page.panel.settingsService
+                    && page.panel.settingsService.wallpaperMode !== "static")
+
+                RowLayout {
+                    spacing: 7
+                    Controls.TahoeButton {
+                        theme: page.theme
+                        label: "12"
+                        active: page.panel && page.panel.settingsService && page.panel.settingsService.wallpaperEngineFps === 12
+                        minimumWidth: 48
+                        onActivated: page.panel.settingsService.setWallpaperEngineFps(12)
+                    }
+                    Controls.TahoeButton {
+                        theme: page.theme
+                        label: "15"
+                        active: page.panel && page.panel.settingsService && page.panel.settingsService.wallpaperEngineFps === 15
+                        minimumWidth: 48
+                        onActivated: page.panel.settingsService.setWallpaperEngineFps(15)
+                    }
+                    Controls.TahoeButton {
+                        theme: page.theme
+                        label: "20"
+                        active: page.panel && page.panel.settingsService && page.panel.settingsService.wallpaperEngineFps === 20
+                        minimumWidth: 48
+                        onActivated: page.panel.settingsService.setWallpaperEngineFps(20)
+                    }
+                }
+            }
+
+            Controls.TahoeListRow {
+                theme: page.theme
+                label: "空闲帧率"
+                detail: {
+                    if (!page.panel || !page.panel.settingsService)
+                        return "空闲后自动降低动态壁纸帧率";
+                    var sec = page.panel.settingsService.wallpaperEngineIdleSeconds;
+                    var fps = page.panel.settingsService.wallpaperEngineIdleFps;
+                    return "无输入 " + sec + "s 后降到 " + fps + " fps（仍低于活动上限）";
+                }
+                iconCode: "\ue192"
+                enabled: !!(page.panel && page.panel.settingsService
+                    && page.panel.settingsService.wallpaperMode !== "static")
+
+                RowLayout {
+                    spacing: 7
+                    Controls.TahoeButton {
+                        theme: page.theme
+                        label: "5"
+                        active: page.panel && page.panel.settingsService && page.panel.settingsService.wallpaperEngineIdleFps === 5
+                        minimumWidth: 48
+                        onActivated: page.panel.settingsService.setWallpaperEngineIdleFps(5)
+                    }
+                    Controls.TahoeButton {
+                        theme: page.theme
+                        label: "8"
+                        active: page.panel && page.panel.settingsService && page.panel.settingsService.wallpaperEngineIdleFps === 8
+                        minimumWidth: 48
+                        onActivated: page.panel.settingsService.setWallpaperEngineIdleFps(8)
+                    }
+                    Controls.TahoeButton {
+                        theme: page.theme
+                        label: "12"
+                        active: page.panel && page.panel.settingsService && page.panel.settingsService.wallpaperEngineIdleFps === 12
+                        minimumWidth: 48
+                        onActivated: page.panel.settingsService.setWallpaperEngineIdleFps(12)
+                    }
+                }
+            }
+
+            Controls.TahoeListRow {
+                theme: page.theme
+                label: "空闲暂停"
+                detail: "空闲时停止动态引擎并显示静态壁纸（最省电）"
+                iconCode: "\ue034"
+                checkable: true
+                enabled: !!(page.panel && page.panel.settingsService
+                    && page.panel.settingsService.wallpaperMode !== "static")
+                checked: !!(page.panel && page.panel.settingsService && page.panel.settingsService.wallpaperPauseWhenIdle)
+                onToggled: function(next) {
+                    if (page.panel && page.panel.settingsService)
+                        page.panel.settingsService.setWallpaperPauseWhenIdle(next);
                 }
             }
 

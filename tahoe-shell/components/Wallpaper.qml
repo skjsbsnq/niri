@@ -15,16 +15,39 @@ PanelWindow {
     property bool launchpadOpen: false
 
     readonly property bool settingsReady: settingsService && settingsService.loaded
+    // Idle budget for live wallpaperengine (ext-idle-notify). Short of lock timeout.
+    readonly property int wallpaperIdleSeconds: settingsService
+        ? Math.max(15, Number(settingsService.wallpaperEngineIdleSeconds) || 60)
+        : 60
+    readonly property int wallpaperActiveFps: settingsService
+        ? Math.max(1, Math.min(20, Number(settingsService.wallpaperEngineFps) || 15))
+        : 15
+    readonly property int wallpaperIdleFps: settingsService
+        ? Math.max(1, Math.min(wallpaperActiveFps, Number(settingsService.wallpaperEngineIdleFps) || 8))
+        : 8
+    readonly property bool wallpaperPauseWhenIdle: !!(settingsService && settingsService.wallpaperPauseWhenIdle)
+    property bool sessionIdle: false
+    readonly property int effectiveWallpaperFps: sessionIdle ? wallpaperIdleFps : wallpaperActiveFps
+    readonly property bool liveWallpaperAllowed: !sessionIdle || !wallpaperPauseWhenIdle
+
     readonly property bool dynamicDesired: settingsReady
         && settingsService.wallpaperMode === "dynamic"
         && settingsService.effectiveDynamicWallpaperCommand.length > 0
+        && liveWallpaperAllowed
     readonly property string dynamicCommand: dynamicDesired
-        ? resolveDynamicCommand(settingsService.effectiveDynamicWallpaperCommand)
+        ? applyWallpaperFpsBudget(resolveDynamicCommand(settingsService.effectiveDynamicWallpaperCommand), effectiveWallpaperFps)
         : ""
     readonly property bool externalDesired: settingsReady
         && settingsService.wallpaperMode === "external"
-    readonly property bool dynamicSuppressesStatic: dynamicDesired && !dynamicLaunchFailed
-    readonly property bool externalSuppressesStatic: externalDesired
+        && liveWallpaperAllowed
+    readonly property bool dynamicSuppressesStatic: settingsReady
+        && settingsService.wallpaperMode === "dynamic"
+        && settingsService.effectiveDynamicWallpaperCommand.length > 0
+        && liveWallpaperAllowed
+        && !dynamicLaunchFailed
+    readonly property bool externalSuppressesStatic: settingsReady
+        && settingsService.wallpaperMode === "external"
+        && liveWallpaperAllowed
         && (!externalStateLoaded || (externalCommand.length > 0 && !externalLaunchFailed))
     readonly property bool showStaticWallpaper: settingsReady
         && !dynamicActive
@@ -126,9 +149,9 @@ PanelWindow {
         if (clamp.length > 0)
             parts.push("--clamp", shellQuote(clamp));
 
-        // Default 15fps; cap 20 for background layer (session: 30fps wallpaper
-        // ~25% CPU + full-screen damage that keeps glass sampling hot).
-        var fps = Math.max(1, Math.min(20, Math.round(numberValue(entry.fps, 15))));
+        // Budget from DesktopSettings (active/idle). Hard cap 20 for background.
+        var fps = Math.max(1, Math.min(20, Math.round(numberValue(entry.fps, root.wallpaperActiveFps))));
+        fps = Math.min(fps, root.effectiveWallpaperFps);
         parts.push("--fps", String(fps));
 
         if (entry.silent) {
@@ -144,9 +167,10 @@ PanelWindow {
             parts.push("--no-audio-processing");
         if (entry.disableMouse)
             parts.push("--disable-mouse");
-        if (entry.disableParallax)
+        // Prefer quieter defaults for compositor cost unless UX explicitly enables them.
+        if (entry.disableParallax || entry.disableParallax === undefined)
             parts.push("--disable-parallax");
-        if (entry.disableParticles)
+        if (entry.disableParticles || entry.disableParticles === undefined)
             parts.push("--disable-particles");
         if (entry.noFullscreenPause)
             parts.push("--no-fullscreen-pause");
@@ -158,8 +182,19 @@ PanelWindow {
         return parts.join(" ");
     }
 
+    // Rewrite or inject --fps so idle/active budget always wins over UX JSON.
+    function applyWallpaperFpsBudget(command, fps) {
+        var text = String(command || "").trim();
+        if (text.length === 0)
+            return "";
+        var n = Math.max(1, Math.min(20, Math.round(Number(fps) || 15)));
+        if (/(^|\s)--fps(\s|=)/.test(text))
+            return text.replace(/(^|\s)--fps(\s+|=)\d+/g, "$1--fps$2" + String(n));
+        return text + " --fps " + String(n);
+    }
+
     function restoreCommandFromUxState() {
-        if (!externalDesired)
+        if (!settingsReady || settingsService.wallpaperMode !== "external")
             return "";
 
         var text = "";
@@ -189,7 +224,19 @@ PanelWindow {
     }
 
     function refreshExternalCommand() {
-        externalCommand = externalDesired ? restoreCommandFromUxState() : "";
+        externalCommand = (settingsReady && settingsService.wallpaperMode === "external" && liveWallpaperAllowed)
+            ? restoreCommandFromUxState()
+            : "";
+    }
+
+    function handleSessionIdleChanged() {
+        // Idle: lower fps (restart engine) or pause to static fallback.
+        // Resume: restore active budget.
+        dynamicLaunchFailed = false;
+        externalLaunchFailed = false;
+        refreshExternalCommand();
+        syncDynamicProcess();
+        syncExternalProcess();
     }
 
     function stopPrestartedWallpaper() {
@@ -344,12 +391,40 @@ PanelWindow {
         externalLaunchFailed = false;
         syncExternalProcess();
     }
+    onSessionIdleChanged: root.handleSessionIdleChanged()
+    onEffectiveWallpaperFpsChanged: {
+        if (!root.completed || (root.sessionIdle && root.wallpaperPauseWhenIdle))
+            return;
+        // Active/idle budget changed while engine should run — rebuild command.
+        root.refreshExternalCommand();
+        root.syncDynamicProcess();
+        root.syncExternalProcess();
+    }
+    onLiveWallpaperAllowedChanged: {
+        if (!root.completed)
+            return;
+        root.refreshExternalCommand();
+        root.syncDynamicProcess();
+        root.syncExternalProcess();
+    }
     Component.onCompleted: {
         completed = true;
         prestartedWallpaperFile.reload();
         activeWallpaperFile.reload();
         syncDynamicProcess();
         syncExternalProcess();
+    }
+
+    // Separate from lock IdleMonitor: shorter timeout so live wallpaper
+    // drops fps (or pauses) before the session locks.
+    IdleMonitor {
+        id: wallpaperIdleMonitor
+        enabled: root.settingsReady
+            && (root.settingsService.wallpaperMode === "dynamic"
+                || root.settingsService.wallpaperMode === "external")
+        timeout: root.wallpaperIdleSeconds
+        respectInhibitors: true
+        onIsIdleChanged: root.sessionIdle = isIdle
     }
 
     Item {

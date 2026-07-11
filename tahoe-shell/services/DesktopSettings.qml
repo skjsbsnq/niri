@@ -27,6 +27,12 @@ Item {
     readonly property string dynamicWallpaperCommand: settingsAdapter.dynamicWallpaperCommand
     readonly property string effectiveDynamicWallpaperCommand: String(dynamicWallpaperCommand || "").trim()
     readonly property string dynamicWallpaperExampleCommand: "linux-wallpaperengine --screen-root {output} --assets-dir \"$HOME/.local/share/Steam/steamapps/workshop/content/431960\" WALLPAPER_ID"
+    // Live wallpaper engine budget. Active fps is capped low so glass sampling
+    // is not forced to full-screen damage at 30Hz; idle drops further (or pauses).
+    readonly property int wallpaperEngineFps: settingsAdapter.wallpaperEngineFps
+    readonly property int wallpaperEngineIdleFps: settingsAdapter.wallpaperEngineIdleFps
+    readonly property int wallpaperEngineIdleSeconds: settingsAdapter.wallpaperEngineIdleSeconds
+    readonly property bool wallpaperPauseWhenIdle: settingsAdapter.wallpaperPauseWhenIdle
     readonly property string screenshotDirectory: settingsAdapter.screenshotDirectory
     readonly property string effectiveScreenshotDirectory: normalizedDirectory(screenshotDirectory).length > 0
         ? normalizedDirectory(screenshotDirectory)
@@ -338,6 +344,41 @@ Item {
         setDynamicWallpaperCommand(dynamicWallpaperExampleCommand);
     }
 
+    function setWallpaperEngineFps(value) {
+        var next = clampInt(value, 1, 20, 15);
+        if (settingsAdapter.wallpaperEngineFps === next)
+            return;
+        settingsAdapter.wallpaperEngineFps = next;
+        if (settingsAdapter.wallpaperEngineIdleFps > next)
+            settingsAdapter.wallpaperEngineIdleFps = next;
+        settingsFile.writeAdapter();
+    }
+
+    function setWallpaperEngineIdleFps(value) {
+        var cap = clampInt(settingsAdapter.wallpaperEngineFps, 1, 20, 15);
+        var next = clampInt(value, 1, cap, Math.min(8, cap));
+        if (settingsAdapter.wallpaperEngineIdleFps === next)
+            return;
+        settingsAdapter.wallpaperEngineIdleFps = next;
+        settingsFile.writeAdapter();
+    }
+
+    function setWallpaperEngineIdleSeconds(value) {
+        var next = clampInt(value, 15, 900, 60);
+        if (settingsAdapter.wallpaperEngineIdleSeconds === next)
+            return;
+        settingsAdapter.wallpaperEngineIdleSeconds = next;
+        settingsFile.writeAdapter();
+    }
+
+    function setWallpaperPauseWhenIdle(enabled) {
+        var next = !!enabled;
+        if (settingsAdapter.wallpaperPauseWhenIdle === next)
+            return;
+        settingsAdapter.wallpaperPauseWhenIdle = next;
+        settingsFile.writeAdapter();
+    }
+
     function openWallpaperEngineUx() {
         Quickshell.execDetached({
             command: [
@@ -646,6 +687,24 @@ Item {
             changed = true;
         }
 
+        var liveFps = clampInt(settingsAdapter.wallpaperEngineFps, 1, 20, 15);
+        if (settingsAdapter.wallpaperEngineFps !== liveFps) {
+            settingsAdapter.wallpaperEngineFps = liveFps;
+            changed = true;
+        }
+
+        var idleFps = clampInt(settingsAdapter.wallpaperEngineIdleFps, 1, liveFps, Math.min(8, liveFps));
+        if (settingsAdapter.wallpaperEngineIdleFps !== idleFps) {
+            settingsAdapter.wallpaperEngineIdleFps = idleFps;
+            changed = true;
+        }
+
+        var idleSec = clampInt(settingsAdapter.wallpaperEngineIdleSeconds, 15, 900, 60);
+        if (settingsAdapter.wallpaperEngineIdleSeconds !== idleSec) {
+            settingsAdapter.wallpaperEngineIdleSeconds = idleSec;
+            changed = true;
+        }
+
         if (!validIconThemeMode(settingsAdapter.iconThemeMode)) {
             settingsAdapter.iconThemeMode = "system";
             changed = true;
@@ -792,6 +851,12 @@ Item {
             property string wallpaperMode: "static"
             property string staticWallpaperPath: ""
             property string dynamicWallpaperCommand: ""
+            // Active/idle fps for linux-wallpaperengine (external + dynamic modes).
+            property int wallpaperEngineFps: 15
+            property int wallpaperEngineIdleFps: 8
+            property int wallpaperEngineIdleSeconds: 60
+            // When true, stop the engine while idle and show static wallpaper.
+            property bool wallpaperPauseWhenIdle: false
             property string screenshotDirectory: ""
             property bool screenshotCopyToClipboard: true
             property bool screenshotOfferActions: true

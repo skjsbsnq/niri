@@ -170,7 +170,15 @@ class MotionTokenConvergenceTests(unittest.TestCase):
         self.assertIn("id: bounceSpring", dock)
         self.assertIn("Motion.dockMagSpring", window_button)
         self.assertIn("magnificationTarget", window_button)
+        self.assertIn("slotWidthTarget", window_button)
+        self.assertIn("slotXTarget", window_button)
         self.assertIn("width: showTitle ? 132 : 60", window_button)
+        # Window half analytical push helpers (T08-fix2).
+        self.assertIn("function windowItemWidthAt(index)", dock)
+        self.assertIn("function windowItemXAt(index)", dock)
+        self.assertIn("function windowWaveContentWidth()", dock)
+        self.assertIn("function syncWindowViewportToCursor()", dock)
+        self.assertIn("windowDisplayedWidth", dock)
         # No dual Behavior on the same property (T00 interceptor 待办 closed).
         self.assertEqual(dock.count("Behavior on magnification"), 0)
         self.assertEqual(dock.count("Behavior on bounceOffset"), 0)

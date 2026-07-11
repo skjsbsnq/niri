@@ -114,7 +114,19 @@ PanelWindow {
         && !(settingsService && settingsService.dockForceIconOnly)
         && titledWindowContentWidth <= availableWindowViewportWidth
     readonly property int activeWindowContentWidth: dockWindowButtonsShowTitle ? titledWindowContentWidth : iconWindowContentWidth
-    readonly property int windowViewportWidth: hasNonMinimizedWindows ? Math.min(activeWindowContentWidth, availableWindowViewportWidth) : 0
+    // T08-fix2: icon-only window half grows with analytical wave (push), same as pinned.
+    // Title mode stays rest-width (no scale/push reflow of text labels).
+    readonly property real windowDisplayedWidth: {
+        var _dep = dockMouseX + windowButtonCount + (dockHovered ? 1 : 0) + (pointerDragActive ? 0 : 1)
+            + (dockWindowButtonsShowTitle ? 1 : 0);
+        if (!hasNonMinimizedWindows)
+            return 0;
+        if (dockWindowButtonsShowTitle || !dockWaveActive())
+            return Math.min(activeWindowContentWidth, availableWindowViewportWidth);
+        var wave = windowWaveContentWidth();
+        return Math.min(availableWindowViewportWidth, Math.max(activeWindowContentWidth, wave));
+    }
+    readonly property int windowViewportWidth: hasNonMinimizedWindows ? Math.ceil(windowDisplayedWidth) : 0
     readonly property int availableMinimizedViewportWidth: hasMinimizedWindows ? Math.max(0, dockRemainingFlexibleWidth - windowViewportWidth) : 0
     readonly property int minimizedViewportWidth: hasMinimizedWindows ? Math.min(minimizedWindowContentWidth, availableMinimizedViewportWidth) : 0
     readonly property color glassFill: darkMode ? "#d01d1f24" : GlassStyle.FillDock
@@ -265,13 +277,85 @@ PanelWindow {
         return extra;
     }
 
+    function windowRestCenter(index) {
+        var w = dockWindowButtonsShowTitle ? dockWindowTitleWidth : dockWindowIconWidth;
+        return index * (w + dockItemSpacing) + w / 2;
+    }
+
+    function windowCursorX() {
+        if (!dockSurface || !windowViewport)
+            return -10000;
+        var origin = windowViewport.mapToItem(dockSurface, 0, 0);
+        return dockMouseX - origin.x + windowViewport.contentX;
+    }
+
+    function windowScaleAt(index) {
+        if (!dockWaveActive() || dockWindowButtonsShowTitle)
+            return 1.0;
+        return Motion.dockCosineScale(windowCursorX() - windowRestCenter(index), dockIconSize);
+    }
+
+    // T08-fix2: analytical push for icon-only window half (mirrors pinned).
+    // Title mode keeps fixed slots — scale is disabled there already.
+    function windowItemWidthAt(index) {
+        if (dockWindowButtonsShowTitle)
+            return dockWindowTitleWidth;
+        return dockWindowIconWidth * windowScaleAt(index);
+    }
+
+    function windowItemXAt(index) {
+        var x = 0;
+        for (var j = 0; j < index; j++)
+            x += windowItemWidthAt(j) + dockItemSpacing;
+        return x;
+    }
+
+    function windowWaveContentWidth() {
+        var n = windowButtonCount;
+        if (n <= 0)
+            return 0;
+        if (dockWindowButtonsShowTitle)
+            return titledWindowContentWidth;
+        var total = 0;
+        for (var i = 0; i < n; i++)
+            total += windowItemWidthAt(i);
+        total += Math.max(0, n - 1) * dockItemSpacing;
+        return total;
+    }
+
+    function windowWaveLeftExtra() {
+        if (!dockWaveActive() || dockWindowButtonsShowTitle || windowButtonCount <= 0)
+            return 0;
+        var cursor = windowCursorX();
+        var extra = 0;
+        var step = dockWindowIconWidth + dockItemSpacing;
+        for (var i = 0; i < windowButtonCount; i++) {
+            var restLeft = i * step;
+            var restRight = restLeft + dockWindowIconWidth;
+            var dw = windowItemWidthAt(i) - dockWindowIconWidth;
+            if (dw < 0)
+                dw = 0;
+            if (cursor >= restRight) {
+                extra += dw;
+            } else if (cursor > restLeft) {
+                extra += dw * ((cursor - restLeft) / Math.max(1, dockWindowIconWidth));
+                break;
+            } else {
+                break;
+            }
+        }
+        return extra;
+    }
+
     // Bias dock surface from horizontal center so growth is around the cursor
     // (rightExtra - leftExtra) / 2, not symmetric about the panel midpoint.
+    // Includes both pinned and window icon-only wave extras (T08-fix2).
     function dockWaveSurfaceBias() {
         if (!dockWaveActive())
             return 0;
-        var leftExtra = pinnedWaveLeftExtra();
-        var totalExtra = Math.max(0, pinnedWaveContentWidth() - pinnedContentWidth);
+        var leftExtra = pinnedWaveLeftExtra() + windowWaveLeftExtra();
+        var totalExtra = Math.max(0, pinnedWaveContentWidth() - pinnedContentWidth)
+            + Math.max(0, windowWaveContentWidth() - activeWindowContentWidth);
         var rightExtra = Math.max(0, totalExtra - leftExtra);
         return (rightExtra - leftExtra) / 2;
     }
@@ -294,22 +378,20 @@ PanelWindow {
         pinnedViewport.contentX = Math.max(0, Math.min(maxX, target));
     }
 
-    function windowRestCenter(index) {
-        var w = dockWindowButtonsShowTitle ? dockWindowTitleWidth : dockWindowIconWidth;
-        return index * (w + dockItemSpacing) + w / 2;
-    }
-
-    function windowCursorX() {
-        if (!dockSurface || !windowViewport)
-            return -10000;
-        var origin = windowViewport.mapToItem(dockSurface, 0, 0);
-        return dockMouseX - origin.x + windowViewport.contentX;
-    }
-
-    function windowScaleAt(index) {
-        if (!dockWaveActive() || dockWindowButtonsShowTitle)
-            return 1.0;
-        return Motion.dockCosineScale(windowCursorX() - windowRestCenter(index), dockIconSize);
+    function syncWindowViewportToCursor() {
+        if (!windowViewport || dockWindowButtonsShowTitle)
+            return;
+        var viewW = windowViewport.width;
+        var contentW = windowViewport.contentWidth;
+        if (!dockWaveActive() || contentW <= viewW + 0.5) {
+            if (windowViewport.contentX !== 0)
+                windowViewport.contentX = 0;
+            return;
+        }
+        var cursorInContent = windowCursorX();
+        var target = cursorInContent - viewW / 2;
+        var maxX = Math.max(0, contentW - viewW);
+        windowViewport.contentX = Math.max(0, Math.min(maxX, target));
     }
 
     // Back-compat name used nowhere after T07, kept as alias for any external call.
@@ -337,6 +419,7 @@ PanelWindow {
         root.dockHovered = true;
         root.pointerDragActive = false;
         root.syncPinnedViewportToCursor();
+        root.syncWindowViewportToCursor();
     }
 
     function updateDockHoverFromButtons(x, buttons) {
@@ -367,6 +450,8 @@ PanelWindow {
         root.clearDockHoverLabel();
         if (pinnedViewport)
             pinnedViewport.contentX = 0;
+        if (windowViewport)
+            windowViewport.contentX = 0;
     }
 
     function showDockHoverLabel(text, item, yOffset) {
@@ -585,7 +670,8 @@ PanelWindow {
         // around the cursor. Clamped to outer margins so left icons are not
         // shoved past the screen edge when the wave expands.
         x: {
-            var _dep = root.dockMouseX + root.pinnedAppCount + (root.dockHovered ? 1 : 0) + (root.pointerDragActive ? 0 : 1);
+            var _dep = root.dockMouseX + root.pinnedAppCount + root.windowButtonCount
+                + (root.dockHovered ? 1 : 0) + (root.pointerDragActive ? 0 : 1);
             var centered = (parent.width - width) / 2;
             var bias = root.dockWaveSurfaceBias();
             var margin = Math.max(6, Math.round(root.dockOuterMargin / 2));
@@ -1126,17 +1212,35 @@ PanelWindow {
                     y: -36
                     width: parent.width
                     height: parent.height + 36
-                    contentWidth: windowRow.implicitWidth
+                    // T08-fix2: content tracks analytical wave in icon-only mode.
+                    contentWidth: {
+                        var _dep = root.dockMouseX + root.windowButtonCount + (root.dockHovered ? 1 : 0)
+                            + (root.dockWindowButtonsShowTitle ? 1 : 0);
+                        if (root.dockWindowButtonsShowTitle)
+                            return root.activeWindowContentWidth;
+                        return Math.max(root.activeWindowContentWidth, root.windowWaveContentWidth());
+                    }
                     contentHeight: height
-                    clip: true
+                    clip: contentWidth > width + 1
                     boundsBehavior: Flickable.StopAtBounds
                     flickableDirection: Flickable.HorizontalFlick
 
-                    Row {
+                    // Explicit-x container (not Row) in icon-only mode so wave can
+                    // push neighbors without reading live delegate geometry.
+                    // Title mode still uses a Row (fixed slots, no scale/push).
+                    Item {
                         id: windowRow
 
                         y: 36
-                        spacing: root.dockItemSpacing
+                        width: {
+                            var _dep = root.dockMouseX + root.windowButtonCount + (root.dockHovered ? 1 : 0)
+                                + (root.dockWindowButtonsShowTitle ? 1 : 0);
+                            if (root.dockWindowButtonsShowTitle)
+                                return root.activeWindowContentWidth;
+                            return Math.max(root.activeWindowContentWidth, root.windowWaveContentWidth());
+                        }
+                        height: root.dockWindowRowHeight
+                        implicitWidth: width
 
                         Repeater {
                             model: ScriptModel {
@@ -1158,6 +1262,14 @@ PanelWindow {
                                 useSpring: root.useSpring
                                 iconSize: root.dockWindowButtonsShowTitle ? 40 : root.dockIconSize
                                 showTitle: root.dockWindowButtonsShowTitle
+                                // Analytical slot geometry (icon-only). Title mode
+                                // uses fixed rest width via WindowButton defaults.
+                                slotWidthTarget: root.dockWindowButtonsShowTitle
+                                    ? root.dockWindowTitleWidth
+                                    : root.windowItemWidthAt(windowButton.index)
+                                slotXTarget: root.dockWindowButtonsShowTitle
+                                    ? windowButton.index * (root.dockWindowTitleWidth + root.dockItemSpacing)
+                                    : root.windowItemXAt(windowButton.index)
                                 magnificationTarget: root.windowScaleAt(windowButton.index)
                                 hoverLabelEnabled: false
                                 labelClipItem: windowViewport

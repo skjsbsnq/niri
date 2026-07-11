@@ -21,6 +21,10 @@ Item {
     // Spring/Number animations (useSpring gate) — dual Behavior{} is unsupported.
     property real magnificationTarget: 1.0
     property real magnification: 1.0
+    // T08-fix2: analytical slot x/width from Dock (icon-only push). Dock always
+    // feeds these; title mode uses fixed rest slots (no scale/push reflow).
+    property real slotWidthTarget: showTitle ? 132 : 60
+    property real slotXTarget: 0
     property real pressScale: Motion.pressScaleFor(settingsService, windowMouse.pressed)
     property real bounceOffset: 0
     property var dockWindow
@@ -36,7 +40,7 @@ Item {
     readonly property bool minimized: windowModel ? !!windowModel.isMinimized : !!(toplevel && toplevel.minimized)
     readonly property string label: appsService ? appsService.toplevelLabel(windowModel || toplevel) : String((windowModel || toplevel) ? (windowModel || toplevel).title || (windowModel || toplevel).appId || "窗口" : "窗口")
     readonly property bool showHoverLabel: hoverLabelEnabled && !showTitle && hovered && label.length > 0
-    readonly property real lift: (magnification - 1.0) * 16
+    readonly property real lift: (magnification - 1.0) * 14
 
     signal activateRequested(var toplevel)
     signal contextMenuRequested(var window)
@@ -44,10 +48,9 @@ Item {
     signal dockPointerEntered()
     signal dockPointerExited()
 
-    // Fixed width. Must NOT depend on magnification — Dock feeds wave scale via
-    // analytical helpers (index-only), and width is the rest slot size so the
-    // running-window half can still use a simple Row without binding loops.
-    // Icon-only mode: 60 (matches Dock.dockWindowIconWidth); titled: 132.
+    // Animated slot geometry. Dock owns targets via slotXTarget/slotWidthTarget
+    // (analytical push in icon-only mode). Initial values match rest icon slot.
+    x: 0
     width: showTitle ? 132 : 60
     height: 60
 
@@ -133,8 +136,12 @@ Item {
     onWindowModelChanged: scheduleDockRectangleUpdate()
     onToplevelChanged: scheduleDockRectangleUpdate()
     onMagnificationTargetChanged: root.animateMagnification()
+    onSlotWidthTargetChanged: root.animateWidth()
+    onSlotXTargetChanged: root.animateX()
     Component.onCompleted: {
         root.magnification = root.magnificationTarget;
+        root.x = root.slotXTarget;
+        root.width = root.slotWidthTarget;
         root.scheduleDockRectangleUpdate();
     }
 
@@ -300,6 +307,24 @@ Item {
             magEase.restart();
         }
     }
+    function animateX() {
+        if (root.useSpring) {
+            xSpring.to = slotXTarget;
+            xSpring.restart();
+        } else {
+            xEase.to = slotXTarget;
+            xEase.restart();
+        }
+    }
+    function animateWidth() {
+        if (root.useSpring) {
+            widthSpring.to = slotWidthTarget;
+            widthSpring.restart();
+        } else {
+            widthEase.to = slotWidthTarget;
+            widthEase.restart();
+        }
+    }
 
     SpringAnimation {
         id: magSpring
@@ -313,6 +338,36 @@ Item {
         id: magEase
         target: root
         property: "magnification"
+        duration: Motion.elementMove(root.settingsService)
+        easing.type: Motion.emphasizedDecel
+    }
+    SpringAnimation {
+        id: xSpring
+        target: root
+        property: "x"
+        spring: Motion.dockMagSpring.spring
+        damping: Motion.dockMagSpring.damping
+        epsilon: Motion.dockMagSpring.epsilon
+    }
+    NumberAnimation {
+        id: xEase
+        target: root
+        property: "x"
+        duration: Motion.elementMove(root.settingsService)
+        easing.type: Motion.emphasizedDecel
+    }
+    SpringAnimation {
+        id: widthSpring
+        target: root
+        property: "width"
+        spring: Motion.dockMagSpring.spring
+        damping: Motion.dockMagSpring.damping
+        epsilon: Motion.dockMagSpring.epsilon
+    }
+    NumberAnimation {
+        id: widthEase
+        target: root
+        property: "width"
         duration: Motion.elementMove(root.settingsService)
         easing.type: Motion.emphasizedDecel
     }
@@ -344,9 +399,8 @@ Item {
         id: bounceSpring
         target: root
         property: "bounceOffset"
-        spring: 380
-        damping: 0.32
-        mass: 0.9
+        spring: Motion.springBouncy.spring
+        damping: Motion.springBouncy.damping
         epsilon: 0.01
     }
     NumberAnimation {

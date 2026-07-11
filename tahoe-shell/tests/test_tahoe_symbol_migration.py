@@ -49,7 +49,12 @@ class TahoeSymbolMigrationTests(unittest.TestCase):
 
     def test_tahoe_symbol_component_exists_with_discipline(self) -> None:
         text = SYMBOL_QML.read_text(encoding="utf-8")
-        self.assertIn("ColorOverlay", text)
+        # Tint via QtQuick.Effects MultiEffect (not Qt5Compat ColorOverlay —
+        # GraphicalEffects can fail type registration under quickshell reload).
+        self.assertIn("MultiEffect", text)
+        self.assertIn("colorization", text)
+        self.assertNotIn("ColorOverlay", text)
+        self.assertNotIn("import Qt5Compat", text)
         self.assertIn("sourceSize", text)
         self.assertIn("asynchronous", text)
         self.assertIn("iconPath", text)

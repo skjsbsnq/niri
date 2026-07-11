@@ -1,14 +1,15 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
-import Qt5Compat.GraphicalEffects
+import QtQuick.Effects
 import Quickshell
 import "TahoeSymbols.js" as Symbols
 
 // Unified monochrome symbol icon (T13).
 // Source is a pre-rendered white PNG under assets/icons/symbols/; tint via
-// ColorOverlay. `name` accepts a semantic name ("wifi") or a legacy Material
-// codepoint string ("\ue63e") — both resolve through TahoeSymbols.js.
+// MultiEffect colorization (QtQuick.Effects; avoids GraphicalEffects plugin).
+// `name` accepts a semantic name ("wifi") or a legacy Material codepoint
+// string ("\ue63e") — both resolve through TahoeSymbols.js.
 // Path resolution prefers appsService.iconPath("symbols", file) when an
 // Apps service is provided (rules §3.1 iconPath entry); otherwise falls
 // back to Quickshell.shellPath under assets/icons/symbols/.
@@ -80,11 +81,13 @@ Item {
         cache: true
     }
 
-    ColorOverlay {
+    // Tint white glyph PNGs. colorization=1 fully replaces luminance with
+    // colorizationColor while preserving the source alpha mask.
+    MultiEffect {
         anchors.fill: baseImage
         source: baseImage
-        color: root.color
+        colorization: 1.0
+        colorizationColor: root.color
         visible: baseImage.status === Image.Ready && root.resolvedSource.length > 0
-        cached: true
     }
 }

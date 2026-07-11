@@ -1064,6 +1064,7 @@ ShellRoot {
                 thumbnailProvider: thumbnailProvider
                 appsService: apps
                 settingsService: desktopSettings
+                useSpring: shell.useSpring
                 open: shell.navigationOpenFor(shell.taskSwitcherOpen, shell.taskSwitcherScreenName, modelData)
                 onCloseRequested: shell.closeTaskSwitcher()
             }
@@ -1088,6 +1089,7 @@ ShellRoot {
                 thumbnailProvider: thumbnailProvider
                 appsService: apps
                 settingsService: desktopSettings
+                useSpring: shell.useSpring
                 open: shell.navigationOpenFor(shell.windowOverviewOpen, shell.windowOverviewScreenName, modelData)
                 onCloseRequested: shell.closeWindowOverview()
             }

@@ -10,12 +10,17 @@ PanelWindow {
     id: root
 
     property bool open: false
+    property bool useSpring: false
     property var windowsService
     property var thumbnailProvider
     property var appsService
     property var settingsService
     property string selectedWindowKey: ""
     property var selectedCardItem: null
+    // idle | entering | open | leaving
+    property string flightPhase: "idle"
+    property int flightEpoch: 0
+    property int pendingFlights: 0
     readonly property var windowChoices: windowsService && windowsService.windowList ? windowsService.windowList : []
     readonly property var workspaceGroups: buildWorkspaceGroups()
     readonly property int screenWidth: Math.max(1, numberOr(root.screen && root.screen.width, root.width))
@@ -24,10 +29,11 @@ PanelWindow {
     readonly property int panelHeight: Math.min(screenHeight - 72, 720)
     readonly property int panelLeft: Math.round(Math.max(8, (screenWidth - panelWidth) / 2))
     readonly property int panelTop: Math.round(Math.max(44, (screenHeight - panelHeight) / 2))
+    readonly property bool surfaceVisible: open || flightPhase === "entering" || flightPhase === "leaving" || flightPhase === "open"
 
     signal closeRequested()
 
-    visible: open || overview.opacity > 0.01
+    visible: surfaceVisible || backdrop.opacity > 0.01
     aboveWindows: true
     exclusionMode: ExclusionMode.Ignore
     exclusiveZone: 0
@@ -47,12 +53,32 @@ PanelWindow {
 
     onOpenChanged: {
         if (open) {
+            flightEpoch += 1;
+            flightPhase = "entering";
+            pendingFlights = 0;
             selectFocusedOrFirst();
             requestVisibleThumbnails(false);
             Qt.callLater(function() {
-                if (root.open)
-                    focusCatcher.forceActiveFocus();
+                if (!root.open)
+                    return;
+                focusCatcher.forceActiveFocus();
+                // Second tick: Flow/Repeater layout must settle before mapToItem.
+                Qt.callLater(function() {
+                    if (root.open)
+                        beginEnterFlights();
+                });
             });
+        } else if (flightPhase === "entering" || flightPhase === "open") {
+            flightEpoch += 1;
+            flightPhase = "leaving";
+            pendingFlights = 0;
+            Qt.callLater(function() {
+                if (!root.open)
+                    beginLeaveFlights();
+            });
+        } else {
+            flightPhase = "idle";
+            pendingFlights = 0;
         }
     }
 
@@ -311,12 +337,191 @@ PanelWindow {
         };
     }
 
+    // Approximate window geometry → Translate offset that places the card over
+    // the real window, then spring back to (0,0). Content-layer only (not glass).
+    function flightOffsetForCard(cardItem, window) {
+        if (!cardItem)
+            return { "x": 0, "y": 0, "scale": 1 };
+
+        var rect = window ? window.geometry : null;
+        var cardW = Math.max(1, cardItem.width);
+        var cardH = Math.max(1, cardItem.height);
+
+        // No geometry / minimized: short rise from below (no free-standing clones).
+        if (!rect || (window && window.isMinimized)) {
+            return {
+                "x": 0,
+                "y": Math.round(56 + (cardItem.indexInGroup || 0) * 8),
+                "scale": 0.88
+            };
+        }
+
+        var winX = Number(rect.x) || 0;
+        var winY = Number(rect.y) || 0;
+        var winW = Math.max(1, Number(rect.width || rect.w) || 1);
+        var winH = Math.max(1, Number(rect.height || rect.h) || 1);
+
+        // Card final position in panel-window coordinates (backdrop fills the surface).
+        var cardInSurface = cardItem.mapToItem(backdrop, 0, 0);
+        var endX = isFinite(cardInSurface.x) ? cardInSurface.x : (root.panelLeft + cardItem.x);
+        var endY = isFinite(cardInSurface.y) ? cardInSurface.y : (root.panelTop + 76 + cardItem.y);
+
+        // Window center → card center, geometry treated as output-local (same screen).
+        var startX = winX + winW * 0.5 - cardW * 0.5;
+        var startY = winY + winH * 0.5 - cardH * 0.5;
+
+        var offsetX = Math.round(startX - endX);
+        var offsetY = Math.round(startY - endY);
+        offsetX = Math.max(-root.screenWidth, Math.min(root.screenWidth, offsetX));
+        offsetY = Math.max(-root.screenHeight, Math.min(root.screenHeight, offsetY));
+
+        var startScale = Math.max(0.55, Math.min(1.4, Math.min(winW / cardW, winH / cardH) * 0.5));
+        return { "x": offsetX, "y": offsetY, "scale": startScale };
+    }
+
+    function shouldAnimateFlight() {
+        return root.useSpring && !Motion.reducedMotion(root.settingsService);
+    }
+
+    function beginEnterFlights() {
+        var epoch = root.flightEpoch;
+        var cards = collectFlightCards();
+        if (cards.length === 0 || !shouldAnimateFlight()) {
+            snapAllCardsHome();
+            if (root.open && root.flightEpoch === epoch)
+                root.flightPhase = "open";
+            return;
+        }
+
+        root.pendingFlights = cards.length;
+        for (var i = 0; i < cards.length; i++) {
+            var card = cards[i];
+            if (!card || !card.prepareEnter)
+                continue;
+            card.prepareEnter(epoch);
+        }
+
+        // Safety: if no card registered a flight, settle.
+        if (root.pendingFlights <= 0 && root.open && root.flightEpoch === epoch) {
+            root.flightPhase = "open";
+            return;
+        }
+        enterWatchdog.epoch = epoch;
+        enterWatchdog.restart();
+    }
+
+    function beginLeaveFlights() {
+        var epoch = root.flightEpoch;
+        var cards = collectFlightCards();
+        if (cards.length === 0 || !shouldAnimateFlight()) {
+            snapAllCardsAway();
+            finishLeave(epoch);
+            return;
+        }
+
+        root.pendingFlights = cards.length;
+        for (var i = 0; i < cards.length; i++) {
+            var card = cards[i];
+            if (!card || !card.prepareLeave)
+                continue;
+            card.prepareLeave(epoch);
+        }
+
+        if (root.pendingFlights <= 0)
+            finishLeave(epoch);
+        // Hard cap leave duration so close never sticks (rules §4.5 stagger budget).
+        leaveWatchdog.epoch = epoch;
+        leaveWatchdog.restart();
+    }
+
+    function finishLeave(epoch) {
+        if (root.flightEpoch !== epoch)
+            return;
+        if (root.open)
+            return;
+        root.flightPhase = "idle";
+        root.pendingFlights = 0;
+        // Explicitly drop any residual flight transforms (no clone Items to destroy —
+        // cards use Translate/scale on themselves; §4.4 satisfied by resetting state).
+        snapAllCardsAway();
+    }
+
+    function noteFlightFinished(epoch) {
+        if (root.flightEpoch !== epoch)
+            return;
+        root.pendingFlights = Math.max(0, root.pendingFlights - 1);
+        if (root.pendingFlights > 0)
+            return;
+        if (root.flightPhase === "entering" && root.open)
+            root.flightPhase = "open";
+        else if (root.flightPhase === "leaving" && !root.open)
+            finishLeave(epoch);
+    }
+
+    function collectFlightCards() {
+        var out = [];
+        // Walk groupColumn → Flow → windowCard items that expose flight API.
+        function walk(item) {
+            if (!item)
+                return;
+            if (item.flightCapable === true)
+                out.push(item);
+            var count = item.children ? item.children.length : 0;
+            for (var i = 0; i < count; i++)
+                walk(item.children[i]);
+        }
+        walk(groupColumn);
+        return out;
+    }
+
+    function snapAllCardsHome() {
+        var cards = collectFlightCards();
+        for (var i = 0; i < cards.length; i++) {
+            if (cards[i] && cards[i].snapHome)
+                cards[i].snapHome();
+        }
+    }
+
+    function snapAllCardsAway() {
+        var cards = collectFlightCards();
+        for (var i = 0; i < cards.length; i++) {
+            if (cards[i] && cards[i].snapAway)
+                cards[i].snapAway();
+        }
+    }
+
+    Timer {
+        id: leaveWatchdog
+        property int epoch: 0
+        interval: 480
+        repeat: false
+        onTriggered: root.finishLeave(epoch)
+    }
+
+    Timer {
+        id: enterWatchdog
+        property int epoch: 0
+        interval: 480
+        repeat: false
+        onTriggered: {
+            if (root.flightEpoch !== epoch)
+                return;
+            if (root.flightPhase === "entering" && root.open) {
+                root.snapAllCardsHome();
+                root.pendingFlights = 0;
+                root.flightPhase = "open";
+            }
+        }
+    }
+
     TahoeGlass.regions: [overviewSurface.region]
 
     Rectangle {
+        id: backdrop
+
         anchors.fill: parent
         color: "#1a101418"
-        opacity: root.open ? 1 : 0
+        opacity: root.open || root.flightPhase === "entering" || root.flightPhase === "open" || root.flightPhase === "leaving" ? 1 : 0
 
         Behavior on opacity {
             NumberAnimation { duration: Motion.fadeFast(root.settingsService); easing.type: Motion.emphasizedDecel }
@@ -358,17 +563,12 @@ PanelWindow {
         y: root.panelTop
         width: root.panelWidth
         height: root.panelHeight
-        opacity: root.open ? 1 : 0
-        scale: root.open ? 1 : 0.985
+        // No entrance scale (T20). Opacity follows flight phase so leave can finish.
+        opacity: (root.open || root.flightPhase === "entering" || root.flightPhase === "open" || root.flightPhase === "leaving") ? 1 : 0
+        visible: opacity > 0.01
 
         Behavior on opacity {
-            NumberAnimation { duration: Motion.panelExit(root.settingsService); easing.type: Motion.emphasizedDecel }
-        }
-
-        // Local exception: overview keeps its existing 160ms scale settle while
-        // opacity uses shared tokens, preserving the pre-GOAL-4 visual timing.
-        Behavior on scale {
-            NumberAnimation { duration: 160; easing.type: Motion.emphasizedDecel }
+            NumberAnimation { duration: Motion.fadeFast(root.settingsService); easing.type: Motion.emphasizedDecel }
         }
 
         MouseArea {
@@ -393,7 +593,7 @@ PanelWindow {
             regionHeight: Math.round(overviewSurface.height)
             interaction: 0.0
             materialAlpha: overview.opacity
-            regionEnabled: root.open || overview.opacity > 0.01
+            regionEnabled: root.surfaceVisible
         }
 
         Row {
@@ -539,6 +739,13 @@ PanelWindow {
                                     id: windowCard
 
                                     required property var modelData
+                                    required property int index
+                                    // Flight API (discovered by collectFlightCards).
+                                    readonly property bool flightCapable: true
+                                    property int indexInGroup: index
+                                    property int flightEpochLocal: -1
+                                    property bool flightActive: false
+
                                     readonly property bool selected: root.selectedWindowKey === root.windowKey(modelData)
                                     readonly property bool minimized: !!(modelData && modelData.isMinimized)
                                     readonly property string iconSource: root.windowIcon(modelData)
@@ -553,6 +760,174 @@ PanelWindow {
                                     width: Math.max(188, Math.min(236, groupDelegate.width))
                                     height: 164
 
+                                    transform: [
+                                        Translate {
+                                            id: flyTranslate
+                                            x: 0
+                                            y: 0
+                                        },
+                                        Scale {
+                                            id: flyScale
+                                            origin.x: windowCard.width / 2
+                                            origin.y: windowCard.height / 2
+                                            xScale: 1
+                                            // Keep axes locked; only xScale is animated.
+                                            yScale: xScale
+                                        }
+                                    ]
+
+                                    // Dual-branch content motion: spring when useSpring, else eased.
+                                    Behavior on opacity {
+                                        NumberAnimation {
+                                            duration: Motion.fadeFast(root.settingsService)
+                                            easing.type: Motion.emphasizedDecel
+                                        }
+                                    }
+
+                                    SpringAnimation {
+                                        id: flyXSpring
+                                        target: flyTranslate
+                                        property: "x"
+                                        spring: Motion.springPanel.spring
+                                        damping: Motion.springPanel.damping
+                                        epsilon: 0.0005
+                                        onStopped: windowCard.maybeFinishFlight()
+                                    }
+                                    SpringAnimation {
+                                        id: flyYSpring
+                                        target: flyTranslate
+                                        property: "y"
+                                        spring: Motion.springPanel.spring
+                                        damping: Motion.springPanel.damping
+                                        epsilon: 0.0005
+                                        onStopped: windowCard.maybeFinishFlight()
+                                    }
+                                    SpringAnimation {
+                                        id: flyScaleSpring
+                                        target: flyScale
+                                        property: "xScale"
+                                        spring: Motion.springSmooth.spring
+                                        damping: Motion.springSmooth.damping
+                                        epsilon: 0.001
+                                        onStopped: windowCard.maybeFinishFlight()
+                                    }
+
+                                    NumberAnimation {
+                                        id: flyXEase
+                                        target: flyTranslate
+                                        property: "x"
+                                        duration: Motion.elementMove(root.settingsService)
+                                        easing.type: Motion.emphasizedDecel
+                                        onStopped: windowCard.maybeFinishFlight()
+                                    }
+                                    NumberAnimation {
+                                        id: flyYEase
+                                        target: flyTranslate
+                                        property: "y"
+                                        duration: Motion.elementMove(root.settingsService)
+                                        easing.type: Motion.emphasizedDecel
+                                        onStopped: windowCard.maybeFinishFlight()
+                                    }
+                                    NumberAnimation {
+                                        id: flyScaleEase
+                                        target: flyScale
+                                        property: "xScale"
+                                        duration: Motion.elementMove(root.settingsService)
+                                        easing.type: Motion.emphasizedDecel
+                                        onStopped: windowCard.maybeFinishFlight()
+                                    }
+
+                                    function stopFlightAnims() {
+                                        flyXSpring.stop();
+                                        flyYSpring.stop();
+                                        flyScaleSpring.stop();
+                                        flyXEase.stop();
+                                        flyYEase.stop();
+                                        flyScaleEase.stop();
+                                    }
+
+                                    function snapHome() {
+                                        stopFlightAnims();
+                                        flyTranslate.x = 0;
+                                        flyTranslate.y = 0;
+                                        flyScale.xScale = 1;
+                                        opacity = 1;
+                                        flightActive = false;
+                                    }
+
+                                    function snapAway() {
+                                        stopFlightAnims();
+                                        var off = root.flightOffsetForCard(windowCard, modelData);
+                                        flyTranslate.x = off.x;
+                                        flyTranslate.y = off.y;
+                                        flyScale.xScale = off.scale;
+                                        opacity = 0;
+                                        flightActive = false;
+                                    }
+
+                                    function animateTo(tx, ty, sc, epoch) {
+                                        flightEpochLocal = epoch;
+                                        flightActive = true;
+                                        stopFlightAnims();
+                                        if (root.shouldAnimateFlight()) {
+                                            flyXSpring.from = flyTranslate.x;
+                                            flyXSpring.to = tx;
+                                            flyYSpring.from = flyTranslate.y;
+                                            flyYSpring.to = ty;
+                                            flyScaleSpring.from = flyScale.xScale;
+                                            flyScaleSpring.to = sc;
+                                            flyXSpring.restart();
+                                            flyYSpring.restart();
+                                            flyScaleSpring.restart();
+                                        } else {
+                                            flyXEase.from = flyTranslate.x;
+                                            flyXEase.to = tx;
+                                            flyYEase.from = flyTranslate.y;
+                                            flyYEase.to = ty;
+                                            flyScaleEase.from = flyScale.xScale;
+                                            flyScaleEase.to = sc;
+                                            if (Motion.reducedMotion(root.settingsService) || flyXEase.duration <= 0) {
+                                                flyTranslate.x = tx;
+                                                flyTranslate.y = ty;
+                                                flyScale.xScale = sc;
+                                                maybeFinishFlight();
+                                            } else {
+                                                flyXEase.restart();
+                                                flyYEase.restart();
+                                                flyScaleEase.restart();
+                                            }
+                                        }
+                                    }
+
+                                    function maybeFinishFlight() {
+                                        if (!flightActive)
+                                            return;
+                                        if (root.flightEpoch !== flightEpochLocal)
+                                            return;
+                                        var springing = flyXSpring.running || flyYSpring.running || flyScaleSpring.running
+                                            || flyXEase.running || flyYEase.running || flyScaleEase.running;
+                                        if (springing)
+                                            return;
+                                        flightActive = false;
+                                        root.noteFlightFinished(flightEpochLocal);
+                                    }
+
+                                    function prepareEnter(epoch) {
+                                        var off = root.flightOffsetForCard(windowCard, modelData);
+                                        stopFlightAnims();
+                                        flyTranslate.x = off.x;
+                                        flyTranslate.y = off.y;
+                                        flyScale.xScale = off.scale;
+                                        opacity = 1;
+                                        animateTo(0, 0, 1, epoch);
+                                    }
+
+                                    function prepareLeave(epoch) {
+                                        var off = root.flightOffsetForCard(windowCard, modelData);
+                                        opacity = 1;
+                                        animateTo(off.x, off.y, off.scale, epoch);
+                                    }
+
                                     onSelectedChanged: if (selected) root.selectedCardItem = windowCard
                                     onModelDataChanged: if (root.open) root.requestThumbnailFor(modelData, false)
 
@@ -561,6 +936,16 @@ PanelWindow {
                                             root.selectedCardItem = windowCard;
                                         if (root.open)
                                             root.requestThumbnailFor(modelData, false);
+                                        // Late-created cards during open settle at home.
+                                        if (root.flightPhase === "open" || root.flightPhase === "entering") {
+                                            if (root.flightPhase === "open")
+                                                snapHome();
+                                        }
+                                    }
+
+                                    Component.onDestruction: {
+                                        // No free-standing clone layers; transform state dies with the card.
+                                        stopFlightAnims();
                                     }
 
                                     Rectangle {

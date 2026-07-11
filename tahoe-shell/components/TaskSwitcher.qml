@@ -10,6 +10,7 @@ PanelWindow {
     id: root
 
     property bool open: false
+    property bool useSpring: false
     property var windowsService
     property var thumbnailProvider
     property var appsService
@@ -24,10 +25,14 @@ PanelWindow {
     readonly property int panelHeight: 190
     readonly property int panelLeft: Math.round(Math.max(8, (screenWidth - panelWidth) / 2))
     readonly property int panelTop: Math.round(Math.max(48, Math.min(screenHeight - panelHeight - 48, screenHeight * 0.34)))
+    readonly property int cardWidth: 138
+    readonly property int cardSpacing: 10
+    readonly property int cardStride: cardWidth + cardSpacing
 
     signal closeRequested()
 
-    visible: open || switcher.opacity > 0.01
+    // Instant appear (macOS cmd+tab): no entrance scale; opacity is binary with open.
+    visible: open
     aboveWindows: true
     exclusionMode: ExclusionMode.Ignore
     exclusiveZone: 0
@@ -55,9 +60,12 @@ PanelWindow {
             selectedIndex = focusedIndex();
             selectedWindowKey = windowKey(currentWindow());
             requestVisibleThumbnails(false);
+            // Snap highlight; subsequent cycles spring.
             Qt.callLater(function() {
-                if (root.open)
-                    focusCatcher.forceActiveFocus();
+                if (!root.open)
+                    return;
+                syncSelectionHighlight(false);
+                focusCatcher.forceActiveFocus();
             });
         } else {
             keyboardMode = false;
@@ -67,13 +75,20 @@ PanelWindow {
     onWindowChoicesChanged: if (open) {
         syncSelectionAfterModelChange();
         requestVisibleThumbnails(false);
+        Qt.callLater(function() {
+            if (root.open)
+                syncSelectionHighlight(false);
+        });
     }
 
     onSelectedIndexChanged: {
         selectedWindowKey = windowKey(currentWindow());
         Qt.callLater(function() {
+            if (!root.open)
+                return;
             if (windowListView.count > 0)
                 windowListView.positionViewAtIndex(root.selectedIndex, ListView.Contain);
+            syncSelectionHighlight(true);
         });
     }
 
@@ -245,6 +260,22 @@ PanelWindow {
         root.thumbnailProvider.requestThumbnails(root.windowChoices, 360, 220, "task-switcher", !!force);
     }
 
+    // Content-space X of the selection frame (ListView content coordinates).
+    function selectionContentXFor(index) {
+        return Math.max(0, normalizeIndex(index) * root.cardStride);
+    }
+
+    function syncSelectionHighlight(animate) {
+        var targetX = selectionContentXFor(root.selectedIndex);
+        highlightSpring.stop();
+        if (animate && root.useSpring && !Motion.reducedMotion(root.settingsService) && root.open) {
+            highlightSpring.to = targetX;
+            highlightSpring.restart();
+        } else {
+            selectionHighlight.contentX = targetX;
+        }
+    }
+
     Timer {
         id: releaseConfirmTimer
         interval: 40
@@ -301,16 +332,9 @@ PanelWindow {
         y: root.panelTop
         width: root.panelWidth
         height: root.panelHeight
+        // Instant show/hide — no entrance scale (T20 / macOS cmd+tab).
         opacity: root.open ? 1 : 0
-        scale: root.open ? 1 : 0.98
-
-        Behavior on opacity {
-            NumberAnimation { duration: Motion.elementMove(root.settingsService); easing.type: Motion.emphasizedDecel }
-        }
-
-        Behavior on scale {
-            NumberAnimation { duration: Motion.menuEnter(root.settingsService); easing.type: Motion.emphasizedDecel }
-        }
+        visible: root.open
 
         MouseArea {
             anchors.fill: parent
@@ -332,9 +356,9 @@ PanelWindow {
             regionY: Math.round(switcher.y + switcherSurface.y)
             regionWidth: Math.round(switcherSurface.width)
             regionHeight: Math.round(switcherSurface.height)
-            interaction: switcher.opacity
-            materialAlpha: switcher.opacity
-            regionEnabled: root.open || switcher.opacity > 0.01
+            interaction: root.open ? 1 : 0
+            materialAlpha: root.open ? 1 : 0
+            regionEnabled: root.open
         }
 
         Text {
@@ -358,170 +382,220 @@ PanelWindow {
             font.pixelSize: 12
         }
 
-        ListView {
-            id: windowListView
+        Item {
+            id: listClip
 
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.top: parent.top
-            anchors.topMargin: 42
             anchors.bottom: parent.bottom
+            anchors.topMargin: 42
             anchors.bottomMargin: 14
             anchors.leftMargin: 14
             anchors.rightMargin: 14
-            orientation: ListView.Horizontal
-            spacing: 10
             clip: true
-            boundsBehavior: Flickable.StopAtBounds
-            currentIndex: root.selectedIndex
-            model: ScriptModel {
-                values: root.windowChoices
+
+            ListView {
+                id: windowListView
+
+                anchors.fill: parent
+                orientation: ListView.Horizontal
+                spacing: root.cardSpacing
+                clip: true
+                boundsBehavior: Flickable.StopAtBounds
+                currentIndex: root.selectedIndex
+                z: 1
+                model: ScriptModel {
+                    values: root.windowChoices
+                }
+
+                delegate: Item {
+                    id: windowItem
+
+                    required property var modelData
+                    required property int index
+                    readonly property bool selected: index === root.selectedIndex
+                    readonly property bool minimized: !!(modelData && modelData.isMinimized)
+                    readonly property string iconSource: root.windowIcon(modelData)
+                    readonly property int thumbnailRevision: root.thumbnailProvider ? root.thumbnailProvider.revision : 0
+                    readonly property var thumbnailState: root.thumbnailProvider ? root.thumbnailProvider.thumbnailStateForWindow(modelData, thumbnailRevision) : null
+                    readonly property bool thumbnailAvailable: !!(thumbnailState && thumbnailState.ready && !thumbnailState.failed)
+                    readonly property string thumbnailSource: thumbnailAvailable && thumbnailState.path
+                        ? "file://" + String(thumbnailState.path) + "?v=" + String(thumbnailState.generation || 0)
+                        : ""
+
+                    width: root.cardWidth
+                    height: windowListView.height
+
+                    onModelDataChanged: if (root.open) root.requestThumbnailFor(modelData, false)
+                    Component.onCompleted: if (root.open) root.requestThumbnailFor(modelData, false)
+
+                    // Base card; selected fill is soft so the spring frame reads on top.
+                    Rectangle {
+                        anchors.fill: parent
+                        anchors.margins: 1
+                        radius: 16
+                        color: windowItem.selected ? "#4cffffff" : cardMouse.containsMouse ? "#44ffffff" : "#24ffffff"
+                        border.color: "#34ffffff"
+                        border.width: 1
+                    }
+
+                    Rectangle {
+                        id: previewFrame
+
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        anchors.top: parent.top
+                        anchors.topMargin: 12
+                        width: 116
+                        height: 66
+                        radius: 13
+                        color: windowItem.minimized ? "#26ffffff" : "#42ffffff"
+                        border.color: "#42ffffff"
+                        border.width: 1
+                        clip: true
+
+                        Image {
+                            id: thumbnailImage
+
+                            anchors.fill: parent
+                            source: windowItem.thumbnailSource
+                            fillMode: Image.PreserveAspectCrop
+                            smooth: true
+                            mipmap: true
+                            asynchronous: true
+                            cache: false
+                            opacity: windowItem.minimized ? 0.62 : 1
+                            visible: windowItem.thumbnailSource.length > 0 && status !== Image.Error
+                            onStatusChanged: {
+                                if (status === Image.Error && windowItem.thumbnailAvailable && root.thumbnailProvider)
+                                    root.thumbnailProvider.markImageFailed(windowItem.modelData, "task switcher thumbnail image failed to load");
+                            }
+                        }
+
+                        WindowPreviewFallback {
+                            anchors.fill: parent
+                            iconSource: windowItem.iconSource
+                            minimized: windowItem.minimized
+                            iconSize: 38
+                            visible: !thumbnailImage.visible
+                        }
+
+                        Rectangle {
+                            anchors.left: parent.left
+                            anchors.bottom: parent.bottom
+                            anchors.margins: 5
+                            width: 24
+                            height: 24
+                            radius: 7
+                            color: "#e8ffffff"
+                            border.color: "#70ffffff"
+                            border.width: 1
+                            visible: thumbnailImage.visible && windowItem.iconSource.length > 0
+
+                            Image {
+                                anchors.centerIn: parent
+                                width: 17
+                                height: 17
+                                source: windowItem.iconSource
+                                fillMode: Image.PreserveAspectFit
+                                smooth: true
+                                mipmap: true
+                                asynchronous: true
+                            }
+                        }
+                    }
+
+                    Text {
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        anchors.topMargin: 84
+                        anchors.leftMargin: 10
+                        anchors.rightMargin: 10
+                        text: root.windowLabel(windowItem.modelData)
+                        color: windowItem.minimized ? "#69727a" : "#202124"
+                        font.pixelSize: 12
+                        font.weight: Font.DemiBold
+                        horizontalAlignment: Text.AlignHCenter
+                        elide: Text.ElideRight
+                        maximumLineCount: 1
+                    }
+
+                    Text {
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        anchors.topMargin: 105
+                        anchors.leftMargin: 10
+                        anchors.rightMargin: 10
+                        text: root.detailText(windowItem.modelData)
+                        color: "#68717a"
+                        font.pixelSize: 10
+                        horizontalAlignment: Text.AlignHCenter
+                        elide: Text.ElideRight
+                        maximumLineCount: 1
+                    }
+
+                    Rectangle {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        anchors.bottom: parent.bottom
+                        anchors.bottomMargin: 11
+                        width: windowItem.modelData && windowItem.modelData.isFocused ? 24 : windowItem.minimized ? 5 : 8
+                        height: 4
+                        radius: 2
+                        color: windowItem.modelData && windowItem.modelData.isFocused ? "#202124" : windowItem.minimized ? "#8a929a" : "#6c747c"
+                    }
+
+                    MouseArea {
+                        id: cardMouse
+
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onEntered: root.selectedIndex = windowItem.index
+                        onClicked: root.chooseIndex(windowItem.index)
+                    }
+                }
             }
 
-            delegate: Item {
-                id: windowItem
+            // Selection frame above cards: content-space X springs between icons.
+            // Transparent fill + border only so thumbnails stay visible; no MouseArea
+            // so clicks fall through to ListView delegates.
+            Item {
+                id: selectionHighlight
 
-                required property var modelData
-                required property int index
-                readonly property bool selected: index === root.selectedIndex
-                readonly property bool minimized: !!(modelData && modelData.isMinimized)
-                readonly property string iconSource: root.windowIcon(modelData)
-                readonly property int thumbnailRevision: root.thumbnailProvider ? root.thumbnailProvider.revision : 0
-                readonly property var thumbnailState: root.thumbnailProvider ? root.thumbnailProvider.thumbnailStateForWindow(modelData, thumbnailRevision) : null
-                readonly property bool thumbnailAvailable: !!(thumbnailState && thumbnailState.ready && !thumbnailState.failed)
-                readonly property string thumbnailSource: thumbnailAvailable && thumbnailState.path
-                    ? "file://" + String(thumbnailState.path) + "?v=" + String(thumbnailState.generation || 0)
-                    : ""
+                property real contentX: 0
 
-                width: 138
-                height: windowListView.height
+                x: contentX - windowListView.contentX
+                y: 0
+                width: root.cardWidth
+                height: parent.height
+                z: 2
 
-                onModelDataChanged: if (root.open) root.requestThumbnailFor(modelData, false)
-                Component.onCompleted: if (root.open) root.requestThumbnailFor(modelData, false)
+                Behavior on contentX {
+                    enabled: !root.useSpring || Motion.reducedMotion(root.settingsService)
+                    NumberAnimation {
+                        duration: Motion.elementMove(root.settingsService)
+                        easing.type: Motion.emphasizedDecel
+                    }
+                }
+
+                SpringAnimation {
+                    id: highlightSpring
+                    target: selectionHighlight
+                    property: "contentX"
+                    spring: Motion.springSnappy.spring
+                    damping: Motion.springSnappy.damping
+                    epsilon: 0.001
+                }
 
                 Rectangle {
                     anchors.fill: parent
                     anchors.margins: 1
                     radius: 16
-                    color: windowItem.selected ? "#76ffffff" : cardMouse.containsMouse ? "#44ffffff" : "#24ffffff"
-                    border.color: windowItem.selected ? "#a8ffffff" : "#34ffffff"
-                    border.width: windowItem.selected ? 2 : 1
-                }
-
-                Rectangle {
-                    id: previewFrame
-
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    anchors.top: parent.top
-                    anchors.topMargin: 12
-                    width: 116
-                    height: 66
-                    radius: 13
-                    color: windowItem.minimized ? "#26ffffff" : "#42ffffff"
-                    border.color: "#42ffffff"
-                    border.width: 1
-                    clip: true
-
-                    Image {
-                        id: thumbnailImage
-
-                        anchors.fill: parent
-                        source: windowItem.thumbnailSource
-                        fillMode: Image.PreserveAspectCrop
-                        smooth: true
-                        mipmap: true
-                        asynchronous: true
-                        cache: false
-                        opacity: windowItem.minimized ? 0.62 : 1
-                        visible: windowItem.thumbnailSource.length > 0 && status !== Image.Error
-                        onStatusChanged: {
-                            if (status === Image.Error && windowItem.thumbnailAvailable && root.thumbnailProvider)
-                                root.thumbnailProvider.markImageFailed(windowItem.modelData, "task switcher thumbnail image failed to load");
-                        }
-                    }
-
-                    WindowPreviewFallback {
-                        anchors.fill: parent
-                        iconSource: windowItem.iconSource
-                        minimized: windowItem.minimized
-                        iconSize: 38
-                        visible: !thumbnailImage.visible
-                    }
-
-                    Rectangle {
-                        anchors.left: parent.left
-                        anchors.bottom: parent.bottom
-                        anchors.margins: 5
-                        width: 24
-                        height: 24
-                        radius: 7
-                        color: "#e8ffffff"
-                        border.color: "#70ffffff"
-                        border.width: 1
-                        visible: thumbnailImage.visible && windowItem.iconSource.length > 0
-
-                        Image {
-                            anchors.centerIn: parent
-                            width: 17
-                            height: 17
-                            source: windowItem.iconSource
-                            fillMode: Image.PreserveAspectFit
-                            smooth: true
-                            mipmap: true
-                            asynchronous: true
-                        }
-                    }
-                }
-
-                Text {
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.top: parent.top
-                    anchors.topMargin: 84
-                    anchors.leftMargin: 10
-                    anchors.rightMargin: 10
-                    text: root.windowLabel(windowItem.modelData)
-                    color: windowItem.minimized ? "#69727a" : "#202124"
-                    font.pixelSize: 12
-                    font.weight: Font.DemiBold
-                    horizontalAlignment: Text.AlignHCenter
-                    elide: Text.ElideRight
-                    maximumLineCount: 1
-                }
-
-                Text {
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.top: parent.top
-                    anchors.topMargin: 105
-                    anchors.leftMargin: 10
-                    anchors.rightMargin: 10
-                    text: root.detailText(windowItem.modelData)
-                    color: "#68717a"
-                    font.pixelSize: 10
-                    horizontalAlignment: Text.AlignHCenter
-                    elide: Text.ElideRight
-                    maximumLineCount: 1
-                }
-
-                Rectangle {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    anchors.bottom: parent.bottom
-                    anchors.bottomMargin: 11
-                    width: windowItem.modelData && windowItem.modelData.isFocused ? 24 : windowItem.minimized ? 5 : 8
-                    height: 4
-                    radius: 2
-                    color: windowItem.modelData && windowItem.modelData.isFocused ? "#202124" : windowItem.minimized ? "#8a929a" : "#6c747c"
-                }
-
-                MouseArea {
-                    id: cardMouse
-
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onEntered: root.selectedIndex = windowItem.index
-                    onClicked: root.chooseIndex(windowItem.index)
+                    color: "transparent"
+                    border.color: "#c8ffffff"
+                    border.width: 2
                 }
             }
         }

@@ -26,11 +26,15 @@ PanelWindow {
     // Unified grid enter 0→1 (all icons together). Avoid per-icon opacity:0
     // cascade that looked like "one icon, then the rest".
     property real gridEnter: 0
-    // Paging: commit next/prev from swipe intent (short drag OR light flick),
-    // not "must drag past 50% of the page".
+    // Paging: decide at finger-up using release velocity + drag delta.
+    // Do NOT wait for flick coast to end — by then velocity is ~0 and short
+    // flicks bounce back (the bug users hit: "甩 then forced back").
     property int pageDragStartPage: 0
     property real pageDragStartX: 0
     property bool pageSnapPending: false
+    property real pageReleaseVelocity: 0
+    property real pagePeakVelocity: 0
+    property bool pageGestureActive: false
 
     readonly property var filteredApps: root.appsService
         ? root.appsService.filteredLaunchpadApps(root.query, "all")
@@ -395,14 +399,17 @@ PanelWindow {
             interactive: root.pageCount > 1
             flickableDirection: Flickable.HorizontalFlick
             boundsBehavior: Flickable.DragAndOvershootBounds
-            // Soft coast then we snap to a whole page (intent-based, not 50%).
-            flickDeceleration: 2500
-            maximumFlickVelocity: 4500
+            // Fast stop: we snap ourselves on release; long coast fights the snap.
+            flickDeceleration: 6000
+            maximumFlickVelocity: 5000
             pressDelay: 0
+            // Slightly easier to start a horizontal flick over icon MouseAreas.
+            // (Qt Quick uses ~15–20px default; lower = more fling-friendly.)
+            // Note: property name is platform-dependent; keep defaults if missing.
             rebound: Transition {
                 NumberAnimation {
                     properties: "x"
-                    duration: 240
+                    duration: 200
                     easing.type: Motion.emphasizedDecel
                 }
             }
@@ -410,16 +417,47 @@ PanelWindow {
             onMovementStarted: {
                 pageSnapAnim.stop();
                 root.pageSnapPending = false;
-                // Anchor intent to the page we were on when the drag began
-                // (contentX is authoritative if a previous snap was mid-flight).
+                root.pageGestureActive = true;
+                root.pageReleaseVelocity = 0;
+                root.pagePeakVelocity = 0;
                 var pageW = Math.max(1, width);
                 root.pageDragStartPage = root.clampPage(Math.round(contentX / pageW));
                 root.pageDragStartX = contentX;
                 root.currentPage = root.pageDragStartPage;
             }
 
-            // Preview target page while dragging (dots follow finger intent).
+            // Track peak velocity while the gesture is live (before coast dies).
+            onHorizontalVelocityChanged: {
+                if (!root.pageGestureActive && !dragging && !moving && !flicking)
+                    return;
+                var v = horizontalVelocity;
+                root.pageReleaseVelocity = v;
+                if (Math.abs(v) > Math.abs(root.pagePeakVelocity))
+                    root.pagePeakVelocity = v;
+            }
+
+            // Finger up: velocity is still meaningful here — commit immediately.
+            onDraggingChanged: {
+                if (dragging) {
+                    pageSnapAnim.stop();
+                    root.pageSnapPending = false;
+                    return;
+                }
+                // Released.
+                if (!root.pageGestureActive)
+                    return;
+                root.pageReleaseVelocity = horizontalVelocity;
+                if (Math.abs(horizontalVelocity) > Math.abs(root.pagePeakVelocity))
+                    root.pagePeakVelocity = horizontalVelocity;
+                // Cancel residual flick coast; we own the settle animation.
+                cancelFlick();
+                root.finishPageGesture();
+            }
+
+            // Preview dots while dragging.
             onContentXChanged: {
+                if (!dragging && !root.pageGestureActive)
+                    return;
                 if (!(moving || dragging || flicking))
                     return;
                 var pageW = Math.max(1, width);
@@ -429,15 +467,18 @@ PanelWindow {
                     pageW * Motion.launchpadPageCommitRatio
                 );
                 var preview = root.pageDragStartPage;
-                if (delta > commitPx * 0.5)
+                if (delta > commitPx * 0.45)
                     preview = root.pageDragStartPage + 1;
-                else if (delta < -commitPx * 0.5)
+                else if (delta < -commitPx * 0.45)
                     preview = root.pageDragStartPage - 1;
                 root.currentPage = root.clampPage(preview);
             }
 
-            onMovementEnded: root.finishPageGesture()
-            onFlickEnded: root.finishPageGesture()
+            // Fallback if drag ended without draggingChanged edge (rare).
+            onMovementEnded: {
+                if (root.pageGestureActive && !root.pageSnapPending)
+                    root.finishPageGesture();
+            }
 
             NumberAnimation {
                 id: pageSnapAnim
@@ -447,6 +488,7 @@ PanelWindow {
                 easing.type: Motion.emphasizedDecel
                 onStopped: {
                     root.pageSnapPending = false;
+                    root.pageGestureActive = false;
                     if (pageFlick.width > 0)
                         root.currentPage = root.clampPage(Math.round(pageFlick.contentX / pageFlick.width));
                 }
@@ -577,9 +619,40 @@ PanelWindow {
                                             anchors.fill: parent
                                             hoverEnabled: true
                                             cursorShape: Qt.PointingHandCursor
-                                            // Let horizontal flicks pass to pageFlick.
+                                            // Critical: allow pageFlick to steal horizontal
+                                            // drags/flings so short swipes page instead of
+                                            // bouncing (preventStealing false alone is not
+                                            // enough if we never yield the grab).
                                             preventStealing: false
+                                            property real pressX: 0
+                                            property real pressY: 0
+                                            property bool moved: false
+
+                                            onPressed: function(mouse) {
+                                                pressX = mouse.x;
+                                                pressY = mouse.y;
+                                                moved = false;
+                                            }
+                                            onPositionChanged: function(mouse) {
+                                                if (!pressed)
+                                                    return;
+                                                var dx = mouse.x - pressX;
+                                                var dy = mouse.y - pressY;
+                                                if (Math.abs(dx) > 8 || Math.abs(dy) > 8)
+                                                    moved = true;
+                                                // Yield horizontal drags to the page Flickable.
+                                                if (Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy) * 1.2) {
+                                                    mouse.accepted = false;
+                                                }
+                                            }
+                                            onReleased: function(mouse) {
+                                                // If this was a horizontal swipe, do not launch.
+                                                if (moved && Math.abs(mouse.x - pressX) > Math.abs(mouse.y - pressY))
+                                                    mouse.accepted = false;
+                                            }
                                             onClicked: {
+                                                if (moved)
+                                                    return;
                                                 root.selectedIndex = cell.globalIndex;
                                                 root.launchAt(cell.globalIndex);
                                             }
@@ -644,23 +717,26 @@ PanelWindow {
         }
     }
 
-    // Commit next/prev from swipe *intent* (distance OR velocity), then ease
-    // to a whole page. Avoids "must drag to the end / past 50%" behavior.
+    // Commit next/prev using release velocity (peak) OR short drag delta.
+    // Qt: positive horizontalVelocity → content moves right → contentX decreases → previous page.
     function finishPageGesture() {
-        if (pageFlick.width <= 0 || pageCount <= 1)
+        if (pageFlick.width <= 0 || pageCount <= 1) {
+            pageGestureActive = false;
             return;
-        // movementEnded and flickEnded can both fire — only snap once.
+        }
         if (pageSnapPending)
-            return;
-        // Still coasting hard? wait for flickEnded (movementEnded may be early).
-        if (pageFlick.flicking && Math.abs(pageFlick.horizontalVelocity) > Motion.launchpadPageFlickVelocity)
             return;
 
         pageSnapPending = true;
+        pageGestureActive = false;
+
         var pageW = Math.max(1, pageFlick.width);
         var delta = pageFlick.contentX - pageDragStartX;
-        // Qt: positive horizontalVelocity → content moving right → contentX ↓ → prev.
-        var vel = pageFlick.horizontalVelocity;
+        // Prefer peak velocity from the gesture; fall back to last sample.
+        var vel = pagePeakVelocity;
+        if (Math.abs(pageReleaseVelocity) > Math.abs(vel))
+            vel = pageReleaseVelocity;
+
         var commitPx = Math.max(
             Motion.launchpadPageCommitMinPx,
             pageW * Motion.launchpadPageCommitRatio
@@ -668,19 +744,15 @@ PanelWindow {
         var flickV = Motion.launchpadPageFlickVelocity;
 
         var page = pageDragStartPage;
-        var goNext = delta > commitPx || vel < -flickV;
-        var goPrev = delta < -commitPx || vel > flickV;
-        if (goNext && goPrev) {
-            // Conflicting signals: prefer the stronger cue.
-            if (Math.abs(vel) >= flickV)
-                page = vel < 0 ? pageDragStartPage + 1 : pageDragStartPage - 1;
-            else
-                page = delta > 0 ? pageDragStartPage + 1 : pageDragStartPage - 1;
-        } else if (goNext) {
+        // Velocity wins over small opposing delta (true fling).
+        if (Math.abs(vel) >= flickV) {
+            page = vel < 0 ? pageDragStartPage + 1 : pageDragStartPage - 1;
+        } else if (delta > commitPx) {
             page = pageDragStartPage + 1;
-        } else if (goPrev) {
+        } else if (delta < -commitPx) {
             page = pageDragStartPage - 1;
         }
+        // else stay on start page (true cancel / tiny jiggle)
 
         page = clampPage(page);
         goToPage(page, true);

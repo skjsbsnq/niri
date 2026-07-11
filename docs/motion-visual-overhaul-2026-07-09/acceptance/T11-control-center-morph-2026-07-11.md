@@ -78,6 +78,12 @@ rg -n 'expandedModule|ModuleMorphPanel|ccMorphDurationMs|wifiNetworks|bluetoothD
 - **修复**：`siblingColumn` 在 `moduleExpanded` 时 `Layout.preferredHeight/maximumHeight → 0` + `clip`，高度用 emphasized 同步动画。
 - 测试：`Layout.preferredHeight: root.moduleExpanded ? 0 : implicitHeight` 断言入治理测试。
 
+## 部署 follow-up（arch-update guardrails）
+
+- **问题**：`scripts/check-tahoe-glass-guardrails.sh` Phase 5 禁止 popup 内任意 `Behavior on y`（含内容层），`collapsedRow` 的 8px 下移触发 FAIL。
+- **修复**：去掉 `Behavior on y` / `Item.y`；兄弟下移仅保留 `siblingColumn.Layout.topMargin`；折叠行只做 opacity。
+- 验收：`bash scripts/check-tahoe-glass-guardrails.sh` PASS。
+
 ## 发现待办
 
 - 实机：reload quickshell 后连点 Wi-Fi morph 10 次目测无残留；`niri` 日志无 region 拒绝。

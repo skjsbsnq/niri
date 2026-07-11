@@ -157,17 +157,13 @@ PanelWindow {
                     height: root.collapsedTopHeight
                     spacing: 10
                     opacity: root.moduleExpanded ? 0 : 1
-                    y: root.moduleExpanded ? Motion.ccMorphSiblingOffsetPx : 0
+                    // No Behavior on y / Item.y — Phase 5 glass guardrails ban
+                    // those patterns in popup shells. Sibling offset uses
+                    // Layout.topMargin on siblingColumn only.
                     enabled: !root.moduleExpanded
                     visible: opacity > 0.01
 
                     Behavior on opacity {
-                        NumberAnimation {
-                            duration: root.morphDuration
-                            easing.type: Motion.emphasizedDecel
-                        }
-                    }
-                    Behavior on y {
                         NumberAnimation {
                             duration: root.morphDuration
                             easing.type: Motion.emphasizedDecel

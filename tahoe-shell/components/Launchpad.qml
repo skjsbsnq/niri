@@ -476,7 +476,7 @@ PanelWindow {
                 target: pageFlick
                 property: "contentX"
                 duration: Motion.launchpadPageSnapDuration(root.settingsService)
-                // OutCubic via Motion token (governance forbids inline Easing.OutCubic).
+                // Smooth settle via Motion.emphasizedDecel (shared token).
                 easing.type: Motion.emphasizedDecel
                 onStopped: {
                     root.pageSnapPending = false;

@@ -119,9 +119,11 @@ def external_args(entry, fallback_screen):
             args.extend([option, value])
 
     try:
-        fps = max(1, round(float(entry.get("fps", 30))))
+        # Default 15; hard-cap 20 for layer=background so a 30fps UX entry does
+        # not force full-screen compositor damage every frame for glass sampling.
+        fps = max(1, min(20, round(float(entry.get("fps", 15)))))
     except Exception:
-        fps = 30
+        fps = 15
     args.extend(["--fps", str(fps)])
 
     if entry.get("silent"):

@@ -179,7 +179,9 @@ PanelWindow {
         property: "dockSlideOffset"
         spring: Motion.springSmooth.spring
         damping: Motion.springSmooth.damping
-        epsilon: 0.0005
+        // Larger epsilon: sub-pixel residual motion was keeping glass region
+        // height/y dirty every frame (~60Hz Tahoe glass commits in session.log).
+        epsilon: 0.05
     }
     NumberAnimation {
         id: dockSlideEase
@@ -860,7 +862,8 @@ PanelWindow {
             regionY: Math.round(root.height - root.dockVisibleHeight)
             regionWidth: Math.round(dockChrome.width)
             regionHeight: Math.round(root.dockVisibleHeight)
-            interaction: root.dockGlassInteraction
+            // Quantize so spring settle noise does not republish glass every frame.
+            interaction: Math.round(root.dockGlassInteraction * 50) / 50
             materialAlpha: 1.0
             glassEnabled: root.dockGlassActive && root.dockVisibleHeight > 0.5
         }
@@ -1203,10 +1206,10 @@ PanelWindow {
                                     var _w = root.pinnedWave;
                                     return root.pinnedPushXAt(pinnedButton.index);
                                 }
-                                property real magnification: 1.0
-                                property real pushX: 0
-                                onMagnificationTargetChanged: magnification = magnificationTarget
-                                onPushXTargetChanged: pushX = pushXTarget
+                                // Bind to targets; Behavior retargets. Avoid
+                                // on*TargetChanged assignment (interceptor WARN).
+                                property real magnification: magnificationTarget
+                                property real pushX: pushXTarget
                                 // Keep name capsule above the growing icon while mag settles.
                                 onMagnificationChanged: {
                                     if (pinnedButton.hovered && root.dockHoverLabelVisible) {
@@ -1216,10 +1219,6 @@ PanelWindow {
                                         if (label.length > 0)
                                             root.showDockHoverLabel(label, pinnedButton, -34);
                                     }
-                                }
-                                Component.onCompleted: {
-                                    magnification = magnificationTarget;
-                                    pushX = pushXTarget;
                                 }
 
                                 Behavior on magnification {

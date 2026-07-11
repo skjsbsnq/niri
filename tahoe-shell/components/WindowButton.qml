@@ -19,13 +19,14 @@ Item {
     // T08-fix9: mag/push track analytical targets via SmoothedAnimation
     // (not per-move Spring.restart — that jittered the bar).
     property real magnificationTarget: 1.0
-    property real magnification: 1.0
+    // Bound to target; Behavior retargets. Do not also assign in handlers.
+    property real magnification: magnificationTarget
     // Slot x/width are REST geometry only (never wave-driven).
     // Visual neighbor push is pushX (Translate on the icon).
     property real slotWidthTarget: showTitle ? 132 : 60
     property real slotXTarget: 0
     property real pushXTarget: 0
-    property real pushX: 0
+    property real pushX: pushXTarget
     property real pressScale: Motion.pressScaleFor(settingsService, windowMouse.pressed)
     property real bounceOffset: 0
     property var dockWindow
@@ -137,13 +138,12 @@ Item {
     onDockWindowChanged: scheduleDockRectangleUpdate()
     onWindowModelChanged: scheduleDockRectangleUpdate()
     onToplevelChanged: scheduleDockRectangleUpdate()
-    onMagnificationTargetChanged: root.magnification = root.magnificationTarget
-    onPushXTargetChanged: root.pushX = root.pushXTarget
+    // Mag/push are bound to targets; Behavior alone retargets. Do NOT also
+    // assign in on*TargetChanged — Qt logs "another interceptor unsupported"
+    // and drops the second Behavior (session log spam + choppy wave).
     onSlotWidthTargetChanged: root.width = root.slotWidthTarget
     onSlotXTargetChanged: root.x = root.slotXTarget
     Component.onCompleted: {
-        root.magnification = root.magnificationTarget;
-        root.pushX = root.pushXTarget;
         root.x = root.slotXTarget;
         root.width = root.slotWidthTarget;
         root.scheduleDockRectangleUpdate();

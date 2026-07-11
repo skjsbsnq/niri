@@ -126,7 +126,9 @@ PanelWindow {
         if (clamp.length > 0)
             parts.push("--clamp", shellQuote(clamp));
 
-        var fps = Math.max(1, Math.round(numberValue(entry.fps, 30)));
+        // Default 15fps; cap 20 for background layer (session: 30fps wallpaper
+        // ~25% CPU + full-screen damage that keeps glass sampling hot).
+        var fps = Math.max(1, Math.min(20, Math.round(numberValue(entry.fps, 15))));
         parts.push("--fps", String(fps));
 
         if (entry.silent) {

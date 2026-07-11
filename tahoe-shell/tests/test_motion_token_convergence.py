@@ -424,7 +424,7 @@ class MotionTokenConvergenceTests(unittest.TestCase):
         self.assertIn("id: windowSectionHost", dock)
         self.assertIn("pushXTarget", dock)
         self.assertIn("pushXTarget", window_button)
-        self.assertIn("property real pushX: 0", window_button)
+        self.assertIn("property real pushX: pushXTarget", window_button)
         self.assertIn("Motion.dockMagFollowMs", window_button)
         # Glass never grows with wave extras.
         self.assertIn("readonly property real dockWaveLeftExtraPx: 0", dock)
@@ -455,6 +455,18 @@ class MotionTokenConvergenceTests(unittest.TestCase):
         # Mag/push must use SmoothedAnimation, not NumberAnimation+emphasizedDecel.
         self.assertGreaterEqual(dock.count("SmoothedAnimation"), 2)
         self.assertGreaterEqual(window_button.count("SmoothedAnimation"), 2)
+        # Do not assign targets in on*Changed while Behavior is active — Qt
+        # logs "another interceptor unsupported" and drops the second path.
+        self.assertNotIn("onMagnificationTargetChanged:", dock)
+        self.assertNotIn("onPushXTargetChanged:", dock)
+        self.assertNotIn("onMagnificationTargetChanged:", window_button)
+        self.assertNotIn("onPushXTargetChanged:", window_button)
+        self.assertIn("property real magnification: magnificationTarget", dock)
+        self.assertIn("property real pushX: pushXTarget", dock)
+        self.assertIn("property real magnification: magnificationTarget", window_button)
+        self.assertIn("property real pushX: pushXTarget", window_button)
+        # Autohide spring must settle; tiny epsilon kept residual glass churn.
+        self.assertIn("epsilon: 0.05", dock)
 
     def test_dock_launch_bounce_and_autohide_spring(self) -> None:
         dock = (COMPONENTS_ROOT / "Dock.qml").read_text(encoding="utf-8")

@@ -73,7 +73,7 @@
 | GOAL-19 | T19 左侧边栏 widget 化重构 | L | DONE | [acceptance/T19-left-sidebar-widgets-2026-07-11.md](acceptance/T19-left-sidebar-widgets-2026-07-11.md) |
 | GOAL-20 | T20 任务切换器/窗口概览手感 | M | DONE | [acceptance/T20-task-overview-motion-2026-07-11.md](acceptance/T20-task-overview-motion-2026-07-11.md) |
 | GOAL-21 | T21 niri fork：layer per-channel spring + pop-slide | M | DONE | [acceptance/T21-layer-channel-spring-pop-slide-2026-07-11.md](acceptance/T21-layer-channel-spring-pop-slide-2026-07-11.md) |
-| GOAL-22 | T22 niri fork：origin pointer + shader preset（含降级出口） | M | PENDING | — |
+| GOAL-22 | T22 niri fork：origin pointer + shader preset（含降级出口） | M | DONE | [acceptance/T22-origin-pointer-shader-preset-2026-07-11.md](acceptance/T22-origin-pointer-shader-preset-2026-07-11.md) |
 | GOAL-23 | T23 收尾：全量回归、校准、文档 | M | PENDING | — |
 
 状态取值：`PENDING` / `IN_PROGRESS` / `DONE` / `BLOCKED(-PUSH)`。改为 DONE 时在"验收记录"列填 `acceptance/Txx-….md` 相对链接。提交 hash 不落盘，由 git 历史承载（查询：`git log --oneline --grep '^Txx:'`）。

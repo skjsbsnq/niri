@@ -125,6 +125,16 @@ var ccMorphDurationMs = 280; // emphasized panel height expand/collapse
 var ccMorphSiblingOffsetPx = 8;
 var ccMorphListMaxHeight = 220;
 
+// Settings shell page transition (T15). Glass region geometry is unchanged;
+// only content opacity/x animate (emphasized, no spring).
+var settingsPageTransitionMs = 280;
+var settingsPageEnterOffsetPx = 24;
+var settingsPageExitOffsetPx = 12;
+
+function settingsPageTransition(settingsService) {
+    return reducedMotion(settingsService) ? 0 : settingsPageTransitionMs;
+}
+
 // Spring vocabulary — QML SpringAnimation parameter groups. Glass region
 // geometry must never use these (guardrail 0704ea4); springs are only for
 // content transforms/opacity inside panels, compositor-side channels, and

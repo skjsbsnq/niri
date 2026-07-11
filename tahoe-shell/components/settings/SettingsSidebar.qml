@@ -26,9 +26,10 @@ Rectangle {
     readonly property color accentBlue: theme ? theme.accentBlue : "#007ff7"
     readonly property bool searching: searchText.trim().length > 0
 
-    Layout.preferredWidth: 210
+    // T15: sidebar 210 → 230 for color-block icons + longer labels.
+    Layout.preferredWidth: 230
     Layout.fillHeight: true
-    radius: 8
+    radius: 10
     color: sidebar.sidebarFill
     border.color: sidebar.sidebarStroke
     border.width: 1
@@ -36,6 +37,14 @@ Rectangle {
 
     function parentPageFor(id) {
         return SettingsModel.parentId(id);
+    }
+
+    function categoryColorFor(info) {
+        if (!info || !info.id)
+            return sidebar.accentBlue;
+        if (sidebar.panel && typeof sidebar.panel.categoryColor === "function")
+            return sidebar.panel.categoryColor(info.id);
+        return sidebar.accentBlue;
     }
 
     function activeFor(info) {
@@ -230,6 +239,7 @@ Rectangle {
                     theme: sidebar.theme
                     label: navDelegate.modelData && navDelegate.modelData.title ? navDelegate.modelData.title : ""
                     iconCode: navDelegate.modelData && navDelegate.modelData.icon ? navDelegate.modelData.icon : ""
+                    categoryColor: sidebar.categoryColorFor(navDelegate.modelData)
                     active: sidebar.activeFor(navDelegate.modelData)
                     badgeText: sidebar.badgeFor(navDelegate.modelData)
                     visible: !(navDelegate.modelData && navDelegate.modelData.separator)

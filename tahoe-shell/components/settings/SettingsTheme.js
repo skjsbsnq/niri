@@ -162,9 +162,9 @@ function danger(darkMode) {
 // --- Panel and grouping surfaces -------------------------------------------
 
 function panelFill(darkMode) {
-    // Settings carries dense text, so its light material needs a readable
-    // baseline even when the wallpaper or compositor fallback is dark.
-    return darkMode ? "#d01d1f24" : "#b8f7f8fb";
+    // T15: content-dense settings shell wants near-opaque fill (~0.92) so
+    // body text stays readable over wallpaper; glass stroke still softens edge.
+    return darkMode ? "#eb1d1f24" : "#ebf5f6f8";
 }
 
 function panelStroke(darkMode) {
@@ -202,6 +202,8 @@ function sidebarStroke(darkMode) {
 }
 
 function sidebarActiveFill(darkMode) {
+    // T15: selected row is a solid accent capsule (call sites use accentBlue).
+    // Keep a soft fill fallback for non-accent contexts.
     return darkMode ? "#3affffff" : "#a6ffffff";
 }
 
@@ -211,6 +213,15 @@ function sidebarActiveStroke(darkMode) {
 
 function sidebarHoverFill(darkMode) {
     return darkMode ? "#26ffffff" : "#80ffffff";
+}
+
+// Solid secondary button fill (T16) — light gray pill, not glass wash.
+function buttonFillSolid(darkMode) {
+    return darkMode ? "#3a3a3c" : "#e5e5ea";
+}
+
+function buttonFillSolidHover(darkMode) {
+    return darkMode ? "#48484a" : "#d1d1d6";
 }
 
 // --- Buttons --------------------------------------------------------------
@@ -345,19 +356,57 @@ function scrim(darkMode) {
 }
 
 // --- Brand category colors ------------------------------------------------
-// One solid accent per legacy summary category. The sidebar uses symbolic
-// icons instead of category color blocks.
+// One solid accent per settings category / sidebar row (T15 color blocks).
+// Used by TahoeCategoryIcon in the sidebar and overview summary tiles.
 
 function categoryColor(key, darkMode, accentId) {
     switch (key) {
+    case "wifi":
+        return systemAccent("blue", darkMode);
+    case "network":
+        return "#64d2ff";     // light blue
+    case "bluetooth":
+        return systemAccent("blue", darkMode);
+    case "displays":
+        return "#5e5ce6";     // indigo
+    case "sound":
+        return systemAccent("pink", darkMode);
+    case "power":
+        return "#34c759";     // green
+    case "multitasking":
+        return "#ff9f0a";     // orange
     case "overview":
         return "#8e8e93";     // system gray (General)
     case "appearance":
         return "#5856d6";     // system indigo
+    case "apps":
+        return "#af52de";     // purple
     case "wallpaper":
         return "#30b0c8";     // teal
     case "notifications":
         return "#ff3b30";     // system red
+    case "search":
+        return "#8e8e93";
+    case "online-accounts":
+        return systemAccent("blue", darkMode);
+    case "sharing":
+        return "#30b0c8";
+    case "wellbeing":
+        return "#ff9f0a";
+    case "mouse-touchpad":
+        return "#8e8e93";
+    case "keyboard":
+        return "#636366";
+    case "color":
+        return "#ff2d55";
+    case "printers":
+        return "#8e8e93";
+    case "accessibility":
+        return systemAccent("blue", darkMode);
+    case "privacy":
+        return "#34c759";
+    case "system":
+        return "#8e8e93";
     case "dynamic-island":
         return "#5e5ce6";     // system indigo (top-bar dynamic island)
     case "screenshot":
@@ -368,6 +417,8 @@ function categoryColor(key, darkMode, accentId) {
         return "#32ade6";     // system light blue (weather)
     case "niri":
         return "#30b0c8";     // teal (niri layout & window appearance)
+    case "niri-layout":
+        return "#30b0c8";
     case "niri-glass":
         return "#5e5ce6";     // indigo (tahoe-glass materials & blur)
     case "niri-input":

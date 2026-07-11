@@ -67,6 +67,8 @@ PanelWindow {
     readonly property color sidebarHoverFill: SettingsTheme.sidebarHoverFill(darkMode)
     readonly property color buttonFill: SettingsTheme.buttonFill(darkMode)
     readonly property color buttonStroke: SettingsTheme.buttonStroke(darkMode)
+    readonly property color buttonFillSolid: SettingsTheme.buttonFillSolid(darkMode)
+    readonly property color buttonFillSolidHover: SettingsTheme.buttonFillSolidHover(darkMode)
     readonly property color accentFillStrong: SettingsTheme.accentFillStrong(darkMode, accentId)
     readonly property color accentStrokeStrong: SettingsTheme.accentStrokeStrong(darkMode)
     readonly property color fieldFill: SettingsTheme.fieldFill(darkMode)
@@ -116,12 +118,18 @@ PanelWindow {
             selectedPage = resolved;
             return;
         }
+        // pageHost may not exist during early property init.
+        if (pageHost)
+            pageHost.navigateTo(resolved);
     }
 
     onOpenChanged: {
         if (open) {
             if (systemStatusService)
                 systemStatusService.refresh();
+            // Snap to current page with no transition when opening the panel.
+            if (pageHost)
+                pageHost.snapTo(SettingsModel.resolveId(selectedPage));
             Qt.callLater(function() {
                 if (root.open)
                     focusCatcher.forceActiveFocus();
@@ -155,6 +163,23 @@ PanelWindow {
 
     function isSelectedPage(name) {
         return SettingsModel.resolveId(selectedPage) === SettingsModel.resolveId(name);
+    }
+
+    // T15: sub-pages (parent in SettingsModel) show a back chevron to parentId.
+    function parentPageId(name) {
+        var id = SettingsModel.resolveId(name || selectedPage);
+        var parent = SettingsModel.parentId(id);
+        return parent !== id ? parent : "";
+    }
+
+    function canGoBack(name) {
+        return parentPageId(name).length > 0;
+    }
+
+    function goBack() {
+        var parent = parentPageId();
+        if (parent.length > 0)
+            openPage(parent);
     }
 
     function openPage(name) {
@@ -279,7 +304,16 @@ PanelWindow {
                 RowLayout {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 46
-                    spacing: 10
+                    spacing: 8
+
+                    // T15: sub-page back chevron (SettingsModel.parentId).
+                    Controls.TahoeButton {
+                        theme: root
+                        iconOnly: true
+                        iconCode: "\ue5c4"
+                        visible: root.canGoBack()
+                        onActivated: root.goBack()
+                    }
 
                     ColumnLayout {
                         Layout.fillWidth: true
@@ -323,204 +357,531 @@ PanelWindow {
                     }
                 }
 
+                // T15: dual-page host — enter +24px fade, leave -12px parallax;
+                // 280ms emphasized. Glass region geometry is not animated.
                 Item {
+                    id: pageHost
+
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     clip: true
 
-                    StackLayout {
-                        anchors.fill: parent
-                        currentIndex: root.pageIndex(root.selectedPage)
+                    property string fromId: ""
+                    property string toId: SettingsModel.resolveId(root.selectedPage)
+                    property real progress: 1
 
+                    function snapTo(id) {
+                        var key = SettingsModel.resolveId(id);
+                        progressAnim.stop();
+                        fromId = "";
+                        toId = key;
+                        progress = 1;
+                    }
+
+                    // Rapid re-entry: abandon in-flight anim and retarget.
+                    function navigateTo(id) {
+                        var key = SettingsModel.resolveId(id);
+                        if (key === toId && progress >= 0.999) {
+                            fromId = "";
+                            progress = 1;
+                            return;
+                        }
+
+                        var leaveId = toId;
+                        if (leaveId === key) {
+                            snapTo(key);
+                            return;
+                        }
+
+                        fromId = leaveId;
+                        toId = key;
+                        progress = 0;
+                        progressAnim.stop();
+                        progressAnim.duration = Motion.settingsPageTransition(root.settingsService);
+                        if (progressAnim.duration <= 0) {
+                            progress = 1;
+                            fromId = "";
+                            return;
+                        }
+                        progressAnim.start();
+                    }
+
+                    function layerOpacity(pageId) {
+                        if (pageId === toId)
+                            return progress;
+                        if (pageId === fromId)
+                            return 1 - progress;
+                        return 0;
+                    }
+
+                    function layerX(pageId) {
+                        if (pageId === toId)
+                            return Motion.settingsPageEnterOffsetPx * (1 - progress);
+                        if (pageId === fromId)
+                            return -Motion.settingsPageExitOffsetPx * progress;
+                        return 0;
+                    }
+
+                    function layerVisible(pageId) {
+                        return layerOpacity(pageId) > 0.01;
+                    }
+
+                    NumberAnimation {
+                        id: progressAnim
+                        target: pageHost
+                        property: "progress"
+                        from: 0
+                        to: 1
+                        duration: Motion.settingsPageTransitionMs
+                        easing.type: Motion.emphasizedDecel
+                        onFinished: {
+                            pageHost.fromId = "";
+                            pageHost.progress = 1;
+                        }
+                    }
+
+                    Component.onCompleted: snapTo(root.selectedPage)
+
+                    Item {
+                        anchors.fill: parent
+                        x: pageHost.layerX("wifi")
+                        opacity: pageHost.layerOpacity("wifi")
+                        visible: pageHost.layerVisible("wifi")
                         Pages.WifiPage {
+                            anchors.fill: parent
                             panel: root
                             theme: root
                             controlsService: root.controlsService
                         }
+                    }
 
+                    Item {
+                        anchors.fill: parent
+                        x: pageHost.layerX("network")
+                        opacity: pageHost.layerOpacity("network")
+                        visible: pageHost.layerVisible("network")
                         Pages.NetworkPage {
+                            anchors.fill: parent
                             panel: root
                             theme: root
                             networkSettingsService: root.networkSettingsService
                         }
+                    }
 
+                    Item {
+                        anchors.fill: parent
+                        x: pageHost.layerX("bluetooth")
+                        opacity: pageHost.layerOpacity("bluetooth")
+                        visible: pageHost.layerVisible("bluetooth")
                         Pages.BluetoothPage {
+                            anchors.fill: parent
                             panel: root
                             theme: root
                             controlsService: root.controlsService
                         }
+                    }
 
+                    Item {
+                        anchors.fill: parent
+                        x: pageHost.layerX("displays")
+                        opacity: pageHost.layerOpacity("displays")
+                        visible: pageHost.layerVisible("displays")
                         Pages.DisplaysPage {
+                            anchors.fill: parent
                             panel: root
                             theme: root
                         }
+                    }
 
+                    Item {
+                        anchors.fill: parent
+                        x: pageHost.layerX("sound")
+                        opacity: pageHost.layerOpacity("sound")
+                        visible: pageHost.layerVisible("sound")
                         Pages.SoundPage {
+                            anchors.fill: parent
                             panel: root
                             theme: root
                         }
+                    }
 
+                    Item {
+                        anchors.fill: parent
+                        x: pageHost.layerX("power")
+                        opacity: pageHost.layerOpacity("power")
+                        visible: pageHost.layerVisible("power")
                         Pages.PowerPage {
+                            anchors.fill: parent
                             panel: root
                             theme: root
                         }
+                    }
 
+                    Item {
+                        anchors.fill: parent
+                        x: pageHost.layerX("multitasking")
+                        opacity: pageHost.layerOpacity("multitasking")
+                        visible: pageHost.layerVisible("multitasking")
                         Pages.MultitaskingPage {
+                            anchors.fill: parent
                             panel: root
                             theme: root
                         }
+                    }
 
+                    Item {
+                        anchors.fill: parent
+                        x: pageHost.layerX("appearance")
+                        opacity: pageHost.layerOpacity("appearance")
+                        visible: pageHost.layerVisible("appearance")
                         Pages.AppearancePage {
+                            anchors.fill: parent
                             panel: root
                             theme: root
                         }
+                    }
 
+                    Item {
+                        anchors.fill: parent
+                        x: pageHost.layerX("apps")
+                        opacity: pageHost.layerOpacity("apps")
+                        visible: pageHost.layerVisible("apps")
                         Pages.AppsPage {
+                            anchors.fill: parent
                             panel: root
                             theme: root
                             appsSettingsService: root.appsSettingsService
                         }
+                    }
 
+                    Item {
+                        anchors.fill: parent
+                        x: pageHost.layerX("notifications")
+                        opacity: pageHost.layerOpacity("notifications")
+                        visible: pageHost.layerVisible("notifications")
                         Pages.NotificationsPage {
+                            anchors.fill: parent
                             panel: root
                             theme: root
                         }
+                    }
 
+                    Item {
+                        anchors.fill: parent
+                        x: pageHost.layerX("search")
+                        opacity: pageHost.layerOpacity("search")
+                        visible: pageHost.layerVisible("search")
                         Pages.FeatureProbePage {
+                            anchors.fill: parent
                             panel: root
                             theme: root
                             panelId: "search"
                         }
+                    }
 
+                    Item {
+                        anchors.fill: parent
+                        x: pageHost.layerX("online-accounts")
+                        opacity: pageHost.layerOpacity("online-accounts")
+                        visible: pageHost.layerVisible("online-accounts")
                         Pages.ExternalSettingsPage {
+                            anchors.fill: parent
                             panel: root
                             theme: root
                             panelId: "online-accounts"
                         }
+                    }
 
+                    Item {
+                        anchors.fill: parent
+                        x: pageHost.layerX("sharing")
+                        opacity: pageHost.layerOpacity("sharing")
+                        visible: pageHost.layerVisible("sharing")
                         Pages.FeatureProbePage {
+                            anchors.fill: parent
                             panel: root
                             theme: root
                             panelId: "sharing"
                         }
+                    }
 
+                    Item {
+                        anchors.fill: parent
+                        x: pageHost.layerX("wellbeing")
+                        opacity: pageHost.layerOpacity("wellbeing")
+                        visible: pageHost.layerVisible("wellbeing")
                         Pages.ReadOnlyCapabilityPage {
+                            anchors.fill: parent
                             panel: root
                             theme: root
                             panelId: "wellbeing"
                         }
+                    }
 
+                    Item {
+                        anchors.fill: parent
+                        x: pageHost.layerX("mouse-touchpad")
+                        opacity: pageHost.layerOpacity("mouse-touchpad")
+                        visible: pageHost.layerVisible("mouse-touchpad")
                         Pages.MouseTouchpadPage {
+                            anchors.fill: parent
                             panel: root
                             theme: root
                         }
+                    }
 
+                    Item {
+                        anchors.fill: parent
+                        x: pageHost.layerX("keyboard")
+                        opacity: pageHost.layerOpacity("keyboard")
+                        visible: pageHost.layerVisible("keyboard")
                         Pages.KeyboardPage {
+                            anchors.fill: parent
                             panel: root
                             theme: root
                         }
+                    }
 
+                    Item {
+                        anchors.fill: parent
+                        x: pageHost.layerX("color")
+                        opacity: pageHost.layerOpacity("color")
+                        visible: pageHost.layerVisible("color")
                         Pages.ExternalSettingsPage {
+                            anchors.fill: parent
                             panel: root
                             theme: root
                             panelId: "color"
                         }
+                    }
 
+                    Item {
+                        anchors.fill: parent
+                        x: pageHost.layerX("printers")
+                        opacity: pageHost.layerOpacity("printers")
+                        visible: pageHost.layerVisible("printers")
                         Pages.ExternalSettingsPage {
+                            anchors.fill: parent
                             panel: root
                             theme: root
                             panelId: "printers"
                         }
+                    }
 
+                    Item {
+                        anchors.fill: parent
+                        x: pageHost.layerX("accessibility")
+                        opacity: pageHost.layerOpacity("accessibility")
+                        visible: pageHost.layerVisible("accessibility")
                         Pages.ExternalSettingsPage {
+                            anchors.fill: parent
                             panel: root
                             theme: root
                             panelId: "accessibility"
                         }
+                    }
 
+                    Item {
+                        anchors.fill: parent
+                        x: pageHost.layerX("privacy")
+                        opacity: pageHost.layerOpacity("privacy")
+                        visible: pageHost.layerVisible("privacy")
                         Pages.ReadOnlyCapabilityPage {
+                            anchors.fill: parent
                             panel: root
                             theme: root
                             panelId: "privacy"
                         }
+                    }
 
+                    Item {
+                        anchors.fill: parent
+                        x: pageHost.layerX("system")
+                        opacity: pageHost.layerOpacity("system")
+                        visible: pageHost.layerVisible("system")
                         Pages.SystemPage {
+                            anchors.fill: parent
                             panel: root
                             theme: root
                         }
+                    }
 
+                    Item {
+                        anchors.fill: parent
+                        x: pageHost.layerX("niri")
+                        opacity: pageHost.layerOpacity("niri")
+                        visible: pageHost.layerVisible("niri")
                         Pages.NiriPage {
+                            anchors.fill: parent
                             panel: root
                             theme: root
                         }
+                    }
 
+                    Item {
+                        anchors.fill: parent
+                        x: pageHost.layerX("wallpaper")
+                        opacity: pageHost.layerOpacity("wallpaper")
+                        visible: pageHost.layerVisible("wallpaper")
                         Pages.WallpaperPage {
+                            anchors.fill: parent
                             panel: root
                             theme: root
                         }
+                    }
 
+                    Item {
+                        anchors.fill: parent
+                        x: pageHost.layerX("dynamic-island")
+                        opacity: pageHost.layerOpacity("dynamic-island")
+                        visible: pageHost.layerVisible("dynamic-island")
                         Pages.DynamicIslandPage {
+                            anchors.fill: parent
                             panel: root
                             theme: root
                         }
+                    }
 
+                    Item {
+                        anchors.fill: parent
+                        x: pageHost.layerX("screenshot")
+                        opacity: pageHost.layerOpacity("screenshot")
+                        visible: pageHost.layerVisible("screenshot")
                         Pages.ScreenshotPage {
+                            anchors.fill: parent
                             panel: root
                             theme: root
                         }
+                    }
 
+                    Item {
+                        anchors.fill: parent
+                        x: pageHost.layerX("dock")
+                        opacity: pageHost.layerOpacity("dock")
+                        visible: pageHost.layerVisible("dock")
                         Pages.DockPage {
+                            anchors.fill: parent
                             panel: root
                             theme: root
                         }
+                    }
 
+                    Item {
+                        anchors.fill: parent
+                        x: pageHost.layerX("weather")
+                        opacity: pageHost.layerOpacity("weather")
+                        visible: pageHost.layerVisible("weather")
                         Pages.WeatherPage {
+                            anchors.fill: parent
                             panel: root
                             theme: root
                         }
+                    }
 
+                    Item {
+                        anchors.fill: parent
+                        x: pageHost.layerX("startup")
+                        opacity: pageHost.layerOpacity("startup")
+                        visible: pageHost.layerVisible("startup")
                         Pages.StartupPage {
+                            anchors.fill: parent
                             panel: root
                             theme: root
                             appsService: root.appsService
                         }
+                    }
 
+                    Item {
+                        anchors.fill: parent
+                        x: pageHost.layerX("health")
+                        opacity: pageHost.layerOpacity("health")
+                        visible: pageHost.layerVisible("health")
                         Pages.HealthPage {
+                            anchors.fill: parent
                             panel: root
                             theme: root
                         }
+                    }
 
+                    Item {
+                        anchors.fill: parent
+                        x: pageHost.layerX("about")
+                        opacity: pageHost.layerOpacity("about")
+                        visible: pageHost.layerVisible("about")
                         Pages.AboutPage {
+                            anchors.fill: parent
                             panel: root
                             theme: root
                         }
+                    }
 
+                    Item {
+                        anchors.fill: parent
+                        x: pageHost.layerX("niri-layout")
+                        opacity: pageHost.layerOpacity("niri-layout")
+                        visible: pageHost.layerVisible("niri-layout")
                         Pages.NiriLayoutPage {
+                            anchors.fill: parent
                             panel: root
                             theme: root
                         }
+                    }
 
+                    Item {
+                        anchors.fill: parent
+                        x: pageHost.layerX("niri-glass")
+                        opacity: pageHost.layerOpacity("niri-glass")
+                        visible: pageHost.layerVisible("niri-glass")
                         Pages.NiriGlassPage {
+                            anchors.fill: parent
                             panel: root
                             theme: root
                         }
+                    }
 
+                    Item {
+                        anchors.fill: parent
+                        x: pageHost.layerX("niri-input")
+                        opacity: pageHost.layerOpacity("niri-input")
+                        visible: pageHost.layerVisible("niri-input")
                         Pages.NiriInputPage {
+                            anchors.fill: parent
                             panel: root
                             theme: root
                         }
+                    }
 
+                    Item {
+                        anchors.fill: parent
+                        x: pageHost.layerX("niri-animations")
+                        opacity: pageHost.layerOpacity("niri-animations")
+                        visible: pageHost.layerVisible("niri-animations")
                         Pages.NiriAnimationsPage {
+                            anchors.fill: parent
                             panel: root
                             theme: root
                         }
+                    }
 
+                    Item {
+                        anchors.fill: parent
+                        x: pageHost.layerX("niri-keyboard")
+                        opacity: pageHost.layerOpacity("niri-keyboard")
+                        visible: pageHost.layerVisible("niri-keyboard")
                         Pages.NiriKeyboardPage {
+                            anchors.fill: parent
                             panel: root
                             theme: root
                         }
+                    }
 
+                    Item {
+                        anchors.fill: parent
+                        x: pageHost.layerX("overview")
+                        opacity: pageHost.layerOpacity("overview")
+                        visible: pageHost.layerVisible("overview")
                         Pages.OverviewPage {
+                            anchors.fill: parent
                             panel: root
                             theme: root
                         }

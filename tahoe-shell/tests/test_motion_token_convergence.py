@@ -188,6 +188,46 @@ class MotionTokenConvergenceTests(unittest.TestCase):
         self.assertIn("Behavior on stackY", toast)
         self.assertNotIn("Behavior on y {", toast)
 
+    def test_motion_exports_control_center_feel_tokens(self) -> None:
+        text = MOTION_JS.read_text(encoding="utf-8")
+
+        self.assertIn("var ccPanelWidth = 330;", text)
+        self.assertIn("var ccTilePressScale = 0.97;", text)
+        self.assertIn("var ccSliderKnobDragScale = 1.15;", text)
+        self.assertIn("var ccToggleBounceMs = 200;", text)
+        self.assertIn("var ccToggleColorMs = 200;", text)
+
+    def test_control_center_dechrome_and_control_feel(self) -> None:
+        cc = (COMPONENTS_ROOT / "ControlCenter.qml").read_text(encoding="utf-8")
+
+        # T10: no title chrome / close X; width token 330.
+        self.assertIn("Motion.ccPanelWidth", cc)
+        self.assertNotIn('text: "控制中心"', cc)
+        self.assertNotIn("id: closeButton", cc)
+        self.assertNotIn("onClicked: root.closeRequested()", cc)
+
+        # Slider white circular knob + drag scale 1.15.
+        self.assertIn("id: knob", cc)
+        self.assertIn("id: knobShadow", cc)
+        self.assertIn("Motion.ccSliderKnobDragScale", cc)
+        self.assertIn('color: "#ffffff"', cc)
+
+        # Tile hover/press feel via ccTilePressScale (not generic pressScale 0.96).
+        self.assertIn("Motion.ccTilePressScale", cc)
+        self.assertIn("tileFillHover", cc)
+        self.assertIn("tileFillPressed", cc)
+
+        # ToggleCircle bounce 1→0.9→1 + ColorAnimation token.
+        self.assertIn("id: toggleBounce", cc)
+        self.assertIn("bounceScale", cc)
+        self.assertIn("Motion.ccToggleBounceMs", cc)
+        self.assertIn("Motion.ccToggleColorMs", cc)
+        self.assertIn("SequentialAnimation", cc)
+
+        # Glass region height still uses eased NumberAnimation only.
+        self.assertNotIn("SpringAnimation", cc)
+        self.assertIn("emphasizedDecel", cc)
+
     def test_dock_uses_analytical_cosine_wave_and_unified_label(self) -> None:
         dock = (COMPONENTS_ROOT / "Dock.qml").read_text(encoding="utf-8")
         window_button = (COMPONENTS_ROOT / "WindowButton.qml").read_text(encoding="utf-8")
@@ -367,7 +407,8 @@ class MotionTokenConvergenceTests(unittest.TestCase):
             "Dock.qml": 2,
             "WindowButton.qml": 1,
             "DockMinimizedWindow.qml": 1,
-            "ControlCenter.qml": 8,
+            # T10 removed chrome close button; ConnectivityTile uses ccTilePressScale.
+            "ControlCenter.qml": 6,
             "Spotlight.qml": 2,
             "Launchpad.qml": 2,
             "MenuRow.qml": 1,

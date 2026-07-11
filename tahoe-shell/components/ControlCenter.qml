@@ -33,7 +33,9 @@ PanelWindow {
     readonly property color glassInnerFill: darkMode ? "#1cffffff" : "#14ffffff"
     // Tiles match the web cc-tile rgba(255,255,255,0.5).
     readonly property color tileFill: darkMode ? "#2c343dcc" : "#80ffffff"
+    readonly property color tileFillHover: darkMode ? "#36424dcc" : "#8fffffff"
     readonly property color tileFillActive: darkMode ? "#37424dcc" : "#88ffffff"
+    readonly property color tileFillPressed: darkMode ? "#242c34cc" : "#70ffffff"
     readonly property color tileStroke: darkMode ? "#34ffffff" : "#5affffff" // inner top-left light
     readonly property color tileShadowLine: "#1a000000" // inner bottom-right shadow
     // macOS accent blue used when a toggle is on.
@@ -50,7 +52,7 @@ PanelWindow {
     visible: open
     aboveWindows: true
     exclusionMode: ExclusionMode.Ignore
-    implicitWidth: 360
+    implicitWidth: Motion.ccPanelWidth
     implicitHeight: panel.implicitHeight
     color: "transparent"
     WlrLayershell.namespace: "tahoe-control-center"
@@ -90,50 +92,8 @@ PanelWindow {
             anchors.margins: 14
             spacing: 12
 
-            // ---- Header row: title + close ----
-            RowLayout {
-                Layout.fillWidth: true
-                Layout.preferredHeight: 24
-                spacing: 8
-
-                Text {
-                    text: "控制中心"
-                    color: root.textPrimary
-                    font.pixelSize: 14
-                    font.weight: Font.DemiBold
-                    Layout.fillWidth: true
-                    verticalAlignment: Text.AlignVCenter
-                }
-
-                Rectangle {
-                    id: closeButton
-                    Layout.preferredWidth: 24
-                    Layout.preferredHeight: 24
-                    radius: 12
-                    color: closeMouse.pressed ? Qt.darker(root.glassInnerFill, 1.2) : root.glassInnerFill
-                    border.color: "#36ffffff"
-                    scale: Motion.pressScaleFor(root.settingsService, closeMouse.pressed)
-
-                    Behavior on scale { NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing } }
-
-                    Text {
-                        anchors.centerIn: parent
-                        text: "x"
-                        color: root.textPrimary
-                        font.pixelSize: 12
-                        font.weight: Font.DemiBold
-                    }
-
-                    MouseArea {
-                        id: closeMouse
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: root.closeRequested()
-                    }
-                }
-            }
-
             // ---- Top row: left stack (wifi/bluetooth/airdrop) + music ----
+            // T10: no title/close chrome (macOS Control Center style).
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 10
@@ -309,21 +269,50 @@ PanelWindow {
 
     // A glass toggle circle (50x50), used in ConnectivityTile and elsewhere.
     // `active` flips the fill between accent blue and translucent white.
+    // T10: state change plays 1→0.9→1 bounce + ColorAnimation 200ms.
     component ToggleCircle: Item {
         id: tc
         property bool active: false
         property string iconCode: ""
         property color activeColor: root.accentActive
         property bool enabled: true
+        property real bounceScale: 1.0
         signal clicked()
 
         implicitWidth: 48
         implicitHeight: 48
-        scale: Motion.pressScaleFor(root.settingsService, toggleMouse.pressed && tc.enabled)
+        scale: tc.bounceScale * Motion.pressScaleFor(root.settingsService, toggleMouse.pressed && tc.enabled)
 
         Behavior on scale { NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing } }
 
+        onActiveChanged: {
+            if (Motion.reducedMotion(root.settingsService)) {
+                tc.bounceScale = 1.0;
+                return;
+            }
+            toggleBounce.restart();
+        }
+
+        SequentialAnimation {
+            id: toggleBounce
+            NumberAnimation {
+                target: tc
+                property: "bounceScale"
+                to: 0.9
+                duration: Math.round(Motion.ccToggleBounceMs * 0.4)
+                easing.type: Easing.OutQuad
+            }
+            NumberAnimation {
+                target: tc
+                property: "bounceScale"
+                to: 1.0
+                duration: Math.round(Motion.ccToggleBounceMs * 0.6)
+                easing.type: Easing.OutBack
+            }
+        }
+
         Rectangle {
+            id: toggleFill
             anchors.fill: parent
             radius: width / 2
             color: toggleMouse.pressed && tc.enabled
@@ -332,6 +321,13 @@ PanelWindow {
             border.color: "#30ffffff"
             border.width: 1
             opacity: tc.enabled ? 1 : 0.4
+
+            Behavior on color {
+                ColorAnimation {
+                    duration: Motion.reducedMotion(root.settingsService) ? 0 : Motion.ccToggleColorMs
+                    easing.type: Easing.InOutQuad
+                }
+            }
         }
 
         // Inner top-left highlight (web double-inset signature).
@@ -352,6 +348,13 @@ PanelWindow {
             font.family: root.iconFont
             font.pixelSize: 20
             opacity: tc.enabled ? 1 : 0.4
+
+            Behavior on color {
+                ColorAnimation {
+                    duration: Motion.reducedMotion(root.settingsService) ? 0 : Motion.ccToggleColorMs
+                    easing.type: Easing.InOutQuad
+                }
+            }
         }
 
         MouseArea {
@@ -367,19 +370,38 @@ PanelWindow {
 
     // Connectivity tile: Wi-Fi heading + sub, plus a row of BT/AirDrop circles.
     // Mirrors the web cc-wifi-tile + cc-row composition.
+    // T10: hover brighten / press dark + scale 0.97.
     component ConnectivityTile: Item {
         id: ct
         property var controls
-        scale: Motion.pressScaleFor(root.settingsService, wifiTileMouse.pressed)
+        readonly property bool tilePressed: wifiTileMouse.pressed
+        readonly property bool tileHovered: wifiTileMouse.containsMouse
+        scale: Motion.reducedMotion(root.settingsService)
+            ? 1.0
+            : (ct.tilePressed ? Motion.ccTilePressScale : 1.0)
 
-        Behavior on scale { NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing } }
+        Behavior on scale {
+            NumberAnimation {
+                duration: Motion.pressDurationFor(root.settingsService)
+                easing.type: Motion.pressEasing
+            }
+        }
 
         Rectangle {
             anchors.fill: parent
             radius: 22
-            color: wifiTileMouse.pressed ? Qt.darker(root.tileFill, 1.12) : root.tileFill
+            color: ct.tilePressed
+                ? root.tileFillPressed
+                : (ct.tileHovered ? root.tileFillHover : root.tileFill)
             border.color: root.tileStroke
             border.width: 1
+
+            Behavior on color {
+                ColorAnimation {
+                    duration: Motion.pressDurationFor(root.settingsService)
+                    easing.type: Motion.pressEasing
+                }
+            }
 
             // Inner top-left light.
             Rectangle {
@@ -397,6 +419,7 @@ PanelWindow {
             MouseArea {
                 id: wifiTileMouse
                 anchors.fill: parent
+                hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
                 z: 0
                 onClicked: {
@@ -513,16 +536,29 @@ PanelWindow {
     }
 
     // Now Playing tile (web cc-music-widget). Shows album art + transport.
+    // T10: hover brighten / press scale on transport only; tile surface hover.
     component MusicTile: Item {
         id: mt
         property var controls
+        readonly property bool tileHovered: musicHover.hovered
+
+        HoverHandler {
+            id: musicHover
+        }
 
         Rectangle {
             anchors.fill: parent
             radius: 22
-            color: root.tileFill
+            color: mt.tileHovered ? root.tileFillHover : root.tileFill
             border.color: root.tileStroke
             border.width: 1
+
+            Behavior on color {
+                ColorAnimation {
+                    duration: Motion.pressDurationFor(root.settingsService)
+                    easing.type: Motion.pressEasing
+                }
+            }
 
             Rectangle {
                 anchors.fill: parent
@@ -558,6 +594,8 @@ PanelWindow {
                             fillMode: Image.PreserveAspectCrop
                             visible: mt.controls && mt.controls.hasMedia && mt.controls.trackArtUrl.length > 0
                             asynchronous: true
+                            sourceSize.width: 76
+                            sourceSize.height: 76
                         }
 
                         Text {
@@ -683,8 +721,8 @@ PanelWindow {
         }
     }
 
-    // White-fill slider (web cc-slider-pill + box-shadow trick). MouseArea
-    // driven — the project never uses QtQuick.Controls, so we stay consistent.
+    // White-fill slider with circular knob + drag scale (T10).
+    // MouseArea driven — project never uses QtQuick.Controls.
     component GlassSlider: Item {
         id: gs
         property string iconCode: ""
@@ -692,6 +730,10 @@ PanelWindow {
         property real value: 0 // 0..1
         property bool enabled: true
         signal userSet(real value)
+
+        readonly property real clampedValue: Math.max(0, Math.min(1, gs.value))
+        readonly property real knobSize: 22
+        readonly property real trackHeight: 26
 
         Rectangle {
             anchors.fill: parent
@@ -719,42 +761,84 @@ PanelWindow {
 
                 Text {
                     text: gs.label
-                    color: "#b3000000" // rgba(0,0,0,0.7)
+                    color: root.darkMode ? "#c8d0d8" : "#b3000000"
                     font.pixelSize: 11
                     font.weight: Font.DemiBold
                     Layout.fillWidth: true
                 }
 
-                // Pill track.
-                Rectangle {
-                    id: pillTrack
+                // Pill track (clip fill only; knob sits above).
+                Item {
+                    id: trackHost
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 26
-                    radius: 13
-                    color: "#47ffffff" // rgba(255,255,255,0.28)
-                    clip: true
+                    Layout.preferredHeight: gs.trackHeight
 
-                    // White fill from left to current value (no visible thumb).
                     Rectangle {
-                        id: fill
-                        x: 0
-                        y: 0
-                        height: parent.height
-                        width: parent.width * Math.max(0, Math.min(1, gs.value))
-                        radius: parent.radius
-                        color: root.sliderFill
+                        id: pillTrack
+                        anchors.fill: parent
+                        radius: height / 2
+                        color: "#47ffffff"
+                        clip: true
+
+                        Rectangle {
+                            id: fill
+                            x: 0
+                            y: 0
+                            height: parent.height
+                            width: parent.width * gs.clampedValue
+                            radius: parent.radius
+                            color: root.sliderFill
+                        }
+
+                        // Right-side icon (web cc-slider-icon-right).
+                        Text {
+                            anchors.right: parent.right
+                            anchors.rightMargin: 10
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: gs.iconCode
+                            color: root.darkMode ? "#b9c0cc" : "#731d1d1f"
+                            font.family: root.iconFont
+                            font.pixelSize: 15
+                            z: 5
+                        }
                     }
 
-                    // Right-side icon (web cc-slider-icon-right).
-                    Text {
-                        anchors.right: parent.right
-                        anchors.rightMargin: 10
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: gs.iconCode
-                        color: "#731d1d1f"
-                        font.family: root.iconFont
-                        font.pixelSize: 15
-                        z: 5
+                    // Soft shadow under the white knob.
+                    Rectangle {
+                        id: knobShadow
+                        width: gs.knobSize
+                        height: gs.knobSize
+                        radius: width / 2
+                        color: "#40000000"
+                        x: Math.max(0, Math.min(pillTrack.width - width, pillTrack.width * gs.clampedValue - width / 2))
+                        anchors.verticalCenter: pillTrack.verticalCenter
+                        anchors.verticalCenterOffset: 1
+                        scale: knob.scale
+                        z: 6
+                    }
+
+                    // White circular knob (macOS signature).
+                    Rectangle {
+                        id: knob
+                        width: gs.knobSize
+                        height: gs.knobSize
+                        radius: width / 2
+                        color: "#ffffff"
+                        border.color: "#22000000"
+                        border.width: 1
+                        x: knobShadow.x
+                        anchors.verticalCenter: pillTrack.verticalCenter
+                        scale: dragArea.pressed && gs.enabled
+                            ? (Motion.reducedMotion(root.settingsService) ? 1.0 : Motion.ccSliderKnobDragScale)
+                            : 1.0
+                        z: 7
+
+                        Behavior on scale {
+                            NumberAnimation {
+                                duration: Motion.pressDurationFor(root.settingsService)
+                                easing.type: Motion.pressEasing
+                            }
+                        }
                     }
 
                     MouseArea {

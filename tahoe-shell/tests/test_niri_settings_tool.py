@@ -102,12 +102,14 @@ class NiriSettingsToolTests(unittest.TestCase):
 
     def test_motion_profile_write_requires_known_layer_animation_groups(self) -> None:
         original = TAHOE_PHASE0.read_text(encoding="utf-8")
+        # T21/T22: process menu lives in the unified `menu` layer-rule; renaming
+        # any of its namespaces makes the exact-tuple match fail.
         broken = original.replace('match namespace="^tahoe-process-menu$"', 'match namespace="^tahoe-other-menu$"')
 
         with self.assertRaises(niri_settings_tool.KdlEditError) as raised:
             niri_settings_tool.update_field(broken, "animations.profile", "fast")
 
-        self.assertIn("expected exactly one layer-rule for process_menu", str(raised.exception))
+        self.assertIn("expected exactly one layer-rule for menu", str(raised.exception))
 
     def test_layout_write_matches_golden_and_preserves_unmanaged_block(self) -> None:
         original = read_fixture("managed.kdl")

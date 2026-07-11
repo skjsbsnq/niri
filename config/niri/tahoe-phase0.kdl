@@ -548,17 +548,14 @@ layer-rule {
     }
 }
 
-// Top-bar popups use the same full-surface top edge reveal as Control Center.
-// Their layer-shell anchor is the popup's left edge, not the clicked button,
-// so scaling from `origin "anchor"` stretches glass from the wrong point.
+// Top-bar status popups (battery/wifi/fan/clipboard) keep Control Center's full
+// top edge-reveal: their layer-shell anchor is the popup's left edge, not the
+// clicked button, so popin/pop-slide from anchor would stretch glass wrong.
 layer-rule {
     match namespace="^tahoe-battery-popup$"
     match namespace="^tahoe-wifi-popup$"
     match namespace="^tahoe-fan-popup$"
     match namespace="^tahoe-clipboard-popup$"
-    match namespace="^tahoe-menu-popup$"
-    match namespace="^tahoe-application-menu$"
-    match namespace="^tahoe-tray-menu$"
 
     animations {
         layer-open {
@@ -584,49 +581,23 @@ layer-rule {
     }
 }
 
-// Layer animation Dock Menu profile. Same spring popin vocabulary as the
-// top-bar menus, but these surfaces are top+left anchored while the dock icon
-// sits below the menu, so `origin "anchor"` would grow away from the icon.
-// Use `origin "center"` until T22 adds a pointer-based origin.
+// T21/T22: menus use pop-slide (scale + 4px edge travel) with origin "pointer"
+// so they grow from the click that opened them (seat pointer at map time; no
+// new protocol). Falls back to center if pointer location is unavailable.
 layer-rule {
+    match namespace="^tahoe-menu-popup$"
+    match namespace="^tahoe-application-menu$"
+    match namespace="^tahoe-tray-menu$"
+    match namespace="^tahoe-process-menu$"
     match namespace="^tahoe-dock-app-menu$"
     match namespace="^tahoe-dock-window-menu$"
 
     animations {
         layer-open {
-            style "popin"
-            origin "center"
-            scale-from 0.94
-            opacity-from 0
-            spring damping-ratio=0.88 stiffness=500 epsilon=0.001
-            opacity-duration-ms 90
-            opacity-curve "standard-decel"
-        }
-        layer-close {
-            style "popout"
-            origin "center"
-            scale-to 0.98
-            opacity-to 0
-            transform-duration-ms 180
-            transform-curve "emphasized-accel"
-            opacity-duration-ms 180
-            opacity-curve "emphasized-accel"
-        }
-    }
-}
-
-// Layer animation Process Menu profile. This context menu is top+left anchored
-// at the click point, so `origin "anchor"` pops it out of the cursor corner.
-// Same spring popin vocabulary as the other menus.
-layer-rule {
-    match namespace="^tahoe-process-menu$"
-
-    animations {
-        layer-open {
             style "pop-slide"
-            origin "anchor"
+            origin "pointer"
             edge "top"
-            distance 10
+            distance 4
             scale-from 0.94
             opacity-from 0
             spring damping-ratio=0.88 stiffness=500 epsilon=0.001
@@ -635,9 +606,9 @@ layer-rule {
         }
         layer-close {
             style "pop-slide"
-            origin "anchor"
+            origin "pointer"
             edge "top"
-            distance 10
+            distance 4
             scale-to 0.98
             opacity-to 0
             transform-duration-ms 180

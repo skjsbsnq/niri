@@ -813,17 +813,23 @@ LAYER_PROFILE_GROUPS = {
     "notification_center": ("tahoe-notification-center",),
     "left_sidebar": ("tahoe-left-sidebar",),
     "spotlight": ("tahoe-spotlight",),
+    # T04-fix2 / T21: status popups stay edge-reveal; all menus share one
+    # pop-slide layer-rule (pointer origin) so the profile writer finds exactly
+    # one block whose namespace set equals this tuple.
     "small_popup": (
         "tahoe-battery-popup",
         "tahoe-wifi-popup",
         "tahoe-fan-popup",
         "tahoe-clipboard-popup",
+    ),
+    "menu": (
         "tahoe-menu-popup",
         "tahoe-application-menu",
         "tahoe-tray-menu",
+        "tahoe-process-menu",
+        "tahoe-dock-app-menu",
+        "tahoe-dock-window-menu",
     ),
-    "dock_menu": ("tahoe-dock-app-menu", "tahoe-dock-window-menu"),
-    "process_menu": ("tahoe-process-menu",),
     "toast": ("tahoe-notification-toast",),
 }
 
@@ -899,11 +905,7 @@ MOTION_PROFILE_LAYERS = {
             "layer-open": spring_phase(0.85, 380, 0.0005, 110, "opacity-from", 0.84, "standard-decel"),
             "layer-close": {**layer_phase(210, 0, "opacity-to", 1.0), "opacity-curve": None},
         },
-        "dock_menu": {
-            "layer-open": spring_phase(0.88, 500, 0.001, 90, "opacity-from", 0.0, "standard-decel"),
-            "layer-close": layer_phase(180, 180, "opacity-to", 0.0, "emphasized-accel"),
-        },
-        "process_menu": {
+        "menu": {
             "layer-open": spring_phase(0.88, 500, 0.001, 90, "opacity-from", 0.0, "standard-decel"),
             "layer-close": layer_phase(180, 180, "opacity-to", 0.0, "emphasized-accel"),
         },
@@ -933,11 +935,7 @@ MOTION_PROFILE_LAYERS = {
             "layer-open": spring_phase(0.9, 520, 0.0005, 80, "opacity-from", 0.84, "standard-decel"),
             "layer-close": {**layer_phase(140, 0, "opacity-to", 1.0), "opacity-curve": None},
         },
-        "dock_menu": {
-            "layer-open": spring_phase(0.95, 750, 0.001, 70, "opacity-from", 0.0, "standard-decel"),
-            "layer-close": layer_phase(140, 140, "opacity-to", 0.0, "emphasized-accel"),
-        },
-        "process_menu": {
+        "menu": {
             "layer-open": spring_phase(0.95, 750, 0.001, 70, "opacity-from", 0.0, "standard-decel"),
             "layer-close": layer_phase(140, 140, "opacity-to", 0.0, "emphasized-accel"),
         },
@@ -967,11 +965,7 @@ MOTION_PROFILE_LAYERS = {
             "layer-open": spring_phase(0.82, 300, 0.0005, 130, "opacity-from", 0.84, "standard-decel"),
             "layer-close": {**layer_phase(210, 0, "opacity-to", 1.0), "opacity-curve": None},
         },
-        "dock_menu": {
-            "layer-open": spring_phase(0.82, 420, 0.001, 110, "opacity-from", 0.0, "standard-decel"),
-            "layer-close": layer_phase(210, 210, "opacity-to", 0.0, "emphasized-accel"),
-        },
-        "process_menu": {
+        "menu": {
             "layer-open": spring_phase(0.82, 420, 0.001, 110, "opacity-from", 0.0, "standard-decel"),
             "layer-close": layer_phase(210, 210, "opacity-to", 0.0, "emphasized-accel"),
         },
@@ -1001,13 +995,9 @@ MOTION_PROFILE_LAYERS = {
             "layer-open": layer_phase(0, 80, "opacity-from", 0.0, "standard-decel"),
             "layer-close": layer_phase(0, 60, "opacity-to", 0.0, "emphasized-accel"),
         },
-        "dock_menu": {
+        "menu": {
             "layer-open": layer_phase(0, 70, "opacity-from", 0.0, "standard-decel"),
             "layer-close": layer_phase(0, 60, "opacity-to", 0.0, "emphasized-accel"),
-        },
-        "process_menu": {
-            "layer-open": layer_phase(0, 60, "opacity-from", 0.0, "standard-decel"),
-            "layer-close": layer_phase(0, 50, "opacity-to", 0.0, "emphasized-accel"),
         },
         "toast": {
             "layer-open": layer_phase(0, 80, "opacity-from", 0.0, "standard-decel"),

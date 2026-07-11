@@ -13,15 +13,27 @@ LAYER_TESTS = REPO / "niri/src/tests/layer_shell.rs"
 WINDOW_BUTTON = REPO / "tahoe-shell/components/WindowButton.qml"
 DOCK_MINIMIZED_WINDOW = REPO / "tahoe-shell/components/DockMinimizedWindow.qml"
 
-TOPBAR_POPUP_NAMESPACES = {
+# Status popups keep full-surface top edge-reveal (T04-fix2). Menus moved to
+# pop-slide in T21 and are checked separately.
+TOPBAR_STATUS_POPUP_NAMESPACES = {
     "tahoe-battery-popup",
     "tahoe-wifi-popup",
     "tahoe-fan-popup",
     "tahoe-clipboard-popup",
+}
+
+TOPBAR_MENU_NAMESPACES = {
     "tahoe-menu-popup",
     "tahoe-application-menu",
     "tahoe-tray-menu",
 }
+
+DOCK_MENU_NAMESPACES = {
+    "tahoe-dock-app-menu",
+    "tahoe-dock-window-menu",
+}
+
+PROCESS_MENU_NAMESPACE = "tahoe-process-menu"
 
 
 def extract_blocks(text: str, start_pattern: str) -> list[str]:
@@ -153,19 +165,19 @@ class EdgeRevealSemanticsTests(unittest.TestCase):
         self.assertIn("layer_close_edge_reveal_moves_full_surface_extent", text)
         self.assertIn("should fully retract that surface", text)
 
-    def test_topbar_popups_share_top_edge_reveal_rule(self) -> None:
+    def test_topbar_status_popups_share_top_edge_reveal_rule(self) -> None:
         text = CONFIG.read_text(encoding="utf-8")
         layer_rules = extract_blocks(text, r"(?m)^\s*layer-rule\s*\{")
         popup_animation_rules = [
             rule
             for rule in layer_rules
-            if layer_rule_namespaces(rule) & TOPBAR_POPUP_NAMESPACES
+            if layer_rule_namespaces(rule) & TOPBAR_STATUS_POPUP_NAMESPACES
             and extract_blocks(rule, r"(?m)^\s*animations\s*\{")
         ]
 
         self.assertEqual(len(popup_animation_rules), 1)
         rule = popup_animation_rules[0]
-        self.assertEqual(layer_rule_namespaces(rule), TOPBAR_POPUP_NAMESPACES)
+        self.assertEqual(layer_rule_namespaces(rule), TOPBAR_STATUS_POPUP_NAMESPACES)
 
         animations = extract_one_block(rule, r"(?m)^\s*animations\s*\{")
         layer_open = extract_one_block(animations, r"(?m)^\s*layer-open\s*\{")
@@ -178,13 +190,42 @@ class EdgeRevealSemanticsTests(unittest.TestCase):
                 for forbidden in ("pop-slide", "scale-from", "scale-to", "origin"):
                     self.assertNotIn(forbidden, block)
 
+    def test_menus_use_pop_slide_with_pointer_origin(self) -> None:
+        """T21/T22: all menus share pop-slide + origin pointer + 4px drop."""
+        text = CONFIG.read_text(encoding="utf-8")
+        layer_rules = extract_blocks(text, r"(?m)^\s*layer-rule\s*\{")
+        expected = TOPBAR_MENU_NAMESPACES | DOCK_MENU_NAMESPACES | {PROCESS_MENU_NAMESPACE}
+
+        menu_rules = [
+            rule
+            for rule in layer_rules
+            if layer_rule_namespaces(rule) & expected
+            and extract_blocks(rule, r"(?m)^\s*animations\s*\{")
+        ]
+        self.assertEqual(len(menu_rules), 1)
+        rule = menu_rules[0]
+        self.assertEqual(layer_rule_namespaces(rule), expected)
+
+        animations = extract_one_block(rule, r"(?m)^\s*animations\s*\{")
+        layer_open = extract_one_block(animations, r"(?m)^\s*layer-open\s*\{")
+        layer_close = extract_one_block(animations, r"(?m)^\s*layer-close\s*\{")
+        for phase, block in (("open", layer_open), ("close", layer_close)):
+            with self.subTest(phase=phase):
+                self.assertRegex(block, r'(?m)^\s*style\s+"pop-slide"\s*$')
+                self.assertRegex(block, r'(?m)^\s*edge\s+"top"\s*$')
+                self.assertRegex(block, r"(?m)^\s*distance\s+4\s*$")
+                self.assertRegex(block, r'(?m)^\s*origin\s+"pointer"\s*$')
+
     def test_spring_open_transform_channels_still_inherit_main_animation(self) -> None:
         text = CONFIG.read_text(encoding="utf-8")
         layer_opens = extract_blocks(text, r"(?m)^\s*layer-open\s*\{")
         spring_opens = [block for block in layer_opens if re.search(r"(?m)^\s*spring\b", block)]
 
-        self.assertGreaterEqual(len(spring_opens), 8)
+        # CC / NC / sidebar / spotlight / status popup / menu / toast = 7.
+        self.assertGreaterEqual(len(spring_opens), 7)
         for block in spring_opens:
+            # Main spring must not be overridden by easing transform-duration/curve.
+            # transform-spring (T21) is allowed and still a spring channel.
             self.assertNotRegex(block, r"(?m)^\s*transform-duration-ms\b")
             self.assertNotRegex(block, r"(?m)^\s*transform-curve\b")
 

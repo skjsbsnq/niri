@@ -159,14 +159,30 @@ function spotlightPreviewFade(settingsService) {
 // Wallpaper zoom is content-side on Wallpaper.qml.
 // Hand-feel: icons reveal together (short unified fade/scale), not one-by-one
 // distance stagger — the old per-icon opacity:0 + long stagger looked like
-// "only one icon then the rest". Paging snap uses a longer eased settle.
+// "only one icon then the rest". Paging uses intent thresholds (short drag OR
+// light flick commits a page) — not "drag past 50% / until icons vanish".
 var launchpadWallpaperScale = 1.06;
 var launchpadWallpaperDim = 0.25;
 var launchpadWallpaperMs = 400;
 // Soft unified enter (whole grid), not per-icon cascade.
 var launchpadIconEnterMs = 280;
 var launchpadIconEnterScaleFrom = 0.92;
-var launchpadPageSnapMs = 320;
+// Whole-layer open/close (opacity + soft settle). Explicit progress so close
+// still animates after open flips false.
+var launchpadLayerEnterMs = 280;
+var launchpadLayerExitMs = 200;
+var launchpadLayerScaleFrom = 0.985;
+// Icon launch pop before layer exit.
+var launchpadLaunchPopMs = 180;
+var launchpadLaunchPopScaleBoost = 0.18;
+// Page snap after intent decision.
+var launchpadPageSnapMs = 240;
+// iOS-like paging: short drag OR any intentional flick advances one page.
+// Thresholds are intentionally low — "press and fling" must commit.
+var launchpadPageCommitRatio = 0.08;
+var launchpadPageCommitMinPx = 28;
+// Capture at finger-up (not after coast). Units ≈ px/s in Flickable.
+var launchpadPageFlickVelocity = 80;
 var launchpadStaggerPerPxMs = 0; // disabled cascade (kept for API/tests)
 var launchpadStaggerBudgetMs = 450;
 var launchpadStaggerMaxItems = 40;
@@ -180,6 +196,18 @@ function launchpadWallpaperDuration(settingsService) {
 
 function launchpadIconEnterDuration(settingsService) {
     return reducedMotion(settingsService) ? 0 : launchpadIconEnterMs;
+}
+
+function launchpadLayerEnterDuration(settingsService) {
+    return reducedMotion(settingsService) ? 0 : launchpadLayerEnterMs;
+}
+
+function launchpadLayerExitDuration(settingsService) {
+    return reducedMotion(settingsService) ? 0 : launchpadLayerExitMs;
+}
+
+function launchpadLaunchPopDuration(settingsService) {
+    return reducedMotion(settingsService) ? 0 : launchpadLaunchPopMs;
 }
 
 function launchpadPageSnapDuration(settingsService) {

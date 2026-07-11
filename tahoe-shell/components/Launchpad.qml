@@ -7,11 +7,10 @@ import "Motion.js" as Motion
 import "TahoeGlass.js" as GlassStyle
 import "settings/SettingsTheme.js" as Theme
 
-// T18: full-screen Launchpad — adaptive 7×5 pages, wallpaper zoom (via
-// Wallpaper.qml), distance-based icon stagger (budget ≤450ms), horizontal
-// snap paging + page dots, arrow-key navigation. Category chips removed.
-// Stays on the QML outer animation path (rules §2.11): compositor scale
-// softens themed app icons on large surfaces.
+// T18 + hand-feel fix: full-screen Launchpad — adaptive 7×5 pages, wallpaper
+// zoom (via Wallpaper.qml), unified icon enter, horizontal intent paging
+// (short swipe commits; no 50% drag requirement), page dots, arrow keys.
+// Category chips removed. Stays on the QML outer animation path (§2.11).
 PanelWindow {
     id: root
 
@@ -26,6 +25,22 @@ PanelWindow {
     // Unified grid enter 0→1 (all icons together). Avoid per-icon opacity:0
     // cascade that looked like "one icon, then the rest".
     property real gridEnter: 0
+    // Whole-layer presentation 0→1 (opacity + soft settle). Driven explicitly
+    // so open/close always animate even when open flips instantly.
+    property real layerProgress: 0
+    // Launch pop on the tapped icon before closing.
+    property int launchingIndex: -1
+    property real launchPop: 0
+    // Paging: decide at finger-up using release velocity + drag delta.
+    // Do NOT wait for flick coast to end — by then velocity is ~0 and short
+    // flicks bounce back (the bug: "must drag until icons vanish").
+    property int pageDragStartPage: 0
+    property real pageDragStartX: 0
+    property bool pageSnapPending: false
+    property real pageReleaseVelocity: 0
+    property real pagePeakVelocity: 0
+    property bool pageGestureActive: false
+    property bool closingForLaunch: false
 
     readonly property var filteredApps: root.appsService
         ? root.appsService.filteredLaunchpadApps(root.query, "all")
@@ -77,12 +92,21 @@ PanelWindow {
         if (animated === false || Motion.reducedMotion(settingsService)) {
             pageSnapAnim.stop();
             pageFlick.contentX = target;
+            pageSnapPending = false;
+            return;
+        }
+        // Already on the page: no-op but clear pending so next gesture works.
+        if (Math.abs(pageFlick.contentX - target) < 0.5) {
+            pageSnapAnim.stop();
+            pageFlick.contentX = target;
+            pageSnapPending = false;
             return;
         }
         pageSnapAnim.stop();
         pageSnapAnim.from = pageFlick.contentX;
         pageSnapAnim.to = target;
         pageSnapAnim.duration = Motion.launchpadPageSnapDuration(settingsService);
+        pageSnapPending = true;
         pageSnapAnim.restart();
     }
 
@@ -92,12 +116,32 @@ PanelWindow {
         return filteredApps[index];
     }
 
+    function requestClose() {
+        closingForLaunch = false;
+        closeRequested();
+    }
+
     function launchAt(index) {
         var app = appAt(index);
         if (!app || !appsService)
             return;
+        selectedIndex = index;
+        if (Motion.reducedMotion(settingsService)) {
+            appsService.launchApp(app);
+            closeRequested();
+            return;
+        }
+        // Pop the icon, then fade the layer out while the app starts.
+        launchingIndex = index;
+        launchPop = 0;
+        launchPopAnim.stop();
+        launchPopAnim.from = 0;
+        launchPopAnim.to = 1;
+        launchPopAnim.duration = Motion.launchpadLaunchPopDuration(settingsService);
+        closingForLaunch = true;
         appsService.launchApp(app);
-        closeRequested();
+        launchPopAnim.restart();
+        launchCloseTimer.restart();
     }
 
     function launchSelected() {
@@ -168,6 +212,34 @@ PanelWindow {
         gridEnterAnim.restart();
     }
 
+    function playLayerEnter() {
+        layerProgressAnim.stop();
+        if (Motion.reducedMotion(settingsService)) {
+            layerProgress = 1;
+            return;
+        }
+        // Continue from current progress so mid-exit reopen does not flash.
+        layerProgressAnim.from = layerProgress;
+        layerProgressAnim.to = 1;
+        layerProgressAnim.duration = Motion.launchpadLayerEnterDuration(settingsService);
+        layerProgressAnim.easing.type = Motion.emphasizedDecel;
+        layerProgressAnim.restart();
+    }
+
+    function playLayerExit() {
+        layerProgressAnim.stop();
+        if (Motion.reducedMotion(settingsService)) {
+            layerProgress = 0;
+            return;
+        }
+        // Keep grid visible during fade-out (don't zero gridEnter instantly).
+        layerProgressAnim.from = layerProgress;
+        layerProgressAnim.to = 0;
+        layerProgressAnim.duration = Motion.launchpadLayerExitDuration(settingsService);
+        layerProgressAnim.easing.type = Motion.emphasizedAccel;
+        layerProgressAnim.restart();
+    }
+
     NumberAnimation {
         id: gridEnterAnim
         target: root
@@ -175,7 +247,30 @@ PanelWindow {
         easing.type: Motion.emphasizedDecel
     }
 
-    visible: compositorLayerAnimations ? open : (open || launcher.opacity > 0.01)
+    NumberAnimation {
+        id: layerProgressAnim
+        target: root
+        property: "layerProgress"
+        easing.type: Motion.emphasizedDecel
+    }
+
+    NumberAnimation {
+        id: launchPopAnim
+        target: root
+        property: "launchPop"
+        easing.type: Motion.emphasizedDecel
+    }
+
+    Timer {
+        id: launchCloseTimer
+        interval: Motion.launchpadLaunchPopDuration(root.settingsService) + 40
+        repeat: false
+        onTriggered: {
+            root.closeRequested();
+        }
+    }
+
+    visible: compositorLayerAnimations ? open : (open || layerProgress > 0.01)
     exclusionMode: ExclusionMode.Ignore
     exclusiveZone: 0
     focusable: open
@@ -197,18 +292,59 @@ PanelWindow {
             query = "";
             selectedIndex = 0;
             currentPage = 0;
+            launchingIndex = -1;
+            launchPop = 0;
+            closingForLaunch = false;
+            launchCloseTimer.stop();
+            launchPopAnim.stop();
             gridEnter = 0;
+            // Start layer fade immediately so open never looks like a hard cut.
+            playLayerEnter();
             Qt.callLater(function() {
                 if (!root.open)
                     return;
                 pageSnapAnim.stop();
                 pageFlick.contentX = 0;
+                pageSnapPending = false;
+                pageGestureActive = false;
                 searchInput.forceActiveFocus();
                 playGridEnter();
             });
         } else {
             gridEnterAnim.stop();
+            launchCloseTimer.stop();
+            // If we closed after an icon pop, freeze the pop at its peak
+            // during the layer fade (do not snap scale back to 1).
+            if (!closingForLaunch) {
+                launchPopAnim.stop();
+                launchingIndex = -1;
+                launchPop = 0;
+            } else {
+                launchPopAnim.stop();
+                // Hold final pop scale while the layer fades out.
+                launchPop = 1;
+            }
+            // Exit: fade whole layer; keep icons until opacity is gone.
+            playLayerExit();
+            // After exit completes, clear gridEnter / launch state for next open.
+            exitCleanupTimer.restart();
+        }
+    }
+
+    Timer {
+        id: exitCleanupTimer
+        interval: Motion.launchpadLayerExitDuration(root.settingsService) + 40
+        repeat: false
+        onTriggered: {
+            if (root.open)
+                return;
             gridEnter = 0;
+            launchingIndex = -1;
+            launchPop = 0;
+            closingForLaunch = false;
+            pageSnapAnim.stop();
+            pageSnapPending = false;
+            pageGestureActive = false;
         }
     }
 
@@ -218,6 +354,7 @@ PanelWindow {
         if (pageFlick.width > 0) {
             pageSnapAnim.stop();
             pageFlick.contentX = 0;
+            pageSnapPending = false;
         }
         // Re-play a short enter when filtering reshuffles the grid.
         if (root.open)
@@ -233,33 +370,24 @@ PanelWindow {
     // Full-screen glass region for blur backdrop (static geometry = surface).
     TahoeGlass.regions: [backdropSurface.region]
 
+    // Root dismiss: any click that is not swallowed by search / icons / dots.
     MouseArea {
         anchors.fill: parent
         enabled: root.open
-        onClicked: root.closeRequested()
+        z: 0
+        onClicked: root.requestClose()
     }
 
     Item {
         id: launcher
         anchors.fill: parent
-        opacity: root.compositorLayerAnimations ? 1 : (root.open ? 1 : 0)
-        // Soft whole-layer settle (opacity only — no scale, keeps icons sharp §2.11).
-
-        Behavior on opacity {
-            NumberAnimation {
-                duration: root.open
-                    ? Motion.panelEnter(root.settingsService)
-                    : Motion.panelExit(root.settingsService)
-                easing.type: Motion.emphasizedDecel
-            }
-        }
-
-        // Click empty chrome (not icons) closes — Flickable/search sit above this.
-        MouseArea {
-            anchors.fill: parent
-            z: 0
-            onClicked: root.closeRequested()
-        }
+        opacity: root.compositorLayerAnimations ? 1 : root.layerProgress
+        // Soft settle on the whole layer (opacity only — no scale, §2.11 icons).
+        scale: root.compositorLayerAnimations
+            ? 1
+            : (Motion.launchpadLayerScaleFrom
+                + (1.0 - Motion.launchpadLayerScaleFrom) * root.layerProgress)
+        transformOrigin: Item.Center
 
         // Full-screen backdrop material (blur region = entire surface).
         GlassPanel {
@@ -276,7 +404,7 @@ PanelWindow {
             regionHeight: Math.round(root.screenHeight)
             interaction: 0
             materialAlpha: root.compositorLayerAnimations ? 1 : launcher.opacity
-            glassEnabled: root.open || launcher.opacity > 0.01
+            glassEnabled: root.open || root.layerProgress > 0.01
         }
 
         // Extra dim so icons read over wallpaper even without blur.
@@ -346,7 +474,7 @@ PanelWindow {
                 focus: root.open
                 verticalAlignment: TextInput.AlignVCenter
                 onTextChanged: root.query = text
-                Keys.onEscapePressed: root.closeRequested()
+                Keys.onEscapePressed: root.requestClose()
                 Keys.onReturnPressed: root.launchSelected()
                 Keys.onEnterPressed: root.launchSelected()
                 Keys.onLeftPressed: root.moveSelection(-1, 0)
@@ -381,27 +509,83 @@ PanelWindow {
             interactive: root.pageCount > 1
             flickableDirection: Flickable.HorizontalFlick
             boundsBehavior: Flickable.DragAndOvershootBounds
-            // Snappier horizontal paging feel.
-            flickDeceleration: 3500
-            maximumFlickVelocity: 4000
+            // Fast stop: we snap ourselves on release; long coast fights the snap.
+            flickDeceleration: 6000
+            maximumFlickVelocity: 5000
             pressDelay: 0
             rebound: Transition {
                 NumberAnimation {
                     properties: "x"
-                    duration: 280
+                    duration: 200
                     easing.type: Motion.emphasizedDecel
                 }
             }
 
-            // Live page index while dragging (dots follow).
-            onContentXChanged: {
-                if (moving || dragging || flicking) {
-                    var pageW = Math.max(1, width);
-                    root.currentPage = root.clampPage(Math.round(contentX / pageW));
-                }
+            onMovementStarted: {
+                pageSnapAnim.stop();
+                root.pageSnapPending = false;
+                root.pageGestureActive = true;
+                root.pageReleaseVelocity = 0;
+                root.pagePeakVelocity = 0;
+                var pageW = Math.max(1, width);
+                root.pageDragStartPage = root.clampPage(Math.round(contentX / pageW));
+                root.pageDragStartX = contentX;
+                root.currentPage = root.pageDragStartPage;
             }
-            onMovementEnded: root.snapToNearestPage()
-            onFlickEnded: root.snapToNearestPage()
+
+            // Track peak velocity while the gesture is live (before coast dies).
+            onHorizontalVelocityChanged: {
+                if (!root.pageGestureActive && !dragging && !moving && !flicking)
+                    return;
+                var v = horizontalVelocity;
+                root.pageReleaseVelocity = v;
+                if (Math.abs(v) > Math.abs(root.pagePeakVelocity))
+                    root.pagePeakVelocity = v;
+            }
+
+            // Finger up: velocity is still meaningful here — commit immediately.
+            onDraggingChanged: {
+                if (dragging) {
+                    pageSnapAnim.stop();
+                    root.pageSnapPending = false;
+                    return;
+                }
+                // Released.
+                if (!root.pageGestureActive)
+                    return;
+                root.pageReleaseVelocity = horizontalVelocity;
+                if (Math.abs(horizontalVelocity) > Math.abs(root.pagePeakVelocity))
+                    root.pagePeakVelocity = horizontalVelocity;
+                // Cancel residual flick coast; we own the settle animation.
+                cancelFlick();
+                root.finishPageGesture();
+            }
+
+            // Preview dots while dragging.
+            onContentXChanged: {
+                if (!dragging && !root.pageGestureActive)
+                    return;
+                if (!(moving || dragging || flicking))
+                    return;
+                var pageW = Math.max(1, width);
+                var delta = contentX - root.pageDragStartX;
+                var commitPx = Math.max(
+                    Motion.launchpadPageCommitMinPx,
+                    pageW * Motion.launchpadPageCommitRatio
+                );
+                var preview = root.pageDragStartPage;
+                if (delta > commitPx * 0.45)
+                    preview = root.pageDragStartPage + 1;
+                else if (delta < -commitPx * 0.45)
+                    preview = root.pageDragStartPage - 1;
+                root.currentPage = root.clampPage(preview);
+            }
+
+            // Fallback if drag ended without draggingChanged edge (rare).
+            onMovementEnded: {
+                if (root.pageGestureActive && !root.pageSnapPending)
+                    root.finishPageGesture();
+            }
 
             NumberAnimation {
                 id: pageSnapAnim
@@ -410,6 +594,8 @@ PanelWindow {
                 duration: Motion.launchpadPageSnapDuration(root.settingsService)
                 easing.type: Motion.emphasizedDecel
                 onStopped: {
+                    root.pageSnapPending = false;
+                    root.pageGestureActive = false;
                     if (pageFlick.width > 0)
                         root.currentPage = root.clampPage(Math.round(pageFlick.contentX / pageFlick.width));
                 }
@@ -440,6 +626,36 @@ PanelWindow {
                         width: pageFlick.width
                         height: pageFlick.height
 
+                        // Empty page chrome closes Launchpad (icons sit above).
+                        // Must yield horizontal drags so paging still works on gaps.
+                        MouseArea {
+                            anchors.fill: parent
+                            z: 0
+                            preventStealing: false
+                            property real pressX: 0
+                            property real pressY: 0
+                            property bool moved: false
+                            onPressed: function(mouse) {
+                                pressX = mouse.x;
+                                pressY = mouse.y;
+                                moved = false;
+                            }
+                            onPositionChanged: function(mouse) {
+                                if (!pressed)
+                                    return;
+                                var dx = mouse.x - pressX;
+                                var dy = mouse.y - pressY;
+                                if (Math.abs(dx) > 8 || Math.abs(dy) > 8)
+                                    moved = true;
+                                if (Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy) * 1.2)
+                                    mouse.accepted = false;
+                            }
+                            onClicked: {
+                                if (!moved)
+                                    root.requestClose();
+                            }
+                        }
+
                         Grid {
                             id: pageGrid
                             anchors.horizontalCenter: parent.horizontalCenter
@@ -449,6 +665,7 @@ PanelWindow {
                             columns: root.gridCols
                             rowSpacing: 0
                             columnSpacing: 0
+                            z: 1
 
                             Repeater {
                                 model: root.cellsPerPage
@@ -461,22 +678,41 @@ PanelWindow {
                                     readonly property var app: root.appAt(cell.globalIndex)
                                     readonly property bool hasApp: !!cell.app
                                     readonly property bool selected: root.selectedIndex === cell.globalIndex && cell.hasApp
+                                    readonly property bool isLaunching: root.launchingIndex === cell.globalIndex
 
                                     width: root.cellWidth
                                     height: root.cellHeight
                                     // Always visible when app exists — enter is on pageFlick.
                                     visible: cell.hasApp
-                                    opacity: 1
+                                    opacity: cell.isLaunching
+                                        ? 1.0
+                                        : (root.launchingIndex >= 0 ? (1.0 - 0.55 * root.launchPop) : 1.0)
+                                    z: cell.isLaunching ? 10 : 0
 
-                                    // Press + selection chrome
+                                    // Press + selection chrome + launch pop
                                     Item {
                                         anchors.fill: parent
-                                        scale: Motion.pressScaleFor(root.settingsService, appMouse.pressed)
+                                        // Press scale only (Behavior). Launch pop uses a separate
+                                        // transform so it is not fought by press Behavior.
+                                        scale: Motion.pressScaleFor(
+                                            root.settingsService,
+                                            appMouse.pressed && !cell.isLaunching
+                                        )
                                         Behavior on scale {
                                             NumberAnimation {
                                                 duration: Motion.pressDurationFor(root.settingsService)
                                                 easing.type: Motion.pressEasing
                                             }
+                                        }
+                                        transform: Scale {
+                                            origin.x: cell.width / 2
+                                            origin.y: cell.height / 2
+                                            xScale: cell.isLaunching
+                                                ? (1.0 + Motion.launchpadLaunchPopScaleBoost * root.launchPop)
+                                                : 1.0
+                                            yScale: cell.isLaunching
+                                                ? (1.0 + Motion.launchpadLaunchPopScaleBoost * root.launchPop)
+                                                : 1.0
                                         }
 
                                         Rectangle {
@@ -533,6 +769,7 @@ PanelWindow {
                                             elide: Text.ElideRight
                                             style: Text.Raised
                                             styleColor: "#66000000"
+                                            opacity: cell.isLaunching ? (1.0 - root.launchPop) : 1.0
                                         }
 
                                         MouseArea {
@@ -540,9 +777,35 @@ PanelWindow {
                                             anchors.fill: parent
                                             hoverEnabled: true
                                             cursorShape: Qt.PointingHandCursor
-                                            // Let horizontal flicks pass to pageFlick.
+                                            // Allow pageFlick to steal horizontal drags.
                                             preventStealing: false
+                                            property real pressX: 0
+                                            property real pressY: 0
+                                            property bool moved: false
+
+                                            onPressed: function(mouse) {
+                                                pressX = mouse.x;
+                                                pressY = mouse.y;
+                                                moved = false;
+                                            }
+                                            onPositionChanged: function(mouse) {
+                                                if (!pressed)
+                                                    return;
+                                                var dx = mouse.x - pressX;
+                                                var dy = mouse.y - pressY;
+                                                if (Math.abs(dx) > 8 || Math.abs(dy) > 8)
+                                                    moved = true;
+                                                // Yield horizontal drags to the page Flickable.
+                                                if (Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy) * 1.2)
+                                                    mouse.accepted = false;
+                                            }
+                                            onReleased: function(mouse) {
+                                                if (moved && Math.abs(mouse.x - pressX) > Math.abs(mouse.y - pressY))
+                                                    mouse.accepted = false;
+                                            }
                                             onClicked: {
+                                                if (moved)
+                                                    return;
                                                 root.selectedIndex = cell.globalIndex;
                                                 root.launchAt(cell.globalIndex);
                                             }
@@ -570,6 +833,12 @@ PanelWindow {
             font.weight: Font.DemiBold
             visible: root.query.trim().length > 0 && root.appCount === 0
             z: 3
+
+            MouseArea {
+                anchors.fill: parent
+                anchors.margins: -24
+                onClicked: root.requestClose()
+            }
         }
 
         // Page dots
@@ -605,27 +874,78 @@ PanelWindow {
                 }
             }
         }
+
+        // Top/bottom chrome strips (outside Flickable) also dismiss on click.
+        MouseArea {
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: parent.top
+            height: root.topChrome
+            z: 1
+            // Search box is above (z:2) and swallows its own clicks.
+            onClicked: root.requestClose()
+        }
+        MouseArea {
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            height: root.bottomChrome
+            z: 1
+            // Page dots are above (z:3).
+            onClicked: root.requestClose()
+        }
     }
 
-    function snapToNearestPage() {
-        if (pageFlick.width <= 0)
+    // Commit next/prev using release velocity (peak) OR short drag delta.
+    // Qt: positive horizontalVelocity → content moves right → contentX decreases → previous page.
+    function finishPageGesture() {
+        if (pageFlick.width <= 0 || pageCount <= 1) {
+            pageGestureActive = false;
             return;
-        var pageW = pageFlick.width;
-        var raw = pageFlick.contentX / pageW;
-        // Prefer velocity direction on light flicks past mid-threshold.
-        var page = clampPage(Math.round(raw));
-        var frac = raw - Math.floor(raw);
-        if (pageFlick.horizontalVelocity < -400 && frac > 0.15)
-            page = clampPage(Math.floor(raw) + 1);
-        else if (pageFlick.horizontalVelocity > 400 && frac < 0.85)
-            page = clampPage(Math.floor(raw));
+        }
+        if (pageSnapPending)
+            return;
+
+        pageSnapPending = true;
+        pageGestureActive = false;
+
+        var pageW = Math.max(1, pageFlick.width);
+        var delta = pageFlick.contentX - pageDragStartX;
+        // Prefer peak velocity from the gesture; fall back to last sample.
+        var vel = pagePeakVelocity;
+        if (Math.abs(pageReleaseVelocity) > Math.abs(vel))
+            vel = pageReleaseVelocity;
+
+        var commitPx = Math.max(
+            Motion.launchpadPageCommitMinPx,
+            pageW * Motion.launchpadPageCommitRatio
+        );
+        var flickV = Motion.launchpadPageFlickVelocity;
+
+        var page = pageDragStartPage;
+        // Velocity wins over small opposing delta (true fling).
+        if (Math.abs(vel) >= flickV) {
+            page = vel < 0 ? pageDragStartPage + 1 : pageDragStartPage - 1;
+        } else if (delta > commitPx) {
+            page = pageDragStartPage + 1;
+        } else if (delta < -commitPx) {
+            page = pageDragStartPage - 1;
+        }
+        // else stay on start page (true cancel / tiny jiggle)
+
+        page = clampPage(page);
         goToPage(page, true);
-        // Keep selection on the visible page.
+
         var base = page * cellsPerPage;
         if (selectedIndex < base || selectedIndex >= base + cellsPerPage) {
             var idx = Math.min(appCount - 1, base);
             if (idx >= 0)
                 selectedIndex = idx;
         }
+    }
+
+    // Kept for tests / page-dot callers that still say "snap".
+    function snapToNearestPage() {
+        finishPageGesture();
     }
 }

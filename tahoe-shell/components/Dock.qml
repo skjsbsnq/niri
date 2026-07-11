@@ -72,7 +72,9 @@ PanelWindow {
     readonly property int dockSurfaceHeight: 84
     readonly property int dockPinnedRowHeight: 70
     readonly property int dockWindowRowHeight: 60
-    readonly property real dockLiftFactor: 14
+    // T08-fix3: scale from icon bottom (macOS). Mag-based lift is no longer
+    // needed — center-origin + lift was what left icons floating mid-air.
+    readonly property real dockLiftFactor: 0
     readonly property int dockSurfaceMaxWidth: Math.max(1, root.width - dockOuterMargin)
     readonly property int dockContentMaxWidth: Math.max(1, dockSurfaceMaxWidth - dockSurfacePadding)
     readonly property int pinnedAppCount: root.appsService && root.appsService.pinnedApps ? root.appsService.pinnedApps.length : 0
@@ -780,7 +782,7 @@ PanelWindow {
                                 // T08 launching state machine: true while waiting for first window
                                 // after a cold launch. Stops on running or 10s timeout.
                                 property bool launching: false
-                                readonly property real lift: (magnification - 1.0) * root.dockLiftFactor + (hovered ? 2 : 0)
+                                readonly property real lift: (magnification - 1.0) * root.dockLiftFactor
                                 // Combined bounce: click settle + launch loop share one offset.
                                 property real bounceOffset: 0
                                 height: root.dockPinnedRowHeight
@@ -852,6 +854,8 @@ PanelWindow {
                                 Image {
                                     id: appIcon
                                     anchors.horizontalCenter: parent.horizontalCenter
+                                    // Bottom-origin scale: feet stay on the dock baseline.
+                                    // Only bounceOffset lifts the whole icon (click / launch).
                                     y: 10 - pinnedButton.lift - pinnedButton.bounceOffset
                                     width: root.dockIconSize
                                     height: root.dockIconSize
@@ -864,7 +868,8 @@ PanelWindow {
                                     sourceSize.width: root.dockIconSourceSize
                                     sourceSize.height: root.dockIconSourceSize
                                     asynchronous: true
-                                    transformOrigin: Item.Center
+                                    // macOS dock grows upward from the icon feet (T08-fix3).
+                                    transformOrigin: Item.Bottom
 
                                     Behavior on opacity {
                                         NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing }

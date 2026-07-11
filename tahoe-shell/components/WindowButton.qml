@@ -40,7 +40,8 @@ Item {
     readonly property bool minimized: windowModel ? !!windowModel.isMinimized : !!(toplevel && toplevel.minimized)
     readonly property string label: appsService ? appsService.toplevelLabel(windowModel || toplevel) : String((windowModel || toplevel) ? (windowModel || toplevel).title || (windowModel || toplevel).appId || "窗口" : "窗口")
     readonly property bool showHoverLabel: hoverLabelEnabled && !showTitle && hovered && label.length > 0
-    readonly property real lift: (magnification - 1.0) * 14
+    // T08-fix3: bottom-origin scale — no mag-based lift (was floating mid-air).
+    readonly property real lift: 0
 
     signal activateRequested(var toplevel)
     signal contextMenuRequested(var window)
@@ -164,7 +165,9 @@ Item {
     Image {
         id: icon
         x: root.showTitle ? 9 : Math.round((parent.width - width) / 2)
-        y: Math.round((parent.height - height) / 2 - root.lift - root.bounceOffset)
+        // Bottom-align to row baseline; scale grows upward (transformOrigin Bottom).
+        // bounceOffset still lifts the whole icon on click.
+        y: Math.round(parent.height - height - 6 - root.bounceOffset)
         width: root.iconSize
         height: root.iconSize
         scale: root.magnification * root.pressScale
@@ -175,8 +178,7 @@ Item {
         sourceSize.width: 96
         sourceSize.height: 96
         opacity: (root.minimized ? 0.58 : 1.0) * (windowMouse.pressed ? 0.75 : 1.0)
-        transformOrigin: Item.Center
-
+        transformOrigin: Item.Bottom
 
         Behavior on opacity {
             NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing }

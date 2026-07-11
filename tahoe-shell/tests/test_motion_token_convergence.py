@@ -179,6 +179,11 @@ class MotionTokenConvergenceTests(unittest.TestCase):
         self.assertIn("function windowWaveContentWidth()", dock)
         self.assertIn("function syncWindowViewportToCursor()", dock)
         self.assertIn("windowDisplayedWidth", dock)
+        # T08-fix3: scale from icon feet so mag does not float icons mid-air.
+        self.assertIn("transformOrigin: Item.Bottom", dock)
+        self.assertIn("transformOrigin: Item.Bottom", window_button)
+        self.assertNotIn("transformOrigin: Item.Center", dock)
+        self.assertNotIn("transformOrigin: Item.Center", window_button)
         # No dual Behavior on the same property (T00 interceptor 待办 closed).
         self.assertEqual(dock.count("Behavior on magnification"), 0)
         self.assertEqual(dock.count("Behavior on bounceOffset"), 0)

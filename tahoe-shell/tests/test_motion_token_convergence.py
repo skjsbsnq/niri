@@ -88,8 +88,9 @@ class MotionTokenConvergenceTests(unittest.TestCase):
     def test_motion_exports_dock_magnification_tokens(self) -> None:
         text = MOTION_JS.read_text(encoding="utf-8")
 
-        self.assertIn("var dockMagPeak = 1.55;", text)
-        self.assertIn("var dockMagRangeIcons = 2.5;", text)
+        self.assertIn("var dockMagPeak = 1.65;", text)
+        self.assertIn("var dockMagFollowMs = 90;", text)
+        self.assertIn("var dockMagRangeIcons = 2.75;", text)
         self.assertIn("var dockMagSpring = {", text)
         self.assertIn("function dockCosineScale(distancePx, iconSizePx)", text)
         # Cosine-bell formula must stay the single outlet.
@@ -99,8 +100,8 @@ class MotionTokenConvergenceTests(unittest.TestCase):
         self.assertIsNotNone(block)
         assert block
         body = block.group(1)
-        self.assertIn("spring: 3.2", body)
-        self.assertIn("damping: 0.42", body)
+        self.assertIn("spring: 3.6", body)
+        self.assertIn("damping: 0.48", body)
         self.assertIn("epsilon: 0.001", body)
 
     def test_motion_exports_dock_launch_and_autohide_tokens(self) -> None:
@@ -121,30 +122,38 @@ class MotionTokenConvergenceTests(unittest.TestCase):
         # Cosine-bell via Motion token; no legacy linear triangle.
         self.assertIn("Motion.dockCosineScale", dock)
         self.assertIn("function pinnedScaleAt(index)", dock)
-        self.assertIn("function pinnedItemXAt(index)", dock)
-        self.assertIn("function pinnedItemWidthAt(index)", dock)
+        self.assertIn("function pinnedRestX(index)", dock)
+        self.assertIn("function pinnedPushXAt(index)", dock)
         self.assertIn("function windowScaleAt(index)", dock)
         self.assertNotIn("1 - distance / 135", dock)
         self.assertNotIn("influence * 0.34", dock)
 
-        # Analytical push: explicit x/width targets on pinned delegates, not Row auto-layout.
-        self.assertIn("readonly property real xTarget: root.pinnedItemXAt(pinnedButton.index)", dock)
-        self.assertIn("readonly property real widthTarget: root.pinnedItemWidthAt(pinnedButton.index)", dock)
-        self.assertIn("readonly property real magnificationTarget: root.pinnedScaleAt(pinnedButton.index)", dock)
+        # T08-fix8/9: rest slots + visual pushX (direct bind, full cosine scales).
+        self.assertIn("root.pinnedScaleAt(pinnedButton.index)", dock)
+        self.assertIn("root.pinnedPushXAt(pinnedButton.index)", dock)
+        self.assertIn("var _w = root.pinnedWave;", dock)
+        self.assertIn("function computeSectionWave(", dock)
+        # Must NOT zero scales to fit host (that killed the wave).
+        self.assertNotIn("scales[i] = 1.0;", dock)
+        self.assertIn("Cosine scales stay FULL strength", dock)
+        self.assertIn("x: root.pinnedRestX(pinnedButton.index)", dock)
+        self.assertIn("width: root.dockPinnedButtonWidth", dock)
         self.assertIn("id: pinnedRow", dock)
-        # Pinned container is Item (explicit x), not Row.
         self.assertIn("Item {\n                        id: pinnedRow", dock)
 
         # Icon base 48 (T08-fix from T07's 56) + exclusiveZone/surface recompute.
         self.assertIn("readonly property int dockIconSize: 48", dock)
         self.assertIn("exclusiveZone: 100", dock)
+        self.assertIn("glassClip: true", dock)
+        self.assertNotIn("glassClip: false", dock)
+        self.assertIn("dockMagHeadroom", dock)
+        self.assertIn("Motion.dockMagFollowMs", dock)
         self.assertIn("height: root.dockSurfaceHeight", dock)
         self.assertIn("dockSlideDistance", dock)
         self.assertIn("function pinnedWaveLeftExtra()", dock)
         self.assertIn("function dockWaveSurfaceBias()", dock)
-        self.assertIn("function syncPinnedViewportToCursor()", dock)
-        # T08-fix4: surface stays rest-width / centered (no live wave expansion).
-        self.assertIn("anchors.horizontalCenter: parent.horizontalCenter", dock)
+        # Glass is rest-centered; wave extras are always 0 (no bar growth).
+        self.assertIn("readonly property real dockWaveLeftExtraPx: 0", dock)
         self.assertNotIn("return (rightExtra - leftExtra) / 2;", dock)
 
         # Unified hover label: one capsule, 13px, no y-slide Behavior.
@@ -164,26 +173,39 @@ class MotionTokenConvergenceTests(unittest.TestCase):
         assert hover_block
         self.assertNotIn("Behavior on y", hover_block.group(0))
 
-        # useSpring dual branch still present for mag + bounce via explicit
-        # SpringAnimation / NumberAnimation (dual Behavior{} is unsupported).
+        # Click bounce still uses dual-branch spring/ease; wave mag/push do NOT
+        # (T08-fix8: direct bind — spring restart every move caused jitter).
         self.assertIn("root.useSpring", dock)
-        self.assertIn("Motion.dockMagSpring", dock)
-        self.assertIn("id: magSpring", dock)
-        self.assertIn("id: magEase", dock)
         self.assertIn("id: bounceSpring", dock)
-        self.assertIn("Motion.dockMagSpring", window_button)
+        self.assertNotIn("id: magSpring", dock)
+        self.assertNotIn("id: pushSpring", dock)
         self.assertIn("magnificationTarget", window_button)
         self.assertIn("slotWidthTarget", window_button)
         self.assertIn("slotXTarget", window_button)
-        self.assertIn("width: showTitle ? 132 : 60", window_button)
-        # Window half analytical push helpers (T08-fix2).
-        self.assertIn("function windowItemWidthAt(index)", dock)
-        self.assertIn("function windowItemXAt(index)", dock)
-        self.assertIn("function windowWaveContentWidth()", dock)
-        self.assertIn("function syncWindowViewportToCursor()", dock)
-        # Outer section widths are rest-sized (T08-fix4); wave only inside Flickable.
+        self.assertIn("width: slotWidthTarget", window_button)
+        self.assertIn("x: slotXTarget", window_button)
+        # T08-fix8: fixed glass + fit-in-section visual wave (rest slots + pushX).
+        self.assertIn("function computeSectionWave(", dock)
+        self.assertIn("function pinnedPushXAt(index)", dock)
+        self.assertIn("function windowPushXAt(index)", dock)
+        self.assertIn("function pinnedClampRight()", dock)
+        self.assertIn("readonly property var pinnedWave:", dock)
+        self.assertIn("readonly property var windowWave:", dock)
+        self.assertIn("id: pinnedSectionHost", dock)
+        self.assertIn("id: windowSectionHost", dock)
+        self.assertIn("pushXTarget", dock)
+        self.assertIn("pushXTarget", window_button)
+        self.assertIn("property real pushX: 0", window_button)
+        self.assertIn("Motion.dockMagFollowMs", window_button)
+        # Glass never grows with wave extras.
+        self.assertIn("readonly property real dockWaveLeftExtraPx: 0", dock)
+        self.assertIn("readonly property real dockWaveRightExtraPx: 0", dock)
+        self.assertIn("anchors.horizontalCenter: parent.horizontalCenter", dock)
+        self.assertNotIn("dockRestSurfaceX - root.dockWaveLeftExtraPx", dock)
+        # Flickable contentWidth is rest-only; sections hard-clip.
+        self.assertIn("contentWidth: root.pinnedContentWidth", dock)
+        self.assertIn("contentWidth: root.activeWindowContentWidth", dock)
         self.assertIn("readonly property int windowViewportWidth: hasNonMinimizedWindows", dock)
-        self.assertNotIn("windowDisplayedWidth", dock)
         # T08-fix3: scale from icon feet so mag does not float icons mid-air.
         self.assertIn("transformOrigin: Item.Bottom", dock)
         self.assertIn("transformOrigin: Item.Bottom", window_button)
@@ -193,9 +215,13 @@ class MotionTokenConvergenceTests(unittest.TestCase):
         self.assertIn("if (!dockRevealDebounceTimer.running)", dock)
         self.assertNotIn("dockRevealDebounceTimer.restart()", dock)
         # No dual Behavior on the same property (T00 interceptor 待办 closed).
-        self.assertEqual(dock.count("Behavior on magnification"), 0)
+        # Wave mag/push use a single short Behavior (T08-fix9 continuous follow).
+        # Dual Behavior on the same property is still forbidden.
+        self.assertEqual(dock.count("Behavior on magnification"), 1)
+        self.assertEqual(dock.count("Behavior on pushX"), 1)
         self.assertEqual(dock.count("Behavior on bounceOffset"), 0)
-        self.assertEqual(window_button.count("Behavior on magnification"), 0)
+        self.assertEqual(window_button.count("Behavior on magnification"), 1)
+        self.assertEqual(window_button.count("Behavior on pushX"), 1)
         self.assertEqual(window_button.count("Behavior on bounceOffset"), 0)
 
     def test_dock_launch_bounce_and_autohide_spring(self) -> None:
@@ -238,10 +264,20 @@ class MotionTokenConvergenceTests(unittest.TestCase):
         self.assertIn("id: runningDot", dock)
         self.assertNotIn("parent.width + 4", dock)
         self.assertNotIn("parent.width + 4", window_button)
-        # Surface HoverHandler owns wave + hide (child exits must not schedule hide).
+        # Surface HoverHandler owns hide (child exits must not schedule hide).
+        # Wave cursor is REST-section local (T08-fix8).
         self.assertIn("id: dockSurfaceHover", dock)
         self.assertIn("HoverHandler", dock)
         self.assertIn("dockSurfaceHover.hovered", dock)
+        self.assertIn("id: dockSurfaceMouse", dock)
+        self.assertIn("updatePinnedHoverFromIcon", dock)
+        self.assertIn("updateWindowHoverFromButton", dock)
+        self.assertIn("mapToItem(dockRow", dock)
+        self.assertNotIn("mapToItem(root,", dock)
+        self.assertIn("// Only clear the label. Do NOT schedule hide", dock)
+        # Window half reports rest-slot local x (no mapToItem into PanelWindow).
+        self.assertIn("dockPointerMoved(mouse.x, mouse.buttons)", window_button)
+        self.assertNotIn("mapToItem(root.dockWindow", window_button)
 
     def test_phase_b_press_feedback_uses_motion_single_outlet(self) -> None:
         # T06 moved menu press feedback into the shared MenuRow.qml outlet.

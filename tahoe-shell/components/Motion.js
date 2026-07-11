@@ -35,21 +35,26 @@ var pressEasing = QtQuick.Easing.OutQuad;
 var menuFlashInterval = 70;
 var menuFlashCount = 2;
 
-// Dock magnification wave (T07). Cosine-bell attenuation:
+// Dock magnification wave (T07 / T08-fix9). Cosine-bell attenuation:
 //   scale(d) = 1 + (peak − 1) · cos²(πd / 2R)   for d < R, else 1
 // R is measured in icon widths (dockMagRangeIcons × iconSize). Analytical
 // push positions use the same curve; never drive glass region geometry with it.
-// T08-fix: peak 1.7→1.55 and icon base 56→48 after hand-test (icons felt oversized;
-// left-edge clip under push). Keep range 2.5 icon-widths.
-var dockMagPeak = 1.55;
-var dockMagRangeIcons = 2.5;
-// Critically-damped settle for magnification / push-x (QML SpringAnimation).
-// Distinct from springBouncy (click bounce) so the wave does not overshoot.
+//
+// Hand-feel targets (macOS-like):
+//  - peak ≈1.65 so the hovered icon clearly "pops" above the shelf
+//  - range ≈2.75 icon-widths for a soft multi-icon wave (not a single spike)
+// Glass stays rest-sized; icons paint above the shelf (glassClip false in Dock).
+var dockMagPeak = 1.65;
+var dockMagRangeIcons = 2.75;
+// Short continuous settle for mag/push (Behavior). Keep critically damped —
+// no overshoot. Not used as per-move restart() (that caused jitter).
 var dockMagSpring = {
-    spring: 3.2,
-    damping: 0.42,
+    spring: 3.6,
+    damping: 0.48,
     epsilon: 0.001
 };
+// Wave follow duration when useSpring is false (NumberAnimation Behavior).
+var dockMagFollowMs = 90;
 
 // Dock launch bounce loop + autohide (T08). Parabolic cycle while an app is
 // launching: height ≈ factor×icon, period ms, InQuad up / OutQuad down.

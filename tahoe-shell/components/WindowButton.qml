@@ -16,15 +16,16 @@ Item {
     // See Dock.qml useSpring. Spring on icon geometry corrupts the Image
     // texture on VMware/software GPUs. Dock forwards its own useSpring here.
     property bool useSpring: false
-    // Magnification target is fed by Dock (cosine-bell wave, T07). The actual
-    // magnification is animated toward the target via explicit dual-branch
-    // Spring/Number animations (useSpring gate) — dual Behavior{} is unsupported.
+    // T08-fix9: mag/push track analytical targets with a short continuous
+    // Behavior (not per-move Spring.restart — that jittered the bar).
     property real magnificationTarget: 1.0
     property real magnification: 1.0
-    // T08-fix2: analytical slot x/width from Dock (icon-only push). Dock always
-    // feeds these; title mode uses fixed rest slots (no scale/push reflow).
+    // Slot x/width are REST geometry only (never wave-driven).
+    // Visual neighbor push is pushX (Translate on the icon).
     property real slotWidthTarget: showTitle ? 132 : 60
     property real slotXTarget: 0
+    property real pushXTarget: 0
+    property real pushX: 0
     property real pressScale: Motion.pressScaleFor(settingsService, windowMouse.pressed)
     property real bounceOffset: 0
     property var dockWindow
@@ -45,14 +46,14 @@ Item {
 
     signal activateRequested(var toplevel)
     signal contextMenuRequested(var window)
-    signal dockPointerMoved(real x, int buttons)
+    // localX is rest-slot local (slots never move — T08-fix7).
+    signal dockPointerMoved(real localX, int buttons)
     signal dockPointerEntered()
     signal dockPointerExited()
 
-    // Animated slot geometry. Dock owns targets via slotXTarget/slotWidthTarget
-    // (analytical push in icon-only mode). Initial values match rest icon slot.
-    x: 0
-    width: showTitle ? 132 : 60
+    // Rest slot geometry. Wave must NOT animate x/width (that caused clip-out).
+    x: slotXTarget
+    width: slotWidthTarget
     height: 60
 
     function updateDockRectangle() {
@@ -136,14 +137,31 @@ Item {
     onDockWindowChanged: scheduleDockRectangleUpdate()
     onWindowModelChanged: scheduleDockRectangleUpdate()
     onToplevelChanged: scheduleDockRectangleUpdate()
-    onMagnificationTargetChanged: root.animateMagnification()
-    onSlotWidthTargetChanged: root.animateWidth()
-    onSlotXTargetChanged: root.animateX()
+    onMagnificationTargetChanged: root.magnification = root.magnificationTarget
+    onPushXTargetChanged: root.pushX = root.pushXTarget
+    onSlotWidthTargetChanged: root.width = root.slotWidthTarget
+    onSlotXTargetChanged: root.x = root.slotXTarget
     Component.onCompleted: {
         root.magnification = root.magnificationTarget;
+        root.pushX = root.pushXTarget;
         root.x = root.slotXTarget;
         root.width = root.slotWidthTarget;
         root.scheduleDockRectangleUpdate();
+    }
+
+    Behavior on magnification {
+        enabled: !Motion.reducedMotion(root.settingsService)
+        NumberAnimation {
+            duration: Motion.dockMagFollowMs
+            easing.type: Motion.emphasizedDecel
+        }
+    }
+    Behavior on pushX {
+        enabled: !Motion.reducedMotion(root.settingsService)
+        NumberAnimation {
+            duration: Motion.dockMagFollowMs
+            easing.type: Motion.emphasizedDecel
+        }
     }
 
     Timer {
@@ -179,6 +197,10 @@ Item {
         sourceSize.height: 96
         opacity: (root.minimized ? 0.58 : 1.0) * (windowMouse.pressed ? 0.75 : 1.0)
         transformOrigin: Item.Bottom
+        // T08-fix7: visual neighbor push only; rest slot stays put.
+        transform: Translate {
+            x: root.pushX
+        }
 
         Behavior on opacity {
             NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing }
@@ -206,7 +228,9 @@ Item {
 
     Rectangle {
         // T08-fix5: clean macOS-style indicator — small round dot, no glow bar.
+        // Follow visual icon (pushX) without moving the rest hit target.
         anchors.horizontalCenter: icon.horizontalCenter
+        anchors.horizontalCenterOffset: root.pushX
         anchors.bottom: parent.bottom
         anchors.bottomMargin: 2
         width: root.active ? 5 : root.minimized ? 3 : 4
@@ -270,13 +294,9 @@ Item {
         acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
         cursorShape: Qt.PointingHandCursor
         onPositionChanged: function(mouse) {
-            // Root-local pointer (not surface-local / not animated-slot-local raw).
-            // mapToItem(dockWindow) uses live transforms so the result is where the
-            // cursor actually is — independent of sibling spring motion.
-            if (root.dockWindow) {
-                var point = root.mapToItem(root.dockWindow, mouse.x, mouse.y);
-                root.dockPointerMoved(point.x, mouse.buttons);
-            }
+            // Rest-slot local x only (T08-fix7). Dock converts to section rest
+            // coordinates — never map into a growing glass surface.
+            root.dockPointerMoved(mouse.x, mouse.buttons);
         }
         onEntered: root.dockPointerEntered()
         onExited: root.dockPointerExited()
@@ -294,82 +314,8 @@ Item {
         }
     }
 
-    // Explicit dual-branch animations (useSpring). Dual Behavior{} on the same
-    // property is unsupported in Qt Quick and only the first interceptor sticks.
-    function animateMagnification() {
-        if (root.useSpring) {
-            magSpring.to = magnificationTarget;
-            magSpring.restart();
-        } else {
-            magEase.to = magnificationTarget;
-            magEase.restart();
-        }
-    }
-    function animateX() {
-        if (root.useSpring) {
-            xSpring.to = slotXTarget;
-            xSpring.restart();
-        } else {
-            xEase.to = slotXTarget;
-            xEase.restart();
-        }
-    }
-    function animateWidth() {
-        if (root.useSpring) {
-            widthSpring.to = slotWidthTarget;
-            widthSpring.restart();
-        } else {
-            widthEase.to = slotWidthTarget;
-            widthEase.restart();
-        }
-    }
-
-    SpringAnimation {
-        id: magSpring
-        target: root
-        property: "magnification"
-        spring: Motion.dockMagSpring.spring
-        damping: Motion.dockMagSpring.damping
-        epsilon: Motion.dockMagSpring.epsilon
-    }
-    NumberAnimation {
-        id: magEase
-        target: root
-        property: "magnification"
-        duration: Motion.elementMove(root.settingsService)
-        easing.type: Motion.emphasizedDecel
-    }
-    SpringAnimation {
-        id: xSpring
-        target: root
-        property: "x"
-        spring: Motion.dockMagSpring.spring
-        damping: Motion.dockMagSpring.damping
-        epsilon: Motion.dockMagSpring.epsilon
-    }
-    NumberAnimation {
-        id: xEase
-        target: root
-        property: "x"
-        duration: Motion.elementMove(root.settingsService)
-        easing.type: Motion.emphasizedDecel
-    }
-    SpringAnimation {
-        id: widthSpring
-        target: root
-        property: "width"
-        spring: Motion.dockMagSpring.spring
-        damping: Motion.dockMagSpring.damping
-        epsilon: Motion.dockMagSpring.epsilon
-    }
-    NumberAnimation {
-        id: widthEase
-        target: root
-        property: "width"
-        duration: Motion.elementMove(root.settingsService)
-        easing.type: Motion.emphasizedDecel
-    }
-
+    // Wave mag/push are direct bindings (T08-fix8). Click bounce still uses
+    // dual-branch spring/ease on bounceOffset only.
     Timer {
         id: bounceTimer
         interval: 16

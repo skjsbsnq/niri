@@ -167,12 +167,35 @@ var launchpadWallpaperMs = 400;
 var launchpadIconEnterMs = 280;
 var launchpadIconEnterScaleFrom = 0.92;
 var launchpadPageSnapMs = 240;
-// iOS-like paging: short drag OR any intentional flick advances one page.
+// iOS / macOS Launchpad paging (LTR page row: page0 | page1 | page2 …):
+//   finger/content LEFT  → contentX ↑ → NEXT page
+//   finger/content RIGHT → contentX ↓ → PREV page
+// First page has no prev (right-drag rubber-bands); last page has no next.
 // Thresholds are intentionally low — "press and fling" must commit.
 var launchpadPageCommitRatio = 0.08;
 var launchpadPageCommitMinPx = 28;
 // Capture at finger-up (not after coast). Units ≈ px/s in Flickable.
 var launchpadPageFlickVelocity = 80;
+
+// Pure page-intent resolver (testable). delta = contentX - startContentX.
+// velocity: Flickable horizontalVelocity (positive → content moving right → prev).
+function launchpadResolvePage(startPage, pageCount, delta, velocity, pageWidth) {
+    var n = Math.max(1, Math.round(Number(pageCount) || 1));
+    var page = Math.max(0, Math.min(n - 1, Math.round(Number(startPage) || 0)));
+    var w = Math.max(1, Number(pageWidth) || 1);
+    var d = Number(delta) || 0;
+    var v = Number(velocity) || 0;
+    var commitPx = Math.max(launchpadPageCommitMinPx, w * launchpadPageCommitRatio);
+    var flickV = launchpadPageFlickVelocity;
+    var next = page;
+    if (Math.abs(v) >= flickV)
+        next = v < 0 ? page + 1 : page - 1;
+    else if (d > commitPx)
+        next = page + 1;
+    else if (d < -commitPx)
+        next = page - 1;
+    return Math.max(0, Math.min(n - 1, next));
+}
 var launchpadStaggerPerPxMs = 0; // disabled cascade (kept for API/tests)
 var launchpadStaggerBudgetMs = 450;
 var launchpadStaggerMaxItems = 40;

@@ -718,7 +718,9 @@ PanelWindow {
     }
 
     // Commit next/prev using release velocity (peak) OR short drag delta.
-    // Qt: positive horizontalVelocity → content moves right → contentX decreases → previous page.
+    // Direction matches macOS/iOS Launchpad (LTR):
+    //   drag/flick LEFT  → next page
+    //   drag/flick RIGHT → previous page (bounces on first page)
     function finishPageGesture() {
         if (pageFlick.width <= 0 || pageCount <= 1) {
             pageGestureActive = false;
@@ -737,24 +739,13 @@ PanelWindow {
         if (Math.abs(pageReleaseVelocity) > Math.abs(vel))
             vel = pageReleaseVelocity;
 
-        var commitPx = Math.max(
-            Motion.launchpadPageCommitMinPx,
-            pageW * Motion.launchpadPageCommitRatio
+        var page = Motion.launchpadResolvePage(
+            pageDragStartPage,
+            pageCount,
+            delta,
+            vel,
+            pageW
         );
-        var flickV = Motion.launchpadPageFlickVelocity;
-
-        var page = pageDragStartPage;
-        // Velocity wins over small opposing delta (true fling).
-        if (Math.abs(vel) >= flickV) {
-            page = vel < 0 ? pageDragStartPage + 1 : pageDragStartPage - 1;
-        } else if (delta > commitPx) {
-            page = pageDragStartPage + 1;
-        } else if (delta < -commitPx) {
-            page = pageDragStartPage - 1;
-        }
-        // else stay on start page (true cancel / tiny jiggle)
-
-        page = clampPage(page);
         goToPage(page, true);
 
         var base = page * cellsPerPage;

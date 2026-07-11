@@ -26,6 +26,11 @@ PanelWindow {
     // Unified grid enter 0→1 (all icons together). Avoid per-icon opacity:0
     // cascade that looked like "one icon, then the rest".
     property real gridEnter: 0
+    // Paging: commit next/prev from swipe intent (short drag OR light flick),
+    // not "must drag past 50% of the page".
+    property int pageDragStartPage: 0
+    property real pageDragStartX: 0
+    property bool pageSnapPending: false
 
     readonly property var filteredApps: root.appsService
         ? root.appsService.filteredLaunchpadApps(root.query, "all")
@@ -77,12 +82,21 @@ PanelWindow {
         if (animated === false || Motion.reducedMotion(settingsService)) {
             pageSnapAnim.stop();
             pageFlick.contentX = target;
+            pageSnapPending = false;
+            return;
+        }
+        // Already on the page: no-op but clear pending so next gesture works.
+        if (Math.abs(pageFlick.contentX - target) < 0.5) {
+            pageSnapAnim.stop();
+            pageFlick.contentX = target;
+            pageSnapPending = false;
             return;
         }
         pageSnapAnim.stop();
         pageSnapAnim.from = pageFlick.contentX;
         pageSnapAnim.to = target;
         pageSnapAnim.duration = Motion.launchpadPageSnapDuration(settingsService);
+        pageSnapPending = true;
         pageSnapAnim.restart();
     }
 
@@ -381,27 +395,49 @@ PanelWindow {
             interactive: root.pageCount > 1
             flickableDirection: Flickable.HorizontalFlick
             boundsBehavior: Flickable.DragAndOvershootBounds
-            // Snappier horizontal paging feel.
-            flickDeceleration: 3500
-            maximumFlickVelocity: 4000
+            // Soft coast then we snap to a whole page (intent-based, not 50%).
+            flickDeceleration: 2500
+            maximumFlickVelocity: 4500
             pressDelay: 0
             rebound: Transition {
                 NumberAnimation {
                     properties: "x"
-                    duration: 280
+                    duration: 240
                     easing.type: Motion.emphasizedDecel
                 }
             }
 
-            // Live page index while dragging (dots follow).
-            onContentXChanged: {
-                if (moving || dragging || flicking) {
-                    var pageW = Math.max(1, width);
-                    root.currentPage = root.clampPage(Math.round(contentX / pageW));
-                }
+            onMovementStarted: {
+                pageSnapAnim.stop();
+                root.pageSnapPending = false;
+                // Anchor intent to the page we were on when the drag began
+                // (contentX is authoritative if a previous snap was mid-flight).
+                var pageW = Math.max(1, width);
+                root.pageDragStartPage = root.clampPage(Math.round(contentX / pageW));
+                root.pageDragStartX = contentX;
+                root.currentPage = root.pageDragStartPage;
             }
-            onMovementEnded: root.snapToNearestPage()
-            onFlickEnded: root.snapToNearestPage()
+
+            // Preview target page while dragging (dots follow finger intent).
+            onContentXChanged: {
+                if (!(moving || dragging || flicking))
+                    return;
+                var pageW = Math.max(1, width);
+                var delta = contentX - root.pageDragStartX;
+                var commitPx = Math.max(
+                    Motion.launchpadPageCommitMinPx,
+                    pageW * Motion.launchpadPageCommitRatio
+                );
+                var preview = root.pageDragStartPage;
+                if (delta > commitPx * 0.5)
+                    preview = root.pageDragStartPage + 1;
+                else if (delta < -commitPx * 0.5)
+                    preview = root.pageDragStartPage - 1;
+                root.currentPage = root.clampPage(preview);
+            }
+
+            onMovementEnded: root.finishPageGesture()
+            onFlickEnded: root.finishPageGesture()
 
             NumberAnimation {
                 id: pageSnapAnim
@@ -410,6 +446,7 @@ PanelWindow {
                 duration: Motion.launchpadPageSnapDuration(root.settingsService)
                 easing.type: Motion.emphasizedDecel
                 onStopped: {
+                    root.pageSnapPending = false;
                     if (pageFlick.width > 0)
                         root.currentPage = root.clampPage(Math.round(pageFlick.contentX / pageFlick.width));
                 }
@@ -607,25 +644,57 @@ PanelWindow {
         }
     }
 
-    function snapToNearestPage() {
-        if (pageFlick.width <= 0)
+    // Commit next/prev from swipe *intent* (distance OR velocity), then ease
+    // to a whole page. Avoids "must drag to the end / past 50%" behavior.
+    function finishPageGesture() {
+        if (pageFlick.width <= 0 || pageCount <= 1)
             return;
-        var pageW = pageFlick.width;
-        var raw = pageFlick.contentX / pageW;
-        // Prefer velocity direction on light flicks past mid-threshold.
-        var page = clampPage(Math.round(raw));
-        var frac = raw - Math.floor(raw);
-        if (pageFlick.horizontalVelocity < -400 && frac > 0.15)
-            page = clampPage(Math.floor(raw) + 1);
-        else if (pageFlick.horizontalVelocity > 400 && frac < 0.85)
-            page = clampPage(Math.floor(raw));
+        // movementEnded and flickEnded can both fire — only snap once.
+        if (pageSnapPending)
+            return;
+        // Still coasting hard? wait for flickEnded (movementEnded may be early).
+        if (pageFlick.flicking && Math.abs(pageFlick.horizontalVelocity) > Motion.launchpadPageFlickVelocity)
+            return;
+
+        pageSnapPending = true;
+        var pageW = Math.max(1, pageFlick.width);
+        var delta = pageFlick.contentX - pageDragStartX;
+        // Qt: positive horizontalVelocity → content moving right → contentX ↓ → prev.
+        var vel = pageFlick.horizontalVelocity;
+        var commitPx = Math.max(
+            Motion.launchpadPageCommitMinPx,
+            pageW * Motion.launchpadPageCommitRatio
+        );
+        var flickV = Motion.launchpadPageFlickVelocity;
+
+        var page = pageDragStartPage;
+        var goNext = delta > commitPx || vel < -flickV;
+        var goPrev = delta < -commitPx || vel > flickV;
+        if (goNext && goPrev) {
+            // Conflicting signals: prefer the stronger cue.
+            if (Math.abs(vel) >= flickV)
+                page = vel < 0 ? pageDragStartPage + 1 : pageDragStartPage - 1;
+            else
+                page = delta > 0 ? pageDragStartPage + 1 : pageDragStartPage - 1;
+        } else if (goNext) {
+            page = pageDragStartPage + 1;
+        } else if (goPrev) {
+            page = pageDragStartPage - 1;
+        }
+
+        page = clampPage(page);
         goToPage(page, true);
-        // Keep selection on the visible page.
+
         var base = page * cellsPerPage;
         if (selectedIndex < base || selectedIndex >= base + cellsPerPage) {
             var idx = Math.min(appCount - 1, base);
             if (idx >= 0)
                 selectedIndex = idx;
         }
+    }
+
+    // Kept for tests / page-dot callers that still say "snap".
+    function snapToNearestPage() {
+        finishPageGesture();
     }
 }

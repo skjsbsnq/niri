@@ -24,19 +24,26 @@ class LaunchpadRefactorTests(unittest.TestCase):
         # Paging + dots + keyboard.
         self.assertIn("pageFlick", text)
         self.assertIn("snapToNearestPage", text)
+        self.assertIn("finishPageGesture", text)
+        self.assertIn("pageDragStartPage", text)
         self.assertIn("moveSelection", text)
         self.assertIn("Keys.onLeftPressed", text)
         # Unified grid enter (no per-icon opacity cascade).
         self.assertIn("gridEnter", text)
         self.assertIn("playGridEnter", text)
         self.assertIn("DragAndOvershootBounds", text)
+        # Intent paging: short drag/flick commits (not 50% Math.round only).
+        self.assertIn("launchpadPageCommitRatio", text)
+        self.assertIn("launchpadPageFlickVelocity", text)
 
     def test_stagger_budget_tokens(self) -> None:
         text = MOTION.read_text(encoding="utf-8")
         self.assertIn("var launchpadWallpaperScale = 1.06;", text)
         self.assertIn("var launchpadWallpaperDim = 0.25;", text)
         self.assertIn("var launchpadIconEnterMs = 280;", text)
-        self.assertIn("var launchpadPageSnapMs = 320;", text)
+        self.assertIn("var launchpadPageSnapMs = 280;", text)
+        self.assertIn("var launchpadPageCommitRatio = 0.14;", text)
+        self.assertIn("var launchpadPageFlickVelocity = 220;", text)
         self.assertIn("var launchpadGridCols = 7;", text)
         self.assertIn("var launchpadGridRows = 5;", text)
         self.assertIn("function launchpadStaggerDelay", text)

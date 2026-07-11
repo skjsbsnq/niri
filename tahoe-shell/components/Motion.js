@@ -166,7 +166,13 @@ var launchpadWallpaperMs = 400;
 // Soft unified enter (whole grid), not per-icon cascade.
 var launchpadIconEnterMs = 280;
 var launchpadIconEnterScaleFrom = 0.92;
-var launchpadPageSnapMs = 320;
+var launchpadPageSnapMs = 280;
+// iOS-like paging: small drag OR light flick advances one page.
+// Ratio of page width (≈12–18% feels intentional without needing a full swipe).
+var launchpadPageCommitRatio = 0.14;
+var launchpadPageCommitMinPx = 48;
+// |horizontalVelocity| above this commits even with tiny displacement.
+var launchpadPageFlickVelocity = 220;
 var launchpadStaggerPerPxMs = 0; // disabled cascade (kept for API/tests)
 var launchpadStaggerBudgetMs = 450;
 var launchpadStaggerMaxItems = 40;

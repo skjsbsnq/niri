@@ -631,6 +631,8 @@ ShellRoot {
 
     SystemStats {
         id: systemStats
+        // Live metrics only while the left sidebar is open (sole consumer).
+        active: shell.leftSidebarOpen
     }
 
     Weather {

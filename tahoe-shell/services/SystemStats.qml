@@ -11,6 +11,10 @@ Item {
     id: root
     visible: false
 
+    // Only sample while a consumer needs live metrics (left sidebar system page).
+    // Idle desktop previously paid for a permanent 1 Hz shell loop + ps every 2 s.
+    property bool active: false
+
     property bool available: false
     property string lastError: ""
     property int parseErrorCount: 0
@@ -40,6 +44,18 @@ Item {
     signal fastDataChanged()
     signal mediumDataChanged()
     signal slowDataChanged()
+
+    onActiveChanged: {
+        if (root.active) {
+            restartTimer.stop();
+            if (!statsProcess.running)
+                statsProcess.running = true;
+        } else {
+            restartTimer.stop();
+            if (statsProcess.running)
+                statsProcess.running = false;
+        }
+    }
 
     function setValue(name, value) {
         if (root[name] !== value)
@@ -384,7 +400,8 @@ Item {
 
     Process {
         id: statsProcess
-        running: true
+        // Start stopped; onActiveChanged / shell.qml gates sampling.
+        running: false
         command: ["sh", "-lc", root.monitorScript()]
         stdout: SplitParser {
             splitMarker: "\n"
@@ -397,10 +414,17 @@ Item {
             root.setValue("lastError", "");
         }
         onRunningChanged: {
-            if (!running && !restartTimer.running)
-                restartTimer.restart();
+            if (!running) {
+                // Keep last readings visible while the sidebar is closed; only
+                // mark unavailable when an active monitor dies unexpectedly.
+                if (root.active && !restartTimer.running)
+                    restartTimer.restart();
+                return;
+            }
         }
         onExited: function(code, exitStatus) {
+            if (!root.active)
+                return;
             root.setValue("available", false);
             if (code !== 0)
                 root.setValue("lastError", "SystemStats exited with code " + String(code));
@@ -412,7 +436,7 @@ Item {
         interval: 2000
         repeat: false
         onTriggered: {
-            if (!statsProcess.running)
+            if (root.active && !statsProcess.running)
                 statsProcess.running = true;
         }
     }

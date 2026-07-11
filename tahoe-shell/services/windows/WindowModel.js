@@ -267,6 +267,83 @@ function geometryFromLayout(layout) {
     };
 }
 
+// Cheap equality for hot layout events. WindowLayoutsChanged can fire every
+// compositor frame during resize/move animations; full JSON.stringify would
+// dominate shell CPU and force Dock/TopBar model rebuilds.
+function sameNumber(left, right) {
+    var a = Number(left);
+    var b = Number(right);
+    if (!isFinite(a) && !isFinite(b))
+        return true;
+    return a === b;
+}
+
+function samePair(left, right) {
+    if (!left && !right)
+        return true;
+    if (!left || !right || left.length < 2 || right.length < 2)
+        return false;
+    return sameNumber(left[0], right[0]) && sameNumber(left[1], right[1]);
+}
+
+function sameGeometry(left, right) {
+    if (!left && !right)
+        return true;
+    if (!left || !right)
+        return false;
+    return sameNumber(left.x, right.x)
+        && sameNumber(left.y, right.y)
+        && sameNumber(left.w !== undefined ? left.w : left.width, right.w !== undefined ? right.w : right.width)
+        && sameNumber(left.h !== undefined ? left.h : left.height, right.h !== undefined ? right.h : right.height);
+}
+
+function sameFocusTimestamp(left, right) {
+    if (!left && !right)
+        return true;
+    if (!left || !right)
+        return false;
+    return sameNumber(left.secs, right.secs) && sameNumber(left.nanos, right.nanos);
+}
+
+function sameLayout(left, right) {
+    if (left === right)
+        return true;
+    if (!left && !right)
+        return true;
+    if (!left || !right)
+        return false;
+
+    // Mirror niri_ipc::WindowLayout fields (source of truth in niri-ipc).
+    var leftPos = left.tile_pos_in_workspace_view !== undefined
+        ? left.tile_pos_in_workspace_view
+        : left.tilePosInWorkspaceView;
+    var rightPos = right.tile_pos_in_workspace_view !== undefined
+        ? right.tile_pos_in_workspace_view
+        : right.tilePosInWorkspaceView;
+    var leftSize = left.tile_size !== undefined ? left.tile_size : left.tileSize;
+    var rightSize = right.tile_size !== undefined ? right.tile_size : right.tileSize;
+    var leftWindow = left.window_size !== undefined ? left.window_size : left.windowSize;
+    var rightWindow = right.window_size !== undefined ? right.window_size : right.windowSize;
+    var leftOffset = left.window_offset_in_tile !== undefined
+        ? left.window_offset_in_tile
+        : left.windowOffsetInTile;
+    var rightOffset = right.window_offset_in_tile !== undefined
+        ? right.window_offset_in_tile
+        : right.windowOffsetInTile;
+    var leftScroll = left.pos_in_scrolling_layout !== undefined
+        ? left.pos_in_scrolling_layout
+        : left.posInScrollingLayout;
+    var rightScroll = right.pos_in_scrolling_layout !== undefined
+        ? right.pos_in_scrolling_layout
+        : right.posInScrollingLayout;
+
+    return samePair(leftPos, rightPos)
+        && samePair(leftSize, rightSize)
+        && samePair(leftWindow, rightWindow)
+        && samePair(leftOffset, rightOffset)
+        && samePair(leftScroll, rightScroll);
+}
+
 function workspaceFromId(id, workspacesById) {
     if (id === undefined || id === null || !workspacesById)
         return null;

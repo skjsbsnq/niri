@@ -79,6 +79,14 @@ class LeftSidebarWidgetTests(unittest.TestCase):
         for match in re.finditer(r"interval:\s*(\d+)", text):
             value = int(match.group(1))
             self.assertGreaterEqual(value, 1000, f"SystemStats interval too aggressive: {value}")
+        # Idle desktop must not keep the stats process always running.
+        self.assertIn("property bool active:", text)
+        self.assertIn("running: false", text)
+
+    def test_shell_gates_system_stats_on_left_sidebar(self) -> None:
+        text = SHELL_QML.read_text(encoding="utf-8")
+        self.assertIn("SystemStats {", text)
+        self.assertIn("active: shell.leftSidebarOpen", text)
 
 
 if __name__ == "__main__":

@@ -43,18 +43,118 @@ Item {
     property var eventWindowOrder: []
     property var ipcWorkspaces: []
     property var workspacesById: ({})
+    // Cached merge results. WindowLayoutsChanged can fire every compositor
+    // frame during resize/move; recomputing merge + filtered/recent lists on
+    // every event made Dock/TopBar/Overview rebuild constantly.
+    property var windowList: []
+    property var nonMinimizedWindowList: []
+    property var minimizedWindowList: []
+    property var recentWindowList: []
+    property var focusedWindow: null
+    property bool layoutPatchPending: false
 
     readonly property bool ipcAvailable: available
     readonly property string ipcError: lastError
-    readonly property var windowList: mergeWindowModels(toplevelList, ipcWindows)
-    readonly property var nonMinimizedWindowList: filteredMinimizedWindows(windowList, false)
-    readonly property var minimizedWindowList: filteredMinimizedWindows(windowList, true)
-    readonly property var recentWindowList: sortedRecentWindows(windowList)
-    readonly property var focusedWindow: findFocusedWindow(windowList)
     readonly property var workspaceList: sortedWorkspaceList(ipcWorkspaces)
+
+    onToplevelListChanged: rebuildMergedWindows()
+    Component.onCompleted: rebuildMergedWindows()
+
+    // Coalesce layout publishes to ~one shell paint. ipc state is still updated
+    // immediately; only the QML model identity refresh is deferred.
+    Timer {
+        id: layoutPatchTimer
+        interval: 16
+        repeat: false
+        onTriggered: {
+            root.layoutPatchPending = false;
+            root.patchMergedWindowLayouts();
+        }
+    }
+
     function setValue(name, value) {
         if (root[name] !== value)
             root[name] = value;
+    }
+
+    function scheduleLayoutPatch() {
+        root.layoutPatchPending = true;
+        if (!layoutPatchTimer.running)
+            layoutPatchTimer.start();
+    }
+
+    function rebuildMergedWindows() {
+        // Membership/focus changes must not race a deferred layout publish.
+        layoutPatchTimer.stop();
+        root.layoutPatchPending = false;
+        var merged = mergeWindowModels(root.toplevelList, root.ipcWindows);
+        root.windowList = merged;
+        root.nonMinimizedWindowList = filteredMinimizedWindows(merged, false);
+        root.minimizedWindowList = filteredMinimizedWindows(merged, true);
+        root.recentWindowList = sortedRecentWindows(merged);
+        root.focusedWindow = findFocusedWindow(merged);
+    }
+
+    // Layout-only path: keep window membership/order stable and only refresh
+    // geometry fields. Avoids O(windows²) rematch against toplevels every frame.
+    function patchMergedWindowLayouts() {
+        var list = root.windowList || [];
+        if (list.length === 0)
+            return;
+
+        var next = null;
+        for (var i = 0; i < list.length; i++) {
+            var model = list[i];
+            if (!model || model.id === undefined || model.id === null)
+                continue;
+
+            var ipc = root.ipcWindowsById[String(model.id)];
+            if (!ipc)
+                continue;
+
+            if (WindowModel.sameLayout(model.layout, ipc.layout)
+                    && WindowModel.sameGeometry(model.geometry, ipc.geometry))
+                continue;
+
+            if (!next)
+                next = list.slice();
+
+            next[i] = {
+                "id": model.id,
+                "modelKey": model.modelKey,
+                "title": model.title,
+                "appId": model.appId,
+                "workspace": model.workspace,
+                "workspaceId": model.workspaceId,
+                "output": model.output,
+                "pid": model.pid,
+                "focused": model.focused,
+                "isFocused": model.isFocused,
+                "minimized": model.minimized,
+                "isMinimized": model.isMinimized,
+                "isFloating": model.isFloating,
+                "isUrgent": model.isUrgent,
+                "urgent": model.urgent,
+                "layout": ipc.layout,
+                "geometry": ipc.geometry,
+                "rect": ipc.geometry,
+                "focusTimestamp": model.focusTimestamp,
+                "ipcWindow": ipc,
+                "toplevel": model.toplevel
+            };
+        }
+
+        if (next) {
+            root.windowList = next;
+            // Membership unchanged; refresh derived views so they share the
+            // patched model objects (geometry consumers / overview / dock).
+            root.nonMinimizedWindowList = filteredMinimizedWindows(next, false);
+            root.minimizedWindowList = filteredMinimizedWindows(next, true);
+            // Keep public API identity consistent with windowList (no orphan
+            // pre-patch objects for focused/recent consumers).
+            root.focusedWindow = findFocusedWindow(next);
+            root.recentWindowList = sortedRecentWindows(next);
+        }
     }
 
     function action(args) {
@@ -217,14 +317,20 @@ Item {
         return WindowModel.normalizedWindowSnapshot(rawWindows, root.workspacesById);
     }
 
-    function applyNormalizedWindows(windows, byId) {
+    function applyNormalizedWindows(windows, byId, options) {
         root.ipcWindows = windows;
         root.ipcWindowsById = byId;
         root.setValue("available", true);
         root.setValue("lastError", "");
+
+        var mode = options && options.mode ? options.mode : "full";
+        if (mode === "layout")
+            root.scheduleLayoutPatch();
+        else
+            root.rebuildMergedWindows();
     }
 
-    function applyWindowsFromMap() {
+    function applyWindowsFromMap(options) {
         var windows = [];
         var byId = {};
         var nextOrder = [];
@@ -244,7 +350,7 @@ Item {
         }
 
         root.eventWindowOrder = nextOrder;
-        root.applyNormalizedWindows(windows, byId);
+        root.applyNormalizedWindows(windows, byId, options);
     }
 
     function upsertWindow(rawWindow) {
@@ -260,7 +366,7 @@ Item {
             root.eventWindowOrder.push(key);
 
         root.ipcWindowsById[key] = normalized;
-        applyWindowsFromMap();
+        applyWindowsFromMap({ "mode": "full" });
     }
 
     function removeClosedWindow(id) {
@@ -275,37 +381,74 @@ Item {
                 nextOrder.push(root.eventWindowOrder[i]);
         }
         root.eventWindowOrder = nextOrder;
-        applyWindowsFromMap();
+        applyWindowsFromMap({ "mode": "full" });
     }
 
     function setEventFocus(id) {
         var target = id === undefined || id === null ? "" : String(id);
+        var changed = false;
         for (var key in root.ipcWindowsById) {
             var window = root.ipcWindowsById[key];
             if (!window)
                 continue;
-            window.isFocused = target.length > 0 && String(window.id) === target;
-            window.focused = window.isFocused;
+            var focused = target.length > 0 && String(window.id) === target;
+            if (window.isFocused !== focused || window.focused !== focused) {
+                window.isFocused = focused;
+                window.focused = focused;
+                changed = true;
+            }
         }
+        return changed;
     }
 
     function updateWindowValue(id, propertyName, value) {
         var key = String(id);
         var window = root.ipcWindowsById[key];
         if (!window)
-            return;
+            return false;
 
-        window[propertyName] = value;
         if (propertyName === "layout") {
+            if (WindowModel.sameLayout(window.layout, value))
+                return false;
+            window.layout = value;
             window.geometry = geometryFromLayout(value);
             window.rect = window.geometry;
-        } else if (propertyName === "isUrgent") {
-            window.isUrgent = !!value;
-            window.urgent = window.isUrgent;
-        } else if (propertyName === "focusTimestamp") {
-            window.focusTimestamp = value;
+            return true;
         }
-        applyWindowsFromMap();
+
+        if (propertyName === "isUrgent") {
+            var urgent = !!value;
+            if (window.isUrgent === urgent && window.urgent === urgent)
+                return false;
+            window.isUrgent = urgent;
+            window.urgent = urgent;
+            return true;
+        }
+
+        if (propertyName === "focusTimestamp") {
+            if (WindowModel.sameFocusTimestamp(window.focusTimestamp, value))
+                return false;
+            window.focusTimestamp = value;
+            return true;
+        }
+
+        if (window[propertyName] === value)
+            return false;
+        window[propertyName] = value;
+        return true;
+    }
+
+    function applyLayoutChanges(changes) {
+        var list = Array.isArray(changes) ? changes : [];
+        var changed = false;
+        for (var i = 0; i < list.length; i++) {
+            if (!list[i] || list[i].length < 2)
+                continue;
+            if (updateWindowValue(list[i][0], "layout", list[i][1]))
+                changed = true;
+        }
+        if (changed)
+            applyWindowsFromMap({ "mode": "layout" });
     }
 
     function loadWorkspaces(rawWorkspaces) {
@@ -322,7 +465,7 @@ Item {
         }
         root.ipcWorkspaces = normalized;
         root.workspacesById = byId;
-        applyWindowsFromMap();
+        applyWindowsFromMap({ "mode": "full" });
     }
 
     function handleEventLine(line) {
@@ -339,26 +482,26 @@ Item {
             } else if (event.WindowClosed) {
                 removeClosedWindow(event.WindowClosed.id);
             } else if (event.WindowFocusChanged) {
-                setEventFocus(event.WindowFocusChanged.id);
-                applyWindowsFromMap();
+                if (setEventFocus(event.WindowFocusChanged.id))
+                    applyWindowsFromMap({ "mode": "full" });
             } else if (event.WindowFocusTimestampChanged) {
-                updateWindowValue(
-                    event.WindowFocusTimestampChanged.id,
-                    "focusTimestamp",
-                    event.WindowFocusTimestampChanged.focus_timestamp
-                );
-            } else if (event.WindowUrgencyChanged) {
-                updateWindowValue(
-                    event.WindowUrgencyChanged.id,
-                    "isUrgent",
-                    !!event.WindowUrgencyChanged.urgent
-                );
-            } else if (event.WindowLayoutsChanged) {
-                var changes = event.WindowLayoutsChanged.changes || [];
-                for (var i = 0; i < changes.length; i++) {
-                    if (changes[i] && changes[i].length >= 2)
-                        updateWindowValue(changes[i][0], "layout", changes[i][1]);
+                if (updateWindowValue(
+                        event.WindowFocusTimestampChanged.id,
+                        "focusTimestamp",
+                        event.WindowFocusTimestampChanged.focus_timestamp
+                    )) {
+                    applyWindowsFromMap({ "mode": "full" });
                 }
+            } else if (event.WindowUrgencyChanged) {
+                if (updateWindowValue(
+                        event.WindowUrgencyChanged.id,
+                        "isUrgent",
+                        !!event.WindowUrgencyChanged.urgent
+                    )) {
+                    applyWindowsFromMap({ "mode": "full" });
+                }
+            } else if (event.WindowLayoutsChanged) {
+                applyLayoutChanges(event.WindowLayoutsChanged.changes || []);
             } else if (event.WorkspacesChanged) {
                 loadWorkspaces(event.WorkspacesChanged.workspaces || []);
             }

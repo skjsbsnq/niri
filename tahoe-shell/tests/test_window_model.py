@@ -133,8 +133,87 @@ class WindowModelTests(unittest.TestCase):
             "buildWindowModel",
             "filteredMinimizedWindows",
             "sortedWorkspaceList",
+            "sameLayout",
+            "sameGeometry",
+            "sameFocusTimestamp",
         ):
             self.assertIn(f"function {function}(", text)
+
+    def test_same_layout_detects_geometry_changes_without_stringify(self) -> None:
+        if shutil.which("node") is None:
+            raise unittest.SkipTest("node is required to execute WindowModel.js fixtures")
+
+        runner = r"""
+const fs = require("fs");
+const vm = require("vm");
+const modulePath = process.argv[1];
+const source = fs.readFileSync(modulePath, "utf8").replace(/^\s*\.pragma library\s*\n/, "");
+const context = { Array, Boolean, Date, JSON, Math, Number, Object, String, console, isFinite };
+vm.createContext(context);
+vm.runInContext(source, context, { filename: modulePath });
+const left = {
+  tile_pos_in_workspace_view: [10, 20],
+  tile_size: [100, 200],
+  window_size: [96, 196],
+  window_offset_in_tile: [2, 2],
+  pos_in_scrolling_layout: [1, 1],
+};
+const same = {
+  tile_pos_in_workspace_view: [10, 20],
+  tile_size: [100, 200],
+  window_size: [96, 196],
+  window_offset_in_tile: [2, 2],
+  pos_in_scrolling_layout: [1, 1],
+};
+const moved = {
+  tile_pos_in_workspace_view: [11, 20],
+  tile_size: [100, 200],
+  window_size: [96, 196],
+  window_offset_in_tile: [2, 2],
+  pos_in_scrolling_layout: [1, 1],
+};
+const offsetOnly = {
+  tile_pos_in_workspace_view: [10, 20],
+  tile_size: [100, 200],
+  window_size: [96, 196],
+  window_offset_in_tile: [12, 2],
+  pos_in_scrolling_layout: [1, 1],
+};
+const scrollOnly = {
+  tile_pos_in_workspace_view: [10, 20],
+  tile_size: [100, 200],
+  window_size: [96, 196],
+  window_offset_in_tile: [2, 2],
+  pos_in_scrolling_layout: [2, 1],
+};
+process.stdout.write(JSON.stringify({
+  same: context.sameLayout(left, same),
+  moved: context.sameLayout(left, moved),
+  offsetOnly: context.sameLayout(left, offsetOnly),
+  scrollOnly: context.sameLayout(left, scrollOnly),
+  bothNullScroll: context.sameLayout(
+    Object.assign({}, left, { pos_in_scrolling_layout: null }),
+    Object.assign({}, same, { pos_in_scrolling_layout: null })
+  ),
+  geoSame: context.sameGeometry(context.geometryFromLayout(left), context.geometryFromLayout(same)),
+  geoMoved: context.sameGeometry(context.geometryFromLayout(left), context.geometryFromLayout(moved)),
+}));
+"""
+        completed = subprocess.run(
+            ["node", "-e", runner, str(WINDOW_MODEL)],
+            check=True,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        result = json.loads(completed.stdout)
+        self.assertTrue(result["same"])
+        self.assertFalse(result["moved"])
+        self.assertFalse(result["offsetOnly"])
+        self.assertFalse(result["scrollOnly"])
+        self.assertTrue(result["bothNullScroll"])
+        self.assertTrue(result["geoSame"])
+        self.assertFalse(result["geoMoved"])
 
     def test_windows_qml_keeps_public_window_api_and_delegates_merge_logic(self) -> None:
         text = WINDOWS_QML.read_text(encoding="utf-8")
@@ -146,7 +225,12 @@ class WindowModelTests(unittest.TestCase):
             "recentWindowList",
             "focusedWindow",
         ):
-            self.assertIn(f"readonly property var {property_name}", text)
+            # Cached writable properties (layout events must not re-merge every frame).
+            self.assertIn(f"property var {property_name}", text)
+        self.assertIn("function rebuildMergedWindows()", text)
+        self.assertIn("function patchMergedWindowLayouts()", text)
+        self.assertIn('applyLayoutChanges', text)
+        self.assertIn('mode": "layout"', text)
 
         for function_name in (
             "activate",

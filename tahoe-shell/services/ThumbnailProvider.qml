@@ -59,6 +59,9 @@ Item {
     property int queueHead: 0
     property int pendingQueueLength: 0
     property var activeJob: null
+    // Membership fingerprint so layout-only windowList patches (geometry churn)
+    // do not re-walk the whole cache every compositor frame.
+    property string lastLiveWindowKeys: ""
 
     readonly property int pendingCount: pendingQueueLength
     readonly property bool running: thumbnailProcess.running
@@ -321,12 +324,20 @@ Item {
             return;
 
         var live = {};
+        var liveKeys = [];
         var windows = root.windowsService.windowList || [];
         for (var i = 0; i < windows.length; i++) {
             var key = keyForWindow(windows[i]);
-            if (key.length > 0)
+            if (key.length > 0 && !live[key]) {
                 live[key] = true;
+                liveKeys.push(key);
+            }
         }
+        liveKeys.sort();
+        var fingerprint = liveKeys.join(",");
+        if (fingerprint === root.lastLiveWindowKeys)
+            return;
+        root.lastLiveWindowKeys = fingerprint;
 
         var keys = [];
         for (var cacheKey in root.cache) {

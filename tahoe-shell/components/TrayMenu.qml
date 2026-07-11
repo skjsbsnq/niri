@@ -108,7 +108,7 @@ PanelWindow {
                         anchors.centerIn: parent
                         name: "\ue8b8"
                         color: root.darkMode ? "#94a0ad" : "#661d1d1f"
-                        size: 16
+                        size: 18
                         visible: !headerIcon.visible
                     }
                 }

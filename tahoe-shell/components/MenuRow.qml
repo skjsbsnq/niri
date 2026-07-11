@@ -54,6 +54,9 @@ Item {
     }
     readonly property color separatorColor: Theme.separator(darkMode)
     readonly property int rowHeight: separator ? 9 : (header ? 22 : 26)
+    // Align with TopBar status symbols (optical fill); menus stay one step
+    // below top-bar 20 because row height is only 26.
+    readonly property int symbolSize: 18
     readonly property int textLeft: showCheckColumn
         ? (30 + indent * 14)
         : (icon.length > 0 ? 34 : 10)
@@ -159,7 +162,7 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         name: row.checked ? "\ue5ca" : ""
         color: row.iconColor
-        size: 15
+        size: row.symbolSize
         visible: !row.separator && row.showCheckColumn
         opacity: row.checked ? 1 : 0
     }
@@ -171,7 +174,7 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         name: row.icon
         color: row.iconColor
-        size: 16
+        size: row.symbolSize
         visible: !row.separator && !row.showCheckColumn && row.icon.length > 0
     }
 
@@ -199,7 +202,7 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         name: "\ue5cc"
         color: row.highlight ? "#ffffff" : Theme.tertiaryLabel(row.darkMode)
-        size: 15
+        size: row.symbolSize
         visible: !row.separator && row.hasSubmenu && !row.header
     }
 

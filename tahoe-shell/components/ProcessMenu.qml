@@ -122,7 +122,7 @@ PanelWindow {
                     Layout.alignment: Qt.AlignVCenter
                     name: "\ueb8e" // terminal
                     color: root.textTertiary
-                    size: 16
+                    size: 18
                 }
 
                 Text {

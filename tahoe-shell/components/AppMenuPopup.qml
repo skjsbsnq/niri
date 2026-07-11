@@ -97,7 +97,7 @@ PanelWindow {
                             anchors.centerIn: parent
                             name: root.nativeMenuAvailable ? "\ue86c" : "\ue8a0"
                             color: root.darkMode ? "#f5f7fb" : "#202124"
-                            size: 16
+                            size: 18
                         }
                     }
 

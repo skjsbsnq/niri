@@ -60,8 +60,13 @@ PanelWindow {
     readonly property color statusTextFaint: darkMode ? "#99f5f7fb" : "#991d1d1f"
     readonly property color statusAttention: Theme.statusAttention(darkMode)
     readonly property color accentColor: Theme.accent(darkMode, accentId)
-    readonly property int statusItemHeight: 22
-    readonly property int statusIconWidth: 26
+    // Status-row hit target; slightly taller/wider so 18–20px symbols
+    // optically match tray IconImage (16px full-bleed color icons).
+    readonly property int statusItemHeight: 24
+    readonly property int statusIconWidth: 28
+    // TahoeSymbol display size (was 16; Material PNG padding made it look small).
+    // 20 reads closer to tray IconImage 16px full-bleed; drop to 18 if crowded.
+    readonly property int statusSymbolSize: 20
     readonly property int batteryItemMinWidth: 66
     readonly property int statusRadius: 7
     readonly property color buttonFill: "transparent"
@@ -231,7 +236,7 @@ PanelWindow {
                         anchors.centerIn: parent
                         name: "\ue2bd" // wb_cloudy
                         color: root.leftSidebarOpen ? root.accentColor : root.topTextSecondary
-                        size: 16
+                        size: root.statusSymbolSize
                     }
 
                     MouseArea {
@@ -394,7 +399,7 @@ PanelWindow {
                     anchors.centerIn: parent
                     name: root.dndEnabled ? "\ue7f6" : "\ue7f4"
                     color: root.statusText
-                    size: 16
+                    size: root.statusSymbolSize
                     opacity: root.notificationCount > 0 || root.dndEnabled ? 1 : 0.68
                 }
 
@@ -453,7 +458,7 @@ PanelWindow {
                     anchors.centerIn: parent
                     name: "\ue14f"
                     color: root.clipboardService && root.clipboardService.available ? root.statusText : root.statusTextDisabled
-                    size: 16
+                    size: root.statusSymbolSize
                     opacity: root.clipboardService && root.clipboardService.available ? 1 : 0.5
                 }
 
@@ -511,7 +516,7 @@ PanelWindow {
                     anchors.centerIn: parent
                     name: "\ue332"
                     color: root.statusText
-                    size: 16
+                    size: root.statusSymbolSize
                     opacity: root.fanService && root.fanService.available ? (root.fanService.autoMode ? 0.76 : 1) : 0.45
                 }
 
@@ -630,7 +635,7 @@ PanelWindow {
                     anchors.centerIn: parent
                     name: "\ue63e"
                     color: root.statusText
-                    size: 16
+                    size: root.statusSymbolSize
                     opacity: root.controlsService && root.controlsService.wifiEnabled ? 1 : 0.45
                 }
 
@@ -665,7 +670,7 @@ PanelWindow {
                     anchors.centerIn: parent
                     name: "\ue8b6"
                     color: root.statusText
-                    size: 16
+                    size: root.statusSymbolSize
                 }
 
                 MouseArea {

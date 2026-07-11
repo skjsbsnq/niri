@@ -165,24 +165,28 @@ var launchpadWallpaperScale = 1.06;
 var launchpadWallpaperDim = 0.25;
 var launchpadWallpaperMs = 400;
 // Soft unified enter (whole grid), not per-icon cascade.
-var launchpadIconEnterMs = 280;
-var launchpadIconEnterScaleFrom = 0.92;
+var launchpadIconEnterMs = 320;
+var launchpadIconEnterScaleFrom = 0.94;
 // Whole-layer open/close (opacity + soft settle). Explicit progress so close
 // still animates after open flips false.
-var launchpadLayerEnterMs = 280;
-var launchpadLayerExitMs = 200;
-var launchpadLayerScaleFrom = 0.985;
+var launchpadLayerEnterMs = 340;
+var launchpadLayerExitMs = 240;
+var launchpadLayerScaleFrom = 0.988;
 // Icon launch pop before layer exit.
-var launchpadLaunchPopMs = 180;
-var launchpadLaunchPopScaleBoost = 0.18;
-// Page snap after intent decision.
-var launchpadPageSnapMs = 240;
-// iOS-like paging: short drag OR any intentional flick advances one page.
-// Thresholds are intentionally low — "press and fling" must commit.
-var launchpadPageCommitRatio = 0.08;
-var launchpadPageCommitMinPx = 28;
-// Capture at finger-up (not after coast). Units ≈ px/s in Flickable.
-var launchpadPageFlickVelocity = 80;
+var launchpadLaunchPopMs = 200;
+var launchpadLaunchPopScaleBoost = 0.14;
+// Page snap after intent decision (base; actual duration scales with distance).
+var launchpadPageSnapMs = 300;
+var launchpadPageSnapMinMs = 180;
+var launchpadPageSnapMaxMs = 380;
+// iOS-like paging: short drag OR intentional flick advances one page.
+// Displacement ALWAYS wins once past commit — never let velocity yank back
+// a page the finger already crossed.
+var launchpadPageCommitRatio = 0.10;
+var launchpadPageCommitMinPx = 36;
+// Release velocity only used when displacement is still small (true flick).
+// Units ≈ px/s in Flickable.
+var launchpadPageFlickVelocity = 220;
 var launchpadStaggerPerPxMs = 0; // disabled cascade (kept for API/tests)
 var launchpadStaggerBudgetMs = 450;
 var launchpadStaggerMaxItems = 40;
@@ -212,6 +216,19 @@ function launchpadLaunchPopDuration(settingsService) {
 
 function launchpadPageSnapDuration(settingsService) {
     return reducedMotion(settingsService) ? 0 : launchpadPageSnapMs;
+}
+
+// Distance-aware snap: short remaining travel settles faster, long travel
+// stays smooth without feeling sticky.
+function launchpadPageSnapDurationForDistance(settingsService, distancePx, pageWidthPx) {
+    if (reducedMotion(settingsService))
+        return 0;
+    var pageW = pageWidthPx > 1 ? pageWidthPx : 1;
+    var dist = Math.abs(Number(distancePx) || 0);
+    var t = Math.min(1, dist / pageW);
+    var ms = launchpadPageSnapMinMs
+        + (launchpadPageSnapMaxMs - launchpadPageSnapMinMs) * t;
+    return Math.round(ms);
 }
 
 function launchpadStaggerDelay(distanceFromCenterPx, index, total) {

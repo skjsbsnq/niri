@@ -49,6 +49,22 @@ var dockMagSpring = {
     epsilon: 0.001
 };
 
+// Dock launch bounce loop + autohide (T08). Parabolic cycle while an app is
+// launching: height ≈ factor×icon, period ms, InQuad up / OutQuad down.
+// Stops on appHasRunningWindow or timeout. Reveal debounce suppresses edge jitter.
+var dockLaunchBounceHeightFactor = 0.7;
+var dockLaunchBouncePeriodMs = 550;
+var dockLaunchBounceTimeoutMs = 10000;
+var dockRevealDebounceMs = 150;
+// Autohide slide distance (px). Spring uses springSmooth (critically damped —
+// no overshoot into glass region geometry beyond the existing clamps).
+var dockAutohideSlidePx = 88;
+
+function dockLaunchBounceHeight(iconSizePx) {
+    var size = iconSizePx > 0 ? iconSizePx : 56;
+    return size * dockLaunchBounceHeightFactor;
+}
+
 // Spring vocabulary — QML SpringAnimation parameter groups. Glass region
 // geometry must never use these (guardrail 0704ea4); springs are only for
 // content transforms/opacity inside panels, compositor-side channels, and

@@ -46,8 +46,10 @@ PanelWindow {
     readonly property bool dockHidden: dockAutoHide && !dockHovered && !pointerDragActive && !launchpadOpen && !menuOpen
     property bool dockVisualHidden: dockHidden
     property bool dockGlassActive: !dockHidden
-    property real dockSlideOffset: dockVisualHidden ? 88 : 0
-    readonly property real dockVisibleAmount: 1 - Math.min(1, Math.max(0, dockSlideOffset / 88))
+    // Writable; animated toward dockSlideTarget via springSmooth / ease dual branch (T08).
+    property real dockSlideOffset: 0
+    readonly property real dockSlideTarget: dockVisualHidden ? Motion.dockAutohideSlidePx : 0
+    readonly property real dockVisibleAmount: 1 - Math.min(1, Math.max(0, dockSlideOffset / Motion.dockAutohideSlidePx))
     readonly property real dockGlassInteraction: dockHovered ? dockVisibleAmount : 0.0
     readonly property real dockVisibleHeight: Math.max(0, Math.min(dockSurface.height, dockSurface.height - dockSlideOffset))
     // T07 dock metrics — icon base 56 (was 46); slots grow with analytical push.
@@ -128,6 +130,40 @@ PanelWindow {
         }
     }
 
+    onDockSlideTargetChanged: root.animateDockSlideTo(dockSlideTarget)
+    Component.onCompleted: root.dockSlideOffset = root.dockSlideTarget
+
+    // T08: autohide slide uses springSmooth (critically damped — no overshoot).
+    // Glass region geometry stays clamped via dockVisibleHeight; only the
+    // content transform (Translate y) is spring-driven. Dual branch for useSpring.
+    function animateDockSlideTo(value) {
+        dockSlideSpring.stop();
+        dockSlideEase.stop();
+        if (root.useSpring && !Motion.reducedMotion(root.settingsService)) {
+            dockSlideSpring.to = value;
+            dockSlideSpring.restart();
+        } else {
+            dockSlideEase.to = value;
+            dockSlideEase.restart();
+        }
+    }
+
+    SpringAnimation {
+        id: dockSlideSpring
+        target: root
+        property: "dockSlideOffset"
+        spring: Motion.springSmooth.spring
+        damping: Motion.springSmooth.damping
+        epsilon: 0.0005
+    }
+    NumberAnimation {
+        id: dockSlideEase
+        target: root
+        property: "dockSlideOffset"
+        duration: 190
+        easing.type: Motion.emphasizedDecel
+    }
+
     // T07 · Cosine-bell dock wave + analytical push.
     //
     // Scale and slot geometry are pure functions of (index, cursorX) against
@@ -206,12 +242,21 @@ PanelWindow {
 
     function markDockHovered() {
         hoverExitTimer.stop();
-        root.dockHovered = true;
+        // Already revealed or auto-hide off: set immediately. Only the
+        // first edge-enter while fully hidden is debounced (T08).
+        if (root.dockHovered || !root.dockAutoHide || !root.dockVisualHidden) {
+            dockRevealDebounceTimer.stop();
+            root.dockHovered = true;
+            return;
+        }
+        dockRevealDebounceTimer.restart();
     }
 
     function updateDockHover(x) {
         hoverExitTimer.stop();
         root.dockMouseX = x;
+        // Pointer is already on the surface — force reveal without debounce.
+        dockRevealDebounceTimer.stop();
         root.dockHovered = true;
         root.pointerDragActive = false;
     }
@@ -232,11 +277,13 @@ PanelWindow {
     }
 
     function scheduleDockHoverReset() {
+        dockRevealDebounceTimer.stop();
         hoverExitTimer.restart();
     }
 
     function resetDockHover() {
         hoverExitTimer.stop();
+        dockRevealDebounceTimer.stop();
         root.dockHovered = false;
         root.dockMouseX = -10000;
         root.clearDockHoverLabel();
@@ -386,6 +433,15 @@ PanelWindow {
         onTriggered: root.resetDockHover()
     }
 
+    // T08: debounce first edge-enter while dock is hidden so rapid
+    // skims of the reveal zone do not jitter the panel open/closed.
+    Timer {
+        id: dockRevealDebounceTimer
+        interval: Motion.dockRevealDebounceMs
+        repeat: false
+        onTriggered: root.dockHovered = true
+    }
+
     Timer {
         id: dockRevealPrepareTimer
         interval: 34
@@ -424,11 +480,8 @@ PanelWindow {
 
     TahoeGlass.regions: [dockSurface.region]
 
-    // Local exception: dock auto-hide slide is tuned to the reveal zone and
-    // stays distinct from panel enter/exit tokens until profile write support.
-    Behavior on dockSlideOffset {
-        NumberAnimation { duration: 190; easing.type: Motion.emphasizedDecel }
-    }
+    // T08: dockSlideOffset is driven by explicit springSmooth / NumberAnimation
+    // dual branch (see animateDockSlideTo). No Behavior interceptor here.
 
     MouseArea {
         anchors {
@@ -546,7 +599,12 @@ PanelWindow {
                                     && root.appsService
                                     && root.niriService
                                     && root.appsService.appHasRunningWindow(appModel, root.niriService.windowList)
+                                // T08 launching state machine: true while waiting for first window
+                                // after a cold launch. Stops on running or 10s timeout.
+                                property bool launching: false
                                 readonly property real lift: (magnification - 1.0) * root.dockLiftFactor + (hovered ? 2 : 0)
+                                // Combined bounce: click settle + launch loop share one offset.
+                                property real bounceOffset: 0
                                 height: root.dockPinnedRowHeight
 
                                 property bool reorderPressed: false
@@ -554,11 +612,30 @@ PanelWindow {
                                 property real reorderPressX: 0
                                 property real reorderPressY: 0
 
+                                onRunningChanged: {
+                                    if (pinnedButton.running)
+                                        pinnedButton.stopLaunchBounce();
+                                }
+                                onLaunchingChanged: {
+                                    if (pinnedButton.launching)
+                                        launchBounceTimeout.restart();
+                                    else
+                                        launchBounceTimeout.stop();
+                                }
+
                                 Timer {
                                     id: suppressClickReset
                                     interval: 180
                                     repeat: false
                                     onTriggered: pinnedButton.suppressNextClick = false
+                                }
+
+                                // 10s safety stop if the app never maps a window (T08).
+                                Timer {
+                                    id: launchBounceTimeout
+                                    interval: Motion.dockLaunchBounceTimeoutMs
+                                    repeat: false
+                                    onTriggered: pinnedButton.stopLaunchBounce()
                                 }
 
                                 DropArea {
@@ -621,12 +698,26 @@ PanelWindow {
                                 }
 
                                 Rectangle {
+                                    id: runningDot
                                     anchors.horizontalCenter: parent.horizontalCenter
                                     anchors.bottom: parent.bottom
-                                    width: pinnedButton.running ? 5 : 0
+                                    width: (pinnedButton.running || pinnedButton.launching) ? 5 : 0
                                     height: 5
                                     radius: 3
-                                    color: "#99000000"
+                                    color: pinnedButton.launching && !pinnedButton.running
+                                        ? (root.darkMode ? "#a0ffffff" : "#99000000")
+                                        : (root.darkMode ? "#ccffffff" : "#99000000")
+
+                                    // T08: 2px soft glow (sibling halo; no GraphicalEffects).
+                                    Rectangle {
+                                        anchors.centerIn: parent
+                                        width: parent.width + 4
+                                        height: parent.height + 4
+                                        radius: width / 2
+                                        z: -1
+                                        visible: parent.width > 0
+                                        color: root.darkMode ? "#40ffffff" : "#40000000"
+                                    }
                                 }
 
                                 MouseArea {
@@ -696,15 +787,23 @@ PanelWindow {
                                         if (pinnedButton.suppressNextClick)
                                             return;
 
-                                        pinnedButton.bounce();
                                         if (mouse.button === Qt.RightButton) {
+                                            pinnedButton.bounce();
                                             if (pinnedButton.appId !== "launchpad")
                                                 root.openPinnedAppMenu(pinnedButton.appModel, pinnedButton.appId, root.anchorRectFor(pinnedButton));
                                             root.markDockHovered();
                                             return;
                                         } else if (pinnedButton.appId === "launchpad") {
+                                            pinnedButton.bounce();
                                             root.toggleLaunchpad();
                                         } else if (root.appsService) {
+                                            // T08: cold-start → launch bounce loop; re-click
+                                            // while already launching does not stack anims.
+                                            // Already-running apps just get a single bounce.
+                                            if (!pinnedButton.running && !pinnedButton.launching)
+                                                pinnedButton.startLaunchBounce();
+                                            else if (!pinnedButton.launching)
+                                                pinnedButton.bounce();
                                             root.appsService.launchPinnedApp(pinnedButton.appModel, pinnedButton.appId);
                                         }
                                     }
@@ -721,7 +820,7 @@ PanelWindow {
 
                                 // Writable animated values (not bound) so animations own them.
                                 property real magnification: 1.0
-                                property real bounceOffset: 0
+                                // bounceOffset declared above (shared by click + launch loop).
                                 // x/width still need initial layout; animate toward targets.
                                 x: 0
                                 width: root.dockPinnedButtonWidth
@@ -734,6 +833,7 @@ PanelWindow {
                                     pinnedButton.x = pinnedButton.xTarget;
                                     pinnedButton.width = pinnedButton.widthTarget;
                                 }
+                                Component.onDestruction: pinnedButton.stopLaunchBounce()
 
                                 function animateMagnification() {
                                     if (root.useSpring) {
@@ -809,7 +909,7 @@ PanelWindow {
                                     easing.type: Motion.emphasizedDecel
                                 }
 
-                                // Bounce: kick to 14 then settle to 0 via dual-branch anims.
+                                // ── Click bounce (single hop) ──────────────────────
                                 Timer {
                                     id: bounceTimer
                                     interval: 16
@@ -818,8 +918,11 @@ PanelWindow {
                                 }
 
                                 function bounce() {
+                                    if (pinnedButton.launching)
+                                        return;
                                     bounceSpring.stop();
                                     bounceEase.stop();
+                                    launchBounceLoop.stop();
                                     pinnedButton.bounceOffset = 14;
                                     bounceTimer.restart();
                                 }
@@ -837,9 +940,8 @@ PanelWindow {
                                     id: bounceSpring
                                     target: pinnedButton
                                     property: "bounceOffset"
-                                    spring: 380
-                                    damping: 0.32
-                                    mass: 0.9
+                                    spring: Motion.springBouncy.spring
+                                    damping: Motion.springBouncy.damping
                                     epsilon: 0.01
                                 }
                                 NumberAnimation {
@@ -848,6 +950,62 @@ PanelWindow {
                                     property: "bounceOffset"
                                     duration: 220
                                     easing.type: Motion.emphasizedDecel
+                                }
+
+                                // ── T08 launch bounce loop ─────────────────────────
+                                // Parabola cycle: up InQuad, down OutQuad; height =
+                                // 0.7×icon, period 550ms. Re-entrant start is a no-op
+                                // (连点不叠加). reduced profile: single hop then idle.
+                                function startLaunchBounce() {
+                                    if (pinnedButton.launching)
+                                        return;
+                                    if (Motion.reducedMotion(root.settingsService)) {
+                                        // One instant hop, no loop under reduced.
+                                        pinnedButton.bounce();
+                                        return;
+                                    }
+                                    bounceSpring.stop();
+                                    bounceEase.stop();
+                                    bounceTimer.stop();
+                                    pinnedButton.bounceOffset = 0;
+                                    pinnedButton.launching = true;
+                                    launchBounceLoop.restart();
+                                }
+                                function stopLaunchBounce() {
+                                    if (!pinnedButton.launching && !launchBounceLoop.running)
+                                        return;
+                                    launchBounceLoop.stop();
+                                    launchBounceTimeout.stop();
+                                    pinnedButton.launching = false;
+                                    // Settle residual offset to 0 without stacking.
+                                    bounceSpring.stop();
+                                    bounceEase.stop();
+                                    bounceTimer.stop();
+                                    if (Math.abs(pinnedButton.bounceOffset) > 0.5)
+                                        pinnedButton.animateBounceTo(0);
+                                    else
+                                        pinnedButton.bounceOffset = 0;
+                                }
+
+                                SequentialAnimation {
+                                    id: launchBounceLoop
+                                    loops: Animation.Infinite
+                                    NumberAnimation {
+                                        target: pinnedButton
+                                        property: "bounceOffset"
+                                        from: 0
+                                        to: Motion.dockLaunchBounceHeight(root.dockIconSize)
+                                        duration: Math.round(Motion.dockLaunchBouncePeriodMs / 2)
+                                        easing.type: Easing.InQuad
+                                    }
+                                    NumberAnimation {
+                                        target: pinnedButton
+                                        property: "bounceOffset"
+                                        from: Motion.dockLaunchBounceHeight(root.dockIconSize)
+                                        to: 0
+                                        duration: Math.round(Motion.dockLaunchBouncePeriodMs / 2)
+                                        easing.type: Easing.OutQuad
+                                    }
                                 }
                             }
                         }

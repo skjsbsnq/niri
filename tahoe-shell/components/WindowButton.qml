@@ -203,6 +203,17 @@ Item {
         radius: 2
         color: root.active ? "#202124" : root.minimized ? "#7b818a" : "#99000000"
         opacity: (root.windowModel || root.toplevel) ? 1 : 0
+
+        // T08: 2px soft glow under the running indicator.
+        Rectangle {
+            anchors.centerIn: parent
+            width: parent.width + 4
+            height: parent.height + 4
+            radius: Math.min(width, height) / 2
+            z: -1
+            visible: parent.opacity > 0.01 && parent.width > 0
+            color: "#40000000"
+        }
     }
 
     Rectangle {

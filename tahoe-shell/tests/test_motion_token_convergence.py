@@ -103,6 +103,17 @@ class MotionTokenConvergenceTests(unittest.TestCase):
         self.assertIn("damping: 0.42", body)
         self.assertIn("epsilon: 0.001", body)
 
+    def test_motion_exports_dock_launch_and_autohide_tokens(self) -> None:
+        text = MOTION_JS.read_text(encoding="utf-8")
+
+        self.assertIn("var dockLaunchBounceHeightFactor = 0.7;", text)
+        self.assertIn("var dockLaunchBouncePeriodMs = 550;", text)
+        self.assertIn("var dockLaunchBounceTimeoutMs = 10000;", text)
+        self.assertIn("var dockRevealDebounceMs = 150;", text)
+        self.assertIn("var dockAutohideSlidePx = 88;", text)
+        self.assertIn("function dockLaunchBounceHeight(iconSizePx)", text)
+        self.assertIn("dockLaunchBounceHeightFactor", text)
+
     def test_dock_uses_analytical_cosine_wave_and_unified_label(self) -> None:
         dock = (COMPONENTS_ROOT / "Dock.qml").read_text(encoding="utf-8")
         window_button = (COMPONENTS_ROOT / "WindowButton.qml").read_text(encoding="utf-8")
@@ -161,6 +172,43 @@ class MotionTokenConvergenceTests(unittest.TestCase):
         self.assertEqual(dock.count("Behavior on bounceOffset"), 0)
         self.assertEqual(window_button.count("Behavior on magnification"), 0)
         self.assertEqual(window_button.count("Behavior on bounceOffset"), 0)
+
+    def test_dock_launch_bounce_and_autohide_spring(self) -> None:
+        dock = (COMPONENTS_ROOT / "Dock.qml").read_text(encoding="utf-8")
+        window_button = (COMPONENTS_ROOT / "WindowButton.qml").read_text(encoding="utf-8")
+
+        # Launching state machine: start on cold launch, stop on running / timeout.
+        self.assertIn("property bool launching: false", dock)
+        self.assertIn("function startLaunchBounce()", dock)
+        self.assertIn("function stopLaunchBounce()", dock)
+        self.assertIn("id: launchBounceLoop", dock)
+        self.assertIn("id: launchBounceTimeout", dock)
+        self.assertIn("Motion.dockLaunchBounceTimeoutMs", dock)
+        self.assertIn("Motion.dockLaunchBounceHeight(root.dockIconSize)", dock)
+        self.assertIn("Motion.dockLaunchBouncePeriodMs", dock)
+        self.assertIn("Easing.InQuad", dock)
+        self.assertIn("Easing.OutQuad", dock)
+        self.assertIn("loops: Animation.Infinite", dock)
+        # Re-click while launching does not stack; running apps get single bounce.
+        self.assertIn("if (!pinnedButton.running && !pinnedButton.launching)", dock)
+        self.assertIn("pinnedButton.startLaunchBounce()", dock)
+        self.assertIn("onRunningChanged", dock)
+        self.assertIn("pinnedButton.stopLaunchBounce()", dock)
+
+        # Autohide: springSmooth dual branch + 150ms reveal debounce; no Behavior interceptor.
+        self.assertIn("Motion.springSmooth", dock)
+        self.assertIn("id: dockSlideSpring", dock)
+        self.assertIn("id: dockSlideEase", dock)
+        self.assertIn("function animateDockSlideTo(value)", dock)
+        self.assertIn("id: dockRevealDebounceTimer", dock)
+        self.assertIn("Motion.dockRevealDebounceMs", dock)
+        self.assertIn("Motion.dockAutohideSlidePx", dock)
+        self.assertEqual(dock.count("Behavior on dockSlideOffset"), 0)
+
+        # Running indicator 2px glow (sibling halo, no GraphicalEffects).
+        self.assertIn("id: runningDot", dock)
+        self.assertIn("parent.width + 4", dock)
+        self.assertIn("parent.width + 4", window_button)
 
     def test_phase_b_press_feedback_uses_motion_single_outlet(self) -> None:
         # T06 moved menu press feedback into the shared MenuRow.qml outlet.

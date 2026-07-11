@@ -59,7 +59,7 @@
 | GOAL-05 | T05 全局按下态铺开 | M | DONE | [acceptance/T05-global-press-feedback-2026-07-10.md](acceptance/T05-global-press-feedback-2026-07-10.md) |
 | GOAL-06 | T06 菜单 macOS 化 + MenuRow 合并 | M | DONE | [acceptance/T06-menu-macos-row-2026-07-11.md](acceptance/T06-menu-macos-row-2026-07-11.md) |
 | GOAL-07 | T07 Dock 放大与推挤重写 | L | DONE | [acceptance/T07-dock-magnification-2026-07-11.md](acceptance/T07-dock-magnification-2026-07-11.md) |
-| GOAL-08 | T08 Dock 启动弹跳 + autohide 手感 | M | PENDING | — |
+| GOAL-08 | T08 Dock 启动弹跳 + autohide 手感 | M | DONE | [acceptance/T08-dock-launch-autohide-2026-07-11.md](acceptance/T08-dock-launch-autohide-2026-07-11.md) |
 | GOAL-09 | T09 通知堆叠与滑出 | M | PENDING | — |
 | GOAL-10 | T10 控制中心去 chrome + 控件手感 | M | PENDING | — |
 | GOAL-11 | T11 控制中心模块 morph 展开 | L | PENDING | — |

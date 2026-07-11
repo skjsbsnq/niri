@@ -7,6 +7,7 @@ import Quickshell.Wayland
 import "TahoeGlass.js" as GlassStyle
 import "Motion.js" as Motion
 import "PopupGeometry.js" as PopupGeometry
+import "settings/SettingsTheme.js" as Theme
 
 PanelWindow {
     id: root
@@ -33,18 +34,19 @@ PanelWindow {
     readonly property real popupOriginX: PopupGeometry.originX(anchorRect, popupLeftMargin, root.implicitWidth, screenWidth, fallbackRight)
     readonly property color glassFill: darkMode ? "#d01d1f24" : GlassStyle.FillPanel
     readonly property color glassStroke: darkMode ? "#38ffffff" : GlassStyle.StrokePanel
-    readonly property color glassInnerFill: darkMode ? "#1cffffff" : "#14ffffff"
-    readonly property color tileFill: darkMode ? "#2c343dcc" : "#80ffffff"
-    readonly property color tileFillHover: darkMode ? "#36424dcc" : "#8fffffff"
-    readonly property color tileFillActive: darkMode ? "#37424dcc" : "#88ffffff"
-    readonly property color tileFillPressed: darkMode ? "#242c34cc" : "#70ffffff"
-    readonly property color tileStroke: darkMode ? "#34ffffff" : "#5affffff"
+    readonly property color glassInnerFill: Theme.controlInnerFill(darkMode)
+    readonly property string accentId: settingsService ? settingsService.accentColor : "blue"
+    readonly property color tileFill: Theme.controlTileFill(darkMode)
+    readonly property color tileFillHover: Theme.controlTileFillHover(darkMode)
+    readonly property color tileFillActive: Theme.controlTileFillActive(darkMode)
+    readonly property color tileFillPressed: Theme.controlTileFillPressed(darkMode)
+    readonly property color tileStroke: Theme.controlTileStroke(darkMode)
     readonly property color tileShadowLine: "#1a000000"
-    readonly property color accentActive: "#2c9cf2"
-    readonly property color textPrimary: darkMode ? "#f5f7fb" : "#1d1d1f"
-    readonly property color textSecondary: darkMode ? "#c8d0d8" : "#991d1d1f"
-    readonly property color textTertiary: darkMode ? "#9da7b1" : "#731d1d1f"
-    readonly property color sliderFill: darkMode ? "#d8e4f0" : "#f2ffffff"
+    readonly property color accentActive: Theme.accent(darkMode, accentId)
+    readonly property color textPrimary: Theme.label(darkMode)
+    readonly property color textSecondary: Theme.secondaryLabel(darkMode)
+    readonly property color textTertiary: Theme.tertiaryLabel(darkMode)
+    readonly property color sliderFill: Theme.sliderFill(darkMode)
     readonly property var wifiNetworks: controlsService ? controlsService.wifiNetworks : []
     readonly property var bluetoothDevices: controlsService ? controlsService.bluetoothDeviceEntries : []
     readonly property int morphDuration: Motion.reducedMotion(settingsService) ? 0 : Motion.ccMorphDurationMs
@@ -891,7 +893,7 @@ PanelWindow {
                             color: row.connected
                                 ? (root.darkMode ? "#403a7ab5" : "#5ad7f0ff")
                                 : (rowMouse.containsMouse ? "#40ffffff" : "#28ffffff")
-                            border.color: row.connected ? "#882c9cf2" : "#34ffffff"
+                            border.color: row.connected ? root.accentActive : "#34ffffff"
                             border.width: 1
 
                             ColumnLayout {
@@ -998,7 +1000,7 @@ PanelWindow {
                                             Layout.fillWidth: true
                                             Layout.fillHeight: true
                                             color: root.textPrimary
-                                            selectionColor: "#662c9cf2"
+                                            selectionColor: root.accentActive
                                             selectedTextColor: "#ffffff"
                                             font.pixelSize: 13
                                             echoMode: TextInput.Password

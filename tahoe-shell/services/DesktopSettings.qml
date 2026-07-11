@@ -54,6 +54,8 @@ Item {
     readonly property string weatherTempUnit: settingsAdapter.weatherTempUnit
     // T09: max simultaneous toast cards in the live stack (1–3).
     readonly property int notificationToastStackMax: settingsAdapter.notificationToastStackMax
+    // T14: macOS-style accent id (blue/purple/pink/red/orange/yellow/green/graphite).
+    readonly property string accentColor: settingsAdapter.accentColor
     property var autostartEntries: []
     property string autostartStatus: "unknown"
     property string autostartDetail: "尚未读取启动项"
@@ -128,6 +130,46 @@ Item {
             || value === "balanced"
             || value === "liquid"
             || value === "reduced";
+    }
+
+    function validAccentColor(value) {
+        var id = String(value || "").trim().toLowerCase();
+        return id === "blue"
+            || id === "purple"
+            || id === "pink"
+            || id === "red"
+            || id === "orange"
+            || id === "yellow"
+            || id === "green"
+            || id === "graphite"
+            || id === "gray"
+            || id === "grey";
+    }
+
+    function normalizeAccentColor(value) {
+        var id = String(value || "").trim().toLowerCase();
+        if (id === "gray" || id === "grey")
+            return "graphite";
+        return validAccentColor(id) ? (id === "gray" || id === "grey" ? "graphite" : id) : "blue";
+    }
+
+    function accentColorLabel(value) {
+        var id = normalizeAccentColor(value);
+        if (id === "purple")
+            return "紫色";
+        if (id === "pink")
+            return "粉色";
+        if (id === "red")
+            return "红色";
+        if (id === "orange")
+            return "橙色";
+        if (id === "yellow")
+            return "黄色";
+        if (id === "green")
+            return "绿色";
+        if (id === "graphite")
+            return "石墨";
+        return "蓝色";
     }
 
     function cleanIconThemeName(value) {
@@ -365,6 +407,15 @@ Item {
         settingsFile.writeAdapter();
     }
 
+    function setAccentColor(value) {
+        var next = normalizeAccentColor(value);
+        if (settingsAdapter.accentColor === next)
+            return;
+
+        settingsAdapter.accentColor = next;
+        settingsFile.writeAdapter();
+    }
+
     function setNotificationToastStackMax(value) {
         var next = clampInt(value, 1, 3, 3);
         if (settingsAdapter.notificationToastStackMax === next)
@@ -569,6 +620,7 @@ Item {
     }
 
     function sanitizeState() {
+        settingsAdapter.accentColor = normalizeAccentColor(settingsAdapter.accentColor);
         root.loaded = true;
         var changed = false;
 
@@ -746,6 +798,7 @@ Item {
             property string startupNote: ""
             property bool compositorLayerAnimations: true
             property string motionProfile: "balanced"
+            property string accentColor: "blue"
             property int notificationToastStackMax: 3
             property bool dynamicIslandEnabled: true
             property bool dynamicIslandHideTopbarTime: true

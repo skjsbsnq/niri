@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import "Motion.js" as Motion
+import "settings/SettingsTheme.js" as Theme
 
 // LS06: 左侧边栏「系统」标签页内容。
 //
@@ -38,10 +39,11 @@ Item {
     readonly property color cardFill: darkMode ? "#24ffffff" : "#58ffffff"
     readonly property color cardStroke: darkMode ? "#2effffff" : "#66ffffff"
     readonly property color rowHover: darkMode ? "#28ffffff" : "#48ffffff"
-    readonly property color textPrimary: darkMode ? "#f5f7fb" : "#1d1d1f"
-    readonly property color textSecondary: darkMode ? "#c8d0d8" : "#991d1d1f"
+    readonly property string accentId: settingsService ? settingsService.accentColor : "blue"
+    readonly property color textPrimary: Theme.label(darkMode)
+    readonly property color textSecondary: Theme.secondaryLabel(darkMode)
     readonly property color textTertiary: darkMode ? "#9da7b1" : "#731d1d1f"
-    readonly property color accentBlue: darkMode ? "#2c9cf2" : "#0b6bd3"
+    readonly property color accentBlue: Theme.accent(darkMode, accentId)
     // 折线/网格多色，深浅色都用同一组饱和度适中的强调色（照参考 catppuccin 配色，
     // 但 Tahoe 下放到偏中性的玻璃卡片里，避免太跳）。
     readonly property color colorNetDown: "#2c9cf2"

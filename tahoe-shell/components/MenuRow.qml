@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import "Motion.js" as Motion
+import "settings/SettingsTheme.js" as Theme
 
 // Shared menu row for every shell menu (T06).
 // macOS signatures: height 26 / 13px / radius 6 / accent-blue hover + white text;
@@ -28,29 +29,30 @@ Item {
     readonly property bool interactive: enabledRow && !separator && !header
     readonly property bool highlight: interactive
         && (forceHighlight || rowMouse.containsMouse || (rowMouse.pressed && !flashing))
-    readonly property color accent: darkMode ? "#0a84ff" : "#007aff"
-    readonly property color danger: darkMode ? "#ff6961" : "#ff453a"
+    readonly property string accentId: settingsService ? settingsService.accentColor : "blue"
+    readonly property color accent: Theme.accent(darkMode, accentId)
+    readonly property color danger: Theme.danger(darkMode)
     readonly property color labelColor: {
         if (separator)
             return "transparent";
         if (highlight)
             return "#ffffff";
         if (header)
-            return darkMode ? "#94a0ad" : "#721d1d1f";
+            return Theme.tertiaryLabel(darkMode);
         if (destructive)
             return danger;
-        return darkMode ? "#f5f7fb" : "#1d1d1f";
+        return Theme.label(darkMode);
     }
     readonly property color iconColor: {
         if (highlight)
             return "#ffffff";
         if (header)
-            return darkMode ? "#94a0ad" : "#721d1d1f";
+            return Theme.tertiaryLabel(darkMode);
         if (destructive)
             return danger;
         return darkMode ? "#c3ccd6" : "#202124";
     }
-    readonly property color separatorColor: darkMode ? "#1affffff" : "#1a000000"
+    readonly property color separatorColor: Theme.separator(darkMode)
     readonly property int rowHeight: separator ? 9 : (header ? 22 : 26)
     readonly property int textLeft: showCheckColumn
         ? (30 + indent * 14)
@@ -196,7 +198,7 @@ Item {
         anchors.rightMargin: 8
         anchors.verticalCenter: parent.verticalCenter
         name: "\ue5cc"
-        color: row.highlight ? "#ffffff" : (row.darkMode ? "#94a0ad" : "#661d1d1f")
+        color: row.highlight ? "#ffffff" : Theme.tertiaryLabel(row.darkMode)
         size: 15
         visible: !row.separator && row.hasSubmenu && !row.header
     }

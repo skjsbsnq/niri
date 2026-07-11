@@ -6,6 +6,7 @@ import Quickshell
 import Quickshell.Wayland
 import "TahoeGlass.js" as GlassStyle
 import "Motion.js" as Motion
+import "settings/SettingsTheme.js" as Theme
 
 // LS05/LS11: left-edge shell container. It owns the glass shell and tab
 // switching; System/Weather pages own their own content and data presentation.
@@ -26,12 +27,13 @@ PanelWindow {
     readonly property int panelWidth: Math.max(320, Math.min(540, screenWidth - 24))
     readonly property color glassFill: darkMode ? "#d01d1f24" : GlassStyle.FillPanel
     readonly property color glassStroke: darkMode ? "#38ffffff" : GlassStyle.StrokePanel
-    readonly property color cardFill: darkMode ? "#24ffffff" : "#58ffffff"
-    readonly property color cardStroke: darkMode ? "#2effffff" : "#66ffffff"
-    readonly property color textPrimary: darkMode ? "#f5f7fb" : "#1d1d1f"
-    readonly property color textSecondary: darkMode ? "#c8d0d8" : "#991d1d1f"
-    readonly property color textTertiary: darkMode ? "#9da7b1" : "#731d1d1f"
-    readonly property color accentBlue: darkMode ? "#2c9cf2" : "#0b6bd3"
+    readonly property string accentId: settingsService ? settingsService.accentColor : "blue"
+    readonly property color cardFill: Theme.cardFill(darkMode)
+    readonly property color cardStroke: Theme.cardStroke(darkMode)
+    readonly property color textPrimary: Theme.label(darkMode)
+    readonly property color textSecondary: Theme.secondaryLabel(darkMode)
+    readonly property color textTertiary: Theme.tertiaryLabel(darkMode)
+    readonly property color accentBlue: Theme.accent(darkMode, accentId)
     readonly property bool compositorLayerAnimations: !!(settingsService && settingsService.compositorLayerAnimations)
     readonly property real closedSlideX: -(panelWidth + 24)
     readonly property bool qmlSlideActive: !compositorLayerAnimations && slideTransform.x > closedSlideX + 0.5

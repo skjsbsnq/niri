@@ -8,6 +8,7 @@ import Quickshell.Wayland
 import "Motion.js" as Motion
 import "TahoeGlass.js" as GlassStyle
 import "DynamicIslandMotion.js" as IslandMotion
+import "settings/SettingsTheme.js" as Theme
 
 PanelWindow {
     id: root
@@ -51,19 +52,21 @@ PanelWindow {
     readonly property bool batteryAvailable: batteryService && batteryService.available
     readonly property color glassFill: darkMode ? "#d01d1f24" : GlassStyle.FillTopBar
     readonly property color glassStroke: darkMode ? "#38ffffff" : GlassStyle.StrokeTopBar
-    readonly property color topText: darkMode ? "#f5f7fb" : "#1d1d1f"
-    readonly property color topTextSecondary: darkMode ? "#d6dde5" : "#3a3a3c"
+    readonly property string accentId: settingsService ? settingsService.accentColor : "blue"
+    readonly property color topText: Theme.label(darkMode)
+    readonly property color topTextSecondary: Theme.topTextSecondary(darkMode)
     readonly property color statusText: topText
     readonly property color statusTextDisabled: darkMode ? "#73f5f7fb" : "#731d1d1f"
     readonly property color statusTextFaint: darkMode ? "#99f5f7fb" : "#991d1d1f"
-    readonly property color statusAttention: "#ff453a"
+    readonly property color statusAttention: Theme.statusAttention(darkMode)
+    readonly property color accentColor: Theme.accent(darkMode, accentId)
     readonly property int statusItemHeight: 22
     readonly property int statusIconWidth: 26
     readonly property int batteryItemMinWidth: 66
     readonly property int statusRadius: 7
     readonly property color buttonFill: "transparent"
-    readonly property color buttonHover: darkMode ? "#24ffffff" : "#26ffffff"
-    readonly property color buttonOpen: darkMode ? "#34ffffff" : "#34ffffff"
+    readonly property color buttonHover: Theme.buttonHover(darkMode)
+    readonly property color buttonOpen: Theme.buttonOpen(darkMode)
 
     signal toggleAppMenu(var anchorRect)
     signal toggleApplicationMenu(var anchorRect)
@@ -227,7 +230,7 @@ PanelWindow {
                     TahoeSymbol {
                         anchors.centerIn: parent
                         name: "\ue2bd" // wb_cloudy
-                        color: root.leftSidebarOpen ? "#0b6bd3" : root.topTextSecondary
+                        color: root.leftSidebarOpen ? root.accentColor : root.topTextSecondary
                         size: 16
                     }
 
@@ -402,7 +405,7 @@ PanelWindow {
                     width: countLabel.implicitWidth + 8
                     height: 14
                     radius: 7
-                    color: "#ccff453a"
+                    color: root.statusAttention
                     border.color: "#ffffff"
                     border.width: 1
                     visible: root.notificationCount > 0
@@ -460,7 +463,7 @@ PanelWindow {
                     radius: 6.5
                     x: parent.width - width - 2
                     y: 1
-                    color: "#ccff453a"
+                    color: root.statusAttention
                     border.color: "#ffffff"
                     border.width: 1
                     visible: root.clipboardCount > 0

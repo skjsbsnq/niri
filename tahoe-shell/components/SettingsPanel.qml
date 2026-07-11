@@ -51,7 +51,8 @@ PanelWindow {
     readonly property color textPrimary: SettingsTheme.textPrimary(darkMode)
     readonly property color textSecondary: SettingsTheme.textSecondary(darkMode)
     readonly property color textMuted: SettingsTheme.textMuted(darkMode)
-    readonly property color accentBlue: SettingsTheme.accentBlue(darkMode)
+    readonly property string accentId: settingsService ? settingsService.accentColor : "blue"
+    readonly property color accentBlue: SettingsTheme.accent(darkMode, accentId)
     readonly property color panelFill: SettingsTheme.panelFill(darkMode)
     readonly property color panelStroke: SettingsTheme.panelStroke(darkMode)
     readonly property color sectionFill: SettingsTheme.sectionFill(darkMode)
@@ -66,11 +67,11 @@ PanelWindow {
     readonly property color sidebarHoverFill: SettingsTheme.sidebarHoverFill(darkMode)
     readonly property color buttonFill: SettingsTheme.buttonFill(darkMode)
     readonly property color buttonStroke: SettingsTheme.buttonStroke(darkMode)
-    readonly property color accentFillStrong: SettingsTheme.accentFillStrong(darkMode)
+    readonly property color accentFillStrong: SettingsTheme.accentFillStrong(darkMode, accentId)
     readonly property color accentStrokeStrong: SettingsTheme.accentStrokeStrong(darkMode)
     readonly property color fieldFill: SettingsTheme.fieldFill(darkMode)
     readonly property color fieldStroke: SettingsTheme.fieldStroke(darkMode)
-    readonly property color fieldStrokeFocus: SettingsTheme.fieldStrokeFocus(darkMode)
+    readonly property color fieldStrokeFocus: SettingsTheme.fieldStrokeFocus(darkMode, accentId)
     readonly property color sliderTrack: SettingsTheme.sliderTrack(darkMode)
     readonly property color switchOff: SettingsTheme.switchOff(darkMode)
     readonly property color tileFill: SettingsTheme.tileFill(darkMode)
@@ -82,7 +83,7 @@ PanelWindow {
     readonly property string currentPageId: SettingsModel.resolveId(selectedPage)
 
     function categoryColor(key) {
-        return SettingsTheme.categoryColor(key, darkMode);
+        return SettingsTheme.categoryColor(key, darkMode, accentId);
     }
 
     signal closeRequested()

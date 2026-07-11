@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import "Motion.js" as Motion
+import "settings/SettingsTheme.js" as Theme
 
 // 左侧边栏天气页。
 //
@@ -25,13 +26,14 @@ Item {
     readonly property bool updating: !!(weatherService && weatherService.updating)
     readonly property string status: weatherService ? String(weatherService.status || "idle") : "idle"
 
-    readonly property color textPrimary: darkMode ? "#f5f7fb" : "#1d1d1f"
-    readonly property color textSecondary: darkMode ? "#c8d0d8" : "#991d1d1f"
-    readonly property color textTertiary: darkMode ? "#9da7b1" : "#731d1d1f"
-    readonly property color accentBlue: darkMode ? "#2c9cf2" : "#0b6bd3"
+    readonly property string accentId: settingsService ? settingsService.accentColor : "blue"
+    readonly property color textPrimary: Theme.label(darkMode)
+    readonly property color textSecondary: Theme.secondaryLabel(darkMode)
+    readonly property color textTertiary: Theme.tertiaryLabel(darkMode)
+    readonly property color accentBlue: Theme.accent(darkMode, accentId)
     readonly property color successGreen: darkMode ? "#63d471" : "#248a3d"
     readonly property color warningYellow: darkMode ? "#ffd60a" : "#b56a00"
-    readonly property color dangerRed: darkMode ? "#ff453a" : "#e54857"
+    readonly property color dangerRed: Theme.danger(darkMode)
     readonly property color precipBlue: darkMode ? "#7dc8ff" : "#2c9cf2"
     readonly property color cardFill: darkMode ? "#18ffffff" : "#34ffffff"
     readonly property color cardHover: darkMode ? "#26ffffff" : "#50ffffff"

@@ -1,12 +1,25 @@
 .pragma library
 
-// Tahoe settings design tokens. Light-mode values match the S1 baseline (only
-// accentBlue changed #2c9cf2 -> #007ff7 per the macOS reference); every token
-// now also resolves a dark-mode variant so the panel stays readable when
-// shell.darkMode is on. Brand category colors are solid macOS system colors
-// and read well in both modes.
+// Tahoe shell design tokens (T14). Expanded from settings-only tokens into the
+// shared shell color library — one export surface for TopBar / menus / CC /
+// sidebar / settings. Do not introduce a parallel theme file (rules §2.4 / §3.2).
+//
+// Accent is selectable (macOS 8 system colors) via DesktopSettings.accentColor.
+// Call sites pass darkMode + optional accentId; default accent is system blue.
 
-// --- Text -----------------------------------------------------------------
+// --- Text (semantic aliases + legacy names) --------------------------------
+
+function label(darkMode) {
+    return textPrimary(darkMode);
+}
+
+function secondaryLabel(darkMode) {
+    return textSecondary(darkMode);
+}
+
+function tertiaryLabel(darkMode) {
+    return textMuted(darkMode);
+}
 
 function textPrimary(darkMode) {
     return darkMode ? "#f5f7fb" : "#1d1d1f";
@@ -20,11 +33,96 @@ function textMuted(darkMode) {
     return darkMode ? "#94a0ad" : "#5f6870";
 }
 
-// --- Accent / state -------------------------------------------------------
+function separator(darkMode) {
+    return darkMode ? "#1affffff" : "#1a000000";
+}
 
-function accentBlue(darkMode) {
-    // macOS system blue: #007ff7 (light, Web reference) / #0a84ff (dark).
-    return darkMode ? "#0a84ff" : "#007ff7";
+// --- Accent system (macOS 8) ----------------------------------------------
+
+// Stable ids stored in DesktopSettings.accentColor.
+var ACCENT_IDS = [
+    "blue",
+    "purple",
+    "pink",
+    "red",
+    "orange",
+    "yellow",
+    "green",
+    "graphite"
+];
+
+function accentIds() {
+    return ACCENT_IDS.slice();
+}
+
+function normalizeAccentId(value) {
+    var id = String(value || "").trim().toLowerCase();
+    if (id === "gray" || id === "grey")
+        return "graphite";
+    for (var i = 0; i < ACCENT_IDS.length; i++) {
+        if (ACCENT_IDS[i] === id)
+            return id;
+    }
+    return "blue";
+}
+
+function accentLabel(value) {
+    switch (normalizeAccentId(value)) {
+    case "purple":
+        return "紫色";
+    case "pink":
+        return "粉色";
+    case "red":
+        return "红色";
+    case "orange":
+        return "橙色";
+    case "yellow":
+        return "黄色";
+    case "green":
+        return "绿色";
+    case "graphite":
+        return "石墨";
+    default:
+        return "蓝色";
+    }
+}
+
+// Light / dark pairs match macOS system colors (approximate public palette).
+function systemAccent(value, darkMode) {
+    switch (normalizeAccentId(value)) {
+    case "purple":
+        return darkMode ? "#bf5af2" : "#af52de";
+    case "pink":
+        return darkMode ? "#ff375f" : "#ff2d55";
+    case "red":
+        return darkMode ? "#ff453a" : "#ff3b30";
+    case "orange":
+        return darkMode ? "#ff9f0a" : "#ff9500";
+    case "yellow":
+        return darkMode ? "#ffd60a" : "#ffcc00";
+    case "green":
+        return darkMode ? "#30d158" : "#34c759";
+    case "graphite":
+        return darkMode ? "#98989d" : "#8e8e93";
+    default: // blue
+        return darkMode ? "#0a84ff" : "#007ff7";
+    }
+}
+
+// Backward-compatible name: default system blue when accentId omitted.
+function accentBlue(darkMode, accentId) {
+    if (accentId === undefined || accentId === null || String(accentId).length === 0)
+        return systemAccent("blue", darkMode);
+    return systemAccent(accentId, darkMode);
+}
+
+// Preferred shell API: accent(darkMode, accentId).
+function accent(darkMode, accentId) {
+    return systemAccent(accentId, darkMode);
+}
+
+function systemBlue(darkMode) {
+    return systemAccent("blue", darkMode);
 }
 
 function stateLabel(state) {
@@ -43,7 +141,7 @@ function stateLabel(state) {
     return "信息";
 }
 
-function stateColor(state, darkMode) {
+function stateColor(state, darkMode, accentId) {
     if (state === "ok")
         return darkMode ? "#30d158" : "#34c759";
     if (state === "warn")
@@ -54,7 +152,7 @@ function stateColor(state, darkMode) {
         return "#ff453a";
     if (state === "broken")
         return darkMode ? "#ff6961" : "#d70015";
-    return accentBlue(darkMode);
+    return accent(darkMode, accentId);
 }
 
 function danger(darkMode) {
@@ -125,8 +223,13 @@ function buttonStroke(darkMode) {
     return darkMode ? "#2effffff" : "#50ffffff";
 }
 
-function accentFillStrong(darkMode) {
-    // Primary button fill: accent blue at ~85% alpha.
+function accentFillStrong(darkMode, accentId) {
+    // Primary button fill: accent at ~85% alpha.
+    var c = String(accent(darkMode, accentId) || "#007ff7").replace("#", "");
+    if (c.length === 6)
+        return "#" + "d8" + c;
+    if (c.length === 8)
+        return "#" + "d8" + c.substring(2);
     return darkMode ? "#d80a84ff" : "#d8007ff7";
 }
 
@@ -144,8 +247,8 @@ function fieldStroke(darkMode) {
     return darkMode ? "#30ffffff" : "#4cffffff";
 }
 
-function fieldStrokeFocus(darkMode) {
-    return accentBlue(darkMode);
+function fieldStrokeFocus(darkMode, accentId) {
+    return accent(darkMode, accentId);
 }
 
 // --- Slider / switch ------------------------------------------------------
@@ -177,6 +280,64 @@ function tileStrokeHover(darkMode) {
     return darkMode ? "#34ffffff" : "#a0ffffff";
 }
 
+// --- Shell surfaces (TopBar / CC / LeftSidebar shared) --------------------
+
+function topText(darkMode) {
+    return label(darkMode);
+}
+
+function topTextSecondary(darkMode) {
+    return darkMode ? "#d6dde5" : "#3a3a3c";
+}
+
+function statusAttention(darkMode) {
+    return danger(darkMode);
+}
+
+function buttonHover(darkMode) {
+    return darkMode ? "#24ffffff" : "#26ffffff";
+}
+
+function buttonOpen(darkMode) {
+    return "#34ffffff";
+}
+
+function cardFill(darkMode) {
+    return darkMode ? "#24ffffff" : "#58ffffff";
+}
+
+function cardStroke(darkMode) {
+    return darkMode ? "#2effffff" : "#66ffffff";
+}
+
+function controlTileFill(darkMode) {
+    return darkMode ? "#2c343dcc" : "#80ffffff";
+}
+
+function controlTileFillHover(darkMode) {
+    return darkMode ? "#36424dcc" : "#8fffffff";
+}
+
+function controlTileFillActive(darkMode) {
+    return darkMode ? "#37424dcc" : "#88ffffff";
+}
+
+function controlTileFillPressed(darkMode) {
+    return darkMode ? "#242c34cc" : "#70ffffff";
+}
+
+function controlTileStroke(darkMode) {
+    return darkMode ? "#34ffffff" : "#5affffff";
+}
+
+function controlInnerFill(darkMode) {
+    return darkMode ? "#1cffffff" : "#14ffffff";
+}
+
+function sliderFill(darkMode) {
+    return darkMode ? "#d8e4f0" : "#f2ffffff";
+}
+
 // --- Overlay scrim --------------------------------------------------------
 
 function scrim(darkMode) {
@@ -187,7 +348,7 @@ function scrim(darkMode) {
 // One solid accent per legacy summary category. The sidebar uses symbolic
 // icons instead of category color blocks.
 
-function categoryColor(key, darkMode) {
+function categoryColor(key, darkMode, accentId) {
     switch (key) {
     case "overview":
         return "#8e8e93";     // system gray (General)
@@ -202,7 +363,7 @@ function categoryColor(key, darkMode) {
     case "screenshot":
         return "#ff7a59";     // coral
     case "dock":
-        return "#0a84ff";     // system blue
+        return systemAccent("blue", darkMode);
     case "weather":
         return "#32ade6";     // system light blue (weather)
     case "niri":
@@ -210,7 +371,7 @@ function categoryColor(key, darkMode) {
     case "niri-glass":
         return "#5e5ce6";     // indigo (tahoe-glass materials & blur)
     case "niri-input":
-        return "#0a84ff";     // system blue (keyboard/touchpad/display)
+        return systemAccent("blue", darkMode);
     case "niri-animations":
         return "#ff9f0a";     // system orange (spring animations)
     case "niri-keyboard":
@@ -222,6 +383,6 @@ function categoryColor(key, darkMode) {
     case "about":
         return "#8e8e93";     // system gray
     default:
-        return accentBlue(darkMode);
+        return accent(darkMode, accentId);
     }
 }

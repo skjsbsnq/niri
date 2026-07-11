@@ -65,7 +65,7 @@
 | GOAL-11 | T11 控制中心模块 morph 展开 | L | DONE | [acceptance/T11-control-center-morph-2026-07-11.md](acceptance/T11-control-center-morph-2026-07-11.md) |
 | GOAL-12 | T12 灵动岛 morph 弹簧化 | S | DONE | [acceptance/T12-dynamic-island-spring-2026-07-11.md](acceptance/T12-dynamic-island-spring-2026-07-11.md) |
 | GOAL-13 | T13 图标体系迁移 | L | DONE | [acceptance/T13-icon-system-migration-2026-07-11.md](acceptance/T13-icon-system-migration-2026-07-11.md) |
-| GOAL-14 | T14 颜色语义化 + accent 系统 | M | PENDING | — |
+| GOAL-14 | T14 颜色语义化 + accent 系统 | M | DONE | [acceptance/T14-color-accent-system-2026-07-11.md](acceptance/T14-color-accent-system-2026-07-11.md) |
 | GOAL-15 | T15 设置外壳重设计 | L | PENDING | — |
 | GOAL-16 | T16 设置控件精修 | M | PENDING | — |
 | GOAL-17 | T17 Spotlight 重构 | M | PENDING | — |

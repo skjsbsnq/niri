@@ -322,6 +322,9 @@ class MotionTokenConvergenceTests(unittest.TestCase):
         # Closing panel clears morph state (no layout residue).
         self.assertIn("onOpenChanged", cc)
         self.assertIn('root.expandedModule = ""', cc)
+        # Sibling stack collapses height while expanded (no ghost layout under list).
+        self.assertIn("Layout.preferredHeight: root.moduleExpanded ? 0 : implicitHeight", cc)
+        self.assertIn("Layout.maximumHeight: root.moduleExpanded ? 0 : 100000", cc)
 
     def test_dock_uses_analytical_cosine_wave_and_unified_label(self) -> None:
         dock = (COMPONENTS_ROOT / "Dock.qml").read_text(encoding="utf-8")

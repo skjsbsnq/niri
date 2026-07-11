@@ -72,7 +72,13 @@ rg -n 'expandedModule|ModuleMorphPanel|ccMorphDurationMs|wifiNetworks|bluetoothD
 | 高度动画玻璃 | 仅 eased height Behavior |
 | 既有功能 | 滑块/媒体/编辑行/IPC 关闭路径保留 |
 
+## 审查 follow-up（同日）
+
+- **问题**：morph 展开时 sibling 列仅 opacity→0，仍占 `implicitHeight`，玻璃面板过高。
+- **修复**：`siblingColumn` 在 `moduleExpanded` 时 `Layout.preferredHeight/maximumHeight → 0` + `clip`，高度用 emphasized 同步动画。
+- 测试：`Layout.preferredHeight: root.moduleExpanded ? 0 : implicitHeight` 断言入治理测试。
+
 ## 发现待办
 
 - 实机：reload quickshell 后连点 Wi-Fi morph 10 次目测无残留；`niri` 日志无 region 拒绝。
-- T12：灵动岛 morph 弹簧化。
+- T12：灵动岛 morph 弹簧化（已完成）。

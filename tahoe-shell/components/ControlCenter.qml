@@ -215,14 +215,19 @@ PanelWindow {
             }
 
             // ---- Sliders + utilities: sibling fade/down when morph open ----
+            // Collapse preferredHeight when expanded so glass region does not keep
+            // the full slider stack under an invisible column (review fix).
             ColumnLayout {
                 id: siblingColumn
                 Layout.fillWidth: true
                 spacing: 12
                 opacity: root.moduleExpanded ? 0 : 1
                 Layout.topMargin: root.moduleExpanded ? Motion.ccMorphSiblingOffsetPx : 0
+                Layout.preferredHeight: root.moduleExpanded ? 0 : implicitHeight
+                Layout.maximumHeight: root.moduleExpanded ? 0 : 100000
+                clip: true
                 enabled: !root.moduleExpanded
-                visible: opacity > 0.01 || Layout.preferredHeight > 0
+                visible: Layout.preferredHeight > 0.5 || opacity > 0.01
 
                 Behavior on opacity {
                     NumberAnimation {
@@ -231,6 +236,18 @@ PanelWindow {
                     }
                 }
                 Behavior on Layout.topMargin {
+                    NumberAnimation {
+                        duration: root.morphDuration
+                        easing.type: Motion.emphasizedDecel
+                    }
+                }
+                Behavior on Layout.preferredHeight {
+                    NumberAnimation {
+                        duration: root.morphDuration
+                        easing.type: Motion.emphasizedDecel
+                    }
+                }
+                Behavior on Layout.maximumHeight {
                     NumberAnimation {
                         duration: root.morphDuration
                         easing.type: Motion.emphasizedDecel

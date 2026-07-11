@@ -18,15 +18,24 @@ Item {
 
     readonly property bool primaryState: primary || active
     readonly property color textPrimary: theme ? theme.textPrimary : "#1d1d1f"
-    readonly property color rowFillHover: theme ? theme.rowFillHover : "#48ffffff"
-    readonly property color buttonFill: theme ? theme.buttonFill : "#40ffffff"
-    readonly property color buttonStroke: theme ? theme.buttonStroke : "#50ffffff"
+    // T16: primary = solid accent; secondary = solid light gray (not glass wash).
+    readonly property color solidFill: theme && theme.buttonFillSolid !== undefined
+        ? theme.buttonFillSolid
+        : (theme && theme.darkMode ? "#3a3a3c" : "#e5e5ea")
+    readonly property color solidHover: theme && theme.buttonFillSolidHover !== undefined
+        ? theme.buttonFillSolidHover
+        : (theme && theme.darkMode ? "#48484a" : "#d1d1d6")
     readonly property color accentFill: theme ? theme.accentFillStrong : "#d8007ff7"
     readonly property color accentStroke: theme ? theme.accentStrokeStrong : "#70ffffff"
+    readonly property color fillColor: buttonMouse.pressed && btn.enabled
+        ? Qt.darker(btn.primaryState ? btn.accentFill : btn.solidFill, 1.12)
+        : btn.primaryState
+            ? btn.accentFill
+            : (buttonMouse.containsMouse && btn.enabled ? btn.solidHover : btn.solidFill)
 
     signal activated()
 
-    Layout.preferredWidth: iconOnly ? 32 : Math.max(minimumWidth, labelText.implicitWidth + (btn.iconCode.length > 0 ? 34 : 20))
+    Layout.preferredWidth: iconOnly ? 32 : Math.max(minimumWidth, labelText.implicitWidth + (btn.iconCode.length > 0 ? 34 : 24))
     Layout.preferredHeight: iconOnly ? 32 : 30
     opacity: enabled ? 1 : 0.45
     scale: Motion.pressScaleFor(theme && theme.settingsService ? theme.settingsService : null, buttonMouse.pressed && enabled)
@@ -41,11 +50,8 @@ Item {
     Rectangle {
         anchors.fill: parent
         radius: 8
-        color: buttonMouse.pressed && btn.enabled
-            ? Qt.darker(btn.primaryState ? btn.accentFill : btn.buttonFill, 1.18)
-            : btn.primaryState ? btn.accentFill : (buttonMouse.containsMouse && btn.enabled ? btn.rowFillHover : btn.buttonFill)
-        border.color: btn.primaryState ? btn.accentStroke : btn.buttonStroke
-        border.width: 1
+        color: btn.fillColor
+        border.width: 0
     }
 
     Row {
@@ -64,7 +70,7 @@ Item {
             id: labelText
             text: btn.label
             color: btn.primaryState ? "#ffffff" : btn.textPrimary
-            font.pixelSize: 11
+            font.pixelSize: 13
             font.weight: Font.DemiBold
         }
     }

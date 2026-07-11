@@ -40,7 +40,7 @@ Rectangle {
         color: field.textPrimary
         selectionColor: field.accentBlue
         selectedTextColor: "#ffffff"
-        font.pixelSize: 12
+        font.pixelSize: 13
         verticalAlignment: TextInput.AlignVCenter
         clip: true
         onEditingFinished: field.editingFinished()

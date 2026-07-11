@@ -2,13 +2,11 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Layouts
+import "../../Motion.js" as Motion
 import "../.."
 
-// Full-width slider row: optional leading icon, a label with a right-aligned
-// value, and a fill-bar track (no visible thumb, matching ControlCenter's
-// GlassSlider idiom — the project never uses QtQuick.Controls). value is a
-// normalized 0..1 ratio; the owning page maps it to the real domain and
-// supplies valueText (e.g. "4500K"). Click or drag the track to set it.
+// Full-width slider row: optional leading icon, label + value, track with a
+// white circular knob + soft shadow (T16). value is a normalized 0..1 ratio.
 Item {
     id: slider
 
@@ -18,12 +16,15 @@ Item {
     property string valueText: ""
     property real value: 0 // 0..1
     property bool interactive: true
+    property bool dragging: trackMouse.pressed
 
     readonly property color textPrimary: theme ? theme.textPrimary : "#1d1d1f"
     readonly property color accentBlue: theme ? theme.accentBlue : "#007ff7"
     readonly property color rowFill: theme ? theme.rowFill : "#28ffffff"
     readonly property color rowStroke: theme ? theme.rowStroke : "#32ffffff"
     readonly property color trackColor: theme ? theme.sliderTrack : "#26000000"
+    readonly property real knobDiameter: 18
+    readonly property real knobScale: dragging ? 1.12 : 1.0
 
     signal userSet(real value)
 
@@ -59,7 +60,7 @@ Item {
 
         ColumnLayout {
             Layout.fillWidth: true
-            spacing: 6
+            spacing: 8
 
             RowLayout {
                 Layout.fillWidth: true
@@ -69,7 +70,7 @@ Item {
                     Layout.fillWidth: true
                     text: slider.label
                     color: slider.textPrimary
-                    font.pixelSize: 12
+                    font.pixelSize: 13
                     font.weight: Font.DemiBold
                     elide: Text.ElideRight
                     visible: text.length > 0
@@ -78,29 +79,72 @@ Item {
                 Text {
                     text: slider.valueText
                     color: slider.accentBlue
-                    font.pixelSize: 12
+                    font.pixelSize: 13
                     font.weight: Font.DemiBold
                     visible: slider.valueText.length > 0
                     Layout.alignment: Qt.AlignRight | Qt.AlignVCenter
                 }
             }
 
-            Rectangle {
-                id: track
+            Item {
+                id: trackHost
                 Layout.fillWidth: true
-                Layout.preferredHeight: 8
-                radius: 4
-                color: slider.trackColor
-                clip: true
+                Layout.preferredHeight: 20
 
                 Rectangle {
-                    height: parent.height
-                    width: parent.width * slider.clampRatio(slider.value)
-                    radius: parent.radius
-                    color: slider.accentBlue
+                    id: track
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    height: 6
+                    radius: 3
+                    color: slider.trackColor
+
+                    Rectangle {
+                        height: parent.height
+                        width: Math.max(0, (parent.width - slider.knobDiameter) * slider.clampRatio(slider.value) + slider.knobDiameter / 2)
+                        radius: parent.radius
+                        color: slider.accentBlue
+                    }
+                }
+
+                Item {
+                    id: knob
+                    width: slider.knobDiameter
+                    height: slider.knobDiameter
+                    x: (trackHost.width - width) * slider.clampRatio(slider.value)
+                    anchors.verticalCenter: parent.verticalCenter
+                    scale: slider.knobScale
+
+                    Behavior on scale {
+                        NumberAnimation {
+                            duration: Motion.pressDurationFor(slider.theme && slider.theme.settingsService ? slider.theme.settingsService : null)
+                            easing.type: Motion.emphasizedDecel
+                        }
+                    }
+
+                    // Soft shadow disc under the white knob.
+                    Rectangle {
+                        anchors.centerIn: parent
+                        width: parent.width + 4
+                        height: parent.height + 4
+                        radius: width / 2
+                        color: "#30000000"
+                        y: 1
+                        z: -1
+                    }
+
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: width / 2
+                        color: "#ffffff"
+                        border.color: "#14000000"
+                        border.width: 1
+                    }
                 }
 
                 MouseArea {
+                    id: trackMouse
                     anchors.fill: parent
                     enabled: slider.enabled && slider.interactive
                     cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor

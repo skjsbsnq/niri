@@ -119,17 +119,18 @@ PanelWindow {
         interaction: 0.0
         opacity: 1
 
-        // Animate glass height with no overshoot when morph expands content.
-        Behavior on height {
-            NumberAnimation {
-                duration: root.morphDuration
-                easing.type: Motion.emphasizedDecel
-            }
-        }
+        // No Behavior on panel.height: content uses anchors.fill, so a lagged
+        // height animation stretches the ColumnLayout (extra space) then snaps
+        // back — visible as sliders jumping down on 「编辑控制项」collapse.
+        // Morph height is animated only via morphHost / sibling layout props;
+        // panel.height tracks content.implicitHeight 1:1 (still no Spring).
 
         ColumnLayout {
             id: content
-            anchors.fill: parent
+            // Top-align to natural height; do not stretch to a lagging panel.
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.top: parent.top
             anchors.margins: 14
             spacing: 12
 
@@ -211,19 +212,21 @@ PanelWindow {
             }
 
             // ---- Sliders + utilities: sibling fade/down when morph open ----
-            // Collapse preferredHeight when expanded so glass region does not keep
-            // the full slider stack under an invisible column (review fix).
+            // Morph only: force height 0 when module expanded (no Behavior on
+            // preferredHeight — binding to implicitHeight + Behavior re-ran on
+            // every 「编辑控制项」toggle and lagged the utility-row animation).
             ColumnLayout {
                 id: siblingColumn
                 Layout.fillWidth: true
                 spacing: 12
                 opacity: root.moduleExpanded ? 0 : 1
                 Layout.topMargin: root.moduleExpanded ? Motion.ccMorphSiblingOffsetPx : 0
-                Layout.preferredHeight: root.moduleExpanded ? 0 : implicitHeight
-                Layout.maximumHeight: root.moduleExpanded ? 0 : 100000
-                clip: true
+                // -1 = use implicitHeight (edit-controls grow/shrink freely).
+                Layout.preferredHeight: root.moduleExpanded ? 0 : -1
+                Layout.maximumHeight: root.moduleExpanded ? 0 : -1
+                clip: root.moduleExpanded
                 enabled: !root.moduleExpanded
-                visible: Layout.preferredHeight > 0.5 || opacity > 0.01
+                visible: !root.moduleExpanded || opacity > 0.01
 
                 Behavior on opacity {
                     NumberAnimation {
@@ -232,18 +235,6 @@ PanelWindow {
                     }
                 }
                 Behavior on Layout.topMargin {
-                    NumberAnimation {
-                        duration: root.morphDuration
-                        easing.type: Motion.emphasizedDecel
-                    }
-                }
-                Behavior on Layout.preferredHeight {
-                    NumberAnimation {
-                        duration: root.morphDuration
-                        easing.type: Motion.emphasizedDecel
-                    }
-                }
-                Behavior on Layout.maximumHeight {
                     NumberAnimation {
                         duration: root.morphDuration
                         easing.type: Motion.emphasizedDecel

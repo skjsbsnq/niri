@@ -302,14 +302,28 @@ class MotionTokenConvergenceTests(unittest.TestCase):
         self.assertIn("connectBluetoothDevice", cc)
         self.assertIn("pairBluetoothDevice", cc)
 
-        # Height animation is eased (emphasized), never Spring on glass geometry.
+        # Morph height is eased on morphHost only; panel.height has no Behavior
+        # (avoids content stretch bounce). Never Spring on glass geometry.
         self.assertIn("Motion.ccMorphDurationMs", cc)
         self.assertIn("Motion.ccMorphSiblingOffsetPx", cc)
         self.assertIn("Motion.ccMorphListMaxHeight", cc)
         self.assertIn("emphasizedDecel", cc)
         self.assertNotIn("SpringAnimation", cc)
-        self.assertIn("Behavior on height", cc)
         self.assertIn("Behavior on Layout.preferredHeight", cc)
+        self.assertNotIn("Behavior on height", cc)
+        # content ColumnLayout is top-anchored (not fill) to avoid stretch bounce.
+        self.assertIn("id: content", cc)
+        self.assertIn("anchors.top: parent.top", cc)
+        self.assertIn("anchors.left: parent.left", cc)
+        self.assertIn("anchors.right: parent.right", cc)
+        content_block = re.search(
+            r"ColumnLayout \{\s*id: content.*?// ---- Morph host",
+            cc,
+            re.S,
+        )
+        self.assertIsNotNone(content_block)
+        assert content_block
+        self.assertNotIn("anchors.fill", content_block.group(0))
 
         # Empty / unavailable placeholders.
         self.assertIn("Wi-Fi 服务不可用", cc)
@@ -322,9 +336,9 @@ class MotionTokenConvergenceTests(unittest.TestCase):
         # Closing panel clears morph state (no layout residue).
         self.assertIn("onOpenChanged", cc)
         self.assertIn('root.expandedModule = ""', cc)
-        # Sibling stack collapses height while expanded (no ghost layout under list).
-        self.assertIn("Layout.preferredHeight: root.moduleExpanded ? 0 : implicitHeight", cc)
-        self.assertIn("Layout.maximumHeight: root.moduleExpanded ? 0 : 100000", cc)
+        # Sibling stack collapses only while morph-expanded (-1 = auto otherwise).
+        self.assertIn("Layout.preferredHeight: root.moduleExpanded ? 0 : -1", cc)
+        self.assertIn("Layout.maximumHeight: root.moduleExpanded ? 0 : -1", cc)
 
     def test_dock_uses_analytical_cosine_wave_and_unified_label(self) -> None:
         dock = (COMPONENTS_ROOT / "Dock.qml").read_text(encoding="utf-8")

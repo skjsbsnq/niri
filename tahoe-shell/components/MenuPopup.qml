@@ -5,7 +5,6 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
 import "TahoeGlass.js" as GlassStyle
-import "Motion.js" as Motion
 import "PopupGeometry.js" as PopupGeometry
 
 PanelWindow {
@@ -16,6 +15,7 @@ PanelWindow {
     property var powerService
     property var anchorRect: null
     property var settingsService
+    property bool darkMode: false
     readonly property int edgePadding: 8
     readonly property int fallbackTop: 28
     readonly property int popupGap: 8
@@ -34,7 +34,7 @@ PanelWindow {
     aboveWindows: true
     exclusionMode: ExclusionMode.Ignore
     implicitWidth: 218
-    implicitHeight: powerService && powerService.hasPending ? 404 : 338
+    implicitHeight: powerService && powerService.hasPending ? 380 : 300
     color: "transparent"
     WlrLayershell.namespace: "tahoe-menu-popup"
 
@@ -84,79 +84,89 @@ PanelWindow {
         ColumnLayout {
             anchors.fill: parent
             anchors.margins: 8
-            spacing: 3
+            spacing: 2
 
             MenuRow {
                 text: "关于 niri"
                 icon: "\ue88e"
                 bold: true
+                settingsService: root.settingsService
+                darkMode: root.darkMode
                 onActivated: {
                     root.openSettingsRequested("about");
                     root.closeRequested();
                 }
             }
 
-            Rectangle {
-                Layout.fillWidth: true
-                Layout.preferredHeight: 1
-                color: "#24000000"
+            MenuSeparator {
+                darkMode: root.darkMode
             }
 
             MenuRow {
                 text: root.activeApp
                 icon: "\ue8b8"
+                settingsService: root.settingsService
+                darkMode: root.darkMode
                 onActivated: root.closeRequested()
             }
 
             MenuRow {
                 text: "窗口"
                 icon: "\ue8a7"
+                settingsService: root.settingsService
+                darkMode: root.darkMode
                 onActivated: root.closeRequested()
             }
 
             MenuRow {
                 text: "设置"
                 icon: "\ue8b8"
+                settingsService: root.settingsService
+                darkMode: root.darkMode
                 onActivated: {
                     root.openSettingsRequested("settings");
                     root.closeRequested();
                 }
             }
 
-            Rectangle {
-                Layout.fillWidth: true
-                Layout.preferredHeight: 1
-                color: "#24000000"
+            MenuSeparator {
+                darkMode: root.darkMode
             }
 
             MenuRow {
                 text: "锁定屏幕"
                 icon: "\ue897"
+                settingsService: root.settingsService
+                darkMode: root.darkMode
                 onActivated: root.triggerPower("lock")
             }
 
             MenuRow {
                 text: "睡眠"
                 icon: "\ue51c"
+                settingsService: root.settingsService
+                darkMode: root.darkMode
                 onActivated: root.triggerPower("sleep")
             }
 
             MenuRow {
                 text: "退出登录"
                 icon: "\ue9ba"
+                settingsService: root.settingsService
+                darkMode: root.darkMode
                 onActivated: root.triggerPower("logout")
             }
 
-            Rectangle {
-                Layout.fillWidth: true
-                Layout.preferredHeight: 1
-                color: "#24000000"
+            MenuSeparator {
+                darkMode: root.darkMode
             }
 
             MenuRow {
                 text: "重新启动"
                 icon: "\ue5d5"
                 destructive: true
+                settingsService: root.settingsService
+                darkMode: root.darkMode
                 onActivated: root.triggerPower("restart")
             }
 
@@ -164,6 +174,8 @@ PanelWindow {
                 text: "关机"
                 icon: "\ue8ac"
                 destructive: true
+                settingsService: root.settingsService
+                darkMode: root.darkMode
                 onActivated: root.triggerPower("shutdown")
             }
 
@@ -226,65 +238,6 @@ PanelWindow {
             }
         }
 
-    }
-
-    component MenuRow: Item {
-        id: row
-
-        property alias text: label.text
-        property string icon: ""
-        property bool bold: false
-        property bool destructive: false
-
-        signal activated()
-
-        Layout.fillWidth: true
-        Layout.preferredHeight: 30
-        scale: Motion.pressScaleFor(root.settingsService, rowMouse.pressed)
-
-        Behavior on scale { NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing } }
-
-        Rectangle {
-            anchors.fill: parent
-            radius: 8
-            color: rowMouse.pressed ? "#52ffffff" : (rowMouse.containsMouse ? "#70ffffff" : "transparent")
-        }
-
-        Text {
-            id: iconLabel
-
-            anchors.left: parent.left
-            anchors.leftMargin: 10
-            anchors.verticalCenter: parent.verticalCenter
-            text: row.icon
-            color: row.destructive ? "#ccff3b30" : "#202124"
-            font.family: "Material Icons"
-            font.pixelSize: 16
-            visible: row.icon.length > 0
-        }
-
-        Text {
-            id: label
-
-            anchors.left: parent.left
-            anchors.leftMargin: row.icon.length > 0 ? 34 : 10
-            anchors.right: parent.right
-            anchors.rightMargin: 10
-            anchors.verticalCenter: parent.verticalCenter
-            color: row.destructive ? "#ccff3b30" : "#202124"
-            font.pixelSize: 12
-            font.weight: row.bold ? Font.DemiBold : Font.Normal
-            elide: Text.ElideRight
-        }
-
-        MouseArea {
-            id: rowMouse
-
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            onClicked: row.activated()
-        }
     }
 
     component ConfirmButton: Item {

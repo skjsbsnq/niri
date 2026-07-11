@@ -5,12 +5,11 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
 import "TahoeGlass.js" as GlassStyle
-import "Motion.js" as Motion
 import "PopupGeometry.js" as PopupGeometry
 
 // LS07: 进程列表右键菜单。
 //
-// 视图职责：玻璃 PanelWindow + MenuRow 列，提供「复制 PID / 复制名称 / 复制完整命令 /
+// 视图职责：玻璃 PanelWindow + 共享 MenuRow 列，提供「复制 PID / 复制名称 / 复制完整命令 /
 // 结束进程 / 强制结束(SIGKILL)」五项。位置由进程行屏幕坐标（LeftSidebarSystem 经
 // itemRect 算出的 anchorRect）经 PopupGeometry 定位；Shell 用 PopupDismissLayer 处理
 // 点外部关闭，本面板再加 Esc 关闭以满足 DoD。
@@ -19,8 +18,7 @@ import "PopupGeometry.js" as PopupGeometry
 // Quickshell.execDetached + wl-copy（照 Search.qml 模式）；结束走 execDetached(["kill",...])。
 // 强制结束守 uid>=1000，对系统进程禁用（DoD）。
 //
-// 视觉：照 DockWindowMenu.qml 的 MenuRow 模式，但配色改 Tahoe 深浅色对（DockWindowMenu
-// 只有浅色硬编码）。不引入 QtQuick.Controls。不喂玻璃几何动画（无弹簧）。
+// 视觉：T06 共享 MenuRow（accent 蓝高亮 + 选中闪烁）；深浅色由 darkMode 驱动。
 PanelWindow {
     id: root
 
@@ -53,10 +51,7 @@ PanelWindow {
         : edgePadding
 
     readonly property color textPrimary: darkMode ? "#f5f7fb" : "#1d1d1f"
-    readonly property color textSecondary: darkMode ? "#c8d0d8" : "#991d1d1f"
     readonly property color textTertiary: darkMode ? "#9da7b1" : "#731d1d1f"
-    readonly property color dangerRed: "#ff453a"
-    readonly property color rowHover: darkMode ? "#28ffffff" : "#70ffffff"
 
     signal closeRequested()
 
@@ -115,7 +110,7 @@ PanelWindow {
             anchors.right: parent.right
             anchors.top: parent.top
             anchors.margins: 8
-            spacing: 3
+            spacing: 2
 
             // 头部：进程名 + PID。
             RowLayout {
@@ -152,12 +147,16 @@ PanelWindow {
                 }
             }
 
-            Separator {}
+            MenuSeparator {
+                darkMode: root.darkMode
+            }
 
             MenuRow {
                 text: "复制进程 ID"
                 icon: "\ue9ef" // tag
                 enabledRow: root.proc && root.proc.pid > 0
+                settingsService: root.settingsService
+                darkMode: root.darkMode
                 onActivated: {
                     if (root.proc && root.proc.pid)
                         copyToClipboard(String(root.proc.pid));
@@ -168,6 +167,8 @@ PanelWindow {
                 text: "复制名称"
                 icon: "\ue14d" // content_copy
                 enabledRow: root.proc && root.proc.name && root.proc.name.length > 0
+                settingsService: root.settingsService
+                darkMode: root.darkMode
                 onActivated: {
                     if (root.proc && root.proc.name)
                         copyToClipboard(root.proc.name);
@@ -178,6 +179,8 @@ PanelWindow {
                 text: "复制完整命令"
                 icon: "\ue86f" // code
                 enabledRow: root.proc && root.proc.cmdline && root.proc.cmdline.length > 0
+                settingsService: root.settingsService
+                darkMode: root.darkMode
                 onActivated: {
                     if (root.proc && root.proc.cmdline)
                         copyToClipboard(root.proc.cmdline);
@@ -185,12 +188,16 @@ PanelWindow {
                 }
             }
 
-            Separator {}
+            MenuSeparator {
+                darkMode: root.darkMode
+            }
 
             MenuRow {
                 text: "结束进程"
                 icon: "\ue5cd" // close
                 enabledRow: root.proc && root.proc.pid > 0
+                settingsService: root.settingsService
+                darkMode: root.darkMode
                 onActivated: {
                     if (root.proc && root.proc.pid)
                         Quickshell.execDetached(["kill", String(root.proc.pid)]);
@@ -205,6 +212,8 @@ PanelWindow {
                 enabledRow: root.proc && root.proc.pid > 0
                     && root.proc.uid !== undefined && root.proc.uid !== null
                     && root.proc.uid >= 1000
+                settingsService: root.settingsService
+                darkMode: root.darkMode
                 onActivated: {
                     if (root.proc && root.proc.pid)
                         Quickshell.execDetached(["kill", "-9", String(root.proc.pid)]);
@@ -226,71 +235,5 @@ PanelWindow {
     // 复制到剪贴板：显式使用文本 MIME，避免文本目标误判格式。
     function copyToClipboard(text) {
         Quickshell.execDetached(["sh", "-c", "printf %s \"$1\" | wl-copy --type 'text/plain;charset=utf-8'", "sh", String(text)]);
-    }
-
-    component Separator: Rectangle {
-        Layout.fillWidth: true
-        Layout.preferredHeight: 1
-        color: root.darkMode ? "#22ffffff" : "#22000000"
-    }
-
-    component MenuRow: Item {
-        id: row
-
-        property string text: ""
-        property string icon: ""
-        property bool enabledRow: true
-        property bool destructive: false
-
-        signal activated()
-
-        width: parent ? parent.width : 0
-        height: 30
-        Layout.fillWidth: true
-        Layout.preferredHeight: 30
-        opacity: enabledRow ? 1 : 0.52
-        scale: Motion.pressScaleFor(root.settingsService, rowMouse.pressed && row.enabledRow)
-
-        Behavior on scale { NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing } }
-
-        Rectangle {
-            anchors.fill: parent
-            radius: 8
-            color: rowMouse.pressed && row.enabledRow ? Qt.darker(root.rowHover, 1.18) : (rowMouse.containsMouse && row.enabledRow ? root.rowHover : "transparent")
-        }
-
-        Text {
-            anchors.left: parent.left
-            anchors.leftMargin: 10
-            anchors.verticalCenter: parent.verticalCenter
-            text: row.icon
-            color: row.destructive ? root.dangerRed : root.textSecondary
-            font.family: "Material Icons"
-            font.pixelSize: 16
-        }
-
-        Text {
-            anchors.left: parent.left
-            anchors.leftMargin: 34
-            anchors.right: parent.right
-            anchors.rightMargin: 10
-            anchors.verticalCenter: parent.verticalCenter
-            text: row.text
-            color: row.destructive ? root.dangerRed : root.textPrimary
-            font.pixelSize: 12
-            elide: Text.ElideRight
-            maximumLineCount: 1
-        }
-
-        MouseArea {
-            id: rowMouse
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: row.enabledRow ? Qt.PointingHandCursor : Qt.ArrowCursor
-            onClicked: {
-                if (row.enabledRow)
-                    row.activated();
-            }
-        }
     }
 }

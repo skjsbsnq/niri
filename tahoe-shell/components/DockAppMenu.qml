@@ -5,7 +5,6 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
 import "TahoeGlass.js" as GlassStyle
-import "Motion.js" as Motion
 
 PanelWindow {
     id: root
@@ -16,6 +15,7 @@ PanelWindow {
     property string appId: ""
     property var anchorRect: null
     property var settingsService
+    property bool darkMode: false
     readonly property int edgePadding: 8
     readonly property int popupGap: 8
     readonly property int screenWidth: Math.max(1, numberOr(root.screen && root.screen.width, root.width))
@@ -116,7 +116,7 @@ PanelWindow {
             anchors.right: parent.right
             anchors.top: parent.top
             anchors.margins: 8
-            spacing: 3
+            spacing: 2
 
             RowLayout {
                 Layout.fillWidth: true
@@ -146,7 +146,7 @@ PanelWindow {
                     Text {
                         anchors.centerIn: parent
                         text: "\ue8b8"
-                        color: "#661d1d1f"
+                        color: root.darkMode ? "#94a0ad" : "#661d1d1f"
                         font.family: "Material Icons"
                         font.pixelSize: 16
                         visible: !headerIcon.visible
@@ -157,7 +157,7 @@ PanelWindow {
                     Layout.fillWidth: true
                     Layout.alignment: Qt.AlignVCenter
                     text: root.appTitle
-                    color: "#1d1d1f"
+                    color: root.darkMode ? "#f5f7fb" : "#1d1d1f"
                     font.pixelSize: 12
                     font.weight: Font.DemiBold
                     elide: Text.ElideRight
@@ -165,16 +165,16 @@ PanelWindow {
                 }
             }
 
-            Rectangle {
-                Layout.fillWidth: true
-                Layout.preferredHeight: 1
-                color: "#22000000"
+            MenuSeparator {
+                darkMode: root.darkMode
             }
 
             MenuRow {
                 text: "打开"
                 icon: "\ue89e"
                 enabledRow: root.hasApp && !!root.appsService
+                settingsService: root.settingsService
+                darkMode: root.darkMode
                 onActivated: {
                     if (root.appsService && root.hasApp)
                         root.appsService.launchPinnedApp(root.resolvedApp, root.resolvedAppId);
@@ -187,69 +187,13 @@ PanelWindow {
                 icon: "\ue872"
                 destructive: true
                 enabledRow: root.canUnpin
+                settingsService: root.settingsService
+                darkMode: root.darkMode
                 onActivated: {
                     if (root.canUnpin)
                         root.appsService.unpinAppId(root.resolvedAppId);
                     root.closeRequested();
                 }
-            }
-        }
-    }
-
-    component MenuRow: Item {
-        id: row
-
-        property string text: ""
-        property string icon: ""
-        property bool enabledRow: true
-        property bool destructive: false
-
-        signal activated()
-
-        Layout.fillWidth: true
-        Layout.preferredHeight: 30
-        opacity: enabledRow ? 1 : 0.52
-        scale: Motion.pressScaleFor(root.settingsService, rowMouse.pressed && row.enabledRow)
-
-        Behavior on scale { NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing } }
-
-        Rectangle {
-            anchors.fill: parent
-            radius: 8
-            color: rowMouse.pressed && row.enabledRow ? "#52ffffff" : (rowMouse.containsMouse && row.enabledRow ? "#70ffffff" : "transparent")
-        }
-
-        Text {
-            anchors.left: parent.left
-            anchors.leftMargin: 10
-            anchors.verticalCenter: parent.verticalCenter
-            text: row.icon
-            color: row.destructive ? "#b3261e" : "#202124"
-            font.family: "Material Icons"
-            font.pixelSize: 16
-        }
-
-        Text {
-            anchors.left: parent.left
-            anchors.leftMargin: 34
-            anchors.right: parent.right
-            anchors.rightMargin: 10
-            anchors.verticalCenter: parent.verticalCenter
-            text: row.text
-            color: row.destructive ? "#b3261e" : "#202124"
-            font.pixelSize: 12
-            elide: Text.ElideRight
-            maximumLineCount: 1
-        }
-
-        MouseArea {
-            id: rowMouse
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: row.enabledRow ? Qt.PointingHandCursor : Qt.ArrowCursor
-            onClicked: {
-                if (row.enabledRow)
-                    row.activated();
             }
         }
     }

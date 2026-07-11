@@ -79,7 +79,14 @@ class MotionTokenConvergenceTests(unittest.TestCase):
         self.assertIn("function pressDurationFor(settingsService)", text)
         self.assertIn("function pressScaleFor(settingsService, pressed)", text)
 
+    def test_motion_exports_menu_flash_tokens(self) -> None:
+        text = MOTION_JS.read_text(encoding="utf-8")
+
+        self.assertIn("var menuFlashInterval = 70;", text)
+        self.assertIn("var menuFlashCount = 2;", text)
+
     def test_phase_b_press_feedback_uses_motion_single_outlet(self) -> None:
+        # T06 moved menu press feedback into the shared MenuRow.qml outlet.
         required_counts = {
             "TopBar.qml": 11,
             "Tray.qml": 1,
@@ -89,12 +96,7 @@ class MotionTokenConvergenceTests(unittest.TestCase):
             "ControlCenter.qml": 8,
             "Spotlight.qml": 2,
             "Launchpad.qml": 2,
-            "MenuPopup.qml": 1,
-            "AppMenuPopup.qml": 2,
-            "TrayMenu.qml": 1,
-            "DockAppMenu.qml": 1,
-            "DockWindowMenu.qml": 1,
-            "ProcessMenu.qml": 1,
+            "MenuRow.qml": 1,
             "settings/controls/TahoeButton.qml": 1,
             "settings/controls/TahoeListRow.qml": 1,
             "settings/controls/TahoeSidebarButton.qml": 1,
@@ -106,6 +108,57 @@ class MotionTokenConvergenceTests(unittest.TestCase):
                 text = (COMPONENTS_ROOT / relative).read_text(encoding="utf-8")
                 self.assertEqual(text.count("Motion.pressScaleFor"), expected_count)
                 self.assertIn("Motion.pressDurationFor", text)
+
+        # Parent menus must not re-introduce private pressScale paths.
+        for relative in (
+            "MenuPopup.qml",
+            "AppMenuPopup.qml",
+            "TrayMenu.qml",
+            "DockAppMenu.qml",
+            "DockWindowMenu.qml",
+            "ProcessMenu.qml",
+        ):
+            with self.subTest(parent_menu=relative):
+                text = (COMPONENTS_ROOT / relative).read_text(encoding="utf-8")
+                self.assertEqual(text.count("Motion.pressScaleFor"), 0)
+                self.assertNotIn("component MenuRow", text)
+
+    def test_shared_menu_row_macos_signatures(self) -> None:
+        row = (COMPONENTS_ROOT / "MenuRow.qml").read_text(encoding="utf-8")
+        separator = (COMPONENTS_ROOT / "MenuSeparator.qml").read_text(encoding="utf-8")
+
+        self.assertIn("radius: 6", row)
+        self.assertIn("header ? 22 : 26", row)
+        self.assertIn("font.pixelSize: row.header ? 11 : 13", row)
+        self.assertIn('darkMode ? "#0a84ff" : "#007aff"', row)
+        self.assertIn("Motion.menuFlashInterval", row)
+        self.assertIn("Motion.menuFlashCount", row)
+        self.assertIn("function requestActivate()", row)
+        self.assertIn("Motion.reducedMotion(settingsService)", row)
+        self.assertIn('"#1a000000"', row)
+        self.assertIn('"#1a000000"', separator)
+        self.assertIn("anchors.leftMargin: 10", separator)
+        self.assertIn("anchors.rightMargin: 10", separator)
+
+        # All six menus must consume the shared row (no inline component MenuRow).
+        consumers = (
+            "MenuPopup.qml",
+            "AppMenuPopup.qml",
+            "TrayMenu.qml",
+            "DockAppMenu.qml",
+            "DockWindowMenu.qml",
+            "ProcessMenu.qml",
+        )
+        for relative in consumers:
+            with self.subTest(consumer=relative):
+                text = (COMPONENTS_ROOT / relative).read_text(encoding="utf-8")
+                self.assertIn("MenuRow {", text)
+                self.assertNotIn("component MenuRow", text)
+                self.assertNotIn("component MenuEntry", text)
+                self.assertNotIn("component NativeMenuRow", text)
+                # Dark mode must be wired through so accent/text resolve correctly.
+                self.assertIn("property bool darkMode", text)
+                self.assertIn("darkMode: root.darkMode", text)
 
     def test_glass_panel_press_drives_material_interaction(self) -> None:
         text = (COMPONENTS_ROOT / "GlassPanel.qml").read_text(encoding="utf-8")

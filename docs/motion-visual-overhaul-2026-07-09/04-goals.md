@@ -57,7 +57,7 @@
 | GOAL-03 | T03 layer-rule 全面弹簧化 + anchor popin | M | DONE | [acceptance/T03-layer-springs-2026-07-09.md](acceptance/T03-layer-springs-2026-07-09.md) |
 | GOAL-04 | T04 Genie（神灯）动画专项优化 | M–L | DONE | [acceptance/T04-genie-decouple-2026-07-09.md](acceptance/T04-genie-decouple-2026-07-09.md) |
 | GOAL-05 | T05 全局按下态铺开 | M | DONE | [acceptance/T05-global-press-feedback-2026-07-10.md](acceptance/T05-global-press-feedback-2026-07-10.md) |
-| GOAL-06 | T06 菜单 macOS 化 + MenuRow 合并 | M | PENDING | — |
+| GOAL-06 | T06 菜单 macOS 化 + MenuRow 合并 | M | DONE | [acceptance/T06-menu-macos-row-2026-07-11.md](acceptance/T06-menu-macos-row-2026-07-11.md) |
 | GOAL-07 | T07 Dock 放大与推挤重写 | L | PENDING | — |
 | GOAL-08 | T08 Dock 启动弹跳 + autohide 手感 | M | PENDING | — |
 | GOAL-09 | T09 通知堆叠与滑出 | M | PENDING | — |

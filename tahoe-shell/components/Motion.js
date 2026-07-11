@@ -30,6 +30,11 @@ var pressDuration = 120;
 var pressScale = 0.96;
 var pressEasing = QtQuick.Easing.OutQuad;
 
+// Menu selection flash (T06). Two half-cycles of highlight at this interval
+// before the parent closes the menu and runs the action.
+var menuFlashInterval = 70;
+var menuFlashCount = 2;
+
 // Spring vocabulary — QML SpringAnimation parameter groups. Glass region
 // geometry must never use these (guardrail 0704ea4); springs are only for
 // content transforms/opacity inside panels, compositor-side channels, and

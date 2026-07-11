@@ -911,6 +911,7 @@ ShellRoot {
                 activeApp: apps.windowAppLabel(niri.focusedWindow || niri.activeToplevel)
                 powerService: power
                 settingsService: desktopSettings
+                darkMode: shell.darkMode
                 onCloseRequested: shell.appMenuOpen = false
                 onOpenSettingsRequested: function(page) {
                     shell.openSettingsPanel(page);
@@ -923,6 +924,7 @@ ShellRoot {
                 open: shell.topBarPopupOpenFor(shell.applicationMenuOpen, modelData)
                 appMenuService: appMenu
                 settingsService: desktopSettings
+                darkMode: shell.darkMode
                 onCloseRequested: shell.applicationMenuOpen = false
             }
 
@@ -974,6 +976,7 @@ ShellRoot {
                 anchorRect: shell.dockAppMenuAnchorRect
                 open: shell.dockAppMenuOpenFor(modelData)
                 settingsService: desktopSettings
+                darkMode: shell.darkMode
                 onCloseRequested: shell.closeDockAppMenu()
             }
 
@@ -987,6 +990,7 @@ ShellRoot {
                 anchorRect: shell.dockWindowMenuAnchorRect
                 open: shell.dockWindowMenuOpenFor(modelData)
                 settingsService: desktopSettings
+                darkMode: shell.darkMode
                 onCloseRequested: shell.closeDockWindowMenu()
             }
 
@@ -1143,6 +1147,7 @@ ShellRoot {
                 screen: modelData
                 trayItem: shell.trayMenuItem
                 settingsService: desktopSettings
+                darkMode: shell.darkMode
                 anchorRect: shell.topBarPopupAnchorRect
                 open: shell.topBarPopupOpenFor(shell.trayMenuOpen, modelData)
                 onCloseRequested: {

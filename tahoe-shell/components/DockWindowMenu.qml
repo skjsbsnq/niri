@@ -5,7 +5,6 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
 import "TahoeGlass.js" as GlassStyle
-import "Motion.js" as Motion
 
 PanelWindow {
     id: root
@@ -16,6 +15,7 @@ PanelWindow {
     property var window: null
     property var anchorRect: null
     property var settingsService
+    property bool darkMode: false
     readonly property int edgePadding: 8
     readonly property int popupGap: 8
     readonly property int screenWidth: Math.max(1, numberOr(root.screen && root.screen.width, root.width))
@@ -133,7 +133,7 @@ PanelWindow {
             anchors.right: parent.right
             anchors.top: parent.top
             anchors.margins: 8
-            spacing: 3
+            spacing: 2
 
             RowLayout {
                 Layout.fillWidth: true
@@ -163,7 +163,7 @@ PanelWindow {
                     Text {
                         anchors.centerIn: parent
                         text: "\ue8d0"
-                        color: "#661d1d1f"
+                        color: root.darkMode ? "#94a0ad" : "#661d1d1f"
                         font.family: "Material Icons"
                         font.pixelSize: 16
                         visible: !headerIcon.visible
@@ -174,7 +174,7 @@ PanelWindow {
                     Layout.fillWidth: true
                     Layout.alignment: Qt.AlignVCenter
                     text: root.windowTitle
-                    color: "#1d1d1f"
+                    color: root.darkMode ? "#f5f7fb" : "#1d1d1f"
                     font.pixelSize: 12
                     font.weight: Font.DemiBold
                     elide: Text.ElideRight
@@ -182,12 +182,16 @@ PanelWindow {
                 }
             }
 
-            Separator {}
+            MenuSeparator {
+                darkMode: root.darkMode
+            }
 
             MenuRow {
                 text: "显示窗口"
                 icon: "\ue8d0"
                 enabledRow: root.canActivate
+                settingsService: root.settingsService
+                darkMode: root.darkMode
                 onActivated: {
                     if (root.windowsService && root.window) {
                         if (root.windowMinimized)
@@ -203,6 +207,8 @@ PanelWindow {
                 text: root.windowMinimized ? "已最小化" : "最小化"
                 icon: "\ue15b"
                 enabledRow: root.canMinimize
+                settingsService: root.settingsService
+                darkMode: root.darkMode
                 onActivated: {
                     if (root.windowsService && root.window)
                         root.windowsService.minimize(root.window);
@@ -215,6 +221,8 @@ PanelWindow {
                 icon: root.windowPinned ? "\ue872" : "\ue866"
                 destructive: root.windowPinned
                 enabledRow: root.canPinWindow
+                settingsService: root.settingsService
+                darkMode: root.darkMode
                 onActivated: {
                     if (root.appsService && root.window)
                         root.appsService.togglePinnedWindow(root.window);
@@ -227,6 +235,8 @@ PanelWindow {
                 icon: "\ue5cd"
                 destructive: true
                 enabledRow: root.canClose
+                settingsService: root.settingsService
+                darkMode: root.darkMode
                 onActivated: {
                     if (root.windowsService && root.window)
                         root.windowsService.closeWindow(root.window);
@@ -234,19 +244,23 @@ PanelWindow {
                 }
             }
 
-            Separator {}
+            MenuSeparator {
+                darkMode: root.darkMode
+            }
 
             MenuRow {
                 text: "移动到工作区"
                 icon: "\ue8d4"
                 enabledRow: false
+                settingsService: root.settingsService
+                darkMode: root.darkMode
             }
 
             Item {
                 Layout.fillWidth: true
                 Layout.preferredHeight: root.hasWorkspaces
-                    ? Math.max(30, Math.min(workspaceColumn.implicitHeight, root.maxWorkspaceListHeight))
-                    : 30
+                    ? Math.max(26, Math.min(workspaceColumn.implicitHeight, root.maxWorkspaceListHeight))
+                    : 26
 
                 Flickable {
                     id: workspaceViewport
@@ -261,7 +275,7 @@ PanelWindow {
                     Column {
                         id: workspaceColumn
                         width: workspaceViewport.width
-                        spacing: 3
+                        spacing: 2
 
                         Repeater {
                             model: root.workspaceChoices
@@ -276,6 +290,8 @@ PanelWindow {
                                 text: root.workspaceRowText(modelData, index, currentWorkspace)
                                 icon: currentWorkspace ? "\ue876" : "\ue835"
                                 enabledRow: root.canMoveToWorkspace && !currentWorkspace && reference.length > 0
+                                settingsService: root.settingsService
+                                darkMode: root.darkMode
                                 onActivated: {
                                     if (root.windowsService && root.window)
                                         root.windowsService.moveWindowToWorkspace(root.window, modelData, false);
@@ -292,73 +308,9 @@ PanelWindow {
                     text: "暂无工作区数据"
                     icon: "\ue88f"
                     enabledRow: false
+                    settingsService: root.settingsService
+                    darkMode: root.darkMode
                 }
-            }
-        }
-    }
-
-    component Separator: Rectangle {
-        Layout.fillWidth: true
-        Layout.preferredHeight: 1
-        color: "#22000000"
-    }
-
-    component MenuRow: Item {
-        id: row
-
-        property string text: ""
-        property string icon: ""
-        property bool enabledRow: true
-        property bool destructive: false
-
-        signal activated()
-
-        width: parent ? parent.width : 0
-        height: 30
-        Layout.fillWidth: true
-        Layout.preferredHeight: 30
-        opacity: enabledRow ? 1 : 0.52
-        scale: Motion.pressScaleFor(root.settingsService, rowMouse.pressed && row.enabledRow)
-
-        Behavior on scale { NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing } }
-
-        Rectangle {
-            anchors.fill: parent
-            radius: 8
-            color: rowMouse.pressed && row.enabledRow ? "#52ffffff" : (rowMouse.containsMouse && row.enabledRow ? "#70ffffff" : "transparent")
-        }
-
-        Text {
-            anchors.left: parent.left
-            anchors.leftMargin: 10
-            anchors.verticalCenter: parent.verticalCenter
-            text: row.icon
-            color: row.destructive ? "#b3261e" : "#202124"
-            font.family: "Material Icons"
-            font.pixelSize: 16
-        }
-
-        Text {
-            anchors.left: parent.left
-            anchors.leftMargin: 34
-            anchors.right: parent.right
-            anchors.rightMargin: 10
-            anchors.verticalCenter: parent.verticalCenter
-            text: row.text
-            color: row.destructive ? "#b3261e" : "#202124"
-            font.pixelSize: 12
-            elide: Text.ElideRight
-            maximumLineCount: 1
-        }
-
-        MouseArea {
-            id: rowMouse
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: row.enabledRow ? Qt.PointingHandCursor : Qt.ArrowCursor
-            onClicked: {
-                if (row.enabledRow)
-                    row.activated();
             }
         }
     }

@@ -5,7 +5,6 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Wayland
 import "TahoeGlass.js" as GlassStyle
-import "Motion.js" as Motion
 import "PopupGeometry.js" as PopupGeometry
 
 PanelWindow {
@@ -15,6 +14,7 @@ PanelWindow {
     property var appMenuService
     property var anchorRect: null
     property var settingsService
+    property bool darkMode: false
     readonly property int edgePadding: 8
     readonly property int fallbackTop: 28
     readonly property int popupGap: 8
@@ -79,7 +79,7 @@ PanelWindow {
             ColumnLayout {
                 id: content
                 width: parent.width
-                spacing: 3
+                spacing: 2
 
                 RowLayout {
                     Layout.fillWidth: true
@@ -96,7 +96,7 @@ PanelWindow {
                         Text {
                             anchors.centerIn: parent
                             text: root.nativeMenuAvailable ? "\ue86c" : "\ue8a0"
-                            color: "#202124"
+                            color: root.darkMode ? "#f5f7fb" : "#202124"
                             font.family: "Material Icons"
                             font.pixelSize: 16
                         }
@@ -110,7 +110,7 @@ PanelWindow {
                         Text {
                             Layout.fillWidth: true
                             text: root.appMenuService ? root.appMenuService.activeTitle : "桌面"
-                            color: "#1d1d1f"
+                            color: root.darkMode ? "#f5f7fb" : "#1d1d1f"
                             font.pixelSize: 12
                             font.weight: Font.DemiBold
                             elide: Text.ElideRight
@@ -120,7 +120,7 @@ PanelWindow {
                         Text {
                             Layout.fillWidth: true
                             text: root.appMenuService ? root.appMenuService.menuStatusText : ""
-                            color: "#721d1d1f"
+                            color: root.darkMode ? "#94a0ad" : "#721d1d1f"
                             font.pixelSize: 10
                             elide: Text.ElideRight
                             maximumLineCount: 1
@@ -129,27 +129,40 @@ PanelWindow {
                     }
                 }
 
-                Rectangle {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 1
-                    color: "#22000000"
+                MenuSeparator {
+                    darkMode: root.darkMode
                 }
 
                 Repeater {
                     model: root.nativeMenuAvailable && root.appMenuService ? root.appMenuService.nativeMenuItems : []
 
-                    delegate: NativeMenuRow {
+                    delegate: MenuRow {
                         required property var modelData
 
                         Layout.fillWidth: true
-                        item: modelData
+                        text: modelData ? String(modelData.text || "") : ""
+                        separator: modelData && String(modelData.kind || "item") === "separator"
+                        header: modelData && String(modelData.kind || "item") === "header"
+                        enabledRow: !!modelData && !!modelData.enabled
+                            && String(modelData.kind || "item") !== "separator"
+                            && String(modelData.kind || "item") !== "header"
+                        checked: !!modelData && !!modelData.checked
+                        showCheckColumn: true
+                        hasSubmenu: !!modelData && !!modelData.hasChildren
+                        indent: modelData ? Math.max(0, Number(modelData.indent || 0)) : 0
+                        settingsService: root.settingsService
+                        darkMode: root.darkMode
+                        onActivated: {
+                            if (!root.appMenuService)
+                                return;
+                            root.appMenuService.activateNativeItem(modelData);
+                            root.closeRequested();
+                        }
                     }
                 }
 
-                Rectangle {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 1
-                    color: "#22000000"
+                MenuSeparator {
+                    darkMode: root.darkMode
                     visible: root.nativeMenuAvailable
                 }
 
@@ -157,6 +170,8 @@ PanelWindow {
                     text: "固定到 Dock"
                     icon: "\ue866"
                     enabledRow: root.appMenuService && root.appMenuService.hasFocusedWindow
+                    settingsService: root.settingsService
+                    darkMode: root.darkMode
                     onActivated: {
                         if (root.appMenuService)
                             root.appMenuService.pinFocusedApp();
@@ -168,6 +183,8 @@ PanelWindow {
                     text: "显示窗口"
                     icon: "\ue8d0"
                     enabledRow: root.appMenuService && root.appMenuService.hasFocusedWindow
+                    settingsService: root.settingsService
+                    darkMode: root.darkMode
                     onActivated: {
                         if (root.appMenuService)
                             root.appMenuService.activateFocusedWindow();
@@ -179,6 +196,8 @@ PanelWindow {
                     text: "最小化"
                     icon: "\ue15b"
                     enabledRow: root.appMenuService && root.appMenuService.hasFocusedWindow
+                    settingsService: root.settingsService
+                    darkMode: root.darkMode
                     onActivated: {
                         if (root.appMenuService)
                             root.appMenuService.minimizeFocusedWindow();
@@ -194,148 +213,5 @@ PanelWindow {
         z: -1
         enabled: root.open
         onClicked: root.closeRequested()
-    }
-
-    component MenuRow: Item {
-        id: row
-
-        property string text: ""
-        property string icon: ""
-        property bool enabledRow: true
-
-        signal activated()
-
-        Layout.fillWidth: true
-        Layout.preferredHeight: 30
-        opacity: enabledRow ? 1 : 0.52
-        scale: Motion.pressScaleFor(root.settingsService, rowMouse.pressed && row.enabledRow)
-
-        Behavior on scale { NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing } }
-
-        Rectangle {
-            anchors.fill: parent
-            radius: 8
-            color: rowMouse.pressed && row.enabledRow ? "#52ffffff" : (rowMouse.containsMouse && row.enabledRow ? "#70ffffff" : "transparent")
-        }
-
-        Text {
-            anchors.left: parent.left
-            anchors.leftMargin: 10
-            anchors.verticalCenter: parent.verticalCenter
-            text: row.icon
-            color: "#202124"
-            font.family: "Material Icons"
-            font.pixelSize: 16
-        }
-
-        Text {
-            anchors.left: parent.left
-            anchors.leftMargin: 34
-            anchors.right: parent.right
-            anchors.rightMargin: 10
-            anchors.verticalCenter: parent.verticalCenter
-            text: row.text
-            color: "#202124"
-            font.pixelSize: 12
-            elide: Text.ElideRight
-        }
-
-        MouseArea {
-            id: rowMouse
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: row.enabledRow ? Qt.PointingHandCursor : Qt.ArrowCursor
-            onClicked: {
-                if (row.enabledRow)
-                    row.activated();
-            }
-        }
-    }
-
-    component NativeMenuRow: Item {
-        id: row
-
-        property var item
-        readonly property string kind: item ? String(item.kind || "item") : "item"
-        readonly property bool separator: kind === "separator"
-        readonly property bool header: kind === "header"
-        readonly property bool enabledRow: !!item && !!item.enabled && !separator && !header
-        readonly property int indent: item ? Math.max(0, Number(item.indent || 0)) : 0
-        readonly property bool checked: !!item && !!item.checked
-        readonly property bool hasChildren: !!item && !!item.hasChildren
-
-        Layout.preferredHeight: separator ? 7 : 28
-        opacity: enabledRow || header ? 1 : 0.48
-        scale: Motion.pressScaleFor(root.settingsService, rowMouse.pressed && row.enabledRow)
-
-        Behavior on scale { NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing } }
-
-        Rectangle {
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
-            height: 1
-            color: "#22000000"
-            visible: row.separator
-        }
-
-        Rectangle {
-            anchors.fill: parent
-            radius: 8
-            color: rowMouse.pressed && row.enabledRow ? "#52ffffff" : (rowMouse.containsMouse && row.enabledRow ? "#70ffffff" : "transparent")
-            visible: !row.separator
-        }
-
-        Text {
-            anchors.left: parent.left
-            anchors.leftMargin: 8 + row.indent * 14
-            anchors.verticalCenter: parent.verticalCenter
-            text: row.checked ? "\ue5ca" : ""
-            color: row.header ? "#541d1d1f" : "#1d1d1f"
-            font.family: "Material Icons"
-            font.pixelSize: 15
-            visible: !row.separator
-            opacity: row.checked ? 1 : 0
-        }
-
-        Text {
-            anchors.left: parent.left
-            anchors.leftMargin: 30 + row.indent * 14
-            anchors.right: submenuGlyph.left
-            anchors.rightMargin: 8
-            anchors.verticalCenter: parent.verticalCenter
-            text: row.item ? row.item.text : ""
-            color: row.header ? "#721d1d1f" : "#1d1d1f"
-            font.pixelSize: row.header ? 11 : 12
-            font.weight: row.header ? Font.DemiBold : Font.Normal
-            elide: Text.ElideRight
-            visible: !row.separator
-        }
-
-        Text {
-            id: submenuGlyph
-            anchors.right: parent.right
-            anchors.rightMargin: 8
-            anchors.verticalCenter: parent.verticalCenter
-            text: "\ue5cc"
-            color: "#661d1d1f"
-            font.family: "Material Icons"
-            font.pixelSize: 15
-            visible: !row.separator && row.hasChildren && !row.header
-        }
-
-        MouseArea {
-            id: rowMouse
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: row.enabledRow ? Qt.PointingHandCursor : Qt.ArrowCursor
-            enabled: row.enabledRow
-            onClicked: {
-                if (!root.appMenuService)
-                    return;
-                root.appMenuService.activateNativeItem(row.item);
-                root.closeRequested();
-            }
-        }
     }
 }

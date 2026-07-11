@@ -6,7 +6,6 @@ import Quickshell
 import Quickshell.Wayland
 import Quickshell.Widgets
 import "TahoeGlass.js" as GlassStyle
-import "Motion.js" as Motion
 import "PopupGeometry.js" as PopupGeometry
 
 PanelWindow {
@@ -16,6 +15,7 @@ PanelWindow {
     property var trayItem
     property var anchorRect: null
     property var settingsService
+    property bool darkMode: false
     readonly property var menuHandle: trayItem && trayItem.hasMenu ? trayItem.menu : null
     readonly property string title: trayItem
         ? String(trayItem.tooltipTitle || trayItem.title || trayItem.id || "托盘")
@@ -79,7 +79,7 @@ PanelWindow {
             anchors.right: parent.right
             anchors.top: parent.top
             anchors.margins: 8
-            spacing: 3
+            spacing: 2
 
             RowLayout {
                 Layout.fillWidth: true
@@ -108,7 +108,7 @@ PanelWindow {
                     Text {
                         anchors.centerIn: parent
                         text: "\ue8b8"
-                        color: "#661d1d1f"
+                        color: root.darkMode ? "#94a0ad" : "#661d1d1f"
                         font.family: root.iconFont
                         font.pixelSize: 16
                         visible: !headerIcon.visible
@@ -117,7 +117,7 @@ PanelWindow {
 
                 Text {
                     text: root.title
-                    color: "#1d1d1f"
+                    color: root.darkMode ? "#f5f7fb" : "#1d1d1f"
                     font.pixelSize: 12
                     font.weight: Font.DemiBold
                     elide: Text.ElideRight
@@ -126,20 +126,31 @@ PanelWindow {
                 }
             }
 
-            Rectangle {
-                Layout.fillWidth: true
-                Layout.preferredHeight: 1
-                color: "#22000000"
+            MenuSeparator {
+                darkMode: root.darkMode
             }
 
             Repeater {
                 model: opener.children
 
-                delegate: MenuEntry {
+                delegate: MenuRow {
                     required property var modelData
 
                     Layout.fillWidth: true
-                    entry: modelData
+                    text: modelData ? String(modelData.text || "") : ""
+                    separator: !!modelData && !!modelData.isSeparator
+                    enabledRow: !!modelData && !!modelData.enabled
+                    checked: !!modelData && modelData.checkState === Qt.Checked
+                    showCheckColumn: true
+                    hasSubmenu: !!modelData && !!modelData.hasChildren
+                    settingsService: root.settingsService
+                    darkMode: root.darkMode
+                    onActivated: {
+                        if (!modelData)
+                            return;
+                        modelData.triggered();
+                        root.closeRequested();
+                    }
                 }
             }
 
@@ -151,7 +162,7 @@ PanelWindow {
                 Text {
                     anchors.centerIn: parent
                     text: "无可用操作"
-                    color: "#8a1d1d1f"
+                    color: root.darkMode ? "#94a0ad" : "#8a1d1d1f"
                     font.pixelSize: 12
                     font.weight: Font.DemiBold
                 }
@@ -164,89 +175,5 @@ PanelWindow {
         z: -1
         enabled: root.open
         onClicked: root.closeRequested()
-    }
-
-    component MenuEntry: Item {
-        id: row
-
-        property var entry
-        readonly property bool separator: !!entry && !!entry.isSeparator
-        readonly property bool enabledEntry: !!entry && !!entry.enabled
-        readonly property bool checkedEntry: !!entry && entry.checkState === Qt.Checked
-        readonly property bool hasButton: !!entry && Number(entry.buttonType) > 0
-        readonly property bool hasSubmenu: !!entry && !!entry.hasChildren
-
-        Layout.preferredHeight: separator ? 7 : 28
-        opacity: enabledEntry ? 1 : 0.45
-        scale: Motion.pressScaleFor(root.settingsService, entryMouse.pressed && row.enabledEntry && !row.separator)
-
-        Behavior on scale { NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing } }
-
-        Rectangle {
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
-            height: 1
-            color: "#22000000"
-            visible: row.separator
-        }
-
-        Rectangle {
-            anchors.fill: parent
-            radius: 8
-            color: entryMouse.pressed && row.enabledEntry ? "#52ffffff" : (entryMouse.containsMouse && row.enabledEntry ? "#70ffffff" : "transparent")
-            visible: !row.separator
-        }
-
-        Text {
-            anchors.left: parent.left
-            anchors.leftMargin: 8
-            anchors.verticalCenter: parent.verticalCenter
-            text: row.hasButton && row.checkedEntry ? "\ue5ca" : ""
-            color: "#1d1d1f"
-            font.family: root.iconFont
-            font.pixelSize: 15
-            visible: !row.separator
-        }
-
-        Text {
-            anchors.left: parent.left
-            anchors.leftMargin: 30
-            anchors.right: submenuGlyph.left
-            anchors.rightMargin: 8
-            anchors.verticalCenter: parent.verticalCenter
-            text: row.entry ? row.entry.text : ""
-            color: "#1d1d1f"
-            font.pixelSize: 12
-            elide: Text.ElideRight
-            visible: !row.separator
-        }
-
-        Text {
-            id: submenuGlyph
-            anchors.right: parent.right
-            anchors.rightMargin: 8
-            anchors.verticalCenter: parent.verticalCenter
-            text: "\ue5cc"
-            color: "#661d1d1f"
-            font.family: root.iconFont
-            font.pixelSize: 15
-            visible: !row.separator && row.hasSubmenu
-        }
-
-        MouseArea {
-            id: entryMouse
-
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: row.enabledEntry && !row.separator ? Qt.PointingHandCursor : Qt.ArrowCursor
-            enabled: row.enabledEntry && !row.separator
-            onClicked: {
-                if (!row.entry)
-                    return;
-                row.entry.triggered();
-                root.closeRequested();
-            }
-        }
     }
 }

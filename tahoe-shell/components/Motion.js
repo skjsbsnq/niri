@@ -155,12 +155,19 @@ function spotlightPreviewFade(settingsService) {
     return reducedMotion(settingsService) ? 0 : spotlightPreviewFadeMs;
 }
 
-// Launchpad (T18). Full-screen QML path only (rules §2.11). Wallpaper zoom is
-// content-side on Wallpaper.qml; icon stagger budget ≤450ms / ≤40 items.
+// Launchpad (T18 + hand-feel fix). Full-screen QML path only (rules §2.11).
+// Wallpaper zoom is content-side on Wallpaper.qml.
+// Hand-feel: icons reveal together (short unified fade/scale), not one-by-one
+// distance stagger — the old per-icon opacity:0 + long stagger looked like
+// "only one icon then the rest". Paging snap uses a longer eased settle.
 var launchpadWallpaperScale = 1.06;
 var launchpadWallpaperDim = 0.25;
 var launchpadWallpaperMs = 400;
-var launchpadStaggerPerPxMs = 6; // delay ≈ distanceFromCenter × 6ms
+// Soft unified enter (whole grid), not per-icon cascade.
+var launchpadIconEnterMs = 280;
+var launchpadIconEnterScaleFrom = 0.92;
+var launchpadPageSnapMs = 320;
+var launchpadStaggerPerPxMs = 0; // disabled cascade (kept for API/tests)
 var launchpadStaggerBudgetMs = 450;
 var launchpadStaggerMaxItems = 40;
 var launchpadGridCols = 7;
@@ -171,24 +178,26 @@ function launchpadWallpaperDuration(settingsService) {
     return reducedMotion(settingsService) ? 0 : launchpadWallpaperMs;
 }
 
-function launchpadStaggerDelay(distanceFromCenterPx, index, total) {
-    var n = Math.min(launchpadStaggerMaxItems, Math.max(0, Math.round(Number(total) || 0)));
-    var i = Math.max(0, Math.round(Number(index) || 0));
-    if (n <= 0 || i >= n)
-        return 0;
-    var dist = Math.max(0, Number(distanceFromCenterPx) || 0);
-    var delay = Math.round(dist * launchpadStaggerPerPxMs);
-    // Cap total orchestration: clamp per-item delay so last start ≤ budget.
-    if (delay > launchpadStaggerBudgetMs)
-        delay = launchpadStaggerBudgetMs;
-    return delay;
+function launchpadIconEnterDuration(settingsService) {
+    return reducedMotion(settingsService) ? 0 : launchpadIconEnterMs;
 }
 
-// Left sidebar widget stack (T19). Card enter stagger after panel settles.
-var sidebarCardStaggerMs = 30;
-var sidebarCardEnterOffsetPx = 14;
-var sidebarCardStaggerBudgetMs = 450;
-var sidebarCardStaggerMaxItems = 16;
+function launchpadPageSnapDuration(settingsService) {
+    return reducedMotion(settingsService) ? 0 : launchpadPageSnapMs;
+}
+
+function launchpadStaggerDelay(distanceFromCenterPx, index, total) {
+    // Cascade disabled: return 0 so all icons share one enter timeline.
+    return 0;
+}
+
+// Left sidebar widget stack (T19 + polish). Short, subtle card rise — avoid
+// long opacity-0 cascades that make the panel feel empty then "pop in".
+var sidebarCardStaggerMs = 24;
+var sidebarCardEnterOffsetPx = 10;
+var sidebarCardStaggerBudgetMs = 280;
+var sidebarCardStaggerMaxItems = 12;
+var sidebarCardEnterMs = 260;
 
 function sidebarCardStaggerDelay(index) {
     var i = Math.max(0, Math.round(Number(index) || 0));
@@ -196,6 +205,10 @@ function sidebarCardStaggerDelay(index) {
         return sidebarCardStaggerBudgetMs;
     var delay = i * sidebarCardStaggerMs;
     return Math.min(sidebarCardStaggerBudgetMs, delay);
+}
+
+function sidebarCardEnterDuration(settingsService) {
+    return reducedMotion(settingsService) ? 0 : sidebarCardEnterMs;
 }
 
 // Spring vocabulary — QML SpringAnimation parameter groups. Glass region

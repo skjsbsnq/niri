@@ -26,9 +26,9 @@ PanelWindow {
 
     readonly property int screenWidth: Math.max(1, Number(root.screen && root.screen.width) || root.width)
     readonly property int screenHeight: Math.max(1, Number(root.screen && root.screen.height) || root.height)
-    readonly property int panelWidth: Math.max(320, Math.min(540, screenWidth - 24))
-    readonly property color glassFill: darkMode ? "#d01d1f24" : GlassStyle.FillPanel
-    readonly property color glassStroke: darkMode ? "#38ffffff" : GlassStyle.StrokePanel
+    readonly property int panelWidth: Math.max(340, Math.min(420, screenWidth - 24))
+    readonly property color glassFill: darkMode ? "#e01c1c1e" : "#e8f5f5f7"
+    readonly property color glassStroke: darkMode ? "#28ffffff" : "#2a000000"
     readonly property string accentId: settingsService ? settingsService.accentColor : "blue"
     readonly property color cardFill: Theme.cardFill(darkMode)
     readonly property color cardStroke: "transparent"
@@ -144,31 +144,34 @@ PanelWindow {
 
         ColumnLayout {
             anchors.fill: parent
-            anchors.margins: 16
-            spacing: 12
+            anchors.margins: 14
+            spacing: 10
 
             // Compact top segmented control (replaces title + close + large tabs).
             Item {
                 id: segmentBar
                 Layout.fillWidth: true
-                Layout.preferredHeight: 32
+                Layout.preferredHeight: 34
                 z: 2
 
                 Rectangle {
                     anchors.fill: parent
-                    radius: 10
-                    color: root.darkMode ? "#18ffffff" : "#22ffffff"
+                    radius: 17
+                    color: root.darkMode ? "#1affffff" : "#14000000"
                 }
 
                 Rectangle {
                     id: segmentThumb
                     width: (parent.width - 4) / 2
                     height: parent.height - 4
-                    radius: 8
+                    radius: 15
                     // Driven by moveSegmentThumb — avoids dual interceptors.
                     x: 2
                     y: 2
-                    color: root.darkMode ? "#344b62cc" : "#e8f2ff"
+                    color: root.darkMode ? "#3a3a3c" : "#ffffff"
+                    // Soft plate under the selected segment.
+                    border.color: root.darkMode ? "#22ffffff" : "#12000000"
+                    border.width: 1
 
                     Behavior on x {
                         enabled: !root.useSpring || Motion.reducedMotion(root.settingsService)
@@ -297,7 +300,7 @@ PanelWindow {
         Text {
             anchors.centerIn: parent
             text: seg.label
-            color: seg.active ? root.accentBlue : root.textSecondary
+            color: seg.active ? root.textPrimary : root.textSecondary
             font.pixelSize: 13
             font.weight: seg.active ? Font.DemiBold : Font.Medium
         }

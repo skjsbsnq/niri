@@ -29,8 +29,8 @@ class LeftSidebarWidgetTests(unittest.TestCase):
         self.assertIn("heroGradientColors", text)
         self.assertIn("WeatherCodes.slug", text)
         # Large temp is non-mono (no monoFontFamily on hero temp).
-        self.assertIn("font.pixelSize: 52", text)
-        self.assertNotIn("font.family: root.monoFontFamily", text.split("font.pixelSize: 52")[1][:200])
+        self.assertIn("font.pixelSize: 56", text)
+        self.assertNotIn("font.family: root.monoFontFamily", text.split("font.pixelSize: 56")[1][:200])
         self.assertIn("WidgetCard", text)
         self.assertIn("逐时", text)
         # No 1px card stroke pattern on widget cards.
@@ -56,11 +56,19 @@ class LeftSidebarWidgetTests(unittest.TestCase):
         # Signal wiring still present.
         self.assertIn("onOpenProcessMenuRequested", text)
 
+    def test_left_sidebar_click_outside_dismiss(self) -> None:
+        text = SHELL_QML.read_text(encoding="utf-8")
+        # Full-screen dismiss layer paired with LeftSidebar (not only ProcessMenu).
+        self.assertIn("Click-outside dismiss for left sidebar", text)
+        self.assertIn("onCloseRequested: shell.closeLeftSidebar()", text)
+        self.assertIn("popupWidth: leftSidebar.panelWidth", text)
+
     def test_motion_sidebar_stagger_tokens(self) -> None:
         text = MOTION.read_text(encoding="utf-8")
-        self.assertIn("var sidebarCardStaggerMs = 30;", text)
-        self.assertIn("var sidebarCardEnterOffsetPx = 14;", text)
+        self.assertIn("var sidebarCardStaggerMs = 24;", text)
+        self.assertIn("var sidebarCardEnterOffsetPx = 10;", text)
         self.assertIn("function sidebarCardStaggerDelay", text)
+        self.assertIn("function sidebarCardEnterDuration", text)
 
     def test_system_stats_refresh_not_tightened(self) -> None:
         # Guard: T19 must not encrypt SystemStats poll cadence.

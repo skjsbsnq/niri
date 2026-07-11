@@ -875,6 +875,24 @@ ShellRoot {
                 onOpenWeatherSettingsRequested: shell.openSettingsPanel("weather")
             }
 
+            // Click-outside dismiss for left sidebar. The sidebar PanelWindow is
+            // panel-width + mask-clipped, so desktop clicks never hit it — need a
+            // full-screen dismiss layer (same pattern as dock menus). Skip while
+            // ProcessMenu is open so the process menu owns outside-click close.
+            PopupDismissLayer {
+                screen: modelData
+                open: shell.navigationOpenFor(shell.leftSidebarOpen, shell.leftSidebarScreenName, modelData)
+                    && !shell.processMenuOpenFor(modelData)
+                usePopupCutout: true
+                useTopBarCutout: true
+                useCustomPopupGeometry: true
+                customPopupLeft: 0
+                customPopupTop: 0
+                popupWidth: leftSidebar.panelWidth
+                popupHeight: Math.max(1, Number(modelData && modelData.height) || 1)
+                onCloseRequested: shell.closeLeftSidebar()
+            }
+
             // LS07 进程右键菜单（照 dockWindowMenu 模式：PanelWindow + margins 定位）。
             ProcessMenu {
                 id: processMenu

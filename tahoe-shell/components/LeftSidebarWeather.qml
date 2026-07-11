@@ -36,9 +36,9 @@ Item {
     readonly property color warningYellow: darkMode ? "#ffd60a" : "#b56a00"
     readonly property color dangerRed: Theme.danger(darkMode)
     readonly property color precipBlue: darkMode ? "#7dc8ff" : "#2c9cf2"
-    // Cards: fill + soft shadow plate; no 1px stroke (T19).
-    readonly property color cardFill: darkMode ? "#22ffffff" : "#48ffffff"
-    readonly property color cardHover: darkMode ? "#30ffffff" : "#60ffffff"
+    // Widget plates over denser glass shell (match system page language).
+    readonly property color cardFill: darkMode ? "#2c2c2e" : "#ffffff"
+    readonly property color cardHover: darkMode ? "#3a3a3c" : "#f2f2f7"
     readonly property color separator: Theme.separator(darkMode)
 
     property real currentEpoch: Math.floor(Date.now() / 1000)
@@ -56,20 +56,20 @@ Item {
         var code = currentWeatherCode();
         var night = currentIsNight();
         var slug = WeatherCodes.slug(code, night);
-        // Status-tinted gradients (clear / rain / night / error / cloudy).
+        // Richer status gradients (clear / rain / night / error / cloudy).
         if (root.status === "error" && !root.hasData)
-            return ["#5a6570", "#2c333a"];
+            return ["#6b7280", "#374151"];
         if (night || slug.indexOf("night") !== -1)
-            return ["#1a2744", "#0b1224"];
+            return ["#1e3a5f", "#0f172a"];
         if (slug.indexOf("rain") !== -1 || slug.indexOf("drizzle") !== -1
                 || slug.indexOf("thunder") !== -1 || slug.indexOf("sleet") !== -1)
-            return ["#3d5a80", "#1b3a4b"];
+            return ["#4b6cb7", "#182848"];
         if (slug.indexOf("snow") !== -1)
-            return ["#7b8fa1", "#4a5d73"];
+            return ["#a8c0d6", "#5b7a94"];
         if (slug.indexOf("fog") !== -1 || slug.indexOf("cloudy") !== -1 || slug === "cloudy")
-            return ["#6b7c8f", "#3d4a5c"];
-        // clear / mostly clear day
-        return ["#4facfe", "#00c6fb"];
+            return ["#8e9eab", "#3b4a5a"];
+        // clear / mostly clear day — warm sky
+        return ["#56ccf2", "#2f80ed"];
     }
 
     ColumnLayout {
@@ -134,13 +134,13 @@ Item {
                 WidgetCard {
                     id: heroCard
                     width: parent.width
-                    height: 168
+                    height: 188
                     cardIndex: 0
                     fillColor: "transparent"
 
                     Rectangle {
                         anchors.fill: parent
-                        radius: 18
+                        radius: 20
                         gradient: Gradient {
                             GradientStop {
                                 position: 0.0
@@ -159,9 +159,9 @@ Item {
                         anchors.right: parent.right
                         anchors.top: parent.bottom
                         anchors.topMargin: -2
-                        height: 8
-                        radius: 4
-                        color: "#18000000"
+                        height: 10
+                        radius: 5
+                        color: root.darkMode ? "#40000000" : "#22000000"
                         z: -1
                     }
 
@@ -169,27 +169,27 @@ Item {
                         anchors.left: parent.left
                         anchors.right: heroIcon.left
                         anchors.top: parent.top
-                        anchors.margins: 16
+                        anchors.margins: 18
                         anchors.rightMargin: 8
-                        spacing: 2
+                        spacing: 4
 
                         Row {
-                            spacing: 8
+                            spacing: 6
                             Text {
                                 text: root.fmtTemp(root.weatherNumber("currentTemperatureC", NaN), false)
                                 color: "#ffffff"
                                 // Large non-mono (T19).
-                                font.pixelSize: 52
+                                font.pixelSize: 56
                                 font.weight: Font.DemiBold
-                                lineHeight: 0.9
+                                lineHeight: 0.88
                             }
                             Text {
                                 text: root.tempUnit() === "f" ? "°F" : "°C"
-                                color: "#ccffffff"
+                                color: "#d9ffffff"
                                 font.pixelSize: 18
                                 font.weight: Font.Medium
                                 anchors.bottom: parent.bottom
-                                anchors.bottomMargin: 10
+                                anchors.bottomMargin: 12
                             }
                             StatusCapsule {
                                 visible: root.hasData && (root.status === "stale" || root.status === "error")
@@ -823,20 +823,19 @@ Item {
         property int cardIndex: 0
         property color fillColor: root.cardFill
 
-        // Shadow plate
+        // Soft drop shadow plate (no 1px stroke).
         Rectangle {
             anchors.fill: parent
-            anchors.topMargin: 2
-            radius: 18
-            color: "#14000000"
+            anchors.topMargin: 3
+            radius: 20
+            color: root.darkMode ? "#40000000" : "#18000000"
             z: -1
         }
 
         Rectangle {
             anchors.fill: parent
-            radius: 18
+            radius: 20
             color: wcard.fillColor
-            // No border/stroke (T19).
         }
 
         property real enterY: Motion.sidebarCardEnterOffsetPx
@@ -856,15 +855,15 @@ Item {
             id: enterYEase
             target: wcard
             property: "enterY"
-            duration: Motion.elementMove(root.settingsService)
+            duration: Motion.sidebarCardEnterDuration(root.settingsService)
             easing.type: Motion.emphasizedDecel
         }
         NumberAnimation {
             id: enterOpacityAnim
             target: wcard
             property: "enterOpacity"
-            duration: Motion.fadeFast(root.settingsService)
-            easing.type: Motion.standardDecel
+            duration: Motion.sidebarCardEnterDuration(root.settingsService)
+            easing.type: Motion.emphasizedDecel
         }
 
         function animateEnter(toY, toOpacity) {
@@ -876,11 +875,11 @@ Item {
                 enterYSpring.restart();
             } else {
                 enterYEase.to = toY;
-                enterYEase.duration = Motion.elementMove(root.settingsService);
+                enterYEase.duration = Motion.sidebarCardEnterDuration(root.settingsService);
                 enterYEase.restart();
             }
             enterOpacityAnim.to = toOpacity;
-            enterOpacityAnim.duration = Motion.fadeFast(root.settingsService);
+            enterOpacityAnim.duration = Motion.sidebarCardEnterDuration(root.settingsService);
             enterOpacityAnim.restart();
         }
 

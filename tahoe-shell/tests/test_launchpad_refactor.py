@@ -26,18 +26,21 @@ class LaunchpadRefactorTests(unittest.TestCase):
         self.assertIn("snapToNearestPage", text)
         self.assertIn("moveSelection", text)
         self.assertIn("Keys.onLeftPressed", text)
-        self.assertIn("staggerDelayFor", text)
-        self.assertIn("DragOverBounds", text)
+        # Unified grid enter (no per-icon opacity cascade).
+        self.assertIn("gridEnter", text)
+        self.assertIn("playGridEnter", text)
+        self.assertIn("DragAndOvershootBounds", text)
 
     def test_stagger_budget_tokens(self) -> None:
         text = MOTION.read_text(encoding="utf-8")
         self.assertIn("var launchpadWallpaperScale = 1.06;", text)
         self.assertIn("var launchpadWallpaperDim = 0.25;", text)
-        self.assertIn("var launchpadStaggerBudgetMs = 450;", text)
-        self.assertIn("var launchpadStaggerMaxItems = 40;", text)
+        self.assertIn("var launchpadIconEnterMs = 280;", text)
+        self.assertIn("var launchpadPageSnapMs = 320;", text)
         self.assertIn("var launchpadGridCols = 7;", text)
         self.assertIn("var launchpadGridRows = 5;", text)
         self.assertIn("function launchpadStaggerDelay", text)
+        self.assertIn("function launchpadPageSnapDuration", text)
 
     def test_wallpaper_zoom_driven_by_launchpad(self) -> None:
         wp = WALLPAPER.read_text(encoding="utf-8")
@@ -57,13 +60,15 @@ class LaunchpadRefactorTests(unittest.TestCase):
         # Press feedback retained.
         self.assertIn("Motion.pressScaleFor", text)
 
-    def test_use_spring_dual_branch_on_icon_scale(self) -> None:
+    def test_unified_enter_not_per_icon_cascade(self) -> None:
         text = LAUNCHPAD.read_text(encoding="utf-8")
-        self.assertIn("SpringAnimation", text)
-        self.assertIn("useSpring", text)
-        # Single Behavior interceptor + explicit SpringAnimation (Dock pattern).
-        self.assertGreaterEqual(text.count("Behavior on scale"), 1)
-        self.assertIn("cellScaleSpring", text)
+        self.assertIn("gridEnterAnim", text)
+        self.assertIn("Motion.launchpadIconEnterScaleFrom", text)
+        # Icons stay opacity 1; enter is on the page surface.
+        self.assertNotIn("staggerTimer", text)
+        self.assertNotIn("cellScaleSpring", text)
+        # Press feedback retained on cells.
+        self.assertIn("Motion.pressScaleFor", text)
 
 
 if __name__ == "__main__":

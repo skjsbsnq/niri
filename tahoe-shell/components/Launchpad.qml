@@ -23,7 +23,9 @@ PanelWindow {
     property string query: ""
     property int selectedIndex: 0
     property int currentPage: 0
-    property bool enterAnimPlayed: false
+    // Unified grid enter 0→1 (all icons together). Avoid per-icon opacity:0
+    // cascade that looked like "one icon, then the rest".
+    property real gridEnter: 0
 
     readonly property var filteredApps: root.appsService
         ? root.appsService.filteredLaunchpadApps(root.query, "all")
@@ -70,13 +72,17 @@ PanelWindow {
 
     function goToPage(page, animated) {
         currentPage = clampPage(page);
-        var target = currentPage * pageFlick.width;
+        var pageW = Math.max(1, pageFlick.width);
+        var target = currentPage * pageW;
         if (animated === false || Motion.reducedMotion(settingsService)) {
+            pageSnapAnim.stop();
             pageFlick.contentX = target;
             return;
         }
         pageSnapAnim.stop();
+        pageSnapAnim.from = pageFlick.contentX;
         pageSnapAnim.to = target;
+        pageSnapAnim.duration = Motion.launchpadPageSnapDuration(settingsService);
         pageSnapAnim.restart();
     }
 
@@ -149,28 +155,24 @@ PanelWindow {
         selectIndex(idx);
     }
 
-    function cellCenterDistance(indexOnPage) {
-        var col = indexOnPage % gridCols;
-        var row = Math.floor(indexOnPage / gridCols);
-        var cx = (gridCols - 1) / 2.0;
-        var cy = (gridRows - 1) / 2.0;
-        var dx = (col - cx) * cellWidth;
-        var dy = (row - cy) * cellHeight;
-        return Math.sqrt(dx * dx + dy * dy);
+    function playGridEnter() {
+        gridEnterAnim.stop();
+        if (Motion.reducedMotion(settingsService)) {
+            gridEnter = 1;
+            return;
+        }
+        gridEnter = 0;
+        gridEnterAnim.from = 0;
+        gridEnterAnim.to = 1;
+        gridEnterAnim.duration = Motion.launchpadIconEnterDuration(settingsService);
+        gridEnterAnim.restart();
     }
 
-    function staggerDelayFor(indexOnPage, pageIndex) {
-        // Only animate the first page (and first N items) to stay in budget.
-        if (pageIndex > 0)
-            return 0;
-        if (indexOnPage >= Motion.launchpadStaggerMaxItems)
-            return Motion.launchpadStaggerBudgetMs;
-        return Motion.launchpadStaggerDelay(cellCenterDistance(indexOnPage), indexOnPage, cellsPerPage);
-    }
-
-    function playEnterStagger() {
-        enterAnimPlayed = true;
-        // Delegates react to open + enterAnimPlayed via their own Timers.
+    NumberAnimation {
+        id: gridEnterAnim
+        target: root
+        property: "gridEnter"
+        easing.type: Motion.emphasizedDecel
     }
 
     visible: compositorLayerAnimations ? open : (open || launcher.opacity > 0.01)
@@ -195,24 +197,31 @@ PanelWindow {
             query = "";
             selectedIndex = 0;
             currentPage = 0;
-            enterAnimPlayed = false;
+            gridEnter = 0;
             Qt.callLater(function() {
                 if (!root.open)
                     return;
+                pageSnapAnim.stop();
                 pageFlick.contentX = 0;
                 searchInput.forceActiveFocus();
-                playEnterStagger();
+                playGridEnter();
             });
         } else {
-            enterAnimPlayed = false;
+            gridEnterAnim.stop();
+            gridEnter = 0;
         }
     }
 
     onQueryChanged: {
         selectedIndex = 0;
         currentPage = 0;
-        if (pageFlick.width > 0)
+        if (pageFlick.width > 0) {
+            pageSnapAnim.stop();
             pageFlick.contentX = 0;
+        }
+        // Re-play a short enter when filtering reshuffles the grid.
+        if (root.open)
+            playGridEnter();
     }
 
     onAppCountChanged: {
@@ -234,7 +243,7 @@ PanelWindow {
         id: launcher
         anchors.fill: parent
         opacity: root.compositorLayerAnimations ? 1 : (root.open ? 1 : 0)
-        // No whole-layer scale — keeps icons sharp (rules §2.11).
+        // Soft whole-layer settle (opacity only — no scale, keeps icons sharp §2.11).
 
         Behavior on opacity {
             NumberAnimation {
@@ -245,11 +254,11 @@ PanelWindow {
             }
         }
 
+        // Click empty chrome (not icons) closes — Flickable/search sit above this.
         MouseArea {
             anchors.fill: parent
-            onClicked: function(mouse) {
-                mouse.accepted = true;
-            }
+            z: 0
+            onClicked: root.closeRequested()
         }
 
         // Full-screen backdrop material (blur region = entire surface).
@@ -287,10 +296,17 @@ PanelWindow {
             height: 40
             z: 2
 
+            // Swallow clicks so empty-area close does not fire through the pill.
+            MouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.LeftButton
+                onClicked: searchInput.forceActiveFocus()
+            }
+
             Rectangle {
                 anchors.fill: parent
                 radius: 20
-                color: root.darkMode ? "#55ffffff" : "#66ffffff"
+                color: root.darkMode ? "#66ffffff" : "#88ffffff"
                 border.color: root.darkMode ? "#40ffffff" : "#55ffffff"
                 border.width: 1
             }
@@ -358,21 +374,32 @@ PanelWindow {
             anchors.topMargin: root.topChrome
             anchors.bottom: parent.bottom
             anchors.bottomMargin: root.bottomChrome
-            contentWidth: width * Math.max(1, root.pageCount)
+            z: 1
+            contentWidth: Math.max(width, width * Math.max(1, root.pageCount))
             contentHeight: height
             clip: true
             interactive: root.pageCount > 1
             flickableDirection: Flickable.HorizontalFlick
-            boundsBehavior: Flickable.DragOverBounds
-            // OvershootBounds-like: allow rubber-band then snap.
+            boundsBehavior: Flickable.DragAndOvershootBounds
+            // Snappier horizontal paging feel.
+            flickDeceleration: 3500
+            maximumFlickVelocity: 4000
+            pressDelay: 0
             rebound: Transition {
                 NumberAnimation {
                     properties: "x"
-                    duration: 220
+                    duration: 280
                     easing.type: Motion.emphasizedDecel
                 }
             }
 
+            // Live page index while dragging (dots follow).
+            onContentXChanged: {
+                if (moving || dragging || flicking) {
+                    var pageW = Math.max(1, width);
+                    root.currentPage = root.clampPage(Math.round(contentX / pageW));
+                }
+            }
             onMovementEnded: root.snapToNearestPage()
             onFlickEnded: root.snapToNearestPage()
 
@@ -380,14 +407,23 @@ PanelWindow {
                 id: pageSnapAnim
                 target: pageFlick
                 property: "contentX"
-                duration: Motion.elementMove(root.settingsService) > 0
-                    ? 220
-                    : 0
+                duration: Motion.launchpadPageSnapDuration(root.settingsService)
                 easing.type: Motion.emphasizedDecel
                 onStopped: {
                     if (pageFlick.width > 0)
                         root.currentPage = root.clampPage(Math.round(pageFlick.contentX / pageFlick.width));
                 }
+            }
+
+            // Unified enter for the whole icon field (opacity + soft scale).
+            opacity: root.gridEnter
+            transform: Scale {
+                origin.x: pageFlick.width / 2
+                origin.y: pageFlick.height / 2
+                xScale: Motion.launchpadIconEnterScaleFrom
+                    + (1.0 - Motion.launchpadIconEnterScaleFrom) * root.gridEnter
+                yScale: Motion.launchpadIconEnterScaleFrom
+                    + (1.0 - Motion.launchpadIconEnterScaleFrom) * root.gridEnter
             }
 
             Row {
@@ -428,90 +464,9 @@ PanelWindow {
 
                                     width: root.cellWidth
                                     height: root.cellHeight
+                                    // Always visible when app exists — enter is on pageFlick.
                                     visible: cell.hasApp
-                                    opacity: 0
-                                    scale: 0.86
-
-                                    // Stagger enter when launchpad opens (first page only).
-                                    property bool staggerReady: false
-
-                                    Timer {
-                                        id: staggerTimer
-                                        interval: root.staggerDelayFor(cell.index, pageDelegate.index)
-                                        repeat: false
-                                        onTriggered: {
-                                            cell.staggerReady = true;
-                                            cell.opacity = 1;
-                                            cell.setScale(1, true);
-                                        }
-                                    }
-
-                                    Connections {
-                                        target: root
-                                        function onEnterAnimPlayedChanged() {
-                                            cell.applyEnterState();
-                                        }
-                                        function onOpenChanged() {
-                                            cell.applyEnterState();
-                                        }
-                                    }
-
-                                    function setScale(value, animate) {
-                                        cellScaleSpring.stop();
-                                        if (animate && root.useSpring && !Motion.reducedMotion(root.settingsService)) {
-                                            cellScaleSpring.to = value;
-                                            cellScaleSpring.restart();
-                                        } else {
-                                            cell.scale = value;
-                                        }
-                                    }
-
-                                    function applyEnterState() {
-                                        if (!root.open) {
-                                            staggerTimer.stop();
-                                            cell.staggerReady = false;
-                                            cell.opacity = 0;
-                                            cell.setScale(0.86, false);
-                                            return;
-                                        }
-                                        if (!root.enterAnimPlayed)
-                                            return;
-                                        if (Motion.reducedMotion(root.settingsService) || pageDelegate.index > 0) {
-                                            cell.staggerReady = true;
-                                            cell.opacity = 1;
-                                            cell.setScale(1, false);
-                                            return;
-                                        }
-                                        cell.staggerReady = false;
-                                        cell.opacity = 0;
-                                        cell.setScale(0.86, false);
-                                        staggerTimer.restart();
-                                    }
-
-                                    Behavior on opacity {
-                                        enabled: !Motion.reducedMotion(root.settingsService)
-                                        NumberAnimation {
-                                            duration: 180
-                                            easing.type: Motion.emphasizedDecel
-                                        }
-                                    }
-                                    // Single interceptor on scale (eased). Spring path
-                                    // uses explicit SpringAnimation when useSpring.
-                                    Behavior on scale {
-                                        enabled: !root.useSpring || Motion.reducedMotion(root.settingsService)
-                                        NumberAnimation {
-                                            duration: 180
-                                            easing.type: Motion.emphasizedDecel
-                                        }
-                                    }
-                                    SpringAnimation {
-                                        id: cellScaleSpring
-                                        target: cell
-                                        property: "scale"
-                                        spring: Motion.springSnappy.spring
-                                        damping: Motion.springSnappy.damping
-                                        epsilon: 0.001
-                                    }
+                                    opacity: 1
 
                                     // Press + selection chrome
                                     Item {
@@ -531,6 +486,11 @@ PanelWindow {
                                             color: cell.selected
                                                 ? (root.darkMode ? "#40ffffff" : "#38ffffff")
                                                 : (appMouse.containsMouse ? "#28ffffff" : "transparent")
+                                            Behavior on color {
+                                                ColorAnimation {
+                                                    duration: Motion.fadeFast(root.settingsService)
+                                                }
+                                            }
                                         }
 
                                         Image {
@@ -548,7 +508,9 @@ PanelWindow {
                                             mipmap: true
                                             sourceSize.width: 128
                                             sourceSize.height: 128
-                                            asynchronous: true
+                                            // Sync decode avoids empty first frame cascade.
+                                            asynchronous: false
+                                            cache: true
                                         }
 
                                         Text {
@@ -578,6 +540,8 @@ PanelWindow {
                                             anchors.fill: parent
                                             hoverEnabled: true
                                             cursorShape: Qt.PointingHandCursor
+                                            // Let horizontal flicks pass to pageFlick.
+                                            preventStealing: false
                                             onClicked: {
                                                 root.selectedIndex = cell.globalIndex;
                                                 root.launchAt(cell.globalIndex);
@@ -588,8 +552,6 @@ PanelWindow {
                                             }
                                         }
                                     }
-
-                                    Component.onCompleted: cell.applyEnterState()
                                 }
                             }
                         }
@@ -648,7 +610,15 @@ PanelWindow {
     function snapToNearestPage() {
         if (pageFlick.width <= 0)
             return;
-        var page = clampPage(Math.round(pageFlick.contentX / pageFlick.width));
+        var pageW = pageFlick.width;
+        var raw = pageFlick.contentX / pageW;
+        // Prefer velocity direction on light flicks past mid-threshold.
+        var page = clampPage(Math.round(raw));
+        var frac = raw - Math.floor(raw);
+        if (pageFlick.horizontalVelocity < -400 && frac > 0.15)
+            page = clampPage(Math.floor(raw) + 1);
+        else if (pageFlick.horizontalVelocity > 400 && frac < 0.85)
+            page = clampPage(Math.floor(raw));
         goToPage(page, true);
         // Keep selection on the visible page.
         var base = page * cellsPerPage;

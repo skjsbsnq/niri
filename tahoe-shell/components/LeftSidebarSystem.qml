@@ -25,21 +25,24 @@ Item {
 
     signal openProcessMenu(var proc, var anchorRect)
 
-    readonly property color cardFill: darkMode ? "#22ffffff" : "#48ffffff"
-    readonly property color rowHover: darkMode ? "#28ffffff" : "#48ffffff"
+    // Widget card surfaces: solid-ish plates over the denser glass shell.
+    readonly property color cardFill: darkMode ? "#2c2c2e" : "#ffffff"
+    readonly property color cardFillAlt: darkMode ? "#242426" : "#f2f2f7"
+    readonly property color rowHover: darkMode ? "#3a3a3c" : "#e8e8ed"
     readonly property string accentId: settingsService ? settingsService.accentColor : "blue"
     readonly property color textPrimary: Theme.label(darkMode)
     readonly property color textSecondary: Theme.secondaryLabel(darkMode)
     readonly property color textTertiary: Theme.tertiaryLabel(darkMode)
     readonly property color accentBlue: Theme.accent(darkMode, accentId)
-    readonly property color colorCpu: "#2c9cf2"
-    readonly property color colorRam: darkMode ? "#89b4fa" : "#0b6bd3"
-    readonly property color colorGpu: "#b48ead"
-    readonly property color colorDisk: "#b48ead"
-    readonly property color colorBattery: "#a6e3a1"
+    // Activity palette (macOS-like rings).
+    readonly property color colorCpu: darkMode ? "#0a84ff" : "#007aff"
+    readonly property color colorRam: darkMode ? "#30d158" : "#34c759"
+    readonly property color colorGpu: darkMode ? "#bf5af2" : "#af52de"
+    readonly property color colorDisk: darkMode ? "#64d2ff" : "#5ac8fa"
+    readonly property color colorBattery: darkMode ? "#30d158" : "#34c759"
     readonly property color dangerRed: Theme.danger(darkMode)
-    readonly property color colorNetDown: "#2c9cf2"
-    readonly property color colorNetUp: darkMode ? "#b48ead" : "#0b6bd3"
+    readonly property color colorNetDown: darkMode ? "#0a84ff" : "#007aff"
+    readonly property color colorNetUp: darkMode ? "#ff9f0a" : "#ff9500"
 
     readonly property int processRowHeight: 36
     readonly property int processLimit: 50
@@ -278,21 +281,33 @@ Item {
         Column {
             id: mainColumn
             width: mainFlick.width
-            spacing: 12
+            spacing: 10
 
             // --- Activity rings ---
             SoftCard {
                 width: parent.width
-                height: 148
+                height: 168
                 cardIndex: 0
 
+                Text {
+                    anchors.left: parent.left
+                    anchors.top: parent.top
+                    anchors.margins: 14
+                    text: "活动"
+                    color: root.textSecondary
+                    font.pixelSize: 12
+                    font.weight: Font.DemiBold
+                }
+
                 Row {
-                    anchors.centerIn: parent
-                    spacing: 18
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    anchors.bottom: parent.bottom
+                    anchors.bottomMargin: 14
+                    spacing: 14
 
                     ActivityRing {
-                        width: 100
-                        height: 100
+                        width: 96
+                        height: 96
                         progress: numOr(s() ? s().cpuUsage : 0, 0) / 100.0
                         ringColor: root.colorCpu
                         centerValue: Math.round(numOr(s() ? s().cpuUsage : 0, 0)) + "%"
@@ -301,8 +316,8 @@ Item {
                     }
 
                     ActivityRing {
-                        width: 100
-                        height: 100
+                        width: 96
+                        height: 96
                         progress: numOr(s() ? s().ramUsage : 0, 0) / 100.0
                         ringColor: root.colorRam
                         centerValue: Math.round(numOr(s() ? s().ramUsage : 0, 0)) + "%"
@@ -311,8 +326,8 @@ Item {
                     }
 
                     ActivityRing {
-                        width: 100
-                        height: 100
+                        width: 96
+                        height: 96
                         visible: root.gpuAvailable()
                         progress: numOr(s() ? s().gpuUsage : 0, 0) / 100.0
                         ringColor: root.colorGpu
@@ -322,8 +337,8 @@ Item {
                     }
 
                     ActivityRing {
-                        width: 100
-                        height: 100
+                        width: 96
+                        height: 96
                         visible: !root.gpuAvailable()
                         progress: Math.min(1, numOr(s() ? s().load1 : 0, 0) / Math.max(1, numOr(s() ? s().cpuCount : 4, 4)))
                         ringColor: root.colorGpu
@@ -334,16 +349,30 @@ Item {
                 }
             }
 
-            // --- Network mini chart (soft card, no stroke) ---
+            // --- Network mini chart ---
             SoftCard {
                 width: parent.width
-                height: 88
+                height: 100
                 cardIndex: 1
+
+                Text {
+                    anchors.left: parent.left
+                    anchors.top: parent.top
+                    anchors.margins: 12
+                    text: "网络"
+                    color: root.textSecondary
+                    font.pixelSize: 12
+                    font.weight: Font.DemiBold
+                    z: 2
+                }
 
                 Canvas {
                     id: chartCanvas
                     anchors.fill: parent
-                    anchors.margins: 10
+                    anchors.leftMargin: 10
+                    anchors.rightMargin: 10
+                    anchors.topMargin: 28
+                    anchors.bottomMargin: 10
                     onPaint: {
                         var ctx = getContext("2d");
                         ctx.clearRect(0, 0, width, height);
@@ -379,7 +408,7 @@ Item {
                 Column {
                     anchors.top: parent.top
                     anchors.right: parent.right
-                    anchors.margins: 10
+                    anchors.margins: 12
                     spacing: 2
                     Text {
                         text: "↓ " + root.formatBytes(s() ? s().netDownBps : 0)
@@ -399,12 +428,12 @@ Item {
             // --- Stats row ---
             SoftCard {
                 width: parent.width
-                height: 56
+                height: 64
                 cardIndex: 2
 
                 Row {
                     anchors.fill: parent
-                    anchors.margins: 12
+                    anchors.margins: 10
                     spacing: 0
 
                     StatCell {
@@ -431,7 +460,7 @@ Item {
             // Disk
             SoftCard {
                 width: parent.width
-                height: 64
+                height: 68
                 cardIndex: 3
 
                 readonly property real perc: (s() ? s().diskUsage : 0) / 100.0
@@ -441,8 +470,8 @@ Item {
                     anchors.top: parent.top
                     anchors.bottom: parent.bottom
                     width: parent.width * parent.perc
-                    radius: 16
-                    color: Qt.rgba(root.colorDisk.r, root.colorDisk.g, root.colorDisk.b, 0.18)
+                    radius: 18
+                    color: Qt.rgba(root.colorDisk.r, root.colorDisk.g, root.colorDisk.b, 0.16)
                 }
 
                 Row {
@@ -477,7 +506,7 @@ Item {
             // Battery
             SoftCard {
                 width: parent.width
-                height: 64
+                height: 68
                 cardIndex: 4
                 visible: root.batteryAvailable()
 
@@ -488,8 +517,8 @@ Item {
                     anchors.top: parent.top
                     anchors.bottom: parent.bottom
                     width: parent.width * parent.perc
-                    radius: 16
-                    color: Qt.rgba(root.colorBattery.r, root.colorBattery.g, root.colorBattery.b, 0.18)
+                    radius: 18
+                    color: Qt.rgba(root.colorBattery.r, root.colorBattery.g, root.colorBattery.b, 0.16)
                 }
 
                 Row {
@@ -745,18 +774,18 @@ Item {
         id: card
         property int cardIndex: 0
 
+        // Soft drop shadow plate (no 1px stroke).
         Rectangle {
             anchors.fill: parent
-            anchors.topMargin: 2
-            radius: 16
-            color: "#14000000"
+            anchors.topMargin: 3
+            radius: 18
+            color: root.darkMode ? "#40000000" : "#18000000"
             z: -1
         }
         Rectangle {
             anchors.fill: parent
-            radius: 16
+            radius: 18
             color: root.cardFill
-            // No 1px stroke (T19).
         }
 
         property real enterY: Motion.sidebarCardEnterOffsetPx
@@ -764,7 +793,6 @@ Item {
         transform: Translate { y: card.enterY }
         opacity: enterOpacity
 
-        // Dual-branch motion without dual Behavior (Qt allows one interceptor).
         SpringAnimation {
             id: enterYSpring
             target: card
@@ -777,15 +805,15 @@ Item {
             id: enterYEase
             target: card
             property: "enterY"
-            duration: Motion.elementMove(root.settingsService)
+            duration: Motion.sidebarCardEnterDuration(root.settingsService)
             easing.type: Motion.emphasizedDecel
         }
         NumberAnimation {
             id: enterOpacityAnim
             target: card
             property: "enterOpacity"
-            duration: Motion.fadeFast(root.settingsService)
-            easing.type: Motion.standardDecel
+            duration: Motion.sidebarCardEnterDuration(root.settingsService)
+            easing.type: Motion.emphasizedDecel
         }
 
         function animateEnter(toY, toOpacity) {
@@ -797,11 +825,11 @@ Item {
                 enterYSpring.restart();
             } else {
                 enterYEase.to = toY;
-                enterYEase.duration = Motion.elementMove(root.settingsService);
+                enterYEase.duration = Motion.sidebarCardEnterDuration(root.settingsService);
                 enterYEase.restart();
             }
             enterOpacityAnim.to = toOpacity;
-            enterOpacityAnim.duration = Motion.fadeFast(root.settingsService);
+            enterOpacityAnim.duration = Motion.sidebarCardEnterDuration(root.settingsService);
             enterOpacityAnim.restart();
         }
 
@@ -853,15 +881,15 @@ Item {
                 ctx.clearRect(0, 0, width, height);
                 var cx = width / 2;
                 var cy = height / 2;
-                var r = Math.min(width, height) / 2 - 8;
+                var r = Math.min(width, height) / 2 - 10;
                 var pi = Math.PI;
                 var start = -pi / 2;
-                ctx.lineWidth = 8;
+                ctx.lineWidth = 9;
                 ctx.lineCap = "round";
                 // Track
                 ctx.beginPath();
                 ctx.arc(cx, cy, r, 0, 2 * pi, false);
-                ctx.strokeStyle = Qt.rgba(ring.ringColor.r, ring.ringColor.g, ring.ringColor.b, 0.15);
+                ctx.strokeStyle = Qt.rgba(ring.ringColor.r, ring.ringColor.g, ring.ringColor.b, 0.14);
                 ctx.stroke();
                 // Progress
                 var prog = Math.max(0, Math.min(1, ring.progress));
@@ -876,12 +904,12 @@ Item {
 
         Column {
             anchors.centerIn: parent
-            spacing: 0
+            spacing: 1
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
                 text: ring.centerValue
                 color: root.textPrimary
-                font.pixelSize: 18
+                font.pixelSize: 17
                 font.weight: Font.DemiBold
             }
             Text {
@@ -889,6 +917,7 @@ Item {
                 text: ring.centerLabel
                 color: root.textSecondary
                 font.pixelSize: 11
+                font.weight: Font.Medium
             }
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter

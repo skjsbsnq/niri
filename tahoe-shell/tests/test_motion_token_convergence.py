@@ -234,10 +234,14 @@ class MotionTokenConvergenceTests(unittest.TestCase):
         self.assertIn("onDockVisibleHeightChanged", dock)
         self.assertNotIn("dockGlassActive = false;\n            dockVisualHidden = true", dock)
 
-        # Running indicator 2px glow (sibling halo, no GraphicalEffects).
+        # Running indicator: clean small dots, no glow halo (T08-fix5).
         self.assertIn("id: runningDot", dock)
-        self.assertIn("parent.width + 4", dock)
-        self.assertIn("parent.width + 4", window_button)
+        self.assertNotIn("parent.width + 4", dock)
+        self.assertNotIn("parent.width + 4", window_button)
+        # Surface HoverHandler owns wave + hide (child exits must not schedule hide).
+        self.assertIn("id: dockSurfaceHover", dock)
+        self.assertIn("HoverHandler", dock)
+        self.assertIn("dockSurfaceHover.hovered", dock)
 
     def test_phase_b_press_feedback_uses_motion_single_outlet(self) -> None:
         # T06 moved menu press feedback into the shared MenuRow.qml outlet.

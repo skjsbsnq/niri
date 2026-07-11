@@ -205,24 +205,17 @@ Item {
     }
 
     Rectangle {
+        // T08-fix5: clean macOS-style indicator — small round dot, no glow bar.
         anchors.horizontalCenter: icon.horizontalCenter
         anchors.bottom: parent.bottom
-        width: root.active ? 16 : root.minimized ? 4 : 6
-        height: 4
-        radius: 2
-        color: root.active ? "#202124" : root.minimized ? "#7b818a" : "#99000000"
+        anchors.bottomMargin: 2
+        width: root.active ? 5 : root.minimized ? 3 : 4
+        height: width
+        radius: width / 2
+        color: root.active
+            ? (root.minimized ? "#7b818a" : "#202124")
+            : root.minimized ? "#7b818a" : "#99000000"
         opacity: (root.windowModel || root.toplevel) ? 1 : 0
-
-        // T08: 2px soft glow under the running indicator.
-        Rectangle {
-            anchors.centerIn: parent
-            width: parent.width + 4
-            height: parent.height + 4
-            radius: Math.min(width, height) / 2
-            z: -1
-            visible: parent.opacity > 0.01 && parent.width > 0
-            color: "#40000000"
-        }
     }
 
     Rectangle {

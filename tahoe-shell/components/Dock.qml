@@ -390,6 +390,17 @@ PanelWindow {
         root.updateDockHover(p.x);
     }
 
+    function seedWaveFromSurfaceHover() {
+        if (!dockSurface || !dockSurfaceHover.hovered)
+            return;
+        root.updateDockHoverFromItem(
+            dockSurface,
+            dockSurfaceHover.point.position.x,
+            dockSurfaceHover.point.position.y,
+            Qt.NoButton
+        );
+    }
+
     function updateDockHoverFromButtons(x, buttons) {
         if (buttons !== Qt.NoButton) {
             root.pointerDragActive = true;
@@ -413,6 +424,9 @@ PanelWindow {
     function resetDockHover() {
         hoverExitTimer.stop();
         dockRevealDebounceTimer.stop();
+        // Still over glass (HoverHandler covers children) → keep revealed.
+        if (dockSurfaceHover.hovered)
+            return;
         root.dockHovered = false;
         root.dockMouseX = -10000;
         root.clearDockHoverLabel();
@@ -561,7 +575,9 @@ PanelWindow {
 
     Timer {
         id: hoverExitTimer
-        interval: root.dockAutoHide ? root.dockHideDelay : 90
+        // Grace for icon→icon gaps. Autohide uses at least 320ms so a slow
+        // cross of spacing does not drop the panel (T08-fix5).
+        interval: root.dockAutoHide ? Math.max(320, root.dockHideDelay) : 160
         repeat: false
         onTriggered: root.resetDockHover()
     }
@@ -617,6 +633,7 @@ PanelWindow {
     // dual branch (see animateDockSlideTo). No Behavior interceptor here.
 
     MouseArea {
+        id: revealMouse
         anchors {
             left: parent.left
             right: parent.right
@@ -662,16 +679,28 @@ PanelWindow {
             y: root.dockSlideOffset
         }
 
-        MouseArea {
-            anchors.fill: parent
-            acceptedButtons: Qt.NoButton
-            hoverEnabled: true
-            onPositionChanged: function(mouse) {
-                root.updateDockHoverFromItem(this, mouse.x, mouse.y, mouse.buttons !== undefined ? mouse.buttons : Qt.NoButton);
+        // T08-fix5: HoverHandler tracks the whole glass including children, so
+        // moving between icons does not drop dockHovered / kill the wave.
+        // Child MouseAreas only handle clicks + labels (no hide scheduling).
+        HoverHandler {
+            id: dockSurfaceHover
+            acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+            onHoveredChanged: {
+                if (dockSurfaceHover.hovered) {
+                    root.markDockHovered();
+                    root.seedWaveFromSurfaceHover();
+                } else {
+                    root.scheduleDockHoverReset();
+                }
             }
-            onEntered: root.markDockHovered()
-            onExited: root.scheduleDockHoverReset()
         }
+
+        // Re-drive the wave whenever the hover point moves (HandlerPoint updates
+        // notify via these aliases — more portable than onPointChanged).
+        property real _hoverLocalX: dockSurfaceHover.point.position.x
+        property real _hoverLocalY: dockSurfaceHover.point.position.y
+        on_HoverLocalXChanged: if (dockSurfaceHover.hovered) root.seedWaveFromSurfaceHover()
+        on_HoverLocalYChanged: if (dockSurfaceHover.hovered) root.seedWaveFromSurfaceHover()
 
         Row {
             id: dockRow
@@ -840,24 +869,20 @@ PanelWindow {
 
                                 Rectangle {
                                     id: runningDot
+                                    // T08-fix5: small clean macOS-style running indicator
+                                    // (no glow halo). Centered under the icon.
                                     anchors.horizontalCenter: parent.horizontalCenter
                                     anchors.bottom: parent.bottom
-                                    width: (pinnedButton.running || pinnedButton.launching) ? 5 : 0
-                                    height: 5
-                                    radius: 3
+                                    anchors.bottomMargin: 2
+                                    width: (pinnedButton.running || pinnedButton.launching) ? 4 : 0
+                                    height: 4
+                                    radius: 2
                                     color: pinnedButton.launching && !pinnedButton.running
-                                        ? (root.darkMode ? "#a0ffffff" : "#99000000")
-                                        : (root.darkMode ? "#ccffffff" : "#99000000")
-
-                                    // T08: 2px soft glow (sibling halo; no GraphicalEffects).
-                                    Rectangle {
-                                        anchors.centerIn: parent
-                                        width: parent.width + 4
-                                        height: parent.height + 4
-                                        radius: width / 2
-                                        z: -1
-                                        visible: parent.width > 0
-                                        color: root.darkMode ? "#40ffffff" : "#40000000"
+                                        ? (root.darkMode ? "#80ffffff" : "#66000000")
+                                        : (root.darkMode ? "#e6ffffff" : "#cc000000")
+                                    opacity: width > 0 ? 1 : 0
+                                    Behavior on width {
+                                        NumberAnimation { duration: 120; easing.type: Motion.emphasizedDecel }
                                     }
                                 }
 
@@ -883,17 +908,8 @@ PanelWindow {
 
                                             return;
                                         }
-
-                                        root.updateDockHoverFromItem(
-                                            pinnedButton,
-                                            mouse.x,
-                                            mouse.y,
-                                            mouse.buttons !== undefined ? mouse.buttons : Qt.NoButton
-                                        );
-                                        if (pinnedButton.hovered) {
-                                            var label = root.appsService ? root.appsService.appLabel(pinnedButton.appModel || pinnedButton.appId) : "";
-                                            root.showDockHoverLabel(label, pinnedButton, -34);
-                                        }
+                                        // Wave position is owned by dockSurface HoverHandler
+                                        // (T08-fix5) — do not map animated slot → dockMouseX.
                                     }
                                     onEntered: {
                                         root.markDockHovered();
@@ -901,8 +917,10 @@ PanelWindow {
                                         root.showDockHoverLabel(label, pinnedButton, -34);
                                     }
                                     onExited: {
+                                        // Only clear the label. Do NOT schedule hide —
+                                        // icon→icon moves fire onExited and would kill
+                                        // the wave / autohide mid-hover (T08-fix5).
                                         root.clearDockHoverLabel();
-                                        root.scheduleDockHoverReset();
                                     }
                                     onPressed: function(mouse) {
                                         if (mouse.button === Qt.LeftButton && pinnedButton.appId !== "launchpad") {
@@ -1246,7 +1264,8 @@ PanelWindow {
                                 dockSlideOffset: root.dockSlideOffset
                                 onDockPointerMoved: function(x, buttons) {
                                     root.updateWindowHoverLabelGeometry(windowButton);
-                                    // x is root-local from WindowButton (T08-fix4).
+                                    // Wave is driven by dockSurface HoverHandler; keep
+                                    // root-local x as a secondary seed only.
                                     root.updateDockHoverFromButtons(x, buttons === undefined ? Qt.NoButton : buttons);
                                 }
                                 onDockPointerEntered: {
@@ -1254,8 +1273,8 @@ PanelWindow {
                                     root.markDockHovered();
                                 }
                                 onDockPointerExited: {
+                                    // Label only — hide is owned by surface HoverHandler.
                                     root.clearWindowHoverLabel(windowButton);
-                                    root.scheduleDockHoverReset();
                                 }
                                 onContextMenuRequested: function(window) {
                                     root.openWindowMenu(window, root.anchorRectFor(windowButton));
@@ -1284,7 +1303,9 @@ PanelWindow {
                     root.updateDockHoverFromButtons(x, buttons === undefined ? Qt.NoButton : buttons);
                 }
                 onDockPointerEntered: root.markDockHovered()
-                onDockPointerExited: root.scheduleDockHoverReset()
+                onDockPointerExited: {
+                    // Surface HoverHandler owns hide (T08-fix5).
+                }
                 onContextMenuRequested: function(window, anchorItem) {
                     root.openWindowMenu(window, root.anchorRectFor(anchorItem));
                     root.markDockHovered();
@@ -1419,13 +1440,12 @@ PanelWindow {
                 root.showDockHoverLabel(tool.label, tool, -34);
             }
             onPositionChanged: function(mouse) {
-                root.updateDockHoverFromItem(tool, mouse.x, mouse.y, mouse.buttons !== undefined ? mouse.buttons : Qt.NoButton);
+                // Wave from surface HoverHandler; only refresh label geometry.
                 if (toolMouse.containsMouse)
                     root.showDockHoverLabel(tool.label, tool, -34);
             }
             onExited: {
                 root.clearDockHoverLabel();
-                root.scheduleDockHoverReset();
             }
             onClicked: tool.activated()
         }

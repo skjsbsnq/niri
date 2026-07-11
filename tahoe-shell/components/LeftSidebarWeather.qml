@@ -4,12 +4,11 @@ import QtQuick
 import QtQuick.Layouts
 import "Motion.js" as Motion
 import "settings/SettingsTheme.js" as Theme
+import "WeatherCodes.js" as WeatherCodes
 
-// 左侧边栏天气页。
-//
-// 重构目标：天气页只做侧栏内的信息布局，玻璃、模糊、阴影继续由
-// LeftSidebar.qml 的玻璃 region 统一拥有。这里不再绘制独立天气背景或
-// 大型图表卡，避免在一个系统侧栏里嵌入第二套天气 App 视觉语言。
+// T19 weather widget: status-gradient mid-size card, large non-mono temp,
+// embedded hourly strip, daily forecast gradient temp bars without stroke.
+// Glass shell remains owned by LeftSidebar.qml.
 Item {
     id: root
 
@@ -19,6 +18,8 @@ Item {
     property bool active: false
     property bool darkMode: false
     property string monoFontFamily: "Noto Sans Mono CJK SC"
+    property bool cardsEnter: false
+    property bool useSpring: false
 
     readonly property var dailyForecast: weatherService ? (weatherService.dailyForecast || []) : []
     readonly property var hourlyForecast: weatherService ? (weatherService.hourlyForecast || []) : []
@@ -35,16 +36,10 @@ Item {
     readonly property color warningYellow: darkMode ? "#ffd60a" : "#b56a00"
     readonly property color dangerRed: Theme.danger(darkMode)
     readonly property color precipBlue: darkMode ? "#7dc8ff" : "#2c9cf2"
-    readonly property color cardFill: darkMode ? "#18ffffff" : "#34ffffff"
-    readonly property color cardHover: darkMode ? "#26ffffff" : "#50ffffff"
-    readonly property color cardStroke: darkMode ? "#26ffffff" : "#54ffffff"
-    readonly property color separator: darkMode ? "#18ffffff" : "#241d1d1f"
-
-    readonly property int metricColumns: width >= 360 ? 2 : 1
-    readonly property real metricGap: 8
-    readonly property real metricTileWidth: metricColumns === 1
-        ? Math.max(0, contentColumn.width)
-        : Math.max(0, (contentColumn.width - metricGap) / 2)
+    // Cards: fill + soft shadow plate; no 1px stroke (T19).
+    readonly property color cardFill: darkMode ? "#22ffffff" : "#48ffffff"
+    readonly property color cardHover: darkMode ? "#30ffffff" : "#60ffffff"
+    readonly property color separator: Theme.separator(darkMode)
 
     property real currentEpoch: Math.floor(Date.now() / 1000)
 
@@ -57,43 +52,53 @@ Item {
         onTriggered: root.currentEpoch = Math.floor(Date.now() / 1000)
     }
 
+    function heroGradientColors() {
+        var code = currentWeatherCode();
+        var night = currentIsNight();
+        var slug = WeatherCodes.slug(code, night);
+        // Status-tinted gradients (clear / rain / night / error / cloudy).
+        if (root.status === "error" && !root.hasData)
+            return ["#5a6570", "#2c333a"];
+        if (night || slug.indexOf("night") !== -1)
+            return ["#1a2744", "#0b1224"];
+        if (slug.indexOf("rain") !== -1 || slug.indexOf("drizzle") !== -1
+                || slug.indexOf("thunder") !== -1 || slug.indexOf("sleet") !== -1)
+            return ["#3d5a80", "#1b3a4b"];
+        if (slug.indexOf("snow") !== -1)
+            return ["#7b8fa1", "#4a5d73"];
+        if (slug.indexOf("fog") !== -1 || slug.indexOf("cloudy") !== -1 || slug === "cloudy")
+            return ["#6b7c8f", "#3d4a5c"];
+        // clear / mostly clear day
+        return ["#4facfe", "#00c6fb"];
+    }
+
     ColumnLayout {
         anchors.fill: parent
         spacing: 10
 
+        // Toolbar: location + refresh/settings (no chrome title).
         Item {
             Layout.fillWidth: true
-            Layout.preferredHeight: 42
+            Layout.preferredHeight: 28
 
-            RowLayout {
-                anchors.fill: parent
-                spacing: 9
+            Text {
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
+                width: parent.width - 76
+                text: root.locationTitle()
+                color: root.textPrimary
+                font.pixelSize: 14
+                font.weight: Font.DemiBold
+                elide: Text.ElideRight
+            }
 
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    Layout.alignment: Qt.AlignVCenter
-                    spacing: 1
-
-                    Text {
-                        Layout.fillWidth: true
-                        text: root.locationTitle()
-                        color: root.textPrimary
-                        font.pixelSize: 15
-                        font.weight: Font.DemiBold
-                        elide: Text.ElideRight
-                    }
-
-                    Text {
-                        Layout.fillWidth: true
-                        text: root.updatedText()
-                        color: root.statusColor()
-                        font.pixelSize: 11
-                        elide: Text.ElideRight
-                    }
-                }
+            Row {
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: 4
 
                 IconButton {
-                    iconCode: "\ue5d5" // refresh
+                    iconCode: "\ue5d5"
                     enabled: !!root.weatherService && !root.updating
                     busy: root.updating
                     onActivated: {
@@ -103,7 +108,7 @@ Item {
                 }
 
                 IconButton {
-                    iconCode: "\ue8b8" // settings
+                    iconCode: "\ue8b8"
                     enabled: true
                     onActivated: root.openWeatherSettingsRequested()
                 }
@@ -112,7 +117,6 @@ Item {
 
         Flickable {
             id: contentFlick
-
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
@@ -123,35 +127,70 @@ Item {
 
             Column {
                 id: contentColumn
-
                 width: contentFlick.width
                 spacing: 12
 
-                Item {
+                // --- Hero gradient widget ---
+                WidgetCard {
+                    id: heroCard
                     width: parent.width
                     height: 168
+                    cardIndex: 0
+                    fillColor: "transparent"
+
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: 18
+                        gradient: Gradient {
+                            GradientStop {
+                                position: 0.0
+                                color: root.heroGradientColors()[0]
+                            }
+                            GradientStop {
+                                position: 1.0
+                                color: root.heroGradientColors()[1]
+                            }
+                        }
+                    }
+
+                    // Soft bottom shadow plate (no stroke).
+                    Rectangle {
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.bottom
+                        anchors.topMargin: -2
+                        height: 8
+                        radius: 4
+                        color: "#18000000"
+                        z: -1
+                    }
 
                     Column {
                         anchors.left: parent.left
                         anchors.right: heroIcon.left
                         anchors.top: parent.top
-                        anchors.topMargin: 5
-                        anchors.rightMargin: 12
-                        spacing: 4
+                        anchors.margins: 16
+                        anchors.rightMargin: 8
+                        spacing: 2
 
                         Row {
-                            width: parent.width
                             spacing: 8
-
                             Text {
-                                text: root.fmtTemp(root.weatherNumber("currentTemperatureC", NaN), true)
-                                color: root.textPrimary
-                                font.pixelSize: 58
-                                font.family: root.monoFontFamily
+                                text: root.fmtTemp(root.weatherNumber("currentTemperatureC", NaN), false)
+                                color: "#ffffff"
+                                // Large non-mono (T19).
+                                font.pixelSize: 52
                                 font.weight: Font.DemiBold
-                                lineHeight: 0.88
+                                lineHeight: 0.9
                             }
-
+                            Text {
+                                text: root.tempUnit() === "f" ? "°F" : "°C"
+                                color: "#ccffffff"
+                                font.pixelSize: 18
+                                font.weight: Font.Medium
+                                anchors.bottom: parent.bottom
+                                anchors.bottomMargin: 10
+                            }
                             StatusCapsule {
                                 visible: root.hasData && (root.status === "stale" || root.status === "error")
                                 text: root.status === "error" ? "失败" : "缓存"
@@ -163,8 +202,8 @@ Item {
                         Text {
                             width: parent.width
                             text: root.conditionText()
-                            color: root.textPrimary
-                            font.pixelSize: 18
+                            color: "#f0ffffff"
+                            font.pixelSize: 16
                             font.weight: Font.DemiBold
                             elide: Text.ElideRight
                         }
@@ -172,34 +211,30 @@ Item {
                         Text {
                             width: parent.width
                             text: root.detailSummary()
-                            color: root.textSecondary
-                            font.pixelSize: 13
+                            color: "#ccffffff"
+                            font.pixelSize: 12
                             wrapMode: Text.Wrap
                             maximumLineCount: 2
                             elide: Text.ElideRight
                         }
                     }
 
-                    Rectangle {
+                    Item {
                         id: heroIcon
-
                         anchors.right: parent.right
+                        anchors.rightMargin: 14
                         anchors.top: parent.top
-                        anchors.topMargin: 9
-                        width: 82
-                        height: 82
-                        radius: 22
-                        color: root.cardFill
-                        border.color: root.cardStroke
-                        border.width: 1
+                        anchors.topMargin: 14
+                        width: 72
+                        height: 72
 
                         MeteoIcon {
                             anchors.centerIn: parent
-                            width: 58
-                            height: 58
+                            width: 64
+                            height: 64
                             weatherCode: root.currentWeatherCode()
                             night: root.currentIsNight()
-                            color: root.textPrimary
+                            color: "#ffffff"
                         }
                     }
 
@@ -207,25 +242,21 @@ Item {
                         anchors.left: parent.left
                         anchors.right: parent.right
                         anchors.bottom: parent.bottom
+                        anchors.margins: 12
                         spacing: 8
 
                         MiniMetricPill {
                             width: (parent.width - 16) / 3
-                            iconCode: "\ue1b1" // device_thermostat
                             label: "体感"
                             value: root.fmtTemp(root.weatherNumber("currentApparentTemperatureC", NaN), true)
                         }
-
                         MiniMetricPill {
                             width: (parent.width - 16) / 3
-                            iconCode: "\ue798" // water_drop
                             label: "湿度"
                             value: root.fmtPercent(root.weatherNumber("currentHumidity", NaN))
                         }
-
                         MiniMetricPill {
                             width: (parent.width - 16) / 3
-                            iconCode: "\uefd8" // air
                             label: "风"
                             value: root.fmtSpeed(root.weatherNumber("currentWindSpeedMs", NaN))
                         }
@@ -241,96 +272,139 @@ Item {
                     accent: root.status === "error" ? root.dangerRed : root.warningYellow
                 }
 
-                SectionHeader {
-                    title: "未来几小时"
-                    detail: root.hourlyVisibleCount() + " 项"
-                }
-
-                HourlyStrip {
+                // Embedded hourly strip (inside soft card, no stroke).
+                WidgetCard {
                     width: parent.width
+                    height: 118
+                    cardIndex: 1
+
+                    Column {
+                        anchors.fill: parent
+                        anchors.margins: 10
+                        spacing: 6
+
+                        Text {
+                            text: "逐时"
+                            color: root.textSecondary
+                            font.pixelSize: 12
+                            font.weight: Font.DemiBold
+                        }
+
+                        HourlyStrip {
+                            width: parent.width
+                            height: 80
+                        }
+                    }
                 }
 
-                SectionHeader {
-                    title: "每日预报"
-                    detail: root.dailyVisibleCount() + " 天"
-                }
-
-                DailyForecastList {
+                // Daily forecast with gradient temp bars, no outer stroke.
+                WidgetCard {
                     width: parent.width
+                    height: dailyList.implicitHeight + 28
+                    cardIndex: 2
+
+                    Column {
+                        id: dailyList
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        anchors.margins: 10
+                        spacing: 0
+
+                        Text {
+                            text: "每日"
+                            color: root.textSecondary
+                            font.pixelSize: 12
+                            font.weight: Font.DemiBold
+                            height: 20
+                        }
+
+                        Repeater {
+                            model: root.dailyVisibleCount()
+                            delegate: DailyRow {
+                                required property int index
+                                width: dailyList.width
+                                rowIndex: index
+                                item: root.dailyAt(index)
+                                last: index === root.dailyVisibleCount() - 1
+                            }
+                        }
+
+                        Text {
+                            width: parent.width
+                            height: 40
+                            visible: root.dailyVisibleCount() === 0
+                            text: "暂无每日预报"
+                            color: root.textSecondary
+                            font.pixelSize: 13
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                    }
                 }
 
-                SectionHeader {
-                    title: "状况"
-                    detail: root.status === "fresh" ? "实时" : root.statusLabel()
-                }
-
-                Grid {
+                // Compact metrics grid (no stroke).
+                WidgetCard {
                     width: parent.width
-                    height: Math.ceil(6 / root.metricColumns) * 78
-                        + (Math.ceil(6 / root.metricColumns) - 1) * root.metricGap
-                    columns: root.metricColumns
-                    spacing: root.metricGap
+                    height: metricsGrid.implicitHeight + 20
+                    cardIndex: 3
 
-                    CompactMetricTile {
-                        width: root.metricTileWidth
-                        iconCode: "\ue430" // wb_sunny
-                        title: "紫外线"
-                        value: root.fmtUv(root.weatherNumber("currentUvIndex", NaN))
-                        detail: root.uvLevel(root.weatherNumber("currentUvIndex", NaN))
-                        accent: root.uvAccent(root.weatherNumber("currentUvIndex", NaN))
-                    }
+                    Grid {
+                        id: metricsGrid
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.top: parent.top
+                        anchors.margins: 10
+                        columns: root.width >= 360 ? 2 : 1
+                        spacing: 8
 
-                    CompactMetricTile {
-                        width: root.metricTileWidth
-                        readonly property var summary: root.aqiSummary()
-                        iconCode: "\uefd8" // air
-                        title: "空气"
-                        value: root.validNumber(summary.value) ? Math.round(summary.value).toString() : "--"
-                        detail: root.validNumber(summary.value) ? summary.level : "暂无 AQI"
-                        accent: summary.color
-                    }
-
-                    CompactMetricTile {
-                        width: root.metricTileWidth
-                        iconCode: "\ue9e4" // speed
-                        title: "气压"
-                        value: root.fmtPressure(root.weatherNumber("currentPressureHpa", NaN))
-                        detail: "hPa"
-                        accent: root.darkMode ? "#7dc8ff" : "#0b6bd3"
-                    }
-
-                    CompactMetricTile {
-                        width: root.metricTileWidth
-                        iconCode: "\ue8f4" // visibility
-                        title: "能见度"
-                        value: root.fmtDistance(root.weatherNumber("currentVisibilityM", NaN))
-                        detail: root.visibilityDescription(root.weatherNumber("currentVisibilityM", NaN))
-                        accent: "#7ed0ff"
-                    }
-
-                    CompactMetricTile {
-                        width: root.metricTileWidth
-                        iconCode: "\ue798" // water_drop
-                        title: "降水"
-                        value: root.fmtPrecip(root.todayPrecipitation())
-                        detail: root.validNumber(root.todayPrecipProbability()) ? "概率 " + root.fmtPercent(root.todayPrecipProbability()) : "今日累计"
-                        accent: root.precipBlue
-                    }
-
-                    CompactMetricTile {
-                        width: root.metricTileWidth
-                        iconCode: "\ue88a" // explore
-                        title: "风向"
-                        value: root.directionLabel(root.weatherNumber("currentWindDirectionDeg", NaN))
-                        detail: "阵风 " + root.fmtSpeed(root.weatherNumber("currentWindGustMs", NaN))
-                        accent: root.windAccent(root.weatherNumber("currentWindSpeedMs", NaN))
+                        CompactMetricTile {
+                            width: metricsGrid.columns === 1
+                                ? metricsGrid.width
+                                : (metricsGrid.width - metricsGrid.spacing) / 2
+                            iconCode: "\ue430"
+                            title: "紫外线"
+                            value: root.fmtUv(root.weatherNumber("currentUvIndex", NaN))
+                            detail: root.uvLevel(root.weatherNumber("currentUvIndex", NaN))
+                            accent: root.uvAccent(root.weatherNumber("currentUvIndex", NaN))
+                        }
+                        CompactMetricTile {
+                            width: metricsGrid.columns === 1
+                                ? metricsGrid.width
+                                : (metricsGrid.width - metricsGrid.spacing) / 2
+                            readonly property var summary: root.aqiSummary()
+                            iconCode: "\uefd8"
+                            title: "空气"
+                            value: root.validNumber(summary.value) ? Math.round(summary.value).toString() : "--"
+                            detail: root.validNumber(summary.value) ? summary.level : "暂无 AQI"
+                            accent: summary.color
+                        }
+                        CompactMetricTile {
+                            width: metricsGrid.columns === 1
+                                ? metricsGrid.width
+                                : (metricsGrid.width - metricsGrid.spacing) / 2
+                            iconCode: "\ue9e4"
+                            title: "气压"
+                            value: root.fmtPressure(root.weatherNumber("currentPressureHpa", NaN))
+                            detail: "hPa"
+                            accent: root.darkMode ? "#7dc8ff" : "#0b6bd3"
+                        }
+                        CompactMetricTile {
+                            width: metricsGrid.columns === 1
+                                ? metricsGrid.width
+                                : (metricsGrid.width - metricsGrid.spacing) / 2
+                            iconCode: "\ue798"
+                            title: "降水"
+                            value: root.fmtPrecip(root.todayPrecipitation())
+                            detail: root.validNumber(root.todayPrecipProbability())
+                                ? "概率 " + root.fmtPercent(root.todayPrecipProbability())
+                                : "今日累计"
+                            accent: root.precipBlue
+                        }
                     }
                 }
 
-                Item {
-                    width: parent.width
-                    height: 6
-                }
+                Item { width: 1; height: 4 }
             }
         }
     }
@@ -347,7 +421,7 @@ Item {
         visible: root.updating
     }
 
-    // --- Section 1: service / model helpers ---
+    // --- helpers (service / format) — unchanged semantics ---
     function service() {
         return root.weatherService || {};
     }
@@ -434,7 +508,6 @@ Item {
         var count = dailyCount();
         if (count === 0)
             return 0;
-
         var todayStart = dayStartEpoch(root.currentEpoch);
         for (var i = 0; i < count; i++) {
             var t = Number(modelItem(root.dailyForecast, i).time);
@@ -463,7 +536,6 @@ Item {
         var count = hourlyCount();
         if (count === 0)
             return 0;
-
         var threshold = root.currentEpoch - 1800;
         for (var i = 0; i < count; i++) {
             var t = Number(modelItem(root.hourlyForecast, i).time);
@@ -481,7 +553,6 @@ Item {
         return modelItem(root.hourlyForecast, hourlyStartIndex() + index);
     }
 
-    // --- Section 2: formatting ---
     function tempUnit() {
         var unit = root.settingsService ? String(root.settingsService.weatherTempUnit || "c").toLowerCase() : "c";
         return unit === "f" ? "f" : "c";
@@ -521,25 +592,9 @@ Item {
         return validNumber(value) ? Number(value).toFixed(1) + " mm" : "--";
     }
 
-    function fmtDistance(meters) {
-        if (!validNumber(meters))
-            return "--";
-        var m = Number(meters);
-        if (m >= 1000) {
-            var km = m / 1000;
-            return (km < 100 ? km.toFixed(1) : Math.round(km).toString()) + " km";
-        }
-        return Math.round(m).toString() + " m";
-    }
-
     function fmtHour(epoch) {
         var n = Number(epoch);
         return isFinite(n) && n > 0 ? Qt.formatDateTime(new Date(n * 1000), "hh:00") : "--";
-    }
-
-    function fmtTime(epoch) {
-        var n = Number(epoch);
-        return isFinite(n) && n > 0 ? Qt.formatDateTime(new Date(n * 1000), "hh:mm") : "--";
     }
 
     function dayLabel(index, epoch) {
@@ -570,52 +625,21 @@ Item {
     function detailSummary() {
         if (!root.hasData)
             return root.updating ? "正在连接 Open-Meteo" : "还没有可显示的预报";
-
-        var uv = weatherNumber("currentUvIndex", NaN);
-        var parts = [
-            "体感 " + fmtTemp(weatherNumber("currentApparentTemperatureC", NaN), true),
-            "风 " + fmtSpeed(weatherNumber("currentWindSpeedMs", NaN))
-        ];
-        if (validNumber(uv))
-            parts.push("UV " + Number(uv).toFixed(1));
-        return parts.join(" · ");
+        return root.updatedText();
     }
 
     function lastErrorText() {
         return String(service().lastError || "").trim();
     }
 
-    function statusColor() {
-        if (root.status === "error")
-            return root.dangerRed;
-        if (root.status === "stale")
-            return root.warningYellow;
-        return root.textTertiary;
-    }
-
-    function statusLabel() {
-        if (root.updating)
-            return "更新中";
-        if (root.status === "fresh")
-            return "已更新";
-        if (root.status === "stale")
-            return "缓存";
-        if (root.status === "error")
-            return "失败";
-        return "等待";
-    }
-
     function updatedText() {
         if (root.updating)
             return "正在更新";
-
         if (root.status === "error")
             return root.lastErrorText().length > 0 ? root.lastErrorText() : "更新失败";
-
         var raw = String(service().updatedAt || "").trim();
         if (raw.length === 0)
             return root.status === "stale" ? "显示缓存" : "等待更新";
-
         var date = new Date(raw);
         var seconds = Math.max(0, Math.floor((root.currentEpoch * 1000 - date.getTime()) / 1000));
         var label = "";
@@ -629,11 +653,9 @@ Item {
             label = Math.floor(seconds / 3600) + " 小时前";
         else
             label = Qt.formatDateTime(date, "M/d hh:mm");
-
         return root.status === "stale" ? "缓存 · " + label : label;
     }
 
-    // --- Section 3: weather summaries ---
     function dailyLow(item) {
         return valueAt(item, "temperatureMinC", NaN);
     }
@@ -720,57 +742,6 @@ Item {
         return "#bf5af2";
     }
 
-    function windAccent(ms) {
-        if (!validNumber(ms))
-            return "#8e8e93";
-        var v = Number(ms);
-        if (v < 4)
-            return root.successGreen;
-        if (v < 8)
-            return "#ffca28";
-        if (v < 12)
-            return "#ff9f0a";
-        return root.dangerRed;
-    }
-
-    function directionLabel(degree) {
-        if (!validNumber(degree))
-            return "--";
-        var normalized = ((Number(degree) % 360) + 360) % 360;
-        if (normalized < 22.5 || normalized >= 337.5)
-            return "N";
-        if (normalized < 67.5)
-            return "NE";
-        if (normalized < 112.5)
-            return "E";
-        if (normalized < 157.5)
-            return "SE";
-        if (normalized < 202.5)
-            return "S";
-        if (normalized < 247.5)
-            return "SW";
-        if (normalized < 292.5)
-            return "W";
-        return "NW";
-    }
-
-    function visibilityDescription(meters) {
-        if (!validNumber(meters))
-            return "--";
-        var km = Number(meters) / 1000;
-        if (km >= 16)
-            return "极清";
-        if (km >= 10)
-            return "清晰";
-        if (km >= 6)
-            return "良好";
-        if (km >= 3)
-            return "轻雾";
-        if (km >= 1)
-            return "低";
-        return "浓雾";
-    }
-
     function aqiThresholds() {
         return [0, 20, 50, 100, 150, 250];
     }
@@ -778,7 +749,6 @@ Item {
     function pollutantIndex(value, thresholds) {
         if (!validNumber(value))
             return NaN;
-
         var v = Number(value);
         var level = -1;
         for (var i = 0; i < thresholds.length; i++) {
@@ -787,7 +757,6 @@ Item {
         }
         if (level < 0)
             return NaN;
-
         var aqi = aqiThresholds();
         if (level < thresholds.length - 1) {
             var bpLo = thresholds[level];
@@ -829,7 +798,6 @@ Item {
             { label: "PM10", value: pollutantIndex(a.pm10, [0, 15, 45, 80, 160, 400]) },
             { label: "PM2.5", value: pollutantIndex(a.pm25, [0, 5, 15, 30, 60, 150]) }
         ];
-
         var best = null;
         for (var i = 0; i < candidates.length; i++) {
             var item = candidates[i];
@@ -840,7 +808,6 @@ Item {
         }
         if (!best)
             return { value: NaN, level: "--", color: "#8e8e93", pollutant: "--" };
-
         var level = aqiLevelIndex(best.value);
         return {
             value: best.value,
@@ -850,63 +817,151 @@ Item {
         };
     }
 
-    // --- Section 4: inline components ---
-    component IconButton: Rectangle {
-        id: button
+    // --- components ---
+    component WidgetCard: Item {
+        id: wcard
+        property int cardIndex: 0
+        property color fillColor: root.cardFill
 
+        // Shadow plate
+        Rectangle {
+            anchors.fill: parent
+            anchors.topMargin: 2
+            radius: 18
+            color: "#14000000"
+            z: -1
+        }
+
+        Rectangle {
+            anchors.fill: parent
+            radius: 18
+            color: wcard.fillColor
+            // No border/stroke (T19).
+        }
+
+        property real enterY: Motion.sidebarCardEnterOffsetPx
+        property real enterOpacity: 0
+        transform: Translate { y: wcard.enterY }
+        opacity: enterOpacity
+
+        SpringAnimation {
+            id: enterYSpring
+            target: wcard
+            property: "enterY"
+            spring: Motion.springSmooth.spring
+            damping: Motion.springSmooth.damping
+            epsilon: 0.0005
+        }
+        NumberAnimation {
+            id: enterYEase
+            target: wcard
+            property: "enterY"
+            duration: Motion.elementMove(root.settingsService)
+            easing.type: Motion.emphasizedDecel
+        }
+        NumberAnimation {
+            id: enterOpacityAnim
+            target: wcard
+            property: "enterOpacity"
+            duration: Motion.fadeFast(root.settingsService)
+            easing.type: Motion.standardDecel
+        }
+
+        function animateEnter(toY, toOpacity) {
+            enterYSpring.stop();
+            enterYEase.stop();
+            enterOpacityAnim.stop();
+            if (root.useSpring && !Motion.reducedMotion(root.settingsService)) {
+                enterYSpring.to = toY;
+                enterYSpring.restart();
+            } else {
+                enterYEase.to = toY;
+                enterYEase.duration = Motion.elementMove(root.settingsService);
+                enterYEase.restart();
+            }
+            enterOpacityAnim.to = toOpacity;
+            enterOpacityAnim.duration = Motion.fadeFast(root.settingsService);
+            enterOpacityAnim.restart();
+        }
+
+        function snapEnter(toY, toOpacity) {
+            enterYSpring.stop();
+            enterYEase.stop();
+            enterOpacityAnim.stop();
+            wcard.enterY = toY;
+            wcard.enterOpacity = toOpacity;
+        }
+
+        Connections {
+            target: root
+            function onCardsEnterChanged() {
+                if (!root.cardsEnter) {
+                    wcard.snapEnter(Motion.sidebarCardEnterOffsetPx, 0);
+                    return;
+                }
+                revealTimer.interval = Motion.sidebarCardStaggerDelay(wcard.cardIndex);
+                revealTimer.restart();
+            }
+        }
+        Timer {
+            id: revealTimer
+            repeat: false
+            onTriggered: wcard.animateEnter(0, 1)
+        }
+        Component.onCompleted: {
+            if (root.cardsEnter)
+                wcard.snapEnter(0, 1);
+        }
+    }
+
+    component IconButton: Item {
+        id: button
         property string iconCode: ""
         property bool busy: false
-
+        property bool enabled: true
         signal activated()
 
-        Layout.preferredWidth: 32
-        Layout.preferredHeight: 32
-        radius: 16
-        color: enabled ? (buttonMouse.containsMouse ? root.cardHover : "transparent") : "transparent"
-        border.color: buttonMouse.containsMouse && enabled ? root.cardStroke : "transparent"
-        border.width: 1
-        opacity: enabled ? 1 : 0.55
+        width: 28
+        height: 28
+
+        Rectangle {
+            anchors.fill: parent
+            radius: 14
+            color: buttonMouse.containsMouse && button.enabled ? root.cardHover : "transparent"
+        }
 
         TahoeSymbol {
-            id: buttonIcon
             anchors.centerIn: parent
-            name: button.busy ? "\ue863" : button.iconCode // sync
+            name: button.busy ? "\ue863" : button.iconCode
             color: root.textSecondary
-            size: 18
+            size: 16
+            opacity: button.enabled ? 1 : 0.5
         }
 
         MouseArea {
             id: buttonMouse
-
             anchors.fill: parent
             hoverEnabled: true
+            enabled: button.enabled
             cursorShape: button.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-            onClicked: {
-                if (button.enabled)
-                    button.activated();
-            }
+            onClicked: button.activated()
         }
     }
 
     component StatusCapsule: Rectangle {
         id: capsule
-
         property string text: ""
         property color accent: root.warningYellow
-
-        width: label.implicitWidth + 16
-        height: 24
-        radius: 12
-        color: Qt.rgba(accent.r, accent.g, accent.b, root.darkMode ? 0.20 : 0.14)
-        border.color: Qt.rgba(accent.r, accent.g, accent.b, 0.42)
-        border.width: 1
-
+        width: label.implicitWidth + 14
+        height: 22
+        radius: 11
+        color: Qt.rgba(accent.r, accent.g, accent.b, 0.28)
+        // No stroke.
         Text {
             id: label
-
             anchors.centerIn: parent
             text: capsule.text
-            color: capsule.accent
+            color: "#ffffff"
             font.pixelSize: 11
             font.weight: Font.DemiBold
         }
@@ -914,346 +969,172 @@ Item {
 
     component MiniMetricPill: Rectangle {
         id: pill
-
-        property string iconCode: ""
         property string label: ""
         property string value: "--"
-
-        height: 42
-        radius: 14
-        color: root.cardFill
-        border.color: root.cardStroke
-        border.width: 1
-
-        Row {
-            anchors.fill: parent
-            anchors.leftMargin: 10
-            anchors.rightMargin: 10
-            spacing: 7
-
-            TahoeSymbol {
-                anchors.verticalCenter: parent.verticalCenter
-                name: pill.iconCode
-                color: root.accentBlue
-                size: 16
+        height: 36
+        radius: 12
+        color: "#28ffffff"
+        // No border.
+        Column {
+            anchors.centerIn: parent
+            spacing: 0
+            Text {
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: pill.label
+                color: "#ccffffff"
+                font.pixelSize: 10
             }
-
-            Column {
-                width: parent.width - 24
-                spacing: 0
-                anchors.verticalCenter: parent.verticalCenter
-
-                Text {
-                    width: parent.width
-                    text: pill.label
-                    color: root.textTertiary
-                    font.pixelSize: 10
-                    elide: Text.ElideRight
-                }
-
-                Text {
-                    width: parent.width
-                    text: pill.value
-                    color: root.textPrimary
-                    font.pixelSize: 12
-                    font.family: root.monoFontFamily
-                    font.weight: Font.DemiBold
-                    elide: Text.ElideRight
-                }
+            Text {
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: pill.value
+                color: "#ffffff"
+                font.pixelSize: 12
+                font.weight: Font.DemiBold
             }
-        }
-    }
-
-    component SectionHeader: Row {
-        id: header
-
-        property string title: ""
-        property string detail: ""
-
-        width: parent ? parent.width : 0
-        height: 20
-        spacing: 8
-
-        Text {
-            width: parent.width - detailLabel.implicitWidth - 8
-            text: header.title
-            color: root.textPrimary
-            font.pixelSize: 13
-            font.weight: Font.DemiBold
-            elide: Text.ElideRight
-            anchors.verticalCenter: parent.verticalCenter
-        }
-
-        Text {
-            id: detailLabel
-
-            text: header.detail
-            color: root.textTertiary
-            font.pixelSize: 11
-            font.family: root.monoFontFamily
-            anchors.verticalCenter: parent.verticalCenter
         }
     }
 
     component HourlyStrip: Item {
-        id: strip
-
-        height: 108
-
         Flickable {
             anchors.fill: parent
             clip: true
             boundsBehavior: Flickable.StopAtBounds
             flickableDirection: Flickable.HorizontalFlick
-            contentWidth: Math.max(width, root.hourlyVisibleCount() * 66)
+            contentWidth: Math.max(width, root.hourlyVisibleCount() * 56)
             contentHeight: height
             interactive: contentWidth > width
 
             Row {
                 height: parent.height
-                spacing: 8
-
+                spacing: 6
                 Repeater {
                     model: root.hourlyVisibleCount()
-
-                    delegate: HourlyChip {
+                    delegate: Column {
                         required property int index
-
-                        width: 58
-                        hourIndex: index
-                        item: root.hourlyAt(index)
+                        width: 50
+                        spacing: 3
+                        Text {
+                            width: parent.width
+                            text: index === 0 ? "现在" : root.fmtHour(root.hourlyAt(index).time)
+                            color: root.textTertiary
+                            font.pixelSize: 10
+                            horizontalAlignment: Text.AlignHCenter
+                        }
+                        MeteoIcon {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            width: 24
+                            height: 24
+                            weatherCode: root.valueAt(root.hourlyAt(index), "weatherCode", -1)
+                            night: !root.valueAt(root.hourlyAt(index), "isDay", true)
+                            color: root.textPrimary
+                        }
+                        Text {
+                            width: parent.width
+                            text: root.fmtTemp(root.valueAt(root.hourlyAt(index), "temperatureC", NaN), false)
+                            color: root.textPrimary
+                            font.pixelSize: 13
+                            font.weight: Font.DemiBold
+                            horizontalAlignment: Text.AlignHCenter
+                        }
                     }
                 }
             }
         }
-
         Text {
             anchors.centerIn: parent
             visible: root.hourlyVisibleCount() === 0
-            text: "暂无逐时预报"
+            text: "暂无逐时"
             color: root.textSecondary
-            font.pixelSize: 13
-        }
-    }
-
-    component HourlyChip: Rectangle {
-        id: chip
-
-        property int hourIndex: 0
-        property var item: ({})
-
-        readonly property bool cellNight: !root.valueAt(item, "isDay", true)
-        readonly property real pop: root.valueAt(item, "precipitationProbability", 0)
-
-        height: 100
-        radius: 17
-        color: chipMouse.containsMouse ? root.cardHover : root.cardFill
-        border.color: root.cardStroke
-        border.width: 1
-
-        Behavior on color { ColorAnimation { duration: Motion.fadeFast(root.settingsService) } }
-
-        Column {
-            anchors.fill: parent
-            anchors.topMargin: 8
-            anchors.bottomMargin: 8
-            spacing: 4
-
-            Text {
-                width: parent.width
-                text: chip.hourIndex === 0 ? "现在" : root.fmtHour(chip.item.time)
-                color: root.textSecondary
-                font.pixelSize: 11
-                horizontalAlignment: Text.AlignHCenter
-                elide: Text.ElideRight
-            }
-
-            MeteoIcon {
-                anchors.horizontalCenter: parent.horizontalCenter
-                width: 28
-                height: 28
-                weatherCode: root.valueAt(chip.item, "weatherCode", -1)
-                night: chip.cellNight
-                color: root.textPrimary
-            }
-
-            Text {
-                width: parent.width
-                text: root.fmtTemp(root.valueAt(chip.item, "temperatureC", NaN), false)
-                color: root.textPrimary
-                font.pixelSize: 15
-                font.family: root.monoFontFamily
-                font.weight: Font.DemiBold
-                horizontalAlignment: Text.AlignHCenter
-                elide: Text.ElideRight
-            }
-
-            Text {
-                width: parent.width
-                text: chip.pop > 0 ? root.fmtPercent(chip.pop) : " "
-                color: root.precipBlue
-                font.pixelSize: 10
-                font.family: root.monoFontFamily
-                horizontalAlignment: Text.AlignHCenter
-                elide: Text.ElideRight
-            }
-        }
-
-        MouseArea {
-            id: chipMouse
-            anchors.fill: parent
-            hoverEnabled: true
-            acceptedButtons: Qt.NoButton
-        }
-    }
-
-    component DailyForecastList: Rectangle {
-        id: list
-
-        readonly property int rowCount: root.dailyVisibleCount()
-        readonly property int rowHeight: 42
-
-        height: rowCount > 0 ? rowCount * rowHeight + 8 : 70
-        radius: 18
-        color: root.cardFill
-        border.color: root.cardStroke
-        border.width: 1
-        clip: true
-
-        Column {
-            anchors.fill: parent
-            anchors.topMargin: 4
-            anchors.bottomMargin: 4
-
-            Repeater {
-                model: list.rowCount
-
-                delegate: DailyRow {
-                    required property int index
-
-                    width: list.width
-                    rowIndex: index
-                    item: root.dailyAt(index)
-                    last: index === list.rowCount - 1
-                }
-            }
-        }
-
-        Text {
-            anchors.centerIn: parent
-            visible: list.rowCount === 0
-            text: "暂无每日预报"
-            color: root.textSecondary
-            font.pixelSize: 13
+            font.pixelSize: 12
         }
     }
 
     component DailyRow: Item {
         id: row
-
         property int rowIndex: 0
         property var item: ({})
         property bool last: false
-
         readonly property real low: root.dailyLow(item)
         readonly property real high: root.dailyHigh(item)
         readonly property real barOffset: root.rangeOffset(low)
         readonly property real barWidth: root.rangeWidth(low, high)
-        readonly property real pop: root.valueAt(item, "precipitationProbabilityMax", 0)
-
-        height: 42
+        height: 36
 
         Text {
             anchors.left: parent.left
-            anchors.leftMargin: 12
             anchors.verticalCenter: parent.verticalCenter
-            width: 46
+            width: 40
             text: root.dayLabel(row.rowIndex, row.item.time)
             color: row.rowIndex === 0 ? root.textPrimary : root.textSecondary
             font.pixelSize: 12
             font.weight: row.rowIndex === 0 ? Font.DemiBold : Font.Medium
-            elide: Text.ElideRight
         }
 
         MeteoIcon {
             anchors.left: parent.left
-            anchors.leftMargin: 62
+            anchors.leftMargin: 44
             anchors.verticalCenter: parent.verticalCenter
-            width: 26
-            height: 26
+            width: 22
+            height: 22
             weatherCode: root.valueAt(row.item, "weatherCode", -1)
             night: false
             color: root.textPrimary
         }
 
         Text {
-            anchors.left: parent.left
-            anchors.leftMargin: 92
-            anchors.verticalCenter: parent.verticalCenter
-            width: 34
-            text: row.pop > 0 ? root.fmtPercent(row.pop) : ""
-            color: root.precipBlue
-            font.pixelSize: 10
-            font.family: root.monoFontFamily
-            elide: Text.ElideRight
-        }
-
-        Text {
             anchors.right: tempBar.left
-            anchors.rightMargin: 8
+            anchors.rightMargin: 6
             anchors.verticalCenter: parent.verticalCenter
-            width: 34
+            width: 30
             text: root.fmtTemp(row.low, false)
             color: root.textTertiary
             font.pixelSize: 12
-            font.family: root.monoFontFamily
             horizontalAlignment: Text.AlignRight
         }
 
         Item {
             id: tempBar
-
             anchors.right: highLabel.left
-            anchors.rightMargin: 8
+            anchors.rightMargin: 6
             anchors.verticalCenter: parent.verticalCenter
-            width: Math.max(56, parent.width - 232)
+            width: Math.max(48, parent.width - 180)
             height: 6
 
             Rectangle {
                 anchors.fill: parent
-                radius: height / 2
+                radius: 3
                 color: root.darkMode ? "#18ffffff" : "#1c1d1d1f"
             }
 
+            // Gradient temperature bar (no stroke).
             Rectangle {
                 x: Math.max(0, Math.min(parent.width - width, parent.width * row.barOffset))
                 width: Math.max(12, Math.min(parent.width, parent.width * row.barWidth))
                 height: parent.height
-                radius: height / 2
-                color: root.accentBlue
+                radius: 3
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop { position: 0.0; color: root.precipBlue }
+                    GradientStop { position: 1.0; color: root.warningYellow }
+                }
             }
         }
 
         Text {
             id: highLabel
-
             anchors.right: parent.right
-            anchors.rightMargin: 12
             anchors.verticalCenter: parent.verticalCenter
-            width: 34
+            width: 30
             text: root.fmtTemp(row.high, false)
             color: root.textPrimary
             font.pixelSize: 12
-            font.family: root.monoFontFamily
             font.weight: Font.DemiBold
             horizontalAlignment: Text.AlignRight
         }
 
         Rectangle {
             anchors.left: parent.left
-            anchors.leftMargin: 12
             anchors.right: parent.right
-            anchors.rightMargin: 12
             anchors.bottom: parent.bottom
             height: 1
             visible: !row.last
@@ -1261,129 +1142,92 @@ Item {
         }
     }
 
-    component CompactMetricTile: Rectangle {
+    component CompactMetricTile: Item {
         id: tile
-
         property string iconCode: ""
         property string title: ""
         property string value: "--"
         property string detail: ""
         property color accent: root.accentBlue
+        height: 64
 
-        height: 78
-        radius: 16
-        color: tileMouse.containsMouse ? root.cardHover : root.cardFill
-        border.color: root.cardStroke
-        border.width: 1
-
-        Behavior on color { ColorAnimation { duration: Motion.fadeFast(root.settingsService) } }
-
-        Row {
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.top: parent.top
-            anchors.leftMargin: 11
-            anchors.rightMargin: 11
-            anchors.topMargin: 10
-            spacing: 7
-
-            TahoeSymbol {
-                anchors.verticalCenter: parent.verticalCenter
-                name: tile.iconCode
-                color: tile.accent
-                size: 17
-            }
-
-            Text {
-                width: parent.width - 24
-                text: tile.title
-                color: root.textSecondary
-                font.pixelSize: 11
-                font.weight: Font.DemiBold
-                elide: Text.ElideRight
-                anchors.verticalCenter: parent.verticalCenter
-            }
-        }
-
-        Text {
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.bottom: detailText.top
-            anchors.leftMargin: 12
-            anchors.rightMargin: 12
-            anchors.bottomMargin: 2
-            text: tile.value
-            color: root.textPrimary
-            font.pixelSize: tile.value.length > 8 ? 17 : 22
-            font.family: root.monoFontFamily
-            font.weight: Font.DemiBold
-            elide: Text.ElideRight
-        }
-
-        Text {
-            id: detailText
-
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.bottom: parent.bottom
-            anchors.leftMargin: 12
-            anchors.rightMargin: 12
-            anchors.bottomMargin: 9
-            text: tile.detail
-            color: root.textTertiary
-            font.pixelSize: 11
-            elide: Text.ElideRight
-        }
-
-        MouseArea {
-            id: tileMouse
+        Rectangle {
             anchors.fill: parent
-            hoverEnabled: true
-            acceptedButtons: Qt.NoButton
+            radius: 14
+            color: root.darkMode ? "#14ffffff" : "#28ffffff"
+            // No stroke.
+        }
+
+        Column {
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.leftMargin: 12
+            anchors.rightMargin: 12
+            spacing: 2
+
+            Row {
+                spacing: 6
+                TahoeSymbol {
+                    anchors.verticalCenter: parent.verticalCenter
+                    name: tile.iconCode
+                    color: tile.accent
+                    size: 14
+                }
+                Text {
+                    text: tile.title
+                    color: root.textSecondary
+                    font.pixelSize: 11
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+            }
+            Text {
+                text: tile.value
+                color: root.textPrimary
+                font.pixelSize: 18
+                font.weight: Font.DemiBold
+            }
+            Text {
+                text: tile.detail
+                color: root.textTertiary
+                font.pixelSize: 11
+            }
         }
     }
 
     component StatusBanner: Rectangle {
         id: banner
-
         property string iconCode: ""
         property string title: ""
         property string message: ""
         property color accent: root.warningYellow
-
-        height: 56
-        radius: 16
+        height: 52
+        radius: 14
         color: Qt.rgba(accent.r, accent.g, accent.b, root.darkMode ? 0.16 : 0.11)
-        border.color: Qt.rgba(accent.r, accent.g, accent.b, 0.38)
-        border.width: 1
+        // No stroke.
 
         Row {
             anchors.fill: parent
-            anchors.leftMargin: 13
-            anchors.rightMargin: 13
+            anchors.leftMargin: 12
+            anchors.rightMargin: 12
             spacing: 10
-
             TahoeSymbol {
                 anchors.verticalCenter: parent.verticalCenter
                 name: banner.iconCode
                 color: banner.accent
-                size: 20
+                size: 18
             }
-
             Column {
-                width: parent.width - 34
-                spacing: 2
+                width: parent.width - 32
                 anchors.verticalCenter: parent.verticalCenter
-
+                spacing: 2
                 Text {
                     width: parent.width
                     text: banner.title
                     color: root.textPrimary
                     font.pixelSize: 12
                     font.weight: Font.DemiBold
-                    elide: Text.ElideRight
                 }
-
                 Text {
                     width: parent.width
                     text: banner.message
@@ -1398,25 +1242,22 @@ Item {
     component EmptyState: Item {
         Column {
             anchors.centerIn: parent
-            width: Math.min(parent.width - 40, 320)
+            width: Math.min(parent.width - 40, 300)
             spacing: 10
-
             TahoeSymbol {
                 anchors.horizontalCenter: parent.horizontalCenter
-                name: "\ue2bd" // wb_cloudy
+                name: "\ue2bd"
                 color: root.accentBlue
-                size: 42
+                size: 40
             }
-
             Text {
                 width: parent.width
                 text: root.status === "error" ? "更新失败" : "等待天气数据"
                 color: root.textPrimary
                 horizontalAlignment: Text.AlignHCenter
-                font.pixelSize: 18
+                font.pixelSize: 16
                 font.weight: Font.DemiBold
             }
-
             Text {
                 width: parent.width
                 text: root.lastErrorText().length > 0 ? root.lastErrorText() : "天气服务会在定位完成后显示预报"
@@ -1430,24 +1271,23 @@ Item {
 
     component BusyStripe: Rectangle {
         id: stripe
-
         height: 2
         color: "transparent"
         clip: true
-
         Rectangle {
             width: parent.width * 0.36
             height: parent.height
-            radius: height / 2
+            radius: 1
             color: root.accentBlue
-            x: -width
-
-            // Local exception: loading shimmer is an ambient loop and keeps
-            // its own InOut timing instead of shell surface motion tokens.
             SequentialAnimation on x {
                 running: stripe.visible
                 loops: Animation.Infinite
-                NumberAnimation { from: -stripe.width * 0.36; to: stripe.width; duration: 1100; easing.type: Easing.InOutCubic }
+                NumberAnimation {
+                    from: -stripe.width * 0.36
+                    to: stripe.width
+                    duration: 1100
+                    easing.type: Easing.InOutCubic
+                }
             }
         }
     }

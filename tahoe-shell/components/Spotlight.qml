@@ -87,12 +87,14 @@ PanelWindow {
     onQueryChanged: {
         selectedIndex = 0;
         previewEpoch += 1;
+        Qt.callLater(function() { root.syncHighlightY(false); });
     }
 
     onResultsChanged: {
         if (selectedIndex >= selectableCount)
             selectedIndex = Math.max(0, selectableCount - 1);
         previewEpoch += 1;
+        Qt.callLater(function() { root.syncHighlightY(false); });
     }
 
     function activateResult(result) {
@@ -137,9 +139,27 @@ PanelWindow {
             next = selectableCount - 1;
         else if (next >= selectableCount)
             next = 0;
+        setSelectedIndex(next);
+    }
+
+    function setSelectedIndex(next) {
         selectedIndex = next;
         previewEpoch += 1;
         ensureSelectedVisible();
+        syncHighlightY(true);
+    }
+
+    function syncHighlightY(animate) {
+        var targetY = highlightYForSelectable(selectedIndex);
+        highlightSpring.stop();
+        if (animate && root.useSpring && !Motion.reducedMotion(root.settingsService) && root.open) {
+            highlightSpring.to = targetY;
+            highlightSpring.restart();
+        } else {
+            // With useSpring=false, Behavior on y eases this assignment.
+            // With reduced / closed, snap.
+            selectionHighlight.y = targetY;
+        }
     }
 
     function ensureSelectedVisible() {
@@ -455,6 +475,8 @@ PanelWindow {
                         interactive: contentHeight > height
 
                         // Selection highlight capsule (content layer; spring OK).
+                        // y is driven by setSelectedIndex / syncHighlightY — not a
+                        // live binding, so SpringAnimation and Behavior never fight.
                         Rectangle {
                             id: selectionHighlight
                             width: resultsColumn.width
@@ -462,23 +484,23 @@ PanelWindow {
                             radius: 10
                             color: root.accent
                             opacity: root.selectableCount > 0 ? 1 : 0
-                            y: root.highlightYForSelectable(root.selectedIndex)
+                            y: 0
                             z: 0
 
-                            Behavior on y {
-                                enabled: root.useSpring && !Motion.reducedMotion(root.settingsService)
-                                SpringAnimation {
-                                    spring: Motion.springSnappy.spring
-                                    damping: Motion.springSnappy.damping
-                                    epsilon: 0.001
-                                }
-                            }
                             Behavior on y {
                                 enabled: !root.useSpring || Motion.reducedMotion(root.settingsService)
                                 NumberAnimation {
                                     duration: Motion.elementMove(root.settingsService)
                                     easing.type: Motion.emphasizedDecel
                                 }
+                            }
+                            SpringAnimation {
+                                id: highlightSpring
+                                target: selectionHighlight
+                                property: "y"
+                                spring: Motion.springSnappy.spring
+                                damping: Motion.springSnappy.damping
+                                epsilon: 0.001
                             }
                             Behavior on opacity {
                                 NumberAnimation {
@@ -602,15 +624,12 @@ PanelWindow {
                                             hoverEnabled: true
                                             cursorShape: Qt.PointingHandCursor
                                             onClicked: {
-                                                root.selectedIndex = parent.selIndex;
-                                                root.previewEpoch += 1;
+                                                root.setSelectedIndex(parent.selIndex);
                                                 root.activateResult(parent.result);
                                             }
                                             onContainsMouseChanged: {
-                                                if (containsMouse) {
-                                                    root.selectedIndex = parent.selIndex;
-                                                    root.previewEpoch += 1;
-                                                }
+                                                if (containsMouse)
+                                                    root.setSelectedIndex(parent.selIndex);
                                             }
                                         }
                                     }

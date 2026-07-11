@@ -8,8 +8,9 @@ import "TahoeGlass.js" as GlassStyle
 import "Motion.js" as Motion
 import "settings/SettingsTheme.js" as Theme
 
-// LS05/LS11: left-edge shell container. It owns the glass shell and tab
-// switching; System/Weather pages own their own content and data presentation.
+// T19: chrome-free left sidebar. Small top segmented control (or single
+// scroll column); System/Weather pages own content. ProcessMenu path
+// (openProcessMenuRequested) unchanged — shell.qml:869-905 owns the menu.
 PanelWindow {
     id: root
 
@@ -21,6 +22,7 @@ PanelWindow {
     property var batteryService
     property bool darkMode: false
     property string monoFontFamily: "Noto Sans Mono CJK SC"
+    property bool useSpring: false
 
     readonly property int screenWidth: Math.max(1, Number(root.screen && root.screen.width) || root.width)
     readonly property int screenHeight: Math.max(1, Number(root.screen && root.screen.height) || root.height)
@@ -29,7 +31,7 @@ PanelWindow {
     readonly property color glassStroke: darkMode ? "#38ffffff" : GlassStyle.StrokePanel
     readonly property string accentId: settingsService ? settingsService.accentColor : "blue"
     readonly property color cardFill: Theme.cardFill(darkMode)
-    readonly property color cardStroke: Theme.cardStroke(darkMode)
+    readonly property color cardStroke: "transparent"
     readonly property color textPrimary: Theme.label(darkMode)
     readonly property color textSecondary: Theme.secondaryLabel(darkMode)
     readonly property color textTertiary: Theme.tertiaryLabel(darkMode)
@@ -37,6 +39,9 @@ PanelWindow {
     readonly property bool compositorLayerAnimations: !!(settingsService && settingsService.compositorLayerAnimations)
     readonly property real closedSlideX: -(panelWidth + 24)
     readonly property bool qmlSlideActive: !compositorLayerAnimations && slideTransform.x > closedSlideX + 0.5
+
+    // Card enter stagger gate: set true after panel is open so children animate in.
+    property bool cardsEnter: false
 
     signal closeRequested()
     signal openWeatherSettingsRequested()
@@ -76,10 +81,27 @@ PanelWindow {
 
     onOpenChanged: {
         if (open) {
+            cardsEnter = false;
             Qt.callLater(function() {
-                if (root.open)
+                if (root.open) {
                     focusCatcher.forceActiveFocus();
+                    // Let the panel settle, then stagger cards.
+                    cardsEnterTimer.restart();
+                }
             });
+        } else {
+            cardsEnterTimer.stop();
+            cardsEnter = false;
+        }
+    }
+
+    Timer {
+        id: cardsEnterTimer
+        interval: 40
+        repeat: false
+        onTriggered: {
+            if (root.open)
+                root.cardsEnter = true;
         }
     }
 
@@ -122,90 +144,95 @@ PanelWindow {
 
         ColumnLayout {
             anchors.fill: parent
-            anchors.margins: 18
-            spacing: 14
+            anchors.margins: 16
+            spacing: 12
 
-            RowLayout {
+            // Compact top segmented control (replaces title + close + large tabs).
+            Item {
+                id: segmentBar
                 Layout.fillWidth: true
-                Layout.preferredHeight: 34
-                spacing: 10
+                Layout.preferredHeight: 32
+                z: 2
 
-                Text {
-                    text: "左侧边栏"
-                    color: root.textPrimary
-                    font.pixelSize: 18
-                    font.weight: Font.DemiBold
-                    Layout.fillWidth: true
-                    verticalAlignment: Text.AlignVCenter
-                    elide: Text.ElideRight
+                Rectangle {
+                    anchors.fill: parent
+                    radius: 10
+                    color: root.darkMode ? "#18ffffff" : "#22ffffff"
                 }
 
                 Rectangle {
-                    Layout.preferredWidth: 30
-                    Layout.preferredHeight: 30
-                    radius: 15
-                    color: closeMouse.containsMouse ? root.cardFill : "transparent"
-                    border.color: closeMouse.containsMouse ? root.cardStroke : "transparent"
-                    border.width: 1
+                    id: segmentThumb
+                    width: (parent.width - 4) / 2
+                    height: parent.height - 4
+                    radius: 8
+                    // Driven by moveSegmentThumb — avoids dual interceptors.
+                    x: 2
+                    y: 2
+                    color: root.darkMode ? "#344b62cc" : "#e8f2ff"
 
-                    TahoeSymbol {
-                        anchors.centerIn: parent
-                        name: "\ue5cd" // close
-                        color: root.textSecondary
-                        size: 18
+                    Behavior on x {
+                        enabled: !root.useSpring || Motion.reducedMotion(root.settingsService)
+                        NumberAnimation {
+                            duration: Motion.elementMove(root.settingsService)
+                            easing.type: Motion.emphasizedDecel
+                        }
+                    }
+                    SpringAnimation {
+                        id: segmentSpring
+                        target: segmentThumb
+                        property: "x"
+                        spring: Motion.springSnappy.spring
+                        damping: Motion.springSnappy.damping
+                        epsilon: 0.001
                     }
 
-                    MouseArea {
-                        id: closeMouse
+                    function targetXFor(tab) {
+                        return 2 + (tab === "weather" ? width : 0);
+                    }
 
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: root.closeRequested()
+                    function moveTo(tab, animate) {
+                        var tx = targetXFor(tab);
+                        segmentSpring.stop();
+                        if (animate && root.useSpring && !Motion.reducedMotion(root.settingsService)) {
+                            segmentSpring.to = tx;
+                            segmentSpring.restart();
+                        } else {
+                            x = tx;
+                        }
+                    }
+
+                    Component.onCompleted: moveTo(root.currentTab, false)
+                }
+
+                Connections {
+                    target: root
+                    function onCurrentTabChanged() {
+                        segmentThumb.moveTo(root.currentTab, true);
                     }
                 }
-            }
-
-            Item {
-                id: tabBar
-
-                property string hoveredTab: tabMouse.containsMouse
-                    ? (tabMouse.mouseX < tabBar.width / 2 ? "system" : "weather")
-                    : ""
-
-                Layout.fillWidth: true
-                Layout.preferredHeight: 38
-                z: 2
 
                 Row {
                     anchors.fill: parent
-                    spacing: 8
+                    anchors.margins: 2
+                    spacing: 0
 
-                    TabButton {
-                        width: Math.max(0, (tabBar.width - 8) / 2)
-                        height: tabBar.height
+                    SegmentLabel {
+                        width: parent.width / 2
+                        height: parent.height
                         label: "系统"
-                        iconCode: "\ue8b8" // settings
                         active: root.currentTab === "system"
-                        hovered: tabBar.hoveredTab === "system"
                     }
 
-                    TabButton {
-                        width: Math.max(0, (tabBar.width - 8) / 2)
-                        height: tabBar.height
+                    SegmentLabel {
+                        width: parent.width / 2
+                        height: parent.height
                         label: "天气"
-                        iconCode: "\ue2bd" // wb_cloudy
                         active: root.currentTab === "weather"
-                        hovered: tabBar.hoveredTab === "weather"
                     }
                 }
 
                 MouseArea {
-                    id: tabMouse
-
                     anchors.fill: parent
-                    z: 10
-                    hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
                     onClicked: function(mouse) {
                         root.currentTab = mouse.x < width / 2 ? "system" : "weather";
@@ -229,6 +256,8 @@ PanelWindow {
                     darkMode: root.darkMode
                     monoFontFamily: root.monoFontFamily
                     processMenuOpen: root.processMenuOpen
+                    cardsEnter: root.cardsEnter && root.currentTab === "system"
+                    useSpring: root.useSpring
                     onOpenProcessMenu: function(proc, anchorRect) {
                         root.openProcessMenuRequested(proc, anchorRect);
                     }
@@ -243,6 +272,8 @@ PanelWindow {
                     active: root.currentTab === "weather"
                     darkMode: root.darkMode
                     monoFontFamily: root.monoFontFamily
+                    cardsEnter: root.cardsEnter && root.currentTab === "weather"
+                    useSpring: root.useSpring
                     onOpenWeatherSettingsRequested: root.openWeatherSettingsRequested()
                 }
             }
@@ -258,41 +289,17 @@ PanelWindow {
         }
     }
 
-    component TabButton: Rectangle {
-        id: tab
-
+    component SegmentLabel: Item {
+        id: seg
         property string label: ""
-        property string iconCode: ""
         property bool active: false
-        property bool hovered: false
 
-        implicitWidth: 120
-        implicitHeight: 38
-        radius: 14
-        color: active ? (root.darkMode ? "#344b62cc" : "#d8ecff") : (hovered ? root.cardFill : "transparent")
-        border.color: active ? root.accentBlue : (hovered ? root.cardStroke : "transparent")
-        border.width: 1
-
-        Row {
+        Text {
             anchors.centerIn: parent
-            spacing: 6
-
-            TahoeSymbol {
-                anchors.verticalCenter: parent.verticalCenter
-                name: tab.iconCode
-                color: tab.active ? root.accentBlue : root.textSecondary
-                size: 17
-            }
-
-            Text {
-                text: tab.label
-                color: tab.active ? root.textPrimary : root.textSecondary
-                font.pixelSize: 13
-                font.weight: tab.active ? Font.DemiBold : Font.Medium
-                anchors.verticalCenter: parent.verticalCenter
-            }
+            text: seg.label
+            color: seg.active ? root.accentBlue : root.textSecondary
+            font.pixelSize: 13
+            font.weight: seg.active ? Font.DemiBold : Font.Medium
         }
-
     }
-
 }

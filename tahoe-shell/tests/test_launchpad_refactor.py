@@ -61,7 +61,9 @@ class LaunchpadRefactorTests(unittest.TestCase):
         text = LAUNCHPAD.read_text(encoding="utf-8")
         self.assertIn("SpringAnimation", text)
         self.assertIn("useSpring", text)
-        self.assertGreaterEqual(text.count("Behavior on scale"), 2)
+        # Single Behavior interceptor + explicit SpringAnimation (Dock pattern).
+        self.assertGreaterEqual(text.count("Behavior on scale"), 1)
+        self.assertIn("cellScaleSpring", text)
 
 
 if __name__ == "__main__":

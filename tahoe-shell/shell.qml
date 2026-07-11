@@ -861,11 +861,13 @@ ShellRoot {
                 batteryService: battery
                 darkMode: shell.darkMode
                 monoFontFamily: shell.monoFontFamily
+                useSpring: shell.useSpring
                 processMenuOpen: shell.processMenuOpenFor(modelData)
                 onCloseRequested: shell.closeLeftSidebar()
                 onOpenProcessMenuRequested: function(proc, anchorRect) {
                     // 系统页右键进程行 → 实例化 ProcessMenu。先登记屏幕/proc/锚点，
                     // 再关其它弹层、开菜单（开菜单会回灌 processMenuOpen 暂停刷新）。
+                    // ProcessMenu 链路（shell.qml 本段）T19 不改。
                     shell.prepareProcessMenu(modelData, proc, anchorRect);
                     shell.closeTopBarPopups("processMenu");
                     shell.processMenuOpen = true;

@@ -442,7 +442,7 @@ PanelWindow {
                                         onTriggered: {
                                             cell.staggerReady = true;
                                             cell.opacity = 1;
-                                            cell.scale = 1;
+                                            cell.setScale(1, true);
                                         }
                                     }
 
@@ -456,12 +456,22 @@ PanelWindow {
                                         }
                                     }
 
+                                    function setScale(value, animate) {
+                                        cellScaleSpring.stop();
+                                        if (animate && root.useSpring && !Motion.reducedMotion(root.settingsService)) {
+                                            cellScaleSpring.to = value;
+                                            cellScaleSpring.restart();
+                                        } else {
+                                            cell.scale = value;
+                                        }
+                                    }
+
                                     function applyEnterState() {
                                         if (!root.open) {
                                             staggerTimer.stop();
                                             cell.staggerReady = false;
                                             cell.opacity = 0;
-                                            cell.scale = 0.86;
+                                            cell.setScale(0.86, false);
                                             return;
                                         }
                                         if (!root.enterAnimPlayed)
@@ -469,12 +479,12 @@ PanelWindow {
                                         if (Motion.reducedMotion(root.settingsService) || pageDelegate.index > 0) {
                                             cell.staggerReady = true;
                                             cell.opacity = 1;
-                                            cell.scale = 1;
+                                            cell.setScale(1, false);
                                             return;
                                         }
                                         cell.staggerReady = false;
                                         cell.opacity = 0;
-                                        cell.scale = 0.86;
+                                        cell.setScale(0.86, false);
                                         staggerTimer.restart();
                                     }
 
@@ -485,20 +495,22 @@ PanelWindow {
                                             easing.type: Motion.emphasizedDecel
                                         }
                                     }
-                                    Behavior on scale {
-                                        enabled: root.useSpring && !Motion.reducedMotion(root.settingsService)
-                                        SpringAnimation {
-                                            spring: Motion.springSnappy.spring
-                                            damping: Motion.springSnappy.damping
-                                            epsilon: 0.001
-                                        }
-                                    }
+                                    // Single interceptor on scale (eased). Spring path
+                                    // uses explicit SpringAnimation when useSpring.
                                     Behavior on scale {
                                         enabled: !root.useSpring || Motion.reducedMotion(root.settingsService)
                                         NumberAnimation {
                                             duration: 180
                                             easing.type: Motion.emphasizedDecel
                                         }
+                                    }
+                                    SpringAnimation {
+                                        id: cellScaleSpring
+                                        target: cell
+                                        property: "scale"
+                                        spring: Motion.springSnappy.spring
+                                        damping: Motion.springSnappy.damping
+                                        epsilon: 0.001
                                     }
 
                                     // Press + selection chrome

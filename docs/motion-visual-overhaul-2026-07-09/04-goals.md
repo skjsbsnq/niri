@@ -70,7 +70,7 @@
 | GOAL-16 | T16 设置控件精修 | M | DONE | [acceptance/T16-settings-controls-polish-2026-07-11.md](acceptance/T16-settings-controls-polish-2026-07-11.md) |
 | GOAL-17 | T17 Spotlight 重构 | M | DONE | [acceptance/T17-spotlight-refactor-2026-07-11.md](acceptance/T17-spotlight-refactor-2026-07-11.md) |
 | GOAL-18 | T18 Launchpad 全屏重构 | L | DONE | [acceptance/T18-launchpad-fullscreen-2026-07-11.md](acceptance/T18-launchpad-fullscreen-2026-07-11.md) |
-| GOAL-19 | T19 左侧边栏 widget 化重构 | L | PENDING | — |
+| GOAL-19 | T19 左侧边栏 widget 化重构 | L | DONE | [acceptance/T19-left-sidebar-widgets-2026-07-11.md](acceptance/T19-left-sidebar-widgets-2026-07-11.md) |
 | GOAL-20 | T20 任务切换器/窗口概览手感 | M | PENDING | — |
 | GOAL-21 | T21 niri fork：layer per-channel spring + pop-slide | M | PENDING | — |
 | GOAL-22 | T22 niri fork：origin pointer + shader preset（含降级出口） | M | PENDING | — |

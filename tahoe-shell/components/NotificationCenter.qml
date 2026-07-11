@@ -18,10 +18,11 @@ PanelWindow {
 
     readonly property var history: notificationsService ? notificationsService.historyModel : []
     readonly property int historyCount: history.length
-    // Re-group whenever history length or model identity changes.
+    // Re-group whenever history model is replaced (length or identity).
     readonly property var groupedHistory: {
-        var _watch = root.historyCount;
-        if (!notificationsService || _watch <= 0)
+        var _count = root.historyCount;
+        var _model = root.history;
+        if (!notificationsService || _count <= 0 || !_model)
             return [];
         return notificationsService.groupedHistory();
     }
@@ -69,14 +70,23 @@ PanelWindow {
             notificationsService.clearEverything();
             return;
         }
+        clearFinishHold.stop();
         root.clearing = true;
         root.clearTotal = Math.min(Motion.toastClearStaggerMaxItems, Math.max(1, root.historyCount));
         root.clearTick = 0;
-        clearStaggerTimer.restart();
+        // First tick immediately so the top row starts flying without a dead frame.
+        root.clearTick = 1;
+        if (root.clearTotal <= 1) {
+            clearStaggerTimer.stop();
+            clearFinishHold.restart();
+        } else {
+            clearStaggerTimer.restart();
+        }
     }
 
     function finishClearAll() {
         clearStaggerTimer.stop();
+        clearFinishHold.stop();
         root.clearing = false;
         root.clearTick = 0;
         root.clearTotal = 0;
@@ -91,9 +101,21 @@ PanelWindow {
         onTriggered: {
             root.clearTick += 1;
             var budgetSteps = Math.max(1, Math.ceil(Motion.toastClearStaggerBudgetMs / Math.max(1, interval)));
-            if (root.clearTick >= root.clearTotal || root.clearTick >= budgetSteps)
-                root.finishClearAll();
+            // After the last row is marked flyOut, hold for the fly-out
+            // animation before wiping the model (Issue 1 review fix).
+            if (root.clearTick >= root.clearTotal || root.clearTick >= budgetSteps) {
+                clearStaggerTimer.stop();
+                clearFinishHold.restart();
+            }
         }
+    }
+
+    Timer {
+        id: clearFinishHold
+        // Match NotificationRow fly-out (elementMove) + small settle margin.
+        interval: Math.max(120, Motion.elementMove(root.settingsService) + 40)
+        repeat: false
+        onTriggered: root.finishClearAll()
     }
 
     onOpenChanged: {

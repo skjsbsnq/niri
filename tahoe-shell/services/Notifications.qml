@@ -155,10 +155,10 @@ Item {
 
         root.activeModel = root.activeModel.concat([notification]);
 
-        // T09: every non-critical toast gets its own expire deadline so a
-        // multi-card stack can dismiss independently without waiting for head.
-        if (!isCritical(notification))
-            root.scheduleExpire(id, expireMsFor(notification));
+        // Expire only for cards currently in the visible stack (newest ≤3).
+        // Off-stack waiters keep full lifetime until they become visible —
+        // preserves pre-T09 queue semantics while allowing multi-card timers.
+        root.rearmVisibleExpires();
     }
 
     // Newest-first slice for the toast stack (macOS: new card on top).
@@ -171,6 +171,26 @@ Item {
         for (var i = 0; i < n; i++)
             out.push(list[list.length - 1 - i]);
         return out;
+    }
+
+    // Keep independent expire deadlines only for currently visible non-critical
+    // cards. Newly visible ids get a fresh timeout; hidden waiters are paused.
+    function rearmVisibleExpires() {
+        var stack = root.visibleStack(3);
+        var nextMap = {};
+        var prev = root.expireMap || {};
+        for (var i = 0; i < stack.length; i++) {
+            var n = stack[i];
+            if (!n || root.isCritical(n))
+                continue;
+            var sid = String(n.id);
+            if (Object.prototype.hasOwnProperty.call(prev, sid) && isFinite(Number(prev[sid])))
+                nextMap[sid] = prev[sid];
+            else
+                nextMap[sid] = Date.now() + root.expireMsFor(n);
+        }
+        root.expireMap = nextMap;
+        root.armSoonestExpire();
     }
 
     // Group history by appName, newest group first (first-seen order of apps
@@ -396,6 +416,7 @@ Item {
         }
         root.activeModel = remaining;
         root.clearExpire(id);
+        root.rearmVisibleExpires();
     }
 
     function dismissId(id, mode) {
@@ -420,7 +441,11 @@ Item {
     }
 
     function dismissCurrent() {
-        if (root.current)
+        // Dismiss the top visible toast (newest), matching the UI stack.
+        var stack = root.visibleStack(1);
+        if (stack.length > 0)
+            root.dismissId(stack[0].id, "dismiss");
+        else if (root.current)
             root.dismissId(root.current.id, "dismiss");
     }
 

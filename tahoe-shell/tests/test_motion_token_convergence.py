@@ -141,12 +141,14 @@ class MotionTokenConvergenceTests(unittest.TestCase):
         self.assertIn("function setNotificationToastStackMax(value)", desktop)
         self.assertIn("readonly property int notificationToastStackMax", desktop)
 
-        # Service: multi-card stack + per-id expire + grouping.
+        # Service: multi-card stack + visible-only expire + grouping.
         self.assertIn("function visibleStack(maxCount)", service)
         self.assertIn("function groupedHistory()", service)
         self.assertIn("property var expireMap", service)
         self.assertIn("function armSoonestExpire()", service)
+        self.assertIn("function rearmVisibleExpires()", service)
         self.assertIn("function scheduleExpire(id, expireMs)", service)
+        self.assertIn("root.rearmVisibleExpires()", service)
 
         # Toast: 3 fixed slots, springPanel enter (useSpring dual branch), swipe.
         self.assertIn("id: stackSlot0", toast)
@@ -173,12 +175,18 @@ class MotionTokenConvergenceTests(unittest.TestCase):
         self.assertIn('property: "enterX"', toast)
         self.assertIn('property: "contentScale"', toast)
 
-        # Center: app grouping + clear-all stagger budget.
+        # Center: app grouping + clear-all stagger budget + post-fly hold.
         self.assertIn("groupedHistory", center)
         self.assertIn("function startClearAll()", center)
         self.assertIn("Motion.toastClearStaggerBudgetMs", center)
         self.assertIn("Motion.toastClearStaggerMaxItems", center)
+        self.assertIn("id: clearFinishHold", center)
         self.assertIn("component AppGroup", center)
+        # Toast: promotion must not re-enter (prevStackIds / isNewlyAppearedId).
+        self.assertIn("function isNewlyAppearedId", toast)
+        self.assertIn("property var prevStackIds", toast)
+        self.assertIn("Behavior on stackY", toast)
+        self.assertNotIn("Behavior on y {", toast)
 
     def test_dock_uses_analytical_cosine_wave_and_unified_label(self) -> None:
         dock = (COMPONENTS_ROOT / "Dock.qml").read_text(encoding="utf-8")

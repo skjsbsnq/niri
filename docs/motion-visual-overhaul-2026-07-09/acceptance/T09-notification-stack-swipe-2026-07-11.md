@@ -101,12 +101,25 @@ rg -n 'function setNotificationToastStackMax|property int notificationToastStack
 5. 不引入 QtQuick.Controls
 6. 既有 IPC / 通知服务 API 增量：`visibleStack` / `groupedHistory` / settings 字段
 
+## 审查与修正（同任务 follow-up commit）
+
+本地 `/review`（`/tmp/grok-1000/grok-review-f895f12c.md`）发现 3 个 bug，已修：
+
+| # | 问题 | 修复 |
+| --- | --- | --- |
+| 1 | 清空 stagger 最后一 tick 立即 `clearEverything`，飞出动画来不及播 | `clearFinishHold`：末 tick 后等 `elementMove+40ms` 再 wipe |
+| 2 | 顶卡 dismiss 后次卡 promote 误触发完整 enter 弹簧 | `prevStackIds` + `isNewlyAppearedId`：仅真正新 id 入场 |
+| 3 | 排队未可见通知从入队即计时，可能未展示就 expire | `rearmVisibleExpires`：仅 visible stack 计时；升入栈才 arm |
+
+次要：`Behavior on y` 双通道 → 只 Behavior `stackY`/`hoverLift`；scale 回到 contentHost；`dismissCurrent` 改为 dismiss 顶卡。
+
 ## 发现待办
 
 - 运行中 shell 需用户 reload 后才能目测 3 卡堆叠与横滑（部署路径与仓库 `tahoe-shell` 可能不同步）。
-- 堆叠 scale 在 slot transform 上，region 仍报 rest 尺寸（略大于视觉卡）——与 T07/T08 glass 固定策略一致；若实机糊边再收紧。
-- 通知中心分组展开无弹簧散开（roadmap 研究文提及；T09 改动清单写「按 app 分组」+ stagger 清空，展开为即时 height Behavior）。
+- 堆叠 scale 在 content transform 上，region 仍报 rest 尺寸（略大于视觉卡）——与 T07/T08 glass 固定策略一致；若实机糊边再收紧。
+- 通知中心分组展开无弹簧散开（roadmap 研究文提及；T09 改动清单写「按 app 分组」+ stagger 清空，展开为 height Behavior）。
+- `compositorLayerAnimations` 对 toast 外层 slide 已不驱动（内容自管 enter）；若 niri toast layer 动画需对齐可后续接。
 
 ## 回滚
 
-`git revert` 本任务提交即可。
+`git revert` 本任务提交（及 follow-up fix 提交）即可。

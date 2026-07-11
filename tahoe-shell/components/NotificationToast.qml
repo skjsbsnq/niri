@@ -55,10 +55,34 @@ PanelWindow {
     readonly property bool toastGlassActive: shouldShowToast || toastMaterialAlpha > 0.01
     readonly property int cardBaseHeight: 86
     property int measuredStackHeight: cardBaseHeight
+    // Previous frame's visible ids — used so promote/demote does not re-enter.
+    property var prevStackIds: []
 
     function numberOr(value, fallback) {
         var number = Number(value);
         return isFinite(number) ? number : fallback;
+    }
+
+    function isNewlyAppearedId(id) {
+        var n = Number(id);
+        if (!isFinite(n) || n < 0)
+            return false;
+        var prev = root.prevStackIds || [];
+        for (var i = 0; i < prev.length; i++) {
+            if (Number(prev[i]) === n)
+                return false;
+        }
+        return true;
+    }
+
+    function commitPrevStackIds() {
+        var ids = [];
+        var items = root.stackItems || [];
+        for (var i = 0; i < items.length; i++) {
+            if (items[i])
+                ids.push(Number(items[i].id));
+        }
+        root.prevStackIds = ids;
     }
 
     function accentFor(notification) {
@@ -154,7 +178,11 @@ PanelWindow {
     }
 
     onStackCountChanged: Qt.callLater(recomputeStackHeight)
-    onStackItemsChanged: Qt.callLater(recomputeStackHeight)
+    onStackItemsChanged: {
+        Qt.callLater(recomputeStackHeight);
+        // After all slots rebind + syncFromStack, record ids for next change.
+        Qt.callLater(commitPrevStackIds);
+    }
 
     component ToastCard: Item {
         id: cardRoot
@@ -176,7 +204,8 @@ PanelWindow {
         property real contentScale: 1
         property real contentOpacity: 0
 
-        // Glass-safe geometry: eased only.
+        // Glass-safe geometry: eased only. Animate stackY / hoverLift
+        // independently; y is a pure binding (no dual Behavior).
         property real stackY: 0
         property real swipeX: 0
         property real hoverLift: 0
@@ -198,31 +227,22 @@ PanelWindow {
         z: root.stackMax - stackIndex
         visible: active || contentOpacity > 0.01 || Math.abs(swipeX) > 0.5
         opacity: root.toastMaterialAlpha
-        // Visual stack scale on the slot (paint transform). GlassPanel region
-        // still reports rest width/height — never spring the region geometry.
-        transform: Scale {
-            origin.x: cardRoot.width / 2
-            origin.y: 0
-            xScale: cardRoot.contentScale
-            yScale: cardRoot.contentScale
-        }
 
         onHeightChanged: root.recomputeStackHeight()
         onYChanged: root.recomputeStackHeight()
         onXChanged: root.recomputeStackHeight()
 
-        // Glass geometry: eased, never spring.
-        Behavior on y {
-            NumberAnimation {
-                duration: Motion.elementMove(root.settingsService)
-                easing.type: Motion.emphasizedDecel
-            }
-        }
         Behavior on x {
             enabled: !cardRoot.swipeDragging
             NumberAnimation {
                 duration: Motion.panelExit(root.settingsService)
                 easing.type: Motion.emphasizedAccel
+            }
+        }
+        Behavior on stackY {
+            NumberAnimation {
+                duration: Motion.elementMove(root.settingsService)
+                easing.type: Motion.emphasizedDecel
             }
         }
         Behavior on hoverLift {
@@ -238,6 +258,7 @@ PanelWindow {
                 hoverLift = 0;
                 if (!swipeDragging && Math.abs(swipeX) < 1)
                     swipeX = 0;
+                boundNotifId = -1;
                 return;
             }
 
@@ -247,13 +268,14 @@ PanelWindow {
             animateScaleTo(targetScale);
             contentOpacity = 1;
 
-            // New identity: only the top card springs in. Demoted/promoted
-            // cards snap content so the stack does not re-slide every push.
+            // True new enqueue at top → spring enter. Promote/demote of an
+            // already-visible id (in prevStackIds) → snap enterX (no re-slide).
             if (boundNotifId !== notifId) {
+                var isNew = root.isNewlyAppearedId(notifId);
                 boundNotifId = notifId;
                 swipeX = 0;
                 swipeDragging = false;
-                if (stackIndex === 0) {
+                if (stackIndex === 0 && isNew) {
                     enterX = Motion.toastEnterOffsetPx;
                     Qt.callLater(function () {
                         if (cardRoot.boundNotifId === cardRoot.notifId && cardRoot.stackIndex === 0)
@@ -294,21 +316,6 @@ PanelWindow {
             scaleEase.stop();
             scaleEase.to = value;
             scaleEase.restart();
-        }
-
-        function animateSwipeTo(value, thenDismiss) {
-            swipeDragging = false;
-            dismissAfterSwipe.pending = !!thenDismiss;
-            // Drive via property; Behavior on x handles easing. For large
-            // dismiss targets, also run an explicit animation so onStopped fires.
-            swipeAnim.stop();
-            swipeX = value;
-            if (thenDismiss) {
-                swipeAnim.to = value;
-                swipeAnim.from = swipeX;
-                // Property already set; use timer fallback for dismiss.
-                dismissAfterSwipe.restart();
-            }
         }
 
         function beginSwipe(px, py) {
@@ -439,8 +446,17 @@ PanelWindow {
                 id: contentHost
                 anchors.fill: parent
                 opacity: 1
-                // Enter slide only (content transform). Stack scale is on cardRoot.
-                transform: Translate { x: cardRoot.enterX }
+                // Enter slide + stack scale: content transforms only (red line §2.1).
+                // GlassPanel region stays at rest width/height.
+                transform: [
+                    Translate { x: cardRoot.enterX },
+                    Scale {
+                        origin.x: contentHost.width / 2
+                        origin.y: 0
+                        xScale: cardRoot.contentScale
+                        yScale: cardRoot.contentScale
+                    }
+                ]
 
                 Column {
                     id: contentColumn

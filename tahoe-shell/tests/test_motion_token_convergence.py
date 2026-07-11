@@ -109,7 +109,7 @@ class MotionTokenConvergenceTests(unittest.TestCase):
         self.assertIn("var dockLaunchBounceHeightFactor = 0.7;", text)
         self.assertIn("var dockLaunchBouncePeriodMs = 550;", text)
         self.assertIn("var dockLaunchBounceTimeoutMs = 10000;", text)
-        self.assertIn("var dockRevealDebounceMs = 150;", text)
+        self.assertIn("var dockRevealDebounceMs = 40;", text)
         self.assertIn("var dockAutohideSlidePx = 88;", text)
         self.assertIn("function dockLaunchBounceHeight(iconSizePx)", text)
         self.assertIn("dockLaunchBounceHeightFactor", text)
@@ -143,6 +143,9 @@ class MotionTokenConvergenceTests(unittest.TestCase):
         self.assertIn("function pinnedWaveLeftExtra()", dock)
         self.assertIn("function dockWaveSurfaceBias()", dock)
         self.assertIn("function syncPinnedViewportToCursor()", dock)
+        # T08-fix4: surface stays rest-width / centered (no live wave expansion).
+        self.assertIn("anchors.horizontalCenter: parent.horizontalCenter", dock)
+        self.assertNotIn("return (rightExtra - leftExtra) / 2;", dock)
 
         # Unified hover label: one capsule, 13px, no y-slide Behavior.
         self.assertIn("id: dockHoverLabel", dock)
@@ -178,12 +181,17 @@ class MotionTokenConvergenceTests(unittest.TestCase):
         self.assertIn("function windowItemXAt(index)", dock)
         self.assertIn("function windowWaveContentWidth()", dock)
         self.assertIn("function syncWindowViewportToCursor()", dock)
-        self.assertIn("windowDisplayedWidth", dock)
+        # Outer section widths are rest-sized (T08-fix4); wave only inside Flickable.
+        self.assertIn("readonly property int windowViewportWidth: hasNonMinimizedWindows", dock)
+        self.assertNotIn("windowDisplayedWidth", dock)
         # T08-fix3: scale from icon feet so mag does not float icons mid-air.
         self.assertIn("transformOrigin: Item.Bottom", dock)
         self.assertIn("transformOrigin: Item.Bottom", window_button)
         self.assertNotIn("transformOrigin: Item.Center", dock)
         self.assertNotIn("transformOrigin: Item.Center", window_button)
+        # T08-fix4: edge reveal debounce must not restart on every move.
+        self.assertIn("if (!dockRevealDebounceTimer.running)", dock)
+        self.assertNotIn("dockRevealDebounceTimer.restart()", dock)
         # No dual Behavior on the same property (T00 interceptor 待办 closed).
         self.assertEqual(dock.count("Behavior on magnification"), 0)
         self.assertEqual(dock.count("Behavior on bounceOffset"), 0)

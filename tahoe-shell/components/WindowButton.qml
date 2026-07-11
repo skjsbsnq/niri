@@ -277,8 +277,11 @@ Item {
         acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
         cursorShape: Qt.PointingHandCursor
         onPositionChanged: function(mouse) {
-            if (root.dockSurfaceItem) {
-                var point = root.mapToItem(root.dockSurfaceItem, mouse.x, mouse.y);
+            // Root-local pointer (not surface-local / not animated-slot-local raw).
+            // mapToItem(dockWindow) uses live transforms so the result is where the
+            // cursor actually is — independent of sibling spring motion.
+            if (root.dockWindow) {
+                var point = root.mapToItem(root.dockWindow, mouse.x, mouse.y);
                 root.dockPointerMoved(point.x, mouse.buttons);
             }
         }

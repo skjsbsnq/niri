@@ -57,7 +57,9 @@ var dockMagSpring = {
 var dockLaunchBounceHeightFactor = 0.7;
 var dockLaunchBouncePeriodMs = 550;
 var dockLaunchBounceTimeoutMs = 10000;
-var dockRevealDebounceMs = 150;
+// T08-fix4: edge-enter debounce must NOT restart on every positionChanged
+// (that made autohide feel stuck). Keep a short single-shot only.
+var dockRevealDebounceMs = 40;
 // Autohide slide distance fallback (px). Dock.qml uses max(this, surfaceHeight)
 // so a taller panel never leaves a strip at the bottom (T08-fix).
 var dockAutohideSlidePx = 88;

@@ -225,8 +225,9 @@ Item {
         acceptedButtons: Qt.LeftButton | Qt.RightButton
         cursorShape: Qt.PointingHandCursor
         onPositionChanged: function(mouse) {
-            if (root.dockSurfaceItem) {
-                var point = root.mapToItem(root.dockSurfaceItem, mouse.x, mouse.y);
+            // Root-local (PanelWindow) pointer — same as WindowButton (T08-fix4).
+            if (root.dockWindow) {
+                var point = root.mapToItem(root.dockWindow, mouse.x, mouse.y);
                 root.dockPointerMoved(point.x, mouse.buttons);
             }
         }

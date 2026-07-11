@@ -94,41 +94,22 @@ PanelWindow {
     readonly property int pinnedViewportWidth: hasNonMinimizedWindows || hasMinimizedWindows
         ? Math.min(pinnedContentWidth, Math.max(0, dockFlexibleSectionsBudget - minimumWindowViewportWidth - minimumMinimizedViewportWidth))
         : Math.min(pinnedContentWidth, dockFlexibleSectionsBudget)
-    // When only pinned icons are present, the dock surface grows with the
-    // analytical wave so magnified icons are not clipped. With window sections
-    // the rest budget stays fixed — but while the wave is active we still grow
-    // the pinned viewport up to the flexible budget (T08-fix) so left/right
-    // icons are not pushed out of the glass by a fixed clip rect.
-    readonly property real pinnedDisplayedWidth: {
-        var _dep = dockMouseX + pinnedAppCount + (dockHovered ? 1 : 0) + (pointerDragActive ? 0 : 1);
-        var wave = pinnedWaveContentWidth();
-        if (hasNonMinimizedWindows || hasMinimizedWindows) {
-            if (dockWaveActive())
-                return Math.min(dockFlexibleSectionsBudget, Math.max(pinnedViewportWidth, wave));
-            return pinnedViewportWidth;
-        }
-        return Math.min(dockFlexibleSectionsBudget, Math.max(pinnedContentWidth, wave));
-    }
-    // Window/minimized sections yield space to the live wave width (not only rest).
+    // T08-fix4: outer section widths stay at REST size so the glass bar does not
+    // grow/shrink under the cursor (that feedback loop made the whole dock jitter).
+    // Wave push only moves icons inside the Flickable (contentWidth may exceed).
+    readonly property real pinnedDisplayedWidth: pinnedViewportWidth > 0
+        ? pinnedViewportWidth
+        : Math.min(dockFlexibleSectionsBudget, pinnedContentWidth)
     readonly property int dockRemainingFlexibleWidth: Math.max(0, dockFlexibleSectionsBudget - Math.ceil(pinnedDisplayedWidth))
     readonly property int availableWindowViewportWidth: hasNonMinimizedWindows ? Math.max(0, dockRemainingFlexibleWidth - minimumMinimizedViewportWidth) : 0
     readonly property bool dockWindowButtonsShowTitle: hasNonMinimizedWindows
         && !(settingsService && settingsService.dockForceIconOnly)
         && titledWindowContentWidth <= availableWindowViewportWidth
     readonly property int activeWindowContentWidth: dockWindowButtonsShowTitle ? titledWindowContentWidth : iconWindowContentWidth
-    // T08-fix2: icon-only window half grows with analytical wave (push), same as pinned.
-    // Title mode stays rest-width (no scale/push reflow of text labels).
-    readonly property real windowDisplayedWidth: {
-        var _dep = dockMouseX + windowButtonCount + (dockHovered ? 1 : 0) + (pointerDragActive ? 0 : 1)
-            + (dockWindowButtonsShowTitle ? 1 : 0);
-        if (!hasNonMinimizedWindows)
-            return 0;
-        if (dockWindowButtonsShowTitle || !dockWaveActive())
-            return Math.min(activeWindowContentWidth, availableWindowViewportWidth);
-        var wave = windowWaveContentWidth();
-        return Math.min(availableWindowViewportWidth, Math.max(activeWindowContentWidth, wave));
-    }
-    readonly property int windowViewportWidth: hasNonMinimizedWindows ? Math.ceil(windowDisplayedWidth) : 0
+    // Rest-sized viewport only — wave no longer expands the glass section width.
+    readonly property int windowViewportWidth: hasNonMinimizedWindows
+        ? Math.min(activeWindowContentWidth, availableWindowViewportWidth)
+        : 0
     readonly property int availableMinimizedViewportWidth: hasMinimizedWindows ? Math.max(0, dockRemainingFlexibleWidth - windowViewportWidth) : 0
     readonly property int minimizedViewportWidth: hasMinimizedWindows ? Math.min(minimizedWindowContentWidth, availableMinimizedViewportWidth) : 0
     readonly property color glassFill: darkMode ? "#d01d1f24" : GlassStyle.FillDock
@@ -216,10 +197,11 @@ PanelWindow {
     }
 
     function pinnedCursorX() {
-        if (!dockSurface || !pinnedViewport)
+        if (!pinnedViewport)
             return -10000;
-        // Viewport origin is stable (does not depend on icon magnification).
-        var origin = pinnedViewport.mapToItem(dockSurface, 0, 0);
+        // dockMouseX is root-local (T08-fix4). Viewport origin in root space is
+        // stable (does not depend on icon springs or surface bias).
+        var origin = pinnedViewport.mapToItem(root, 0, 0);
         return dockMouseX - origin.x + pinnedViewport.contentX;
     }
 
@@ -251,10 +233,7 @@ PanelWindow {
         return total;
     }
 
-    // T08-fix: how much extra width the wave inserts to the left of the cursor
-    // (rest geometry). Used to keep the pointer's icon screen-stable while
-    // neighbors expand away from it — stops left-side icons being shoved out
-    // of the glass when the surface is center-anchored.
+    // Left-of-cursor wave extra (kept for diagnostics / future bias; unused for surface x).
     function pinnedWaveLeftExtra() {
         if (!dockWaveActive() || pinnedAppCount <= 0)
             return 0;
@@ -285,9 +264,9 @@ PanelWindow {
     }
 
     function windowCursorX() {
-        if (!dockSurface || !windowViewport)
+        if (!windowViewport)
             return -10000;
-        var origin = windowViewport.mapToItem(dockSurface, 0, 0);
+        var origin = windowViewport.mapToItem(root, 0, 0);
         return dockMouseX - origin.x + windowViewport.contentX;
     }
 
@@ -349,51 +328,20 @@ PanelWindow {
         return extra;
     }
 
-    // Bias dock surface from horizontal center so growth is around the cursor
-    // (rightExtra - leftExtra) / 2, not symmetric about the panel midpoint.
-    // Includes both pinned and window icon-only wave extras (T08-fix2).
+    // T08-fix4: do NOT shift the glass bar under the cursor. Moving surface.x
+    // while dockMouseX is surface-local creates a scale/position feedback loop
+    // (whole dock jitter). Icons still push inside the Flickable.
     function dockWaveSurfaceBias() {
-        if (!dockWaveActive())
-            return 0;
-        var leftExtra = pinnedWaveLeftExtra() + windowWaveLeftExtra();
-        var totalExtra = Math.max(0, pinnedWaveContentWidth() - pinnedContentWidth)
-            + Math.max(0, windowWaveContentWidth() - activeWindowContentWidth);
-        var rightExtra = Math.max(0, totalExtra - leftExtra);
-        return (rightExtra - leftExtra) / 2;
+        return 0;
     }
 
-    // Keep the magnified region inside the pinned Flickable when the wave is
-    // wider than the viewport (window sections present, or many pinned apps).
+    // Optional overflow scroll — intentionally NOT called from every mouse move
+    // (contentX → cursorX → wave → contentWidth feedback). Leave contentX at 0
+    // unless the user flicks; reset on hover exit.
     function syncPinnedViewportToCursor() {
-        if (!pinnedViewport)
-            return;
-        var viewW = pinnedViewport.width;
-        var contentW = pinnedViewport.contentWidth;
-        if (!dockWaveActive() || contentW <= viewW + 0.5) {
-            if (pinnedViewport.contentX !== 0)
-                pinnedViewport.contentX = 0;
-            return;
-        }
-        var cursorInContent = pinnedCursorX();
-        var target = cursorInContent - viewW / 2;
-        var maxX = Math.max(0, contentW - viewW);
-        pinnedViewport.contentX = Math.max(0, Math.min(maxX, target));
     }
 
     function syncWindowViewportToCursor() {
-        if (!windowViewport || dockWindowButtonsShowTitle)
-            return;
-        var viewW = windowViewport.width;
-        var contentW = windowViewport.contentWidth;
-        if (!dockWaveActive() || contentW <= viewW + 0.5) {
-            if (windowViewport.contentX !== 0)
-                windowViewport.contentX = 0;
-            return;
-        }
-        var cursorInContent = windowCursorX();
-        var target = cursorInContent - viewW / 2;
-        var maxX = Math.max(0, contentW - viewW);
-        windowViewport.contentX = Math.max(0, Math.min(maxX, target));
     }
 
     // Back-compat name used nowhere after T07, kept as alias for any external call.
@@ -405,23 +353,41 @@ PanelWindow {
         hoverExitTimer.stop();
         // Already revealed or auto-hide off: set immediately. Only the
         // first edge-enter while fully hidden is debounced (T08).
+        // T08-fix4: do NOT restart an already-running debounce on every
+        // positionChanged — that made reveal wait forever while the pointer moved.
         if (root.dockHovered || !root.dockAutoHide || !root.dockVisualHidden) {
             dockRevealDebounceTimer.stop();
             root.dockHovered = true;
             return;
         }
-        dockRevealDebounceTimer.restart();
+        if (!dockRevealDebounceTimer.running)
+            dockRevealDebounceTimer.start();
     }
 
     function updateDockHover(x) {
         hoverExitTimer.stop();
+        // x is root-local (PanelWindow coordinates). Never store surface-local or
+        // animated-delegate-local coords — those thrash the wave (T08-fix4).
         root.dockMouseX = x;
         // Pointer is already on the surface — force reveal without debounce.
         dockRevealDebounceTimer.stop();
         root.dockHovered = true;
         root.pointerDragActive = false;
-        root.syncPinnedViewportToCursor();
-        root.syncWindowViewportToCursor();
+    }
+
+    function updateDockHoverFromItem(item, localX, localY, buttons) {
+        if (buttons !== Qt.NoButton) {
+            root.pointerDragActive = true;
+            root.resetDockHover();
+            return;
+        }
+        if (!item)
+            return;
+        // Scene-stable pointer position in root space (includes current transforms
+        // of parents but reports where the cursor actually is — not where the
+        // spring thinks the slot is).
+        var p = item.mapToItem(root, localX, localY !== undefined ? localY : 0);
+        root.updateDockHover(p.x);
     }
 
     function updateDockHoverFromButtons(x, buttons) {
@@ -668,17 +634,9 @@ PanelWindow {
     GlassPanel {
         id: dockSurface
 
-        // T08-fix: explicit x (not horizontalCenter) so we can bias growth
-        // around the cursor. Clamped to outer margins so left icons are not
-        // shoved past the screen edge when the wave expands.
-        x: {
-            var _dep = root.dockMouseX + root.pinnedAppCount + root.windowButtonCount
-                + (root.dockHovered ? 1 : 0) + (root.pointerDragActive ? 0 : 1);
-            var centered = (parent.width - width) / 2;
-            var bias = root.dockWaveSurfaceBias();
-            var margin = Math.max(6, Math.round(root.dockOuterMargin / 2));
-            return Math.round(Math.max(margin, Math.min(parent.width - width - margin, centered + bias)));
-        }
+        // T08-fix4: keep surface horizontally centered. Do not bias x with the
+        // wave — surface-local mouse coords + moving surface = jitter loop.
+        anchors.horizontalCenter: parent.horizontalCenter
         anchors.bottom: parent.bottom
         anchors.bottomMargin: 0
         width: Math.min(root.dockSurfaceMaxWidth, dockRow.implicitWidth + root.dockSurfacePadding)
@@ -709,7 +667,7 @@ PanelWindow {
             acceptedButtons: Qt.NoButton
             hoverEnabled: true
             onPositionChanged: function(mouse) {
-                root.updateDockHoverFromMouse(mouse.x, mouse);
+                root.updateDockHoverFromItem(this, mouse.x, mouse.y, mouse.buttons !== undefined ? mouse.buttons : Qt.NoButton);
             }
             onEntered: root.markDockHovered()
             onExited: root.scheduleDockHoverReset()
@@ -926,8 +884,12 @@ PanelWindow {
                                             return;
                                         }
 
-                                        var point = pinnedButton.mapToItem(dockSurface, mouse.x, mouse.y);
-                                        root.updateDockHoverFromMouse(point.x, mouse);
+                                        root.updateDockHoverFromItem(
+                                            pinnedButton,
+                                            mouse.x,
+                                            mouse.y,
+                                            mouse.buttons !== undefined ? mouse.buttons : Qt.NoButton
+                                        );
                                         if (pinnedButton.hovered) {
                                             var label = root.appsService ? root.appsService.appLabel(pinnedButton.appModel || pinnedButton.appId) : "";
                                             root.showDockHoverLabel(label, pinnedButton, -34);
@@ -1284,6 +1246,7 @@ PanelWindow {
                                 dockSlideOffset: root.dockSlideOffset
                                 onDockPointerMoved: function(x, buttons) {
                                     root.updateWindowHoverLabelGeometry(windowButton);
+                                    // x is root-local from WindowButton (T08-fix4).
                                     root.updateDockHoverFromButtons(x, buttons === undefined ? Qt.NoButton : buttons);
                                 }
                                 onDockPointerEntered: {
@@ -1456,8 +1419,7 @@ PanelWindow {
                 root.showDockHoverLabel(tool.label, tool, -34);
             }
             onPositionChanged: function(mouse) {
-                var point = tool.mapToItem(dockSurface, mouse.x, mouse.y);
-                root.updateDockHoverFromMouse(point.x, mouse);
+                root.updateDockHoverFromItem(tool, mouse.x, mouse.y, mouse.buttons !== undefined ? mouse.buttons : Qt.NoButton);
                 if (toolMouse.containsMouse)
                     root.showDockHoverLabel(tool.label, tool, -34);
             }

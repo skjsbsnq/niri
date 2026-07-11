@@ -35,6 +35,10 @@ class LaunchpadRefactorTests(unittest.TestCase):
         # Intent paging via Motion.launchpadResolvePage (not 50% Math.round only).
         self.assertIn("Motion.launchpadResolvePage", text)
         self.assertIn("pagePeakVelocity", text)
+        # Reversed strip: finger right = next (contentXForPage / logicalPage).
+        self.assertIn("contentXForPage", text)
+        self.assertIn("pageFromContentX", text)
+        self.assertIn("logicalPage", text)
 
     def test_stagger_budget_tokens(self) -> None:
         text = MOTION.read_text(encoding="utf-8")
@@ -82,12 +86,10 @@ class LaunchpadRefactorTests(unittest.TestCase):
 
 
 class LaunchpadPageDirectionTests(unittest.TestCase):
-    """macOS/iOS LTR: left = next, right = prev. First page right-drag stays."""
+    """Desktop-style: right = next, left = prev. First page left-drag stays."""
 
     def _resolve(self):
-        # Minimal eval of Motion.launchpadResolvePage via regex + exec of body.
         text = MOTION.read_text(encoding="utf-8")
-        # Pull the numeric thresholds used by the resolver.
         ratio = float(re.search(r"var launchpadPageCommitRatio = ([0-9.]+);", text).group(1))
         min_px = float(re.search(r"var launchpadPageCommitMinPx = ([0-9.]+);", text).group(1))
         flick_v = float(re.search(r"var launchpadPageFlickVelocity = ([0-9.]+);", text).group(1))
@@ -99,11 +101,12 @@ class LaunchpadPageDirectionTests(unittest.TestCase):
             d = float(delta)
             v = float(velocity)
             commit = max(min_px, w * ratio)
+            # Inverted desktop mapping (matches Motion.launchpadResolvePage).
             if abs(v) >= flick_v:
-                nxt = page + 1 if v < 0 else page - 1
-            elif d > commit:
-                nxt = page + 1
+                nxt = page + 1 if v > 0 else page - 1
             elif d < -commit:
+                nxt = page + 1
+            elif d > commit:
                 nxt = page - 1
             else:
                 nxt = page
@@ -111,26 +114,26 @@ class LaunchpadPageDirectionTests(unittest.TestCase):
 
         return resolve
 
-    def test_first_page_left_goes_next_right_stays(self) -> None:
+    def test_first_page_right_goes_next_left_stays(self) -> None:
         resolve = self._resolve()
-        # contentX up (finger left) → next
-        self.assertEqual(resolve(0, 3, 80, 0, 800), 1)
-        # contentX down (finger right) → prev but clamped to 0
-        self.assertEqual(resolve(0, 3, -80, 0, 800), 0)
-        # flick left (vel < 0) → next
-        self.assertEqual(resolve(0, 3, 5, -200, 800), 1)
-        # flick right (vel > 0) → stay on first
-        self.assertEqual(resolve(0, 3, -5, 200, 800), 0)
+        # contentX down (finger right) → next
+        self.assertEqual(resolve(0, 3, -80, 0, 800), 1)
+        # contentX up (finger left) → prev but clamped to 0
+        self.assertEqual(resolve(0, 3, 80, 0, 800), 0)
+        # flick right (vel > 0) → next
+        self.assertEqual(resolve(0, 3, -5, 200, 800), 1)
+        # flick left (vel < 0) → stay on first
+        self.assertEqual(resolve(0, 3, 5, -200, 800), 0)
 
     def test_middle_page_both_directions(self) -> None:
         resolve = self._resolve()
-        self.assertEqual(resolve(1, 3, 80, 0, 800), 2)
-        self.assertEqual(resolve(1, 3, -80, 0, 800), 0)
+        self.assertEqual(resolve(1, 3, -80, 0, 800), 2)
+        self.assertEqual(resolve(1, 3, 80, 0, 800), 0)
 
-    def test_last_page_right_goes_prev_left_stays(self) -> None:
+    def test_last_page_left_goes_prev_right_stays(self) -> None:
         resolve = self._resolve()
-        self.assertEqual(resolve(2, 3, -80, 0, 800), 1)
-        self.assertEqual(resolve(2, 3, 80, 0, 800), 2)
+        self.assertEqual(resolve(2, 3, 80, 0, 800), 1)
+        self.assertEqual(resolve(2, 3, -80, 0, 800), 2)
 
 
 if __name__ == "__main__":

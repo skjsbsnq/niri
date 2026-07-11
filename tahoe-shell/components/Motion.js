@@ -167,18 +167,19 @@ var launchpadWallpaperMs = 400;
 var launchpadIconEnterMs = 280;
 var launchpadIconEnterScaleFrom = 0.92;
 var launchpadPageSnapMs = 240;
-// iOS / macOS Launchpad paging (LTR page row: page0 | page1 | page2 …):
-//   finger/content LEFT  → contentX ↑ → NEXT page
-//   finger/content RIGHT → contentX ↓ → PREV page
-// First page has no prev (right-drag rubber-bands); last page has no next.
-// Thresholds are intentionally low — "press and fling" must commit.
+// Desktop-style paging (finger right = next). Requires a reversed page strip
+// in Launchpad (first logical page on the right end of the Flickable):
+//   finger RIGHT / contentX ↓ → NEXT page
+//   finger LEFT  / contentX ↑ → PREV page
+// First page: left-drag rubber-bands; last page: right-drag rubber-bands.
 var launchpadPageCommitRatio = 0.08;
 var launchpadPageCommitMinPx = 28;
 // Capture at finger-up (not after coast). Units ≈ px/s in Flickable.
 var launchpadPageFlickVelocity = 80;
 
 // Pure page-intent resolver (testable). delta = contentX - startContentX.
-// velocity: Flickable horizontalVelocity (positive → content moving right → prev).
+// velocity: Flickable horizontalVelocity (positive → content moving right → next
+// on the reversed strip).
 function launchpadResolvePage(startPage, pageCount, delta, velocity, pageWidth) {
     var n = Math.max(1, Math.round(Number(pageCount) || 1));
     var page = Math.max(0, Math.min(n - 1, Math.round(Number(startPage) || 0)));
@@ -188,11 +189,12 @@ function launchpadResolvePage(startPage, pageCount, delta, velocity, pageWidth) 
     var commitPx = Math.max(launchpadPageCommitMinPx, w * launchpadPageCommitRatio);
     var flickV = launchpadPageFlickVelocity;
     var next = page;
+    // Reversed strip: contentX down / vel > 0 → next; contentX up / vel < 0 → prev.
     if (Math.abs(v) >= flickV)
-        next = v < 0 ? page + 1 : page - 1;
-    else if (d > commitPx)
-        next = page + 1;
+        next = v > 0 ? page + 1 : page - 1;
     else if (d < -commitPx)
+        next = page + 1;
+    else if (d > commitPx)
         next = page - 1;
     return Math.max(0, Math.min(n - 1, next));
 }

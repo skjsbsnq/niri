@@ -79,10 +79,25 @@ PanelWindow {
         return Math.max(0, Math.min(pageCount - 1, Math.round(Number(page) || 0)));
     }
 
+    // Desktop-style (finger right = next): pages are laid out right-to-left in
+    // the Flickable so dragging content right reveals the next logical page.
+    // Visual slots left→right: page N-1 … page 1, page 0 (first page on the right).
+    function contentXForPage(page) {
+        var pageW = Math.max(1, pageFlick.width);
+        return (pageCount - 1 - clampPage(page)) * pageW;
+    }
+
+    function pageFromContentX(x) {
+        var pageW = Math.max(1, pageFlick.width);
+        if (pageW <= 0 || pageCount <= 0)
+            return 0;
+        var slot = Math.round(Number(x) / pageW);
+        return clampPage(pageCount - 1 - slot);
+    }
+
     function goToPage(page, animated) {
         currentPage = clampPage(page);
-        var pageW = Math.max(1, pageFlick.width);
-        var target = currentPage * pageW;
+        var target = contentXForPage(currentPage);
         if (animated === false || Motion.reducedMotion(settingsService)) {
             pageSnapAnim.stop();
             pageFlick.contentX = target;
@@ -220,7 +235,8 @@ PanelWindow {
                 if (!root.open)
                     return;
                 pageSnapAnim.stop();
-                pageFlick.contentX = 0;
+                // First logical page sits at the right end of the reversed strip.
+                pageFlick.contentX = root.contentXForPage(0);
                 searchInput.forceActiveFocus();
                 playGridEnter();
             });
@@ -235,7 +251,7 @@ PanelWindow {
         currentPage = 0;
         if (pageFlick.width > 0) {
             pageSnapAnim.stop();
-            pageFlick.contentX = 0;
+            pageFlick.contentX = root.contentXForPage(0);
         }
         // Re-play a short enter when filtering reshuffles the grid.
         if (root.open)
@@ -246,6 +262,16 @@ PanelWindow {
         if (selectedIndex >= appCount)
             selectedIndex = Math.max(0, appCount - 1);
         currentPage = clampPage(currentPage);
+        // pageCount may jump when apps finish loading; keep contentX on the
+        // same logical page (reversed strip: first page is not always x=0).
+        if (open && pageFlick.width > 0 && !pageSnapPending)
+            pageFlick.contentX = contentXForPage(currentPage);
+    }
+
+    onPageCountChanged: {
+        currentPage = clampPage(currentPage);
+        if (open && pageFlick.width > 0 && !pageSnapPending && !pageGestureActive)
+            pageFlick.contentX = contentXForPage(currentPage);
     }
 
     // Full-screen glass region for blur backdrop (static geometry = surface).
@@ -420,8 +446,7 @@ PanelWindow {
                 root.pageGestureActive = true;
                 root.pageReleaseVelocity = 0;
                 root.pagePeakVelocity = 0;
-                var pageW = Math.max(1, width);
-                root.pageDragStartPage = root.clampPage(Math.round(contentX / pageW));
+                root.pageDragStartPage = root.pageFromContentX(contentX);
                 root.pageDragStartX = contentX;
                 root.currentPage = root.pageDragStartPage;
             }
@@ -466,10 +491,11 @@ PanelWindow {
                     Motion.launchpadPageCommitMinPx,
                     pageW * Motion.launchpadPageCommitRatio
                 );
+                // Desktop-style: contentX down (finger right) → next; up → prev.
                 var preview = root.pageDragStartPage;
-                if (delta > commitPx * 0.45)
+                if (delta < -commitPx * 0.45)
                     preview = root.pageDragStartPage + 1;
-                else if (delta < -commitPx * 0.45)
+                else if (delta > commitPx * 0.45)
                     preview = root.pageDragStartPage - 1;
                 root.currentPage = root.clampPage(preview);
             }
@@ -490,7 +516,7 @@ PanelWindow {
                     root.pageSnapPending = false;
                     root.pageGestureActive = false;
                     if (pageFlick.width > 0)
-                        root.currentPage = root.clampPage(Math.round(pageFlick.contentX / pageFlick.width));
+                        root.currentPage = root.pageFromContentX(pageFlick.contentX);
                 }
             }
 
@@ -515,6 +541,8 @@ PanelWindow {
                     delegate: Item {
                         id: pageDelegate
                         required property int index
+                        // Reversed strip: visual slot 0 (left) = last logical page.
+                        readonly property int logicalPage: root.pageCount - 1 - pageDelegate.index
 
                         width: pageFlick.width
                         height: pageFlick.height
@@ -536,7 +564,7 @@ PanelWindow {
                                     id: cell
                                     required property int index
 
-                                    readonly property int globalIndex: pageDelegate.index * root.cellsPerPage + cell.index
+                                    readonly property int globalIndex: pageDelegate.logicalPage * root.cellsPerPage + cell.index
                                     readonly property var app: root.appAt(cell.globalIndex)
                                     readonly property bool hasApp: !!cell.app
                                     readonly property bool selected: root.selectedIndex === cell.globalIndex && cell.hasApp
@@ -718,9 +746,9 @@ PanelWindow {
     }
 
     // Commit next/prev using release velocity (peak) OR short drag delta.
-    // Direction matches macOS/iOS Launchpad (LTR):
-    //   drag/flick LEFT  → next page
-    //   drag/flick RIGHT → previous page (bounces on first page)
+    // Desktop-style (inverted from macOS/iOS):
+    //   drag/flick RIGHT → next page
+    //   drag/flick LEFT  → previous page (bounces on first page)
     function finishPageGesture() {
         if (pageFlick.width <= 0 || pageCount <= 1) {
             pageGestureActive = false;

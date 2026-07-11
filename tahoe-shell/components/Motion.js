@@ -114,13 +114,16 @@ function toastClearStaggerDelay(index, total) {
     return Math.min(toastClearStaggerBudgetMs, i * step);
 }
 
-// Control Center control feel (T10). Glass region height/width must use
-// eased NumberAnimation only (no spring). Module morph tokens land in T11.
+// Control Center control feel (T10) + module morph (T11).
+// Glass region height/width must use eased NumberAnimation only (no spring).
 var ccPanelWidth = 330;
 var ccTilePressScale = 0.97;
 var ccSliderKnobDragScale = 1.15;
 var ccToggleBounceMs = 200;
 var ccToggleColorMs = 200;
+var ccMorphDurationMs = 280; // emphasized panel height expand/collapse
+var ccMorphSiblingOffsetPx = 8;
+var ccMorphListMaxHeight = 220;
 
 // Spring vocabulary — QML SpringAnimation parameter groups. Glass region
 // geometry must never use these (guardrail 0704ea4); springs are only for

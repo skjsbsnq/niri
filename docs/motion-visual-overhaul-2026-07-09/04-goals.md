@@ -62,7 +62,7 @@
 | GOAL-08 | T08 Dock 启动弹跳 + autohide 手感 | M | DONE | [acceptance/T08-dock-launch-autohide-2026-07-11.md](acceptance/T08-dock-launch-autohide-2026-07-11.md) · [T08-fix](acceptance/T08-fix-dock-handtest-2026-07-11.md) · [T08-fix2](acceptance/T08-fix2-window-push-2026-07-11.md) · [T08-fix3](acceptance/T08-fix3-icon-baseline-2026-07-11.md) · [T08-fix4](acceptance/T08-fix4-jitter-reveal-2026-07-11.md) · [T08-fix5](acceptance/T08-fix5-hover-indicator-2026-07-11.md) |
 | GOAL-09 | T09 通知堆叠与滑出 | M | DONE | [acceptance/T09-notification-stack-swipe-2026-07-11.md](acceptance/T09-notification-stack-swipe-2026-07-11.md)（含审查 follow-up） |
 | GOAL-10 | T10 控制中心去 chrome + 控件手感 | M | DONE | [acceptance/T10-control-center-feel-2026-07-11.md](acceptance/T10-control-center-feel-2026-07-11.md) |
-| GOAL-11 | T11 控制中心模块 morph 展开 | L | PENDING | — |
+| GOAL-11 | T11 控制中心模块 morph 展开 | L | DONE | [acceptance/T11-control-center-morph-2026-07-11.md](acceptance/T11-control-center-morph-2026-07-11.md) |
 | GOAL-12 | T12 灵动岛 morph 弹簧化 | S | PENDING | — |
 | GOAL-13 | T13 图标体系迁移 | L | PENDING | — |
 | GOAL-14 | T14 颜色语义化 + accent 系统 | M | PENDING | — |

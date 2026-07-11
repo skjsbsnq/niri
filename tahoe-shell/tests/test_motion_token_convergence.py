@@ -228,6 +228,54 @@ class MotionTokenConvergenceTests(unittest.TestCase):
         self.assertNotIn("SpringAnimation", cc)
         self.assertIn("emphasizedDecel", cc)
 
+    def test_motion_exports_control_center_morph_tokens(self) -> None:
+        text = MOTION_JS.read_text(encoding="utf-8")
+
+        self.assertIn("var ccMorphDurationMs = 280;", text)
+        self.assertIn("var ccMorphSiblingOffsetPx = 8;", text)
+        self.assertIn("var ccMorphListMaxHeight = 220;", text)
+
+    def test_control_center_module_morph_expand(self) -> None:
+        cc = (COMPONENTS_ROOT / "ControlCenter.qml").read_text(encoding="utf-8")
+
+        # State machine + open/close helpers.
+        self.assertIn('property string expandedModule: ""', cc)
+        self.assertIn("function openModule(name)", cc)
+        self.assertIn("function closeModule()", cc)
+        self.assertIn('root.openModule("wifi")', cc)
+        self.assertIn('root.openModule("bluetooth")', cc)
+
+        # Morph panel reuses Controls list channels only.
+        self.assertIn("controlsService.wifiNetworks", cc)
+        self.assertIn("controlsService.bluetoothDeviceEntries", cc)
+        self.assertIn("component ModuleMorphPanel", cc)
+        self.assertIn("onBackRequested", cc)
+        self.assertIn("rescanWifi", cc)
+        self.assertIn("connectWifi", cc)
+        self.assertIn("connectBluetoothDevice", cc)
+        self.assertIn("pairBluetoothDevice", cc)
+
+        # Height animation is eased (emphasized), never Spring on glass geometry.
+        self.assertIn("Motion.ccMorphDurationMs", cc)
+        self.assertIn("Motion.ccMorphSiblingOffsetPx", cc)
+        self.assertIn("Motion.ccMorphListMaxHeight", cc)
+        self.assertIn("emphasizedDecel", cc)
+        self.assertNotIn("SpringAnimation", cc)
+        self.assertIn("Behavior on height", cc)
+        self.assertIn("Behavior on Layout.preferredHeight", cc)
+
+        # Empty / unavailable placeholders.
+        self.assertIn("Wi-Fi 服务不可用", cc)
+        self.assertIn("Wi-Fi 已关闭", cc)
+        self.assertIn("未发现网络", cc)
+        self.assertIn("蓝牙不可用", cc)
+        self.assertIn("蓝牙已关闭", cc)
+        self.assertIn("附近暂无设备", cc)
+
+        # Closing panel clears morph state (no layout residue).
+        self.assertIn("onOpenChanged", cc)
+        self.assertIn('root.expandedModule = ""', cc)
+
     def test_dock_uses_analytical_cosine_wave_and_unified_label(self) -> None:
         dock = (COMPONENTS_ROOT / "Dock.qml").read_text(encoding="utf-8")
         window_button = (COMPONENTS_ROOT / "WindowButton.qml").read_text(encoding="utf-8")
@@ -407,8 +455,8 @@ class MotionTokenConvergenceTests(unittest.TestCase):
             "Dock.qml": 2,
             "WindowButton.qml": 1,
             "DockMinimizedWindow.qml": 1,
-            # T10 removed chrome close button; ConnectivityTile uses ccTilePressScale.
-            "ControlCenter.qml": 6,
+            # T10 dechrome + T11 morph back/footer pressScale outlets.
+            "ControlCenter.qml": 8,
             "Spotlight.qml": 2,
             "Launchpad.qml": 2,
             "MenuRow.qml": 1,

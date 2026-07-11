@@ -61,8 +61,16 @@ Item {
     property int airExitCode: -1
     property string locationRequestMode: "refresh"
 
+    // 城市地理编码搜索（Open-Meteo Geocoding，支持中文城市名）。
+    property var locationSearchResults: []
+    property string locationSearchQuery: ""
+    property bool locationSearching: false
+    property string locationSearchError: ""
+
     signal refreshed()
     signal failed(string message)
+    signal locationSearchFinished()
+    signal locationSearchFailed(string message)
 
     Component.onCompleted: {
         root.loadCache(false);
@@ -248,8 +256,141 @@ Item {
         });
     }
 
+    function geocodeUrl(name) {
+        return "https://geocoding-api.open-meteo.com/v1/search?" + queryString({
+            "name": name,
+            "count": 12,
+            "language": "zh",
+            "format": "json"
+        });
+    }
+
     function curlCommand(url) {
         return ["curl", "-fsS", "--max-time", String(curlTimeoutSeconds), String(url)];
+    }
+
+    function formatGeocodeDisplayName(item) {
+        if (!item)
+            return "未知位置";
+        return compactLocationName(item.name, item.admin1 || item.admin2 || "", item.country || "");
+    }
+
+    function normalizeGeocodeResults(payload) {
+        var rows = payload && Array.isArray(payload.results) ? payload.results : [];
+        var result = [];
+        for (var i = 0; i < rows.length; i++) {
+            var item = rows[i] || {};
+            var lat = numberValue(item.latitude, NaN);
+            var lon = numberValue(item.longitude, NaN);
+            if (!canUseLocation(lat, lon))
+                continue;
+            var name = cleanText(item.name, "");
+            if (name.length === 0)
+                continue;
+            result.push({
+                "id": cleanText(item.id, String(i)),
+                "name": name,
+                "latitude": lat,
+                "longitude": lon,
+                "country": cleanText(item.country, ""),
+                "countryCode": cleanText(item.country_code, ""),
+                "admin1": cleanText(item.admin1, ""),
+                "admin2": cleanText(item.admin2, ""),
+                "timezone": cleanText(item.timezone, ""),
+                "population": numberValue(item.population, 0),
+                "displayName": formatGeocodeDisplayName(item)
+            });
+        }
+        // 中国结果优先，其次按人口降序，便于中文城市搜索命中。
+        result.sort(function(a, b) {
+            var aCn = String(a.countryCode || "").toUpperCase() === "CN" ? 1 : 0;
+            var bCn = String(b.countryCode || "").toUpperCase() === "CN" ? 1 : 0;
+            if (aCn !== bCn)
+                return bCn - aCn;
+            return numberValue(b.population, 0) - numberValue(a.population, 0);
+        });
+        return result;
+    }
+
+    function clearLocationSearch() {
+        root.locationSearchResults = [];
+        root.locationSearchQuery = "";
+        root.locationSearchError = "";
+        root.locationSearching = false;
+    }
+
+    function searchLocations(query) {
+        var name = cleanText(query, "");
+        if (name.length === 0) {
+            root.locationSearchResults = [];
+            root.locationSearchQuery = "";
+            root.locationSearchError = "请输入城市名";
+            root.locationSearching = false;
+            root.locationSearchFailed(root.locationSearchError);
+            return;
+        }
+
+        if (geocodeProcess.running) {
+            geocodeProcess.running = false;
+        }
+
+        root.locationSearching = true;
+        root.locationSearchQuery = name;
+        root.locationSearchError = "";
+        geocodeProcess.command = curlCommand(geocodeUrl(name));
+        geocodeProcess.running = true;
+    }
+
+    function selectSearchResult(index) {
+        var rows = root.locationSearchResults || [];
+        var i = intValue(index, -1);
+        if (i < 0 || i >= rows.length) {
+            root.locationSearchError = "无效的搜索结果";
+            root.locationSearchFailed(root.locationSearchError);
+            return false;
+        }
+
+        var item = rows[i] || {};
+        var lat = numberValue(item.latitude, NaN);
+        var lon = numberValue(item.longitude, NaN);
+        if (!canUseLocation(lat, lon)) {
+            root.locationSearchError = "搜索结果坐标无效";
+            root.locationSearchFailed(root.locationSearchError);
+            return false;
+        }
+
+        var name = cleanText(item.displayName, cleanText(item.name, "手动位置"));
+        root.clearLocationSearch();
+        root.setLocation(lat, lon, name);
+        return true;
+    }
+
+    function finishGeocodeRequest(code, text) {
+        root.locationSearching = false;
+
+        if (code !== 0) {
+            root.locationSearchResults = [];
+            root.locationSearchError = "城市搜索失败";
+            root.locationSearchFailed(root.locationSearchError);
+            return;
+        }
+
+        try {
+            var payload = JSON.parse(String(text || ""));
+            var results = root.normalizeGeocodeResults(payload);
+            root.locationSearchResults = results;
+            if (results.length === 0) {
+                root.locationSearchError = "未找到匹配城市，可尝试拼音或更完整地名";
+                root.locationSearchFailed(root.locationSearchError);
+                return;
+            }
+            root.locationSearchError = "";
+            root.locationSearchFinished();
+        } catch (e) {
+            root.locationSearchResults = [];
+            root.locationSearchError = "城市搜索解析失败";
+            root.locationSearchFailed(root.locationSearchError);
+        }
     }
 
     function refresh() {
@@ -666,6 +807,17 @@ Item {
         }
         onExited: function(code, exitStatus) {
             root.finishLocationRequest(code, locationOut.text);
+        }
+    }
+
+    Process {
+        id: geocodeProcess
+        running: false
+        stdout: StdioCollector {
+            id: geocodeOut
+        }
+        onExited: function(code, exitStatus) {
+            root.finishGeocodeRequest(code, geocodeOut.text);
         }
     }
 

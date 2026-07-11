@@ -6,8 +6,8 @@ import "../controls" as Controls
 
 // LS12: 天气设置页。
 //
-// 职责：管理天气服务的自动定位、手动坐标覆盖和温度单位。持久化只走
-// DesktopSettings 的 setter；立即更新天气只通过 Weather 服务 API 触发。
+// 职责：管理天气服务的自动定位、城市搜索、手动坐标覆盖和温度单位。
+// 持久化只走 DesktopSettings 的 setter；立即更新天气只通过 Weather 服务 API 触发。
 Flickable {
     id: page
 
@@ -18,8 +18,11 @@ Flickable {
     readonly property bool ready: !!settings
     readonly property bool automaticLocation: settings ? !settings.weatherManualOverride : true
     readonly property string statusText: weather ? String(weather.status || "idle") : "idle"
+    readonly property var searchResults: weather ? (weather.locationSearchResults || []) : []
+    readonly property bool locationSearching: !!(weather && weather.locationSearching)
     property bool detectForManual: false
     property string validationMessage: ""
+    property string citySearchText: ""
 
     Layout.fillWidth: true
     Layout.fillHeight: true
@@ -47,6 +50,15 @@ Flickable {
                 page.detectForManual = false;
                 page.validationMessage = String(message || "定位失败");
             }
+        }
+
+        function onLocationSearchFinished() {
+            if (page.searchResults.length > 0)
+                page.validationMessage = "找到 " + page.searchResults.length + " 个结果，点击选用";
+        }
+
+        function onLocationSearchFailed(message) {
+            page.validationMessage = String(message || "城市搜索失败");
         }
     }
 
@@ -181,6 +193,54 @@ Flickable {
         weather.detectLocation();
     }
 
+    function searchCityNow() {
+        if (!weather || typeof weather.searchLocations !== "function") {
+            validationMessage = "天气服务不可用";
+            return;
+        }
+
+        var query = cleanName(citySearchInput.text, cleanName(page.citySearchText, ""));
+        page.citySearchText = query;
+        if (query.length === 0) {
+            validationMessage = "请输入城市名，例如：北京、上海、深圳";
+            return;
+        }
+
+        validationMessage = "正在搜索…";
+        weather.searchLocations(query);
+    }
+
+    function selectSearchResult(index) {
+        if (!weather || typeof weather.selectSearchResult !== "function") {
+            validationMessage = "天气服务不可用";
+            return;
+        }
+
+        validationMessage = "已选用城市，正在更新天气…";
+        if (!weather.selectSearchResult(index))
+            validationMessage = weather.locationSearchError || "选用城市失败";
+    }
+
+    function searchResultDetail(item) {
+        if (!item)
+            return "";
+        var parts = [];
+        var admin1 = cleanName(item.admin1, "");
+        var admin2 = cleanName(item.admin2, "");
+        var country = cleanName(item.country, "");
+        if (admin2.length > 0 && admin2 !== admin1)
+            parts.push(admin2);
+        if (admin1.length > 0)
+            parts.push(admin1);
+        if (country.length > 0)
+            parts.push(country);
+        var lat = Number(item.latitude);
+        var lon = Number(item.longitude);
+        if (isFinite(lat) && isFinite(lon))
+            parts.push(lat.toFixed(2) + ", " + lon.toFixed(2));
+        return parts.join(" · ");
+    }
+
     ColumnLayout {
         id: settingsColumn
         width: parent.width
@@ -189,12 +249,12 @@ Flickable {
         Controls.TahoeSection {
             theme: page.theme
             title: "定位"
-            subtitle: "自动 IP 定位，或使用手动坐标覆盖"
+            subtitle: "自动 IP 定位，或搜索城市 / 手动坐标（Open-Meteo 覆盖全球含中国）"
 
             Controls.TahoeListRow {
                 theme: page.theme
                 label: "自动定位"
-                detail: page.automaticLocation ? "使用 IP 定位刷新天气" : "使用下方手动坐标"
+                detail: page.automaticLocation ? "使用 IP 定位刷新天气（国内可能不准确）" : "使用城市搜索或下方手动坐标"
                 iconCode: "\ue55f" // location_on
                 checkable: true
                 checked: page.automaticLocation
@@ -221,8 +281,66 @@ Flickable {
 
             Controls.TahoeListRow {
                 theme: page.theme
+                label: "搜索城市"
+                detail: page.validationMessage.length > 0
+                    ? page.validationMessage
+                    : "支持中文：北京、杭州、成都… 或拼音 / 英文"
+                iconCode: "\ue8b6" // search
+                enabled: page.ready
+                opacity: enabled ? 1 : 0.52
+
+                RowLayout {
+                    spacing: 7
+                    Layout.maximumWidth: 380
+
+                    Controls.TahoeTextField {
+                        id: citySearchInput
+                        theme: page.theme
+                        Layout.preferredWidth: Math.max(150, Math.min(220, page.width - 360))
+                        text: page.citySearchText
+                        enabled: page.ready
+                        onEditingFinished: {
+                            page.citySearchText = citySearchInput.text;
+                            page.searchCityNow();
+                        }
+                    }
+
+                    Controls.TahoeButton {
+                        theme: page.theme
+                        label: page.locationSearching ? "搜索中" : "搜索"
+                        enabled: page.ready && !!page.weather && !page.locationSearching
+                        onActivated: page.searchCityNow()
+                    }
+                }
+            }
+
+            Repeater {
+                model: page.searchResults
+
+                Controls.TahoeListRow {
+                    required property var modelData
+                    required property int index
+
+                    theme: page.theme
+                    label: page.cleanName(modelData.displayName, page.cleanName(modelData.name, "未知"))
+                    detail: page.searchResultDetail(modelData)
+                    iconCode: "\ue0c8" // place
+                    enabled: page.ready && !!page.weather
+
+                    Controls.TahoeButton {
+                        theme: page.theme
+                        label: "选用"
+                        primary: true
+                        enabled: page.ready && !!page.weather && !page.locationSearching
+                        onActivated: page.selectSearchResult(index)
+                    }
+                }
+            }
+
+            Controls.TahoeListRow {
+                theme: page.theme
                 label: "纬度"
-                detail: "范围 -90 到 90"
+                detail: "范围 -90 到 90（高级：手动坐标）"
                 iconCode: "\ue55e" // explore_nearby
                 enabled: page.ready && !page.automaticLocation
                 opacity: enabled ? 1 : 0.52
@@ -257,8 +375,8 @@ Flickable {
 
             Controls.TahoeListRow {
                 theme: page.theme
-                label: "城市"
-                detail: page.validationMessage.length > 0 ? page.validationMessage : "用于侧边栏天气位置名"
+                label: "显示名称"
+                detail: "侧边栏显示的位置名（选用搜索结果后自动填写）"
                 iconCode: "\ue7f1" // location_city
                 enabled: page.ready && !page.automaticLocation
                 opacity: enabled ? 1 : 0.52

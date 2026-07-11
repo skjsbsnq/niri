@@ -5,7 +5,11 @@ import Quickshell
 import Quickshell.Wayland
 import "TahoeGlass.js" as GlassStyle
 import "Motion.js" as Motion
+import "settings/SettingsTheme.js" as Theme
 
+// T17: single-glass Spotlight — search row + results + optional preview in
+// one panel. Glass region height uses eased NumberAnimation only (no spring).
+// Selection highlight y may spring (content transform) behind useSpring.
 PanelWindow {
     id: root
 
@@ -13,10 +17,44 @@ PanelWindow {
     property var appsService
     property var searchService
     property var settingsService
+    property bool useSpring: false
+    property bool darkMode: false
     property string query: ""
-    readonly property var results: root.searchService ? root.searchService.resultsForQuery(root.query, 6) : []
+    property int selectedIndex: 0
+    property int previewEpoch: 0
+
+    readonly property int resultLimit: Motion.spotlightMaxResults
+    readonly property var results: root.searchService
+        ? root.searchService.resultsForQuery(root.query, root.resultLimit)
+        : []
+    readonly property var resultSections: root.buildSections(root.results)
+    readonly property var flatRows: root.flattenRows(root.resultSections)
+    readonly property int selectableCount: root.countSelectable(root.flatRows)
+    readonly property var selectedResult: root.resultAtSelectableIndex(root.selectedIndex)
+    readonly property bool hasQuery: root.query.trim().length > 0
+    readonly property bool showResults: root.hasQuery
     readonly property bool compositorLayerAnimations:
         root.settingsService && root.settingsService.compositorLayerAnimations
+
+    readonly property string accentId: settingsService ? settingsService.accentColor : "blue"
+    readonly property color accent: Theme.accent(darkMode, accentId)
+    readonly property color textPrimary: Theme.label(darkMode)
+    readonly property color textSecondary: Theme.secondaryLabel(darkMode)
+    readonly property color textTertiary: Theme.tertiaryLabel(darkMode)
+    readonly property color separator: Theme.separator(darkMode)
+    readonly property color rowHover: darkMode ? "#22ffffff" : "#38ffffff"
+    readonly property color groupLabel: textTertiary
+
+    readonly property int searchRowHeight: Motion.spotlightSearchRowHeight
+    readonly property int previewWidth: Motion.spotlightPreviewWidth
+    readonly property int rowHeight: Motion.spotlightRowHeight
+    readonly property int groupHeaderHeight: Motion.spotlightGroupHeaderHeight
+    readonly property int listContentHeight: root.computeListHeight(root.flatRows)
+    readonly property int bodyHeight: root.showResults
+        ? Math.min(Motion.spotlightMaxListHeight, Math.max(root.listContentHeight, root.rowHeight + 12))
+        : 0
+    readonly property int targetPanelHeight: root.searchRowHeight
+        + (root.showResults ? root.bodyHeight + 1 : 0)
 
     signal closeRequested()
 
@@ -37,11 +75,24 @@ PanelWindow {
     onOpenChanged: {
         if (open) {
             query = "";
+            selectedIndex = 0;
+            previewEpoch = 0;
             Qt.callLater(function() {
                 if (root.open)
                     searchInput.forceActiveFocus();
             });
         }
+    }
+
+    onQueryChanged: {
+        selectedIndex = 0;
+        previewEpoch += 1;
+    }
+
+    onResultsChanged: {
+        if (selectedIndex >= selectableCount)
+            selectedIndex = Math.max(0, selectableCount - 1);
+        previewEpoch += 1;
     }
 
     function activateResult(result) {
@@ -73,11 +124,163 @@ PanelWindow {
         return String(result && result.icon || "");
     }
 
-    function launchFirstResult() {
-        if (root.results.length > 0)
-            activateResult(root.results[0]);
+    function activateSelected() {
+        if (root.selectedResult)
+            activateResult(root.selectedResult);
     }
 
+    function moveSelection(delta) {
+        if (selectableCount <= 0)
+            return;
+        var next = selectedIndex + delta;
+        if (next < 0)
+            next = selectableCount - 1;
+        else if (next >= selectableCount)
+            next = 0;
+        selectedIndex = next;
+        previewEpoch += 1;
+        ensureSelectedVisible();
+    }
+
+    function ensureSelectedVisible() {
+        var y = highlightYForSelectable(selectedIndex);
+        if (y < resultsFlick.contentY)
+            resultsFlick.contentY = Math.max(0, y - 8);
+        else if (y + rowHeight > resultsFlick.contentY + resultsFlick.height)
+            resultsFlick.contentY = Math.max(0, y + rowHeight - resultsFlick.height + 8);
+    }
+
+    function providerKey(result) {
+        var provider = String(result && (result.provider || result.kind) || "action").toLowerCase();
+        if (provider === "application")
+            return "apps";
+        return provider;
+    }
+
+    function groupTitleForProvider(provider) {
+        switch (String(provider || "").toLowerCase()) {
+        case "apps":
+            return "应用程序";
+        case "windows":
+            return "窗口";
+        case "settings":
+            return "系统设置";
+        case "calculator":
+            return "计算";
+        case "command":
+            return "命令";
+        case "screenshot":
+            return "截图";
+        case "system-actions":
+            return "系统操作";
+        case "clipboard-pins":
+            return "剪贴板";
+        case "tracker":
+        case "folders":
+        case "recent-files":
+            return "文件";
+        default:
+            return "结果";
+        }
+    }
+
+    function buildSections(list) {
+        var sections = [];
+        var indexByKey = {};
+        var items = list || [];
+        for (var i = 0; i < items.length; i++) {
+            var result = items[i];
+            var key = providerKey(result);
+            var idx = indexByKey[key];
+            if (idx === undefined) {
+                idx = sections.length;
+                indexByKey[key] = idx;
+                sections.push({
+                    "key": key,
+                    "title": groupTitleForProvider(key),
+                    "items": []
+                });
+            }
+            sections[idx].items.push(result);
+        }
+        return sections;
+    }
+
+    function flattenRows(sections) {
+        var rows = [];
+        var selectable = 0;
+        var secs = sections || [];
+        for (var s = 0; s < secs.length; s++) {
+            var section = secs[s];
+            rows.push({
+                "type": "header",
+                "title": section.title,
+                "key": section.key
+            });
+            var items = section.items || [];
+            for (var i = 0; i < items.length; i++) {
+                rows.push({
+                    "type": "result",
+                    "result": items[i],
+                    "selectableIndex": selectable
+                });
+                selectable += 1;
+            }
+        }
+        return rows;
+    }
+
+    function countSelectable(rows) {
+        var n = 0;
+        var list = rows || [];
+        for (var i = 0; i < list.length; i++) {
+            if (list[i].type === "result")
+                n += 1;
+        }
+        return n;
+    }
+
+    function resultAtSelectableIndex(index) {
+        var list = flatRows || [];
+        for (var i = 0; i < list.length; i++) {
+            var row = list[i];
+            if (row.type === "result" && row.selectableIndex === index)
+                return row.result;
+        }
+        return null;
+    }
+
+    function computeListHeight(rows) {
+        var h = 12; // column margins
+        var list = rows || [];
+        for (var i = 0; i < list.length; i++) {
+            h += list[i].type === "header" ? groupHeaderHeight : rowHeight;
+            h += 2;
+        }
+        if (list.length === 0 && hasQuery)
+            h = rowHeight + 24;
+        return h;
+    }
+
+    function highlightYForSelectable(index) {
+        var y = 0;
+        var list = flatRows || [];
+        for (var i = 0; i < list.length; i++) {
+            var row = list[i];
+            if (row.type === "result" && row.selectableIndex === index)
+                return y;
+            y += (row.type === "header" ? groupHeaderHeight : rowHeight) + 2;
+        }
+        return 0;
+    }
+
+    function previewKindLabel(result) {
+        if (!result)
+            return "";
+        return groupTitleForProvider(providerKey(result));
+    }
+
+    // Keep legacy shortcuts available via IPC/search providers; UI chips removed (T17).
     function launchShortcut(kind) {
         if (root.searchService && root.searchService.activateShortcut(kind, root.query)) {
             root.closeRequested();
@@ -85,7 +288,11 @@ PanelWindow {
         }
     }
 
-    TahoeGlass.regions: [spotlightSurface.region, resultsSurface.region]
+    function launchFirstResult() {
+        activateSelected();
+    }
+
+    TahoeGlass.regions: [panelSurface.region]
 
     MouseArea {
         anchors.fill: parent
@@ -96,9 +303,9 @@ PanelWindow {
         id: spotlightPanel
 
         anchors.horizontalCenter: parent.horizontalCenter
-        y: Math.max(58, parent.height * 0.18)
-        width: Math.min(parent.width - 28, 690)
-        height: spotlightSurface.height + (resultsSurface.visible ? resultsSurface.height + 10 : 0)
+        y: Math.max(58, parent.height * 0.16)
+        width: Math.min(parent.width - 28, 760)
+        height: panelSurface.height
         opacity: root.compositorLayerAnimations ? 1 : (root.open ? 1 : 0)
         scale: root.compositorLayerAnimations ? 1 : (root.open ? 1 : 1.04)
 
@@ -118,246 +325,439 @@ PanelWindow {
         }
 
         GlassPanel {
-            id: spotlightSurface
+            id: panelSurface
 
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.top: parent.top
-            height: 66
-            material: GlassStyle.MaterialPill
-            radius: GlassStyle.RadiusPill
-            fillColor: GlassStyle.FillPill
-            strokeColor: GlassStyle.StrokePill
-            useItemRegion: false
-            // Keep the glass region bounds independent from spotlightPanel's
-            // content-layer scale animation.
-            regionX: Math.round(spotlightPanel.x + spotlightSurface.x)
-            regionY: Math.round(spotlightPanel.y + spotlightSurface.y)
-            regionWidth: Math.round(spotlightSurface.width)
-            regionHeight: Math.round(spotlightSurface.height)
-            interaction: root.compositorLayerAnimations ? 1 : spotlightPanel.opacity
-            materialAlpha: root.compositorLayerAnimations ? 1 : spotlightPanel.opacity
-            glassEnabled: root.open || spotlightPanel.opacity > 0.01
-
-            TahoeSymbol {
-                anchors.left: parent.left
-                anchors.leftMargin: 25
-                anchors.verticalCenter: parent.verticalCenter
-                name: "\ue8b6"
-                color: "#4f5963"
-                size: 24
-            }
-
-            Text {
-                anchors.left: searchInput.left
-                anchors.right: shortcutRow.left
-                anchors.rightMargin: 16
-                anchors.verticalCenter: parent.verticalCenter
-                text: "搜索"
-                color: "#69737d"
-                font.pixelSize: 22
-                elide: Text.ElideRight
-                visible: searchInput.text.length === 0
-            }
-
-            TextInput {
-                id: searchInput
-                anchors.left: parent.left
-                anchors.leftMargin: 64
-                anchors.right: shortcutRow.left
-                anchors.rightMargin: 16
-                anchors.verticalCenter: parent.verticalCenter
-                height: 36
-                text: root.query
-                color: "#202124"
-                selectionColor: "#7ab7ff"
-                selectedTextColor: "#ffffff"
-                font.pixelSize: 22
-                clip: true
-                focus: root.open
-                verticalAlignment: TextInput.AlignVCenter
-                onTextChanged: root.query = text
-                Keys.onEscapePressed: root.closeRequested()
-                Keys.onReturnPressed: root.launchFirstResult()
-            }
-
-            Row {
-                id: shortcutRow
-                anchors.right: parent.right
-                anchors.rightMargin: 16
-                anchors.verticalCenter: parent.verticalCenter
-                spacing: 8
-
-                Repeater {
-                    model: [
-                        { "kind": "store", "icon": "AppStore-Symbol.png" },
-                        { "kind": "files", "icon": "Folder-Symbol.png" },
-                        { "kind": "shortcuts", "icon": "Shortcuts-Symbol.png" },
-                        { "kind": "copy", "icon": "Copy-Symbol.png" }
-                    ]
-
-                    delegate: Item {
-                        id: shortcutButton
-
-                        required property var modelData
-
-                        width: 38
-                        height: 38
-                        scale: Motion.pressScaleFor(root.settingsService, shortcutMouse.pressed)
-
-                        Behavior on scale { NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing } }
-
-                        Rectangle {
-                            anchors.fill: parent
-                            radius: 19
-                            color: shortcutMouse.pressed ? "#52ffffff" : (shortcutMouse.containsMouse ? "#70ffffff" : "#40ffffff")
-                            border.color: "#55ffffff"
-                            border.width: 1
-                        }
-
-                        Image {
-                            anchors.centerIn: parent
-                            width: 20
-                            height: 20
-                            source: root.appsService ? root.appsService.iconPath("symbols", shortcutButton.modelData.icon) : ""
-                            fillMode: Image.PreserveAspectFit
-                            smooth: true
-                        }
-
-                        MouseArea {
-                            id: shortcutMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: root.launchShortcut(shortcutButton.modelData.kind)
-                        }
-                    }
-                }
-            }
-        }
-
-        GlassPanel {
-            id: resultsSurface
-
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.top: spotlightSurface.bottom
-            anchors.topMargin: 10
-            height: resultsColumn.implicitHeight + 12
+            // Animated height: eased only — never Spring (glass region geometry).
+            height: root.open ? root.targetPanelHeight : Motion.spotlightMinPanelHeight
             material: GlassStyle.MaterialPanel
             radius: GlassStyle.RadiusPanelCompact
             fillColor: GlassStyle.FillPanelBright
             strokeColor: GlassStyle.StrokePanelBright
             useItemRegion: false
-            regionX: Math.round(spotlightPanel.x + resultsSurface.x)
-            regionY: Math.round(spotlightPanel.y + resultsSurface.y)
-            regionWidth: Math.round(resultsSurface.width)
-            regionHeight: Math.round(resultsSurface.height)
-            interaction: resultsSurface.opacity
-            materialAlpha: resultsSurface.opacity
-            glassEnabled: (root.open || spotlightPanel.opacity > 0.01) && resultsSurface.visible
-            opacity: root.open && root.query.trim().length > 0 ? 1 : 0
-            visible: opacity > 0.01
+            regionX: Math.round(spotlightPanel.x + panelSurface.x)
+            regionY: Math.round(spotlightPanel.y + panelSurface.y)
+            regionWidth: Math.round(panelSurface.width)
+            regionHeight: Math.round(panelSurface.height)
+            interaction: root.compositorLayerAnimations ? 1 : spotlightPanel.opacity
+            materialAlpha: root.compositorLayerAnimations ? 1 : spotlightPanel.opacity
+            glassEnabled: root.open || spotlightPanel.opacity > 0.01
+            clip: true
 
-            Behavior on opacity {
-                NumberAnimation { duration: Motion.fadeFast(root.settingsService); easing.type: Motion.standardDecel }
+            Behavior on height {
+                NumberAnimation {
+                    duration: Motion.spotlightHeightDuration(root.settingsService)
+                    easing.type: Motion.emphasizedDecel
+                }
             }
 
-            Column {
-                id: resultsColumn
+            // --- Search row ---
+            Item {
+                id: searchRow
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.top: parent.top
-                anchors.margins: 6
-                spacing: 2
+                height: root.searchRowHeight
 
-                Repeater {
-                    model: ScriptModel {
-                        values: root.results
+                TahoeSymbol {
+                    anchors.left: parent.left
+                    anchors.leftMargin: 22
+                    anchors.verticalCenter: parent.verticalCenter
+                    name: "\ue8b6"
+                    color: root.textTertiary
+                    size: 22
+                }
+
+                Text {
+                    anchors.left: searchInput.left
+                    anchors.right: searchInput.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "搜索"
+                    color: root.textTertiary
+                    font.pixelSize: 20
+                    elide: Text.ElideRight
+                    visible: searchInput.text.length === 0
+                }
+
+                TextInput {
+                    id: searchInput
+                    anchors.left: parent.left
+                    anchors.leftMargin: 56
+                    anchors.right: parent.right
+                    anchors.rightMargin: 20
+                    anchors.verticalCenter: parent.verticalCenter
+                    height: 34
+                    text: root.query
+                    color: root.textPrimary
+                    selectionColor: root.accent
+                    selectedTextColor: "#ffffff"
+                    font.pixelSize: 20
+                    clip: true
+                    focus: root.open
+                    verticalAlignment: TextInput.AlignVCenter
+                    onTextChanged: root.query = text
+                    Keys.onEscapePressed: root.closeRequested()
+                    Keys.onReturnPressed: root.activateSelected()
+                    Keys.onEnterPressed: root.activateSelected()
+                    Keys.onDownPressed: root.moveSelection(1)
+                    Keys.onUpPressed: root.moveSelection(-1)
+                    Keys.onTabPressed: root.moveSelection(1)
+                    Keys.onBacktabPressed: root.moveSelection(-1)
+                }
+
+                Rectangle {
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.bottom: parent.bottom
+                    height: 1
+                    color: root.separator
+                    visible: root.showResults
+                }
+            }
+
+            // --- Results body ---
+            Item {
+                id: body
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: searchRow.bottom
+                anchors.bottom: parent.bottom
+                visible: root.showResults && height > 1
+                opacity: root.showResults ? 1 : 0
+
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: Motion.fadeFast(root.settingsService)
+                        easing.type: Motion.standardDecel
                     }
+                }
 
-                    delegate: Item {
-                        id: resultButton
+                // Left: result list
+                Item {
+                    id: listPane
+                    anchors.left: parent.left
+                    anchors.top: parent.top
+                    anchors.bottom: parent.bottom
+                    anchors.right: previewPane.left
+                    anchors.rightMargin: 0
+                    clip: true
 
-                        required property var modelData
+                    Flickable {
+                        id: resultsFlick
+                        anchors.fill: parent
+                        anchors.margins: 6
+                        contentWidth: width
+                        contentHeight: resultsColumn.implicitHeight
+                        clip: true
+                        boundsBehavior: Flickable.StopAtBounds
+                        interactive: contentHeight > height
 
-                        width: resultsColumn.width
-                        height: 54
-                        scale: Motion.pressScaleFor(root.settingsService, resultMouse.pressed)
-
-                        Behavior on scale { NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing } }
-
+                        // Selection highlight capsule (content layer; spring OK).
                         Rectangle {
-                            anchors.fill: parent
-                            radius: 12
-                            color: resultMouse.pressed ? "#30ffffff" : (resultMouse.containsMouse ? "#44ffffff" : "transparent")
+                            id: selectionHighlight
+                            width: resultsColumn.width
+                            height: root.rowHeight
+                            radius: 10
+                            color: root.accent
+                            opacity: root.selectableCount > 0 ? 1 : 0
+                            y: root.highlightYForSelectable(root.selectedIndex)
+                            z: 0
+
+                            Behavior on y {
+                                enabled: root.useSpring && !Motion.reducedMotion(root.settingsService)
+                                SpringAnimation {
+                                    spring: Motion.springSnappy.spring
+                                    damping: Motion.springSnappy.damping
+                                    epsilon: 0.001
+                                }
+                            }
+                            Behavior on y {
+                                enabled: !root.useSpring || Motion.reducedMotion(root.settingsService)
+                                NumberAnimation {
+                                    duration: Motion.elementMove(root.settingsService)
+                                    easing.type: Motion.emphasizedDecel
+                                }
+                            }
+                            Behavior on opacity {
+                                NumberAnimation {
+                                    duration: Motion.fadeFast(root.settingsService)
+                                    easing.type: Motion.standardDecel
+                                }
+                            }
                         }
 
-                        Image {
-                            id: resultIcon
-                            anchors.left: parent.left
-                            anchors.leftMargin: 12
-                            anchors.verticalCenter: parent.verticalCenter
-                            width: 32
-                            height: 32
-                            source: root.resultIcon(resultButton.modelData)
-                            fillMode: Image.PreserveAspectFit
-                            smooth: true
-                        }
+                        Column {
+                            id: resultsColumn
+                            width: resultsFlick.width
+                            spacing: 2
+                            z: 1
 
-                        Text {
-                            id: resultTitle
-                            anchors.left: resultIcon.right
-                            anchors.leftMargin: 12
-                            anchors.right: parent.right
-                            anchors.rightMargin: 12
-                            anchors.top: parent.top
-                            anchors.topMargin: resultButton.subtitleText.length > 0 ? 9 : 0
-                            text: root.resultLabel(resultButton.modelData)
-                            color: "#202124"
-                            font.pixelSize: 14
-                            font.weight: Font.DemiBold
-                            elide: Text.ElideRight
-                            maximumLineCount: 1
-                            verticalAlignment: Text.AlignVCenter
-                            height: resultButton.subtitleText.length > 0 ? 18 : parent.height
-                        }
+                            Repeater {
+                                model: ScriptModel {
+                                    values: root.flatRows
+                                }
 
-                        readonly property string subtitleText: root.resultSubtitle(resultButton.modelData)
+                                delegate: Item {
+                                    id: rowDelegate
 
-                        Text {
-                            anchors.left: resultTitle.left
-                            anchors.right: resultTitle.right
-                            anchors.top: resultTitle.bottom
-                            anchors.topMargin: 1
-                            text: resultButton.subtitleText
-                            color: "#5f6870"
-                            font.pixelSize: 11
-                            elide: Text.ElideRight
-                            maximumLineCount: 1
-                            visible: resultButton.subtitleText.length > 0
-                        }
+                                    required property var modelData
 
-                        MouseArea {
-                            id: resultMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: root.activateResult(resultButton.modelData)
+                                    width: resultsColumn.width
+                                    height: modelData.type === "header"
+                                        ? root.groupHeaderHeight
+                                        : root.rowHeight
+
+                                    // Group header
+                                    Text {
+                                        anchors.left: parent.left
+                                        anchors.leftMargin: 12
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        width: parent.width - 24
+                                        text: rowDelegate.modelData.title || ""
+                                        color: root.groupLabel
+                                        font.pixelSize: 11
+                                        font.weight: Font.DemiBold
+                                        elide: Text.ElideRight
+                                        visible: rowDelegate.modelData.type === "header"
+                                    }
+
+                                    // Result row
+                                    Item {
+                                        anchors.fill: parent
+                                        visible: rowDelegate.modelData.type === "result"
+
+                                        readonly property var result: rowDelegate.modelData.result
+                                        readonly property int selIndex: Number(rowDelegate.modelData.selectableIndex) || 0
+                                        readonly property bool selected: root.selectedIndex === selIndex
+                                        readonly property string subtitleText: root.resultSubtitle(result)
+
+                                        scale: Motion.pressScaleFor(root.settingsService, resultMouse.pressed)
+
+                                        Behavior on scale {
+                                            NumberAnimation {
+                                                duration: Motion.pressDurationFor(root.settingsService)
+                                                easing.type: Motion.pressEasing
+                                            }
+                                        }
+
+                                        Rectangle {
+                                            anchors.fill: parent
+                                            radius: 10
+                                            color: resultMouse.containsMouse && !parent.selected
+                                                ? root.rowHover
+                                                : "transparent"
+                                        }
+
+                                        Image {
+                                            id: resultIcon
+                                            anchors.left: parent.left
+                                            anchors.leftMargin: 12
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            width: 28
+                                            height: 28
+                                            source: root.resultIcon(parent.result)
+                                            fillMode: Image.PreserveAspectFit
+                                            smooth: true
+                                            asynchronous: true
+                                            sourceSize.width: 64
+                                            sourceSize.height: 64
+                                        }
+
+                                        Text {
+                                            id: resultTitle
+                                            anchors.left: resultIcon.right
+                                            anchors.leftMargin: 10
+                                            anchors.right: parent.right
+                                            anchors.rightMargin: 12
+                                            anchors.top: parent.top
+                                            anchors.topMargin: parent.subtitleText.length > 0 ? 6 : 0
+                                            text: root.resultLabel(parent.result)
+                                            color: parent.selected ? "#ffffff" : root.textPrimary
+                                            font.pixelSize: 13
+                                            font.weight: Font.DemiBold
+                                            elide: Text.ElideRight
+                                            maximumLineCount: 1
+                                            verticalAlignment: Text.AlignVCenter
+                                            height: parent.subtitleText.length > 0 ? 16 : parent.height
+                                        }
+
+                                        Text {
+                                            anchors.left: resultTitle.left
+                                            anchors.right: resultTitle.right
+                                            anchors.top: resultTitle.bottom
+                                            anchors.topMargin: 1
+                                            text: parent.subtitleText
+                                            color: parent.selected ? "#e8ffffff" : root.textSecondary
+                                            font.pixelSize: 11
+                                            elide: Text.ElideRight
+                                            maximumLineCount: 1
+                                            visible: parent.subtitleText.length > 0
+                                        }
+
+                                        MouseArea {
+                                            id: resultMouse
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: {
+                                                root.selectedIndex = parent.selIndex;
+                                                root.previewEpoch += 1;
+                                                root.activateResult(parent.result);
+                                            }
+                                            onContainsMouseChanged: {
+                                                if (containsMouse) {
+                                                    root.selectedIndex = parent.selIndex;
+                                                    root.previewEpoch += 1;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            Text {
+                                width: parent.width
+                                height: root.rowHeight
+                                text: "无结果"
+                                color: root.textSecondary
+                                font.pixelSize: 13
+                                font.weight: Font.DemiBold
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                                visible: root.hasQuery && root.selectableCount === 0
+                            }
                         }
                     }
                 }
 
-                Text {
-                    width: parent.width
-                    height: 42
-                    text: "无结果"
-                    color: "#5a6570"
-                    font.pixelSize: 14
-                    font.weight: Font.DemiBold
-                    horizontalAlignment: Text.AlignHCenter
-                    verticalAlignment: Text.AlignVCenter
-                    visible: root.query.trim().length > 0 && root.results.length === 0
+                // Right: preview pane
+                Item {
+                    id: previewPane
+                    anchors.top: parent.top
+                    anchors.bottom: parent.bottom
+                    anchors.right: parent.right
+                    width: root.selectableCount > 0 ? root.previewWidth : 0
+                    clip: true
+
+                    Behavior on width {
+                        NumberAnimation {
+                            duration: Motion.spotlightHeightDuration(root.settingsService)
+                            easing.type: Motion.emphasizedDecel
+                        }
+                    }
+
+                    Rectangle {
+                        anchors.left: parent.left
+                        anchors.top: parent.top
+                        anchors.bottom: parent.bottom
+                        width: 1
+                        color: root.separator
+                        visible: parent.width > 1
+                    }
+
+                    Item {
+                        id: previewContent
+                        anchors.fill: parent
+                        anchors.leftMargin: 1
+                        anchors.margins: 16
+                        opacity: 1
+                        visible: root.selectableCount > 0 && root.selectedResult
+
+                        property int epoch: root.previewEpoch
+                        property var result: root.selectedResult
+
+                        onEpochChanged: {
+                            if (Motion.reducedMotion(root.settingsService)) {
+                                opacity = 1;
+                                return;
+                            }
+                            previewFade.restart();
+                        }
+
+                        SequentialAnimation {
+                            id: previewFade
+                            NumberAnimation {
+                                target: previewContent
+                                property: "opacity"
+                                to: 0
+                                duration: Motion.spotlightPreviewFade(root.settingsService) / 2
+                                easing.type: Motion.standardDecel
+                            }
+                            ScriptAction {
+                                script: {
+                                    previewContent.result = root.selectedResult;
+                                }
+                            }
+                            NumberAnimation {
+                                target: previewContent
+                                property: "opacity"
+                                to: 1
+                                duration: Motion.spotlightPreviewFade(root.settingsService) / 2
+                                easing.type: Motion.standardDecel
+                            }
+                        }
+
+                        Column {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: parent.width - 8
+                            spacing: 12
+
+                            Image {
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                width: 72
+                                height: 72
+                                source: root.resultIcon(previewContent.result)
+                                fillMode: Image.PreserveAspectFit
+                                smooth: true
+                                asynchronous: true
+                                sourceSize.width: 128
+                                sourceSize.height: 128
+                            }
+
+                            Text {
+                                width: parent.width
+                                text: root.resultLabel(previewContent.result)
+                                color: root.textPrimary
+                                font.pixelSize: 15
+                                font.weight: Font.DemiBold
+                                horizontalAlignment: Text.AlignHCenter
+                                wrapMode: Text.Wrap
+                                maximumLineCount: 2
+                                elide: Text.ElideRight
+                            }
+
+                            Text {
+                                width: parent.width
+                                text: root.resultSubtitle(previewContent.result)
+                                color: root.textSecondary
+                                font.pixelSize: 12
+                                horizontalAlignment: Text.AlignHCenter
+                                wrapMode: Text.Wrap
+                                maximumLineCount: 3
+                                elide: Text.ElideRight
+                                visible: text.length > 0
+                            }
+
+                            Rectangle {
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                width: kindLabel.implicitWidth + 16
+                                height: 22
+                                radius: 11
+                                color: root.darkMode ? "#22ffffff" : "#28ffffff"
+
+                                Text {
+                                    id: kindLabel
+                                    anchors.centerIn: parent
+                                    text: root.previewKindLabel(previewContent.result)
+                                    color: root.textTertiary
+                                    font.pixelSize: 11
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }

@@ -135,6 +135,69 @@ function settingsPageTransition(settingsService) {
     return reducedMotion(settingsService) ? 0 : settingsPageTransitionMs;
 }
 
+// Spotlight (T17). Single glass panel; height uses eased NumberAnimation only
+// (no spring on glass region geometry). Selection highlight y may spring.
+var spotlightHeightMs = 250;
+var spotlightPreviewFadeMs = 150;
+var spotlightPreviewWidth = 220;
+var spotlightRowHeight = 44;
+var spotlightGroupHeaderHeight = 28;
+var spotlightSearchRowHeight = 56;
+var spotlightMaxResults = 12;
+var spotlightMinPanelHeight = 56;
+var spotlightMaxListHeight = 360;
+
+function spotlightHeightDuration(settingsService) {
+    return reducedMotion(settingsService) ? 0 : spotlightHeightMs;
+}
+
+function spotlightPreviewFade(settingsService) {
+    return reducedMotion(settingsService) ? 0 : spotlightPreviewFadeMs;
+}
+
+// Launchpad (T18). Full-screen QML path only (rules §2.11). Wallpaper zoom is
+// content-side on Wallpaper.qml; icon stagger budget ≤450ms / ≤40 items.
+var launchpadWallpaperScale = 1.06;
+var launchpadWallpaperDim = 0.25;
+var launchpadWallpaperMs = 400;
+var launchpadStaggerPerPxMs = 6; // delay ≈ distanceFromCenter × 6ms
+var launchpadStaggerBudgetMs = 450;
+var launchpadStaggerMaxItems = 40;
+var launchpadGridCols = 7;
+var launchpadGridRows = 5;
+var launchpadPageDotsHeight = 28;
+
+function launchpadWallpaperDuration(settingsService) {
+    return reducedMotion(settingsService) ? 0 : launchpadWallpaperMs;
+}
+
+function launchpadStaggerDelay(distanceFromCenterPx, index, total) {
+    var n = Math.min(launchpadStaggerMaxItems, Math.max(0, Math.round(Number(total) || 0)));
+    var i = Math.max(0, Math.round(Number(index) || 0));
+    if (n <= 0 || i >= n)
+        return 0;
+    var dist = Math.max(0, Number(distanceFromCenterPx) || 0);
+    var delay = Math.round(dist * launchpadStaggerPerPxMs);
+    // Cap total orchestration: clamp per-item delay so last start ≤ budget.
+    if (delay > launchpadStaggerBudgetMs)
+        delay = launchpadStaggerBudgetMs;
+    return delay;
+}
+
+// Left sidebar widget stack (T19). Card enter stagger after panel settles.
+var sidebarCardStaggerMs = 30;
+var sidebarCardEnterOffsetPx = 14;
+var sidebarCardStaggerBudgetMs = 450;
+var sidebarCardStaggerMaxItems = 16;
+
+function sidebarCardStaggerDelay(index) {
+    var i = Math.max(0, Math.round(Number(index) || 0));
+    if (i >= sidebarCardStaggerMaxItems)
+        return sidebarCardStaggerBudgetMs;
+    var delay = i * sidebarCardStaggerMs;
+    return Math.min(sidebarCardStaggerBudgetMs, delay);
+}
+
 // Spring vocabulary — QML SpringAnimation parameter groups. Glass region
 // geometry must never use these (guardrail 0704ea4); springs are only for
 // content transforms/opacity inside panels, compositor-side channels, and

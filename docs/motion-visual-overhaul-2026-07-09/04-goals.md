@@ -68,7 +68,7 @@
 | GOAL-14 | T14 颜色语义化 + accent 系统 | M | DONE | [acceptance/T14-color-accent-system-2026-07-11.md](acceptance/T14-color-accent-system-2026-07-11.md) |
 | GOAL-15 | T15 设置外壳重设计 | L | DONE | [acceptance/T15-settings-shell-redesign-2026-07-11.md](acceptance/T15-settings-shell-redesign-2026-07-11.md) |
 | GOAL-16 | T16 设置控件精修 | M | DONE | [acceptance/T16-settings-controls-polish-2026-07-11.md](acceptance/T16-settings-controls-polish-2026-07-11.md) |
-| GOAL-17 | T17 Spotlight 重构 | M | PENDING | — |
+| GOAL-17 | T17 Spotlight 重构 | M | DONE | [acceptance/T17-spotlight-refactor-2026-07-11.md](acceptance/T17-spotlight-refactor-2026-07-11.md) |
 | GOAL-18 | T18 Launchpad 全屏重构 | L | PENDING | — |
 | GOAL-19 | T19 左侧边栏 widget 化重构 | L | PENDING | — |
 | GOAL-20 | T20 任务切换器/窗口概览手感 | M | PENDING | — |

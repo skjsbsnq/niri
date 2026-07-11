@@ -521,7 +521,8 @@ class MotionTokenConvergenceTests(unittest.TestCase):
             "DockMinimizedWindow.qml": 1,
             # T10 dechrome + T11 morph back/footer pressScale outlets.
             "ControlCenter.qml": 8,
-            "Spotlight.qml": 2,
+            # T17: shortcut chips removed; one press outlet remains on result rows.
+            "Spotlight.qml": 1,
             "Launchpad.qml": 2,
             "MenuRow.qml": 1,
             "settings/controls/TahoeButton.qml": 1,

@@ -1028,6 +1028,8 @@ ShellRoot {
                 appsService: apps
                 searchService: search
                 settingsService: desktopSettings
+                useSpring: shell.useSpring
+                darkMode: shell.darkMode
                 open: shell.spotlightOpen
                 onCloseRequested: shell.spotlightOpen = false
             }

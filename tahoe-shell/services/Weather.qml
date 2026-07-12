@@ -66,6 +66,15 @@ Item {
     property string locationSearchQuery: ""
     property bool locationSearching: false
     property string locationSearchError: ""
+    // Single geocode Process pipeline: generation isolates late success/error/cancel.
+    // geocodeGeneration is the latest search intent; only matching finishes may write
+    // locationSearching/results/error/signals. Pending holds only the newest query
+    // while an older curl is still exiting — not a second Process or debounce path.
+    property int geocodeGeneration: 0
+    property int geocodeInFlightGeneration: 0
+    property string geocodeInFlightQuery: ""
+    property bool geocodePending: false
+    property string geocodePendingQuery: ""
 
     signal refreshed()
     signal failed(string message)
@@ -313,15 +322,32 @@ Item {
     }
 
     function clearLocationSearch() {
+        // Invalidate any in-flight curl so its late exit cannot clear a later search.
+        root.geocodeGeneration += 1;
+        root.geocodePending = false;
+        root.geocodePendingQuery = "";
+        if (geocodeProcess.running)
+            geocodeProcess.running = false;
         root.locationSearchResults = [];
         root.locationSearchQuery = "";
         root.locationSearchError = "";
         root.locationSearching = false;
     }
 
+    function geocodeIdentityMatches(generation) {
+        if (generation === undefined || generation === null)
+            return false;
+        return Number(generation) === Number(root.geocodeGeneration);
+    }
+
     function searchLocations(query) {
         var name = cleanText(query, "");
         if (name.length === 0) {
+            root.geocodeGeneration += 1;
+            root.geocodePending = false;
+            root.geocodePendingQuery = "";
+            if (geocodeProcess.running)
+                geocodeProcess.running = false;
             root.locationSearchResults = [];
             root.locationSearchQuery = "";
             root.locationSearchError = "请输入城市名";
@@ -330,15 +356,65 @@ Item {
             return;
         }
 
-        if (geocodeProcess.running) {
-            geocodeProcess.running = false;
-        }
-
+        // Always advance generation for a new intent. Never compare only query text:
+        // two identical queries in a row still need isolated success/error/cancel.
+        root.geocodeGeneration += 1;
         root.locationSearching = true;
         root.locationSearchQuery = name;
         root.locationSearchError = "";
-        geocodeProcess.command = curlCommand(geocodeUrl(name));
+
+        if (geocodeProcess.running) {
+            // Keep only the newest pending query; stop the old curl so exit settles
+            // and schedulePendingGeocode starts this generation after onExited.
+            root.geocodePending = true;
+            root.geocodePendingQuery = name;
+            geocodeProcess.running = false;
+            return;
+        }
+
+        root.startGeocode(root.geocodeGeneration, name);
+    }
+
+    function startGeocode(generation, query) {
+        // Never start a superseded generation; keep pending so a later exit can re-run latest.
+        if (!root.geocodeIdentityMatches(generation))
+            return;
+        if (String(query || "").length === 0)
+            return;
+        if (geocodeProcess.running) {
+            root.geocodePending = true;
+            root.geocodePendingQuery = String(query || "");
+            return;
+        }
+
+        root.geocodePending = false;
+        root.geocodePendingQuery = "";
+        root.geocodeInFlightGeneration = generation;
+        root.geocodeInFlightQuery = String(query || "");
+        // Freeze command args at start so a later searchLocations cannot rebind mid-flight.
+        geocodeProcess.command = root.curlCommand(root.geocodeUrl(root.geocodeInFlightQuery));
+        root.locationSearching = true;
+        root.locationSearchQuery = root.geocodeInFlightQuery;
+        root.locationSearchError = "";
         geocodeProcess.running = true;
+        if (!geocodeProcess.running) {
+            // Failed to start: finish with the frozen generation so loading cannot stick.
+            root.finishGeocodeRequest(1, "", generation);
+        }
+    }
+
+    function schedulePendingGeocode() {
+        // Defer restart until after Process exit handling settles.
+        Qt.callLater(function() {
+            if (!root.geocodePending)
+                return;
+            if (geocodeProcess.running)
+                return;
+            var query = root.geocodePendingQuery;
+            root.geocodePending = false;
+            root.geocodePendingQuery = "";
+            root.startGeocode(root.geocodeGeneration, query);
+        });
     }
 
     function selectSearchResult(index) {
@@ -365,13 +441,38 @@ Item {
         return true;
     }
 
-    function finishGeocodeRequest(code, text) {
+    function finishGeocodeRequest(code, text, generation) {
+        // Generation is mandatory: missing, already-consumed, or stale never write search state.
+        // onExited freezes the in-flight generation before any pending restart can overwrite it.
+        if (generation === undefined || generation === null) {
+            root.schedulePendingGeocode();
+            return;
+        }
+        var gen = generation;
+
+        // Must still own the in-flight slot (rejects double onExited and foreign finishes).
+        if (Number(gen) !== Number(root.geocodeInFlightGeneration)) {
+            root.schedulePendingGeocode();
+            return;
+        }
+
+        // Consume in-flight identity before latest-generation gate so a deferred
+        // pending start cannot be attributed to this exit.
+        root.geocodeInFlightGeneration = 0;
+        root.geocodeInFlightQuery = "";
+
+        if (!root.geocodeIdentityMatches(gen)) {
+            root.schedulePendingGeocode();
+            return;
+        }
+
         root.locationSearching = false;
 
         if (code !== 0) {
             root.locationSearchResults = [];
             root.locationSearchError = "城市搜索失败";
             root.locationSearchFailed(root.locationSearchError);
+            root.schedulePendingGeocode();
             return;
         }
 
@@ -382,6 +483,7 @@ Item {
             if (results.length === 0) {
                 root.locationSearchError = "未找到匹配城市，可尝试拼音或更完整地名";
                 root.locationSearchFailed(root.locationSearchError);
+                root.schedulePendingGeocode();
                 return;
             }
             root.locationSearchError = "";
@@ -391,6 +493,8 @@ Item {
             root.locationSearchError = "城市搜索解析失败";
             root.locationSearchFailed(root.locationSearchError);
         }
+
+        root.schedulePendingGeocode();
     }
 
     function refresh() {
@@ -817,7 +921,10 @@ Item {
             id: geocodeOut
         }
         onExited: function(code, exitStatus) {
-            root.finishGeocodeRequest(code, geocodeOut.text);
+            // Freeze generation at exit: pending restart must not rebind this completion.
+            var generation = root.geocodeInFlightGeneration;
+            var text = geocodeOut.text;
+            root.finishGeocodeRequest(code, text, generation);
         }
     }
 

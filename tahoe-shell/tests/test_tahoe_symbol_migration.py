@@ -1,4 +1,4 @@
-"""T13: Material Icons → TahoeSymbol migration governance."""
+"""TahoeSymbol rendering and icon-system regression coverage."""
 
 from __future__ import annotations
 
@@ -6,55 +6,33 @@ import re
 import unittest
 from pathlib import Path
 
+from fontTools.ttLib import TTFont
+
 ROOT = Path(__file__).resolve().parents[1]
 COMPONENTS = ROOT / "components"
 ASSETS_SYMBOLS = ROOT / "assets" / "icons" / "symbols"
-SHELL_QML = ROOT / "shell.qml"
 SYMBOL_QML = COMPONENTS / "TahoeSymbol.qml"
 SYMBOLS_JS = COMPONENTS / "TahoeSymbols.js"
 
 
 class TahoeSymbolMigrationTests(unittest.TestCase):
-    def test_no_material_icons_font_references_in_shell(self) -> None:
-        """Acceptance: grep Material Icons over shell runtime sources is empty."""
-        offenders: list[str] = []
-        for path in ROOT.rglob("*"):
-            if path.suffix not in {".qml", ".js"}:
-                continue
-            if "docs" in path.parts or "tests" in path.parts:
-                continue
-            # Registry comment may mention the source font; that's documentation only.
-            if path.name == "TahoeSymbols.js":
-                text = path.read_text(encoding="utf-8")
-                # No live FontLoader / family string.
-                self.assertNotIn('font.family: "Material Icons"', text)
-                self.assertNotIn("FontLoader", text)
-                continue
-            text = path.read_text(encoding="utf-8", errors="replace")
-            if "Material Icons" in text or "MaterialIcons" in text:
-                offenders.append(str(path.relative_to(ROOT)))
-            if "iconFont" in text:
-                offenders.append(f"{path.relative_to(ROOT)}:iconFont")
-        self.assertEqual(offenders, [], f"Material Icons residual: {offenders}")
-
-    def test_fontloader_and_ttf_removed(self) -> None:
-        shell = SHELL_QML.read_text(encoding="utf-8")
-        self.assertNotIn("FontLoader", shell)
-        self.assertNotIn("MaterialIconsRound", shell)
+    def test_bundled_font_is_restored(self) -> None:
         fonts_dir = ROOT / "assets" / "fonts"
-        self.assertFalse(
-            (fonts_dir / "MaterialIconsRound.ttf").exists(),
-            "Material Icons TTF must be removed after migration",
-        )
+        font = fonts_dir / "MaterialIconsRound.ttf"
+        self.assertTrue(font.exists(), "the icon font must ship with the shell")
+        self.assertGreater(font.stat().st_size, 300_000)
 
     def test_tahoe_symbol_component_exists_with_discipline(self) -> None:
         text = SYMBOL_QML.read_text(encoding="utf-8")
-        # Tint via QtQuick.Effects MultiEffect (not Qt5Compat ColorOverlay —
-        # GraphicalEffects can fail type registration under quickshell reload).
-        self.assertIn("MultiEffect", text)
-        self.assertIn("colorization", text)
-        self.assertNotIn("ColorOverlay", text)
-        self.assertNotIn("import Qt5Compat", text)
+        self.assertIn("FontLoader", text)
+        self.assertIn("MaterialIconsRound.ttf", text)
+        self.assertIn("Symbols.glyph(root.name)", text)
+        self.assertIn("Text.QtRendering", text)
+        self.assertIn("horizontalAlignment: Text.AlignHCenter", text)
+        self.assertIn("verticalAlignment: Text.AlignVCenter", text)
+        self.assertIn("property real opticalOffsetY: 1", text)
+        self.assertIn("anchors.verticalCenterOffset: root.opticalOffsetY", text)
+        self.assertIn('source: root.usesFontGlyph ? "" : root.resolvedSource', text)
         self.assertIn("sourceSize", text)
         self.assertIn("asynchronous", text)
         self.assertIn("iconPath", text)
@@ -70,6 +48,7 @@ class TahoeSymbolMigrationTests(unittest.TestCase):
         self.assertIn("CodepointToName", js)
         self.assertIn("fileName", js)
         self.assertIn("resolveName", js)
+        self.assertIn("function glyph(value)", js)
         # Spot-check critical UI symbols exist on disk
         for name in ("wifi", "search", "notifications", "close", "check", "settings", "cloud"):
             self.assertTrue((ASSETS_SYMBOLS / f"{name}.png").exists(), name)
@@ -82,15 +61,49 @@ class TahoeSymbolMigrationTests(unittest.TestCase):
             hits += text.count("TahoeSymbol")
         self.assertGreaterEqual(hits, 40, f"expected widespread TahoeSymbol usage, got {hits}")
 
-    def test_no_font_family_material_in_qml(self) -> None:
+    def test_all_runtime_material_codepoints_exist_in_bundled_font(self) -> None:
+        font_path = ROOT / "assets" / "fonts" / "MaterialIconsRound.ttf"
+        font = TTFont(font_path)
+        cmap = font.getBestCmap()
+        referenced: set[int] = set()
+        for path in COMPONENTS.rglob("*.qml"):
+            text = path.read_text(encoding="utf-8", errors="replace")
+            referenced.update(
+                int(value, 16)
+                for value in re.findall(r"\\u([ef][0-9a-fA-F]{3})", text)
+            )
+        missing = sorted(codepoint for codepoint in referenced if codepoint not in cmap)
+        self.assertGreater(len(referenced), 100)
+        self.assertEqual(missing, [], f"missing icon codepoints: {[hex(value) for value in missing]}")
+
+    def test_no_direct_material_font_rendering_outside_symbol_component(self) -> None:
         pattern = re.compile(r'font\.family:\s*["\']Material')
         offenders = []
         for path in ROOT.rglob("*.qml"):
             if "docs" in path.parts:
                 continue
+            if path == SYMBOL_QML:
+                continue
             if pattern.search(path.read_text(encoding="utf-8", errors="replace")):
                 offenders.append(str(path.relative_to(ROOT)))
         self.assertEqual(offenders, [])
+
+    def test_dynamic_island_osd_width_accounts_for_both_gaps(self) -> None:
+        content = (COMPONENTS / "DynamicIslandContent.qml").read_text(encoding="utf-8")
+        self.assertIn("id: osdIcon", content)
+        self.assertIn("id: osdRing", content)
+        self.assertIn(
+            "parent.width - osdIcon.width - osdRing.width - (osdRow.spacing * 2)",
+            content,
+        )
+
+    def test_popup_icon_alignment_and_topbar_battery_scale(self) -> None:
+        clipboard = (COMPONENTS / "ClipboardPopup.qml").read_text(encoding="utf-8")
+        topbar = (COMPONENTS / "TopBar.qml").read_text(encoding="utf-8")
+        self.assertIn("Layout.topMargin: 2", clipboard)
+        self.assertIn("Layout.preferredWidth: 24", topbar)
+        self.assertIn("width: 20", topbar)
+        self.assertIn("height: 11", topbar)
 
 
 if __name__ == "__main__":

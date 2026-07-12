@@ -420,6 +420,28 @@ function isKnown(value) {
     return resolveName(value).length > 0;
 }
 
+function glyph(value) {
+    var key = normalizeKey(value);
+    if (key.length === 0)
+        return "";
+
+    var hex = hexFromValue(key);
+    if (hex.length === 0) {
+        var name = resolveName(key);
+        for (var candidate in HexToName) {
+            if (Object.prototype.hasOwnProperty.call(HexToName, candidate)
+                    && HexToName[candidate] === name) {
+                hex = candidate;
+                break;
+            }
+        }
+    }
+
+    if (hex.length === 0)
+        return "";
+    return String.fromCharCode(parseInt(hex, 16));
+}
+
 // Backward-compatible aliases used by older call sites / tests.
 var CodepointToName = HexToName;
 function nameFromCodepoint(code) {

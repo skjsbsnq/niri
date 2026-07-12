@@ -266,6 +266,7 @@ PanelWindow {
                 TahoeSymbol {
                     Layout.preferredWidth: 20
                     Layout.alignment: Qt.AlignTop
+                    Layout.topMargin: 2
                     name: row.entry ? row.entry.icon : "\ue14f"
                     color: "#731d1d1f"
                     size: 17

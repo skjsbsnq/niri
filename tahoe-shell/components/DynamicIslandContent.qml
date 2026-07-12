@@ -231,13 +231,14 @@ Item {
         }
 
         TahoeSymbol {
+            id: osdIcon
             name: root.iconCode.length > 0 ? root.iconCode : "\ue050"
             color: root.textPrimary
             size: 20
         }
 
         Item {
-            width: Math.max(1, parent.width - 22 - 34)
+            width: Math.max(1, parent.width - osdIcon.width - osdRing.width - (osdRow.spacing * 2))
             height: parent.height
 
             Text {
@@ -254,6 +255,7 @@ Item {
         }
 
         Item {
+            id: osdRing
             width: 30
             height: 30
             anchors.verticalCenter: parent.verticalCenter

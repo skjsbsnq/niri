@@ -5,17 +5,10 @@ import QtQuick.Effects
 import Quickshell
 import "TahoeSymbols.js" as Symbols
 
-// Unified monochrome symbol icon (T13).
-// Source is a pre-rendered white PNG under assets/icons/symbols/; tint via
-// MultiEffect colorization (QtQuick.Effects; avoids GraphicalEffects plugin).
-// `name` accepts a semantic name ("wifi") or a legacy Material codepoint
-// string ("\ue63e") — both resolve through TahoeSymbols.js.
-// Path resolution prefers appsService.iconPath("symbols", file) when an
-// Apps service is provided (rules §3.1 iconPath entry); otherwise falls
-// back to Quickshell.shellPath under assets/icons/symbols/.
-//
-// Memory discipline (rules §4.3): sourceSize is clamped to ≤128 and defaults
-// to 2× display size (retina). Always asynchronous.
+// Unified monochrome symbol icon. Material private-use codepoints are rendered
+// directly from the bundled font so every call site shares the font's metrics,
+// baseline and optical size. Explicit bitmap sources and the few PNG-only
+// shortcut symbols retain the image fallback.
 Item {
     id: root
 
@@ -33,7 +26,13 @@ Item {
     property bool asynchronous: true
     property bool mipmap: true
     property int fillMode: Image.PreserveAspectFit
+    // Material's font line box sits slightly above the optical center at small
+    // sizes. Keep one shared correction so popup and top-bar glyphs agree.
+    property real opticalOffsetX: 0
+    property real opticalOffsetY: 1
 
+    readonly property string glyph: Symbols.glyph(root.name)
+    readonly property bool usesFontGlyph: root.source.length === 0 && root.glyph.length > 0
     readonly property string resolvedName: Symbols.resolveName(root.name)
     readonly property string resolvedFile: {
         if (root.source.length > 0)
@@ -64,13 +63,37 @@ Item {
     width: implicitWidth
     height: implicitHeight
 
+    FontLoader {
+        id: materialIconsFont
+        source: Quickshell.shellPath("assets/fonts/MaterialIconsRound.ttf")
+    }
+
+    Text {
+        anchors.centerIn: parent
+        anchors.horizontalCenterOffset: root.opticalOffsetX
+        anchors.verticalCenterOffset: root.opticalOffsetY
+        width: root.displaySize
+        height: root.displaySize
+        text: root.glyph
+        color: root.color
+        font.family: materialIconsFont.name
+        font.pixelSize: Math.max(1, Math.round(root.displaySize))
+        font.weight: Font.Normal
+        horizontalAlignment: Text.AlignHCenter
+        verticalAlignment: Text.AlignVCenter
+        renderType: Text.QtRendering
+        visible: root.usesFontGlyph && materialIconsFont.status === FontLoader.Ready
+    }
+
     Image {
         id: baseImage
 
         anchors.centerIn: parent
+        anchors.horizontalCenterOffset: root.opticalOffsetX
+        anchors.verticalCenterOffset: root.opticalOffsetY
         width: root.displaySize > 0 ? root.displaySize : parent.width
         height: root.displaySize > 0 ? root.displaySize : parent.height
-        source: root.resolvedSource
+        source: root.usesFontGlyph ? "" : root.resolvedSource
         sourceSize.width: root.pixelBudget
         sourceSize.height: root.pixelBudget
         fillMode: root.fillMode
@@ -81,13 +104,13 @@ Item {
         cache: true
     }
 
-    // Tint white glyph PNGs. colorization=1 fully replaces luminance with
-    // colorizationColor while preserving the source alpha mask.
     MultiEffect {
         anchors.fill: baseImage
         source: baseImage
         colorization: 1.0
         colorizationColor: root.color
-        visible: baseImage.status === Image.Ready && root.resolvedSource.length > 0
+        visible: !root.usesFontGlyph
+            && baseImage.status === Image.Ready
+            && root.resolvedSource.length > 0
     }
 }

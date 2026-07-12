@@ -564,16 +564,16 @@ PanelWindow {
                     }
 
                     Item {
-                        Layout.preferredWidth: 20
-                        Layout.preferredHeight: 12
+                        Layout.preferredWidth: 24
+                        Layout.preferredHeight: 14
                         Layout.alignment: Qt.AlignVCenter
 
                         Rectangle {
                             id: batteryOutline
                             x: 0
-                            y: 2
-                            width: 17
-                            height: 9
+                            y: 1.5
+                            width: 20
+                            height: 11
                             radius: 3
                             color: "transparent"
                             border.color: root.statusTextFaint
@@ -592,10 +592,10 @@ PanelWindow {
                         }
 
                         Rectangle {
-                            x: 18
+                            x: 21
                             y: 5
                             width: 2
-                            height: 3
+                            height: 4
                             radius: 1
                             color: root.statusTextFaint
                         }

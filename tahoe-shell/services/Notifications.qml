@@ -82,6 +82,10 @@ Item {
     property bool stateLoaded: false
     // id → absolute expire deadline (ms since epoch). Critical ids are absent.
     property var expireMap: ({})
+    // Live Notification property updates (replace-id) do not rewrite activeModel.
+    // Narrow identity signal for consumers (Dynamic Island); carries only the
+    // stable id — never a second snapshot or copied model.
+    signal notificationUpdated(int id)
 
     FileView {
         id: notificationStateFile
@@ -123,6 +127,37 @@ Item {
     readonly property int defaultExpireMs: 5000
     readonly property int maxExpireMs: 30000
 
+    function emitNotificationUpdated(id) {
+        var nid = Number(id);
+        if (!isFinite(nid))
+            return;
+        root.notificationUpdated(nid);
+    }
+
+    function wireNotificationPropertyUpdates(notification, id) {
+        // replace-id mutates the same live object without re-emitting
+        // NotificationServer.notification or rewriting activeModel.
+        // Forward property changes as a narrow identity event for island.
+        if (!notification)
+            return;
+
+        try {
+            notification.summaryChanged.connect(function() {
+                root.emitNotificationUpdated(id);
+            });
+        } catch (e1) {}
+        try {
+            notification.bodyChanged.connect(function() {
+                root.emitNotificationUpdated(id);
+            });
+        } catch (e2) {}
+        try {
+            notification.appNameChanged.connect(function() {
+                root.emitNotificationUpdated(id);
+            });
+        } catch (e3) {}
+    }
+
     function handleIncoming(notification) {
         if (!notification)
             return;
@@ -140,6 +175,7 @@ Item {
             root.handleClosed(id);
         });
 
+        root.wireNotificationPropertyUpdates(notification, id);
         root.pushHistory(notification);
 
         if (root.dndEnabled) {

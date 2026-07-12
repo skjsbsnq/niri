@@ -35,9 +35,13 @@ Item {
     property real transientProgress: -1
     property string transientIconCode: ""
     property bool userInteracting: false
-    property int observedNotificationCount: 0
-    property int lastSeenNotificationId: -1
-    property var pendingNotificationEntry: null
+    // Stable notification identity tracking (Task 09).
+    // seenNotificationIds: IDs already observed in activeModel (set membership).
+    // pendingNotificationIds: FIFO of IDs waiting to present (replaces scalar pending entry).
+    // displayingNotificationId: ID currently shown as transient_notification (-1 if none).
+    property var seenNotificationIds: ({})
+    property var pendingNotificationIds: []
+    property int displayingNotificationId: -1
     property real lastVolume: 0
     property bool lastMuted: false
     property real lastBrightness: 1.0
@@ -300,7 +304,8 @@ Item {
 
         transientTimer.stop();
         swipeSettleTimer.stop();
-        root.pendingNotificationEntry = null;
+        root.clearPendingNotificationIds();
+        root.displayingNotificationId = -1;
         root.pendingOsd = null;
         root.hoverExpanded = false;
         root.userInteracting = false;
@@ -329,7 +334,8 @@ Item {
 
     function reset() {
         transientTimer.stop();
-        root.pendingNotificationEntry = null;
+        root.clearPendingNotificationIds();
+        root.displayingNotificationId = -1;
         root.pendingOsd = null;
         root.hoverExpanded = false;
         root.preferMediaWhenAvailable = true;
@@ -425,7 +431,13 @@ Item {
    }
 
    function showTransientNotification(summary, body, appName) {
-        queueOrShowNotificationEntry({
+        // Manual/smoke path: no stable Notifications model id. Present as a
+        // one-shot transient without enqueueing into the identity FIFO.
+        if (!root.islandEnabled || notificationsDndEnabled())
+            return;
+        if (blocksTransientNotification())
+            return;
+        presentNotificationEntry({
             "id": -1,
             "summary": sanitizeNotificationText(summary, ""),
             "body": sanitizeNotificationText(body, ""),
@@ -678,12 +690,19 @@ Item {
     }
 
     function resetNotificationTracking() {
+        // Seed seen set from current activeModel without enqueueing history as new.
+        var seen = {};
         var list = root.notificationsService ? root.notificationsService.activeModel : [];
-        root.observedNotificationCount = list ? list.length : 0;
-        root.lastSeenNotificationId = root.observedNotificationCount > 0
-            ? notificationId(list[root.observedNotificationCount - 1])
-            : -1;
-        root.pendingNotificationEntry = null;
+        if (list) {
+            for (var i = 0; i < list.length; i++) {
+                var id = notificationId(list[i]);
+                if (id >= 0)
+                    seen[String(id)] = true;
+            }
+        }
+        root.seenNotificationIds = seen;
+        root.clearPendingNotificationIds();
+        root.displayingNotificationId = -1;
     }
 
     function notificationId(notification) {
@@ -698,29 +717,135 @@ Item {
         }
     }
 
+    function clearPendingNotificationIds() {
+        root.pendingNotificationIds = [];
+    }
+
+    function pendingNotificationIdKey(id) {
+        return String(Number(id));
+    }
+
+    function isPendingNotificationId(id) {
+        var nid = Number(id);
+        if (!isFinite(nid) || nid < 0)
+            return false;
+        var key = pendingNotificationIdKey(nid);
+        var queue = root.pendingNotificationIds || [];
+        for (var i = 0; i < queue.length; i++) {
+            if (pendingNotificationIdKey(queue[i]) === key)
+                return true;
+        }
+        return false;
+    }
+
+    function enqueuePendingNotificationId(id) {
+        var nid = Number(id);
+        if (!isFinite(nid) || nid < 0)
+            return;
+        if (isPendingNotificationId(nid))
+            return;
+        if (Number(root.displayingNotificationId) === nid)
+            return;
+        root.pendingNotificationIds = (root.pendingNotificationIds || []).concat([nid]);
+    }
+
+    function removePendingNotificationId(id) {
+        var key = pendingNotificationIdKey(id);
+        var queue = root.pendingNotificationIds || [];
+        var next = [];
+        for (var i = 0; i < queue.length; i++) {
+            if (pendingNotificationIdKey(queue[i]) !== key)
+                next.push(queue[i]);
+        }
+        if (next.length !== queue.length)
+            root.pendingNotificationIds = next;
+    }
+
+    function findLiveNotificationById(id) {
+        var nid = Number(id);
+        if (!isFinite(nid) || nid < 0)
+            return null;
+        var list = root.notificationsService ? root.notificationsService.activeModel : [];
+        if (!list)
+            return null;
+        for (var i = 0; i < list.length; i++) {
+            if (notificationId(list[i]) === nid)
+                return list[i];
+        }
+        return null;
+    }
+
     function handleNotificationsChanged() {
         var list = root.notificationsService ? root.notificationsService.activeModel : [];
-        var nextCount = list ? list.length : 0;
-        if (nextCount <= root.observedNotificationCount) {
-            root.observedNotificationCount = nextCount;
+        if (!list)
+            list = [];
+
+        var nextSeen = {};
+        var newIds = [];
+        for (var i = 0; i < list.length; i++) {
+            var id = notificationId(list[i]);
+            if (id < 0)
+                continue;
+            var key = String(id);
+            nextSeen[key] = true;
+            if (!root.seenNotificationIds || !root.seenNotificationIds[key])
+                newIds.push(id);
+        }
+
+        // Drop pending IDs that left the model (dismissed / expired).
+        var queue = root.pendingNotificationIds || [];
+        var kept = [];
+        for (var q = 0; q < queue.length; q++) {
+            var qid = Number(queue[q]);
+            if (isFinite(qid) && nextSeen[String(qid)])
+                kept.push(qid);
+        }
+        if (kept.length !== queue.length)
+            root.pendingNotificationIds = kept;
+
+        // If the currently displayed notification left the model, clear display id
+        // (timer/state may still be finishing; do not force-hide unrelated transients).
+        if (root.displayingNotificationId >= 0
+                && !nextSeen[String(root.displayingNotificationId)])
+            root.displayingNotificationId = -1;
+
+        root.seenNotificationIds = nextSeen;
+
+        if (notificationsDndEnabled() || !root.islandEnabled) {
+            root.clearPendingNotificationIds();
             return;
         }
 
-        var notification = list[nextCount - 1];
-        root.observedNotificationCount = nextCount;
-        handleIncomingNotification(notification);
+        // Enqueue newly appeared IDs in activeModel append order (FIFO).
+        for (var n = 0; n < newIds.length; n++)
+            enqueuePendingNotificationId(newIds[n]);
+
+        maybeShowPendingNotification();
     }
 
-    function handleIncomingNotification(notification) {
-        if (!notification || notificationsDndEnabled())
+    function handleNotificationUpdated(id) {
+        // replace-id path: live object property change, no activeModel rewrite.
+        var nid = Number(id);
+        if (!isFinite(nid) || nid < 0)
+            return;
+        if (notificationsDndEnabled() || !root.islandEnabled)
             return;
 
-        var id = notificationId(notification);
-        if (id >= 0 && id === root.lastSeenNotificationId)
+        // Currently displaying this id → refresh text in place, no re-entry animation/timer.
+        if (Number(root.displayingNotificationId) === nid
+                && root.state === "transient_notification") {
+            var live = findLiveNotificationById(nid);
+            if (!live)
+                return;
+            applyNotificationEntryText(notificationEntry(live));
+            return;
+        }
+
+        // Queued: keep position; dequeue will read latest live content.
+        if (isPendingNotificationId(nid))
             return;
 
-        root.lastSeenNotificationId = id;
-        queueOrShowNotificationEntry(notificationEntry(notification));
+        // Not displaying and not queued → do not re-popup as a new notification.
     }
 
     function notificationEntry(notification) {
@@ -742,12 +867,38 @@ Item {
         };
     }
 
+    function applyNotificationEntryText(entry) {
+        // In-place text update for replace-id while the same id is displayed.
+        // Does not restart transientTimer or reassign forcedState.
+        if (!entry)
+            return;
+
+        var title = sanitizeNotificationText(entry.summary, "通知");
+        var detail = sanitizeNotificationText(entry.body, "");
+        var appName = sanitizeNotificationText(entry.appName, "");
+        if (detail.length === 0 && appName.length > 0 && appName !== title)
+            detail = appName;
+        if (detail === title)
+            detail = "";
+
+        root.transientDisplayText = title;
+        root.transientSecondaryText = detail;
+        root.transientProgress = -1;
+        root.transientIconCode = "\ue7f4";
+    }
+
     function notificationsDndEnabled() {
         return !!(root.notificationsService && root.notificationsService.dndEnabled);
     }
 
    function blocksTransientNotification() {
-       return root.expanded || root.userInteracting;
+       // Expanded / user interacting, or already showing a notification transient
+       // (one at a time; queue drains after hide).
+       if (root.expanded || root.userInteracting)
+           return true;
+       if (root.state === "transient_notification")
+           return true;
+       return false;
    }
 
     function blocksTransientOsd() {
@@ -865,35 +1016,39 @@ Item {
         });
     }
 
-   function queueOrShowNotificationEntry(entry) {
-        if (!root.islandEnabled) {
-            root.pendingNotificationEntry = null;
-            return;
-        }
-
-        if (!entry || notificationsDndEnabled())
-            return;
-
-        if (blocksTransientNotification()) {
-            root.pendingNotificationEntry = entry;
-            return;
-        }
-
-        presentNotificationEntry(entry);
-    }
-
     function maybeShowPendingNotification() {
         if (!root.islandEnabled) {
-            root.pendingNotificationEntry = null;
+            root.clearPendingNotificationIds();
             return;
         }
 
-        if (!root.pendingNotificationEntry || blocksTransientNotification() || notificationsDndEnabled())
+        if (notificationsDndEnabled()) {
+            root.clearPendingNotificationIds();
+            return;
+        }
+
+        if (blocksTransientNotification())
             return;
 
-        var entry = root.pendingNotificationEntry;
-        root.pendingNotificationEntry = null;
-        presentNotificationEntry(entry);
+        // Drain FIFO: skip IDs whose live object is gone; present first still-alive.
+        while ((root.pendingNotificationIds || []).length > 0) {
+            if (blocksTransientNotification())
+                return;
+
+            var queue = root.pendingNotificationIds || [];
+            var nextId = Number(queue[0]);
+            root.pendingNotificationIds = queue.slice(1);
+
+            if (!isFinite(nextId) || nextId < 0)
+                continue;
+
+            var live = findLiveNotificationById(nextId);
+            if (!live)
+                continue;
+
+            presentNotificationEntry(notificationEntry(live));
+            return;
+        }
     }
 
     function presentNotificationEntry(entry) {
@@ -908,16 +1063,21 @@ Item {
         if (detail === title)
             detail = "";
 
+        var nid = Number(entry.id);
+        root.displayingNotificationId = (isFinite(nid) && nid >= 0) ? nid : -1;
         showTransient("transient_notification", title, detail, -1, "\ue7f4", root.notificationHideMs);
     }
 
     function handleDndChanged() {
-        if (!notificationsDndEnabled())
+        if (!notificationsDndEnabled()) {
+            maybeShowPendingNotification();
             return;
+        }
 
-        root.pendingNotificationEntry = null;
+        root.clearPendingNotificationIds();
         if (root.state === "transient_notification") {
             transientTimer.stop();
+            root.displayingNotificationId = -1;
             root.forcedState = "";
             clearTransientFields();
         }
@@ -999,7 +1159,8 @@ Item {
             "iconCode=" + root.iconCode,
             "targetScreenName=" + root.targetScreenName,
             "expanded=" + root.expanded,
-            "pendingNotification=" + !!root.pendingNotificationEntry,
+            "pendingNotificationIds=" + (root.pendingNotificationIds ? root.pendingNotificationIds.length : 0),
+            "displayingNotificationId=" + root.displayingNotificationId,
             "swipeStartProgress=" + root.swipeStartProgress,
             "swipeProgress=" + root.swipeProgress,
             "swipePreviewWidth=" + root.swipePreviewWidth,
@@ -1014,6 +1175,10 @@ Item {
 
         function onActiveModelChanged() {
             root.handleNotificationsChanged();
+        }
+
+        function onNotificationUpdated(id) {
+            root.handleNotificationUpdated(id);
         }
 
         function onDndEnabledChanged() {
@@ -1064,8 +1229,11 @@ Item {
         interval: root.smokeTransientHideMs
         repeat: false
         onTriggered: {
+            if (root.state === "transient_notification")
+                root.displayingNotificationId = -1;
             root.clearTransientFields();
             root.forcedState = "";
+            root.maybeShowPendingNotification();
         }
     }
 

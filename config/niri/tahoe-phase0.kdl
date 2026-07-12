@@ -548,14 +548,15 @@ layer-rule {
     }
 }
 
-// Top-bar status popups (battery/wifi/fan/clipboard) keep Control Center's full
-// top edge-reveal: their layer-shell anchor is the popup's left edge, not the
+// Top-bar status popups and tray menus keep Control Center's full top
+// edge-reveal: their layer-shell anchor is the popup's left edge, not the
 // clicked button, so popin/pop-slide from anchor would stretch glass wrong.
 layer-rule {
     match namespace="^tahoe-battery-popup$"
     match namespace="^tahoe-wifi-popup$"
     match namespace="^tahoe-fan-popup$"
     match namespace="^tahoe-clipboard-popup$"
+    match namespace="^tahoe-tray-menu$"
 
     animations {
         layer-open {
@@ -581,13 +582,12 @@ layer-rule {
     }
 }
 
-// T21/T22: menus use pop-slide (scale + 4px edge travel) with origin "pointer"
-// so they grow from the click that opened them (seat pointer at map time; no
-// new protocol). Falls back to center if pointer location is unavailable.
+// T21/T22: app and shell menus use pop-slide (scale + 4px edge travel) with
+// origin "pointer" so they grow from the click that opened them (seat pointer
+// at map time; no new protocol). Falls back to center if unavailable.
 layer-rule {
     match namespace="^tahoe-menu-popup$"
     match namespace="^tahoe-application-menu$"
-    match namespace="^tahoe-tray-menu$"
     match namespace="^tahoe-process-menu$"
     match namespace="^tahoe-dock-app-menu$"
     match namespace="^tahoe-dock-window-menu$"

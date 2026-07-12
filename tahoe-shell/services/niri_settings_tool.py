@@ -813,19 +813,19 @@ LAYER_PROFILE_GROUPS = {
     "notification_center": ("tahoe-notification-center",),
     "left_sidebar": ("tahoe-left-sidebar",),
     "spotlight": ("tahoe-spotlight",),
-    # T04-fix2 / T21: status popups stay edge-reveal; all menus share one
-    # pop-slide layer-rule (pointer origin) so the profile writer finds exactly
-    # one block whose namespace set equals this tuple.
+    # T04-fix2 / T21: status popups and tray menus stay edge-reveal; app and
+    # shell menus share one pop-slide layer-rule (pointer origin). Keep these
+    # tuples equal to the namespace sets of their animation rules.
     "small_popup": (
         "tahoe-battery-popup",
         "tahoe-wifi-popup",
         "tahoe-fan-popup",
         "tahoe-clipboard-popup",
+        "tahoe-tray-menu",
     ),
     "menu": (
         "tahoe-menu-popup",
         "tahoe-application-menu",
-        "tahoe-tray-menu",
         "tahoe-process-menu",
         "tahoe-dock-app-menu",
         "tahoe-dock-window-menu",

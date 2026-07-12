@@ -13,19 +13,19 @@ LAYER_TESTS = REPO / "niri/src/tests/layer_shell.rs"
 WINDOW_BUTTON = REPO / "tahoe-shell/components/WindowButton.qml"
 DOCK_MINIMIZED_WINDOW = REPO / "tahoe-shell/components/DockMinimizedWindow.qml"
 
-# Status popups keep full-surface top edge-reveal (T04-fix2). Menus moved to
-# pop-slide in T21 and are checked separately.
+# Status popups and tray menus keep full-surface top edge-reveal (T04-fix2).
+# App and shell menus use pop-slide and are checked separately.
 TOPBAR_STATUS_POPUP_NAMESPACES = {
     "tahoe-battery-popup",
     "tahoe-wifi-popup",
     "tahoe-fan-popup",
     "tahoe-clipboard-popup",
+    "tahoe-tray-menu",
 }
 
 TOPBAR_MENU_NAMESPACES = {
     "tahoe-menu-popup",
     "tahoe-application-menu",
-    "tahoe-tray-menu",
 }
 
 DOCK_MENU_NAMESPACES = {
@@ -165,7 +165,7 @@ class EdgeRevealSemanticsTests(unittest.TestCase):
         self.assertIn("layer_close_edge_reveal_moves_full_surface_extent", text)
         self.assertIn("should fully retract that surface", text)
 
-    def test_topbar_status_popups_share_top_edge_reveal_rule(self) -> None:
+    def test_topbar_status_popups_and_tray_share_top_edge_reveal_rule(self) -> None:
         text = CONFIG.read_text(encoding="utf-8")
         layer_rules = extract_blocks(text, r"(?m)^\s*layer-rule\s*\{")
         popup_animation_rules = [
@@ -191,7 +191,7 @@ class EdgeRevealSemanticsTests(unittest.TestCase):
                     self.assertNotIn(forbidden, block)
 
     def test_menus_use_pop_slide_with_pointer_origin(self) -> None:
-        """T21/T22: all menus share pop-slide + origin pointer + 4px drop."""
+        """T21/T22: app and shell menus share pointer pop-slide + 4px drop."""
         text = CONFIG.read_text(encoding="utf-8")
         layer_rules = extract_blocks(text, r"(?m)^\s*layer-rule\s*\{")
         expected = TOPBAR_MENU_NAMESPACES | DOCK_MENU_NAMESPACES | {PROCESS_MENU_NAMESPACE}

@@ -180,7 +180,6 @@ Item {
             MediaControlButton {
                 size: root.controlSize
                 hit: root.controlHit
-                enabled: root.canPrev
                 controlEnabled: root.canPrev
                 glyph: "prev"
                 primaryColor: root.textPrimary
@@ -196,7 +195,6 @@ Item {
             MediaControlButton {
                 size: root.controlSize
                 hit: root.controlHit
-                enabled: root.canPlayPause
                 controlEnabled: root.canPlayPause
                 glyph: root.isPlaying ? "pause" : "play"
                 primaryColor: root.textPrimary
@@ -212,7 +210,6 @@ Item {
             MediaControlButton {
                 size: root.controlSize
                 hit: root.controlHit
-                enabled: root.canNext
                 controlEnabled: root.canNext
                 glyph: "next"
                 primaryColor: root.textPrimary
@@ -445,11 +442,17 @@ Item {
         MouseArea {
             id: mouse
             anchors.fill: parent
-            enabled: btn.controlEnabled
+            // Always enabled so the hit rect absorbs presses when the control
+            // is disabled (prevents fall-through to capsule click/swipe).
+            // Actions and interacting still require controlEnabled via begin.
+            enabled: true
             preventStealing: true
+            cursorShape: Qt.PointingHandCursor
             onPressed: function(mouseEvent) {
-                if (btn.beginInteraction())
-                    mouseEvent.accepted = true;
+                // beginInteraction is a no-op when disabled; always accept so
+                // the event does not fall through to the capsule MouseArea.
+                btn.beginInteraction();
+                mouseEvent.accepted = true;
             }
             onReleased: function(mouseEvent) {
                 btn.endInteraction(false);
@@ -457,11 +460,6 @@ Item {
             }
             onCanceled: {
                 btn.endInteraction(true);
-            }
-            onEnabledChanged: {
-                // Disabling mid-press must not leave interactionActive stuck.
-                if (!enabled)
-                    btn.endInteraction(true);
             }
         }
     }

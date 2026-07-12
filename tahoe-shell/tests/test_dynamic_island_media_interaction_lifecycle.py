@@ -499,7 +499,12 @@ class DynamicIslandMediaInteractionLifecycleTests(unittest.TestCase):
         for handler in media_handlers:
             self.assertIn("setUserInteracting", handler)
 
-    def test_task_does_not_change_capsule_mousearea_z_order(self) -> None:
+    def test_capsule_mousearea_has_no_elevated_z_or_propagate(self) -> None:
+        """01A residual: capsule gesture MA must not use elevate-z / propagate tricks.
+
+        Task 01B may place contentHost above this MouseArea via contentHost.z;
+        the capsule area itself stays default stacking without propagateComposedEvents.
+        """
         text = self.overlay
         content_idx = text.find("id: contentHost")
         mouse_idx = text.find("MouseArea {")

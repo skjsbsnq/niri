@@ -230,9 +230,12 @@ PanelWindow {
 
         // Content layer: scale 0.9→1 on state switch (springBouncy when allowed).
         // Content opacity fade remains inside DynamicIslandContent views.
+        // Stack above the capsule MouseArea so media controls receive hits;
+        // blank capsule regions still fall through to the fill MouseArea below.
         Item {
             id: contentHost
             anchors.fill: parent
+            z: 1
             property string contentKey: root.contentState
             property real contentScale: 1.0
             scale: contentScale

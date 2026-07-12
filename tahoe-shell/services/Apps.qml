@@ -31,7 +31,10 @@ Item {
     property int pinnedRevision: 0
     property int iconRevision: 0
     property int desktopEntriesRevision: 0
-    property int desktopEntriesCount: -1
+    // Lightweight identity+metadata fingerprint owned solely by Apps.
+    // Replaces count-only polling so equal-count swaps and in-place .desktop
+    // edits (Name/Icon/Exec/NoDisplay) rebuild realApplications.
+    property string desktopEntriesFingerprint: ""
     readonly property var pinnedApps: buildPinnedApps(pinnedRevision, desktopEntriesRevision)
     readonly property var launchpadApps: realApplications
 
@@ -54,6 +57,16 @@ Item {
         }
     }
 
+    // DesktopEntries rescans emit applicationsChanged even when membership
+    // count is unchanged (in-place metadata updates, equal-count replace).
+    Connections {
+        target: DesktopEntries
+
+        function onApplicationsChanged() {
+            root.refreshDesktopEntries(false);
+        }
+    }
+
     FileView {
         id: pinnedFile
         path: root.pinnedConfigPath
@@ -71,6 +84,8 @@ Item {
         onLoadFailed: root.loadPinnedState()
     }
 
+    // Recovery poll only. Same fingerprint-gated refresh path as the signal —
+    // not a second competing refresh system.
     Timer {
         id: desktopEntriesRefreshTimer
         interval: 2000
@@ -106,16 +121,55 @@ Item {
         }
     }
 
+    // Stable, order-independent fingerprint of desktop identity and the
+    // metadata fields that affect launchpad UI, search, pinning resolution,
+    // and launch behavior. O(n) field reads only — no full model rebuild.
+    function desktopEntriesFingerprintOf(entries) {
+        var list = Array.isArray(entries) ? entries : [];
+        var parts = [];
+        for (var i = 0; i < list.length; i++) {
+            var app = list[i];
+            if (!app)
+                continue;
+
+            var id = String(app.id || "").trim();
+            var name = String(app.name || "").trim();
+            var genericName = String(app.genericName || "").trim();
+            var icon = String(app.icon || "").trim();
+            var execString = String(app.execString || "").trim();
+            var startupClass = String(app.startupClass || "").trim();
+            var noDisplay = app.noDisplay ? "1" : "0";
+            var command = "";
+            if (app.command && app.command.length > 0)
+                command = String(app.command.join("\u001f"));
+
+            parts.push([
+                id,
+                name,
+                genericName,
+                icon,
+                execString,
+                command,
+                startupClass,
+                noDisplay
+            ].join("\u001e"));
+        }
+
+        parts.sort();
+        return parts.join("\u001d");
+    }
+
     function buildApplications(revision) {
         return desktopEntryValues().filter(isLaunchableApplication).sort(compareApplications);
     }
 
     function refreshDesktopEntries(force) {
-        var count = desktopEntryValues().length;
-        if (!force && count === desktopEntriesCount)
+        var entries = desktopEntryValues();
+        var fingerprint = desktopEntriesFingerprintOf(entries);
+        if (!force && fingerprint === desktopEntriesFingerprint)
             return;
 
-        desktopEntriesCount = count;
+        desktopEntriesFingerprint = fingerprint;
         desktopEntriesRevision += 1;
         bumpPinnedRevision();
     }

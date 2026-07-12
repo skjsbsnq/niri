@@ -35,6 +35,7 @@ Item {
     signal mediaPlayPauseRequested()
     signal mediaNextRequested()
     signal mediaControlPressed()
+    signal mediaControlReleased()
     property int summaryBatteryPercent: 0
     property bool summaryBatteryCharging: false
     property real summaryVolume: 0
@@ -329,6 +330,7 @@ Item {
         onPlayPauseRequested: root.mediaPlayPauseRequested()
         onNextRequested: root.mediaNextRequested()
         onControlPressed: root.mediaControlPressed()
+        onControlReleased: root.mediaControlReleased()
 
         Behavior on opacity {
             NumberAnimation {

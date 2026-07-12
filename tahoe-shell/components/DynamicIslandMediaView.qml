@@ -28,6 +28,7 @@ Item {
     signal playPauseRequested()
     signal nextRequested()
     signal controlPressed()
+    signal controlReleased()
 
     readonly property int badgeSize: 56
     readonly property int controlSize: 26
@@ -188,6 +189,8 @@ Item {
                     if (root.canPrev)
                         root.previousRequested();
                 }
+                onReleased: root.controlReleased()
+                onCanceled: root.controlReleased()
             }
 
             MediaControlButton {
@@ -202,6 +205,8 @@ Item {
                     if (root.canPlayPause)
                         root.playPauseRequested();
                 }
+                onReleased: root.controlReleased()
+                onCanceled: root.controlReleased()
             }
 
             MediaControlButton {
@@ -216,6 +221,8 @@ Item {
                     if (root.canNext)
                         root.nextRequested();
                 }
+                onReleased: root.controlReleased()
+                onCanceled: root.controlReleased()
             }
         }
     }
@@ -323,16 +330,60 @@ Item {
         property string glyph: "play"
         property color primaryColor: "#ffffff"
         property real pressScale: 0.8
+        // Tracks an in-flight pointer grab so release/cancel/destroy stay paired.
+        property bool interactionActive: false
         signal pressed()
+        signal released()
+        signal canceled()
 
         width: hit
         height: hit
-        scale: mouse.pressed ? pressScale : 1
+        scale: interactionActive ? pressScale : 1
 
         // Local exception: press feedback must be shorter than overlay content
         // fades; the component still reuses the Dynamic Island easing token.
         Behavior on scale {
             NumberAnimation { duration: 100; easing.type: IslandMotion.overlayColorEasing }
+        }
+
+        function beginInteraction() {
+            // root.visible is the Content opacity gate; btn.visible is local.
+            if (!btn.controlEnabled || !btn.visible || !root.visible || btn.interactionActive)
+                return false;
+            btn.interactionActive = true;
+            btn.pressed();
+            return true;
+        }
+
+        function endInteraction(canceled) {
+            if (!btn.interactionActive)
+                return;
+            btn.interactionActive = false;
+            if (canceled)
+                btn.canceled();
+            else
+                btn.released();
+        }
+
+        onControlEnabledChanged: {
+            if (!btn.controlEnabled)
+                btn.endInteraction(true);
+        }
+
+        // Product collapse gates DynamicIslandMediaView via
+        // `visible: opacity > 0.01` in Content — ancestor hide does not flip
+        // the button's own `visible` property, so watch the media view root.
+        Connections {
+            target: root
+            function onVisibleChanged() {
+                if (!root.visible)
+                    btn.endInteraction(true);
+            }
+        }
+
+        Component.onDestruction: {
+            // Destroy while grabbed must clear interacting via canceled.
+            btn.endInteraction(true);
         }
 
         Canvas {
@@ -341,7 +392,7 @@ Item {
             height: btn.size
             property string currentGlyph: btn.glyph
             property bool currentEnabled: btn.controlEnabled
-            property color fillColor: mouse.pressed ? "#8e8e93" : (btn.controlEnabled ? btn.primaryColor : "#555560")
+            property color fillColor: btn.interactionActive ? "#8e8e93" : (btn.controlEnabled ? btn.primaryColor : "#555560")
             onCurrentGlyphChanged: requestPaint()
             onCurrentEnabledChanged: requestPaint()
             onFillColorChanged: requestPaint()
@@ -397,8 +448,20 @@ Item {
             enabled: btn.controlEnabled
             preventStealing: true
             onPressed: function(mouseEvent) {
-                btn.pressed();
+                if (btn.beginInteraction())
+                    mouseEvent.accepted = true;
+            }
+            onReleased: function(mouseEvent) {
+                btn.endInteraction(false);
                 mouseEvent.accepted = true;
+            }
+            onCanceled: {
+                btn.endInteraction(true);
+            }
+            onEnabledChanged: {
+                // Disabling mid-press must not leave interactionActive stuck.
+                if (!enabled)
+                    btn.endInteraction(true);
             }
         }
     }

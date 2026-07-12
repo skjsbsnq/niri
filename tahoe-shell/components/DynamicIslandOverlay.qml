@@ -310,6 +310,7 @@ PanelWindow {
                 onMediaPlayPauseRequested: if (root.dynamicIslandService) root.dynamicIslandService.mediaTogglePlayPause()
                 onMediaNextRequested: if (root.dynamicIslandService) root.dynamicIslandService.mediaNext()
                 onMediaControlPressed: if (root.dynamicIslandService) root.dynamicIslandService.setUserInteracting(true)
+                onMediaControlReleased: if (root.dynamicIslandService) root.dynamicIslandService.setUserInteracting(false)
             }
         }
 

@@ -104,7 +104,18 @@ PanelWindow {
     function dismissNotification(notification) {
         if (!notificationsService || !notification)
             return;
-        notificationsService.dismissId(notification.id, "dismiss");
+        root.dismissNotificationId(notification.id);
+    }
+
+    // Swipe-dismiss Timer must use the id captured at gesture commit time.
+    // Never re-read a stackIndex-bound notification object after rebind.
+    function dismissNotificationId(id) {
+        if (!notificationsService)
+            return;
+        var n = Number(id);
+        if (!isFinite(n) || n < 0)
+            return;
+        notificationsService.dismissId(n, "dismiss");
     }
 
     function invokeAction(notification, identifier) {
@@ -318,6 +329,15 @@ PanelWindow {
             scaleEase.restart();
         }
 
+        function clearPendingDismiss() {
+            // Cancel/rebound/new-gesture: drop pending identity. Do not clear
+            // on stack rebind alone — a late Timer must still target the
+            // notification that was swiped, not the promoted replacement.
+            dismissAfterSwipe.stop();
+            dismissAfterSwipe.pending = false;
+            dismissAfterSwipe.pendingId = -1;
+        }
+
         function beginSwipe(px, py) {
             if (!active || stackIndex !== 0)
                 return;
@@ -327,7 +347,8 @@ PanelWindow {
             swipePointerStartX = px;
             swipePointerStartY = py;
             swipeAnim.stop();
-            dismissAfterSwipe.stop();
+            // A new press supersedes any prior swipe-dismiss commit.
+            cardRoot.clearPendingDismiss();
         }
 
         function advanceSwipe(px, py) {
@@ -356,10 +377,19 @@ PanelWindow {
             if (Math.abs(progress) >= enter || absPx >= Motion.toastSwipeDismissPx) {
                 var target = (swipeX >= 0 ? 1 : -1) * (w + 48);
                 swipeX = target;
+                // Capture stable id at commit time — not at Timer fire.
+                var idAtCommit = cardRoot.notifId;
+                if (idAtCommit < 0) {
+                    cardRoot.clearPendingDismiss();
+                    return;
+                }
                 dismissAfterSwipe.pending = true;
+                dismissAfterSwipe.pendingId = idAtCommit;
                 dismissAfterSwipe.restart();
             } else {
+                // Snap back: no dismiss; clear any stale pending identity.
                 swipeX = 0;
+                cardRoot.clearPendingDismiss();
             }
         }
 
@@ -397,13 +427,20 @@ PanelWindow {
 
         Timer {
             id: dismissAfterSwipe
+            // pendingId is the only identity the delayed dismiss may act on.
+            // Never re-read cardRoot.notification here: stackIndex rebinding
+            // can promote B into this slot while A's exit animation runs.
             property bool pending: false
+            property int pendingId: -1
             interval: Motion.panelExit(root.settingsService)
             repeat: false
             onTriggered: {
-                if (pending && cardRoot.notification)
-                    root.dismissNotification(cardRoot.notification);
+                var id = pendingId;
+                var wasPending = pending;
                 pending = false;
+                pendingId = -1;
+                if (wasPending && id >= 0)
+                    root.dismissNotificationId(id);
             }
         }
 
@@ -659,6 +696,7 @@ PanelWindow {
                 onCanceled: {
                     cardRoot.swipeDragging = false;
                     cardRoot.swipeX = 0;
+                    cardRoot.clearPendingDismiss();
                 }
             }
         }

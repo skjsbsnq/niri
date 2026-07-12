@@ -29,6 +29,19 @@ Item {
     property string permissionStatus: "unknown"
     property string permissionDetail: "尚未读取权限"
     property bool permissionsRefreshing: false
+    // Monotonic request generation for the single permissionsProbe pipeline.
+    // permissionsProbeGeneration: latest refresh intent.
+    // permissionsProbeInFlightGeneration / DesktopId: frozen identity of the running Process.
+    // permissionsProbePending: newest selection arrived while Process was still running.
+    // permissionsStdout*: caches collector output for the in-flight generation only.
+    property int permissionsProbeGeneration: 0
+    property int permissionsProbeInFlightGeneration: 0
+    property string permissionsProbeInFlightDesktopId: ""
+    // Desktop ID that currently owns permission* display fields (empty when cleared / pending).
+    property string permissionsOwnerDesktopId: ""
+    property bool permissionsProbePending: false
+    property string permissionsStdoutText: ""
+    property int permissionsStdoutGeneration: 0
     property int revision: 0
 
     readonly property var applications: root.appsService ? root.appsService.launchpadApps : []
@@ -213,53 +226,147 @@ Item {
     }
 
     function selectApp(app) {
+        var nextId = desktopIdForApp(app);
         root.selectedApp = app;
-        root.selectedDesktopId = desktopIdForApp(app);
+        root.selectedDesktopId = nextId;
+        // Close display identity when selection changes so B never shows A's rows.
+        if (String(root.permissionsOwnerDesktopId || "") !== String(nextId || ""))
+            root.invalidateStalePermissionDisplay();
         root.refreshPermissions();
     }
 
-    function refreshPermissions() {
-        if (!root.selectedDesktopId || root.selectedDesktopId.length === 0) {
-            root.permissionStatus = "unknown";
-            root.permissionDetail = "未选择应用";
-            root.permissionItems = [];
-            root.staticPermissionItems = [];
-            root.snapConnectionItems = [];
-            root.storageInfo = ({ "total": "0 B", "totalBytes": 0, "items": [] });
-            root.sandboxInfo = ({});
-            root.permissionCapability = ({});
-            root.revision += 1;
-            return;
-        }
-        if (!root.commandRunner || !root.commandRunner.appsPermissionsCommand) {
-            root.permissionStatus = "missing";
-            root.permissionDetail = "CommandRunner 未注入，应用权限不可用。";
-            root.permissionItems = [];
-            root.staticPermissionItems = [];
-            root.snapConnectionItems = [];
-            root.storageInfo = ({ "total": "0 B", "totalBytes": 0, "items": [] });
+    function clearPermissionsState(status, detail, sandbox) {
+        // sandbox === null/undefined means "no sandbox object" (unselected path keeps empty capability).
+        // A truthy sandbox object (including empty {}) builds capability from that sandbox.
+        var hasSandbox = sandbox !== null && sandbox !== undefined;
+        root.permissionsOwnerDesktopId = "";
+        root.permissionStatus = status;
+        root.permissionDetail = detail;
+        root.permissionItems = [];
+        root.staticPermissionItems = [];
+        root.snapConnectionItems = [];
+        root.storageInfo = ({ "total": "0 B", "totalBytes": 0, "items": [] });
+        root.sandboxInfo = hasSandbox ? sandbox : ({});
+        root.permissionCapability = hasSandbox ? ({
+            "sandboxType": sandbox.type || "unknown",
+            "fullyEnforceable": sandbox.fullyEnforceable === true,
+            "portalStatus": status,
+            "defaultControl": "warning",
+            "canTogglePortalPermissions": false,
+            "writeScope": "none",
+            "ordinaryAppWarning": sandbox.type === "none"
+        }) : ({});
+        root.revision += 1;
+    }
+
+    function invalidateStalePermissionDisplay() {
+        // Selection moved away from the desktop that owns current permission* fields.
+        // Clear payload immediately (AppMenu-style owner close); keep loading until latest probe lands.
+        root.permissionsOwnerDesktopId = "";
+        root.permissionStatus = "unknown";
+        root.permissionDetail = "正在读取权限";
+        root.permissionItems = [];
+        root.staticPermissionItems = [];
+        root.snapConnectionItems = [];
+        root.storageInfo = ({ "total": "0 B", "totalBytes": 0, "items": [] });
+        if (root.selectedDesktopId && root.selectedDesktopId.length > 0) {
             root.sandboxInfo = sandboxForDesktopId(root.selectedDesktopId);
             root.permissionCapability = ({
                 "sandboxType": root.sandboxInfo.type || "unknown",
                 "fullyEnforceable": root.sandboxInfo.fullyEnforceable === true,
-                "portalStatus": "missing",
+                "portalStatus": "unknown",
                 "defaultControl": "warning",
                 "canTogglePortalPermissions": false,
                 "writeScope": "none",
                 "ordinaryAppWarning": root.sandboxInfo.type === "none"
             });
-            root.revision += 1;
+        } else {
+            root.sandboxInfo = ({});
+            root.permissionCapability = ({});
+        }
+        root.revision += 1;
+    }
+
+    function permissionsIdentityMatches(generation, desktopId) {
+        if (generation === undefined || generation === null)
+            return false;
+        if (Number(generation) !== Number(root.permissionsProbeGeneration))
+            return false;
+        if (String(desktopId || "") !== String(root.selectedDesktopId || ""))
+            return false;
+        return true;
+    }
+
+    function refreshPermissions() {
+        if (!root.selectedDesktopId || root.selectedDesktopId.length === 0) {
+            // Bump generation so any in-flight A result cannot write after clear.
+            root.permissionsProbeGeneration += 1;
+            root.permissionsProbePending = false;
+            root.permissionsRefreshing = false;
+            if (permissionsProbe.running)
+                permissionsProbe.running = false;
+            // null sandbox preserves historical unselected capability = {}.
+            root.clearPermissionsState("unknown", "未选择应用", null);
             return;
         }
-        if (permissionsProbe.running)
+        if (!root.commandRunner || !root.commandRunner.appsPermissionsCommand) {
+            root.permissionsProbeGeneration += 1;
+            root.permissionsProbePending = false;
+            root.permissionsRefreshing = false;
+            if (permissionsProbe.running)
+                permissionsProbe.running = false;
+            root.clearPermissionsState(
+                "missing",
+                "CommandRunner 未注入，应用权限不可用。",
+                sandboxForDesktopId(root.selectedDesktopId)
+            );
+            // missing path still owns the selected desktop's capability view.
+            root.permissionsOwnerDesktopId = root.selectedDesktopId;
             return;
+        }
+        if (permissionsProbe.running) {
+            // Discarding a newer selection permanently was the old race; keep latest pending.
+            if (String(root.permissionsProbeInFlightDesktopId) !== String(root.selectedDesktopId)) {
+                root.permissionsProbeGeneration += 1;
+                root.permissionsProbePending = true;
+                root.permissionsRefreshing = true;
+                if (String(root.permissionsOwnerDesktopId || "") !== String(root.selectedDesktopId || ""))
+                    root.invalidateStalePermissionDisplay();
+            }
+            return;
+        }
 
+        root.permissionsProbeGeneration += 1;
+        root.startPermissionsProbe(root.permissionsProbeGeneration, root.selectedDesktopId);
+    }
+
+    function startPermissionsProbe(generation, desktopId) {
+        // Never start a superseded generation; keep pending so a later exit can re-run latest.
+        if (Number(generation) !== Number(root.permissionsProbeGeneration))
+            return;
+        if (String(desktopId || "") !== String(root.selectedDesktopId || ""))
+            return;
+        if (permissionsProbe.running) {
+            root.permissionsProbePending = true;
+            return;
+        }
+
+        root.permissionsProbePending = false;
+        root.permissionsProbeInFlightGeneration = generation;
+        root.permissionsProbeInFlightDesktopId = String(desktopId || "");
+        root.permissionsStdoutText = "";
+        root.permissionsStdoutGeneration = 0;
+        // Freeze desktop ID into the command at start so later selection cannot rebind mid-flight.
+        permissionsProbe.command = root.commandRunner.appsPermissionsCommand(desktopId);
         root.permissionsRefreshing = true;
-        permissionsProbe.command = root.commandRunner.appsPermissionsCommand(root.selectedDesktopId);
         permissionsProbe.running = true;
     }
 
-    function parsePermissions(text) {
+    function parsePermissions(text, generation, desktopId) {
+        // Generation and desktop identity are mandatory: missing or stale never write permission state.
+        if (!root.permissionsIdentityMatches(generation, desktopId))
+            return;
+
         try {
             var parsed = JSON.parse(String(text || "{}"));
             root.permissionStatus = parsed.portal ? String(parsed.portal.status || "unknown") : "unknown";
@@ -268,7 +375,7 @@ Item {
             root.staticPermissionItems = parsed.staticPermissions || [];
             root.snapConnectionItems = parsed.snapConnections || [];
             root.storageInfo = parsed.storage || ({ "total": "0 B", "totalBytes": 0, "items": [] });
-            root.sandboxInfo = parsed.sandbox || sandboxForDesktopId(root.selectedDesktopId);
+            root.sandboxInfo = parsed.sandbox || sandboxForDesktopId(desktopId);
             root.permissionCapability = parsed.capability || ({
                 "sandboxType": root.sandboxInfo.type || "unknown",
                 "fullyEnforceable": root.sandboxInfo.fullyEnforceable === true,
@@ -285,7 +392,7 @@ Item {
             root.staticPermissionItems = [];
             root.snapConnectionItems = [];
             root.storageInfo = ({ "total": "0 B", "totalBytes": 0, "items": [] });
-            root.sandboxInfo = sandboxForDesktopId(root.selectedDesktopId);
+            root.sandboxInfo = sandboxForDesktopId(desktopId);
             root.permissionCapability = ({
                 "sandboxType": root.sandboxInfo.type || "unknown",
                 "fullyEnforceable": root.sandboxInfo.fullyEnforceable === true,
@@ -296,7 +403,66 @@ Item {
                 "ordinaryAppWarning": root.sandboxInfo.type === "none"
             });
         }
+        root.permissionsOwnerDesktopId = String(desktopId || "");
         root.revision += 1;
+    }
+
+    function applyPermissionsFailure(code, generation, desktopId) {
+        if (!root.permissionsIdentityMatches(generation, desktopId))
+            return;
+
+        var sandbox = sandboxForDesktopId(desktopId);
+        root.permissionStatus = "error";
+        root.permissionDetail = "权限读取失败，退出码 " + String(code);
+        root.permissionItems = [];
+        root.staticPermissionItems = [];
+        root.snapConnectionItems = [];
+        root.storageInfo = ({ "total": "0 B", "totalBytes": 0, "items": [] });
+        root.sandboxInfo = sandbox;
+        root.permissionCapability = ({
+            "sandboxType": sandbox.type || "unknown",
+            "fullyEnforceable": sandbox.fullyEnforceable === true,
+            "portalStatus": "error",
+            "defaultControl": "warning",
+            "canTogglePortalPermissions": false,
+            "writeScope": "none",
+            "ordinaryAppWarning": sandbox.type === "none"
+        });
+        root.permissionsOwnerDesktopId = String(desktopId || "");
+        root.revision += 1;
+    }
+
+    function schedulePendingPermissionsProbe() {
+        // Defer restart until after Process exit handling settles.
+        Qt.callLater(function() {
+            if (!root.permissionsProbePending)
+                return;
+            if (permissionsProbe.running)
+                return;
+            root.startPermissionsProbe(root.permissionsProbeGeneration, root.selectedDesktopId);
+        });
+    }
+
+    function finishPermissionsProbe(code, generation, desktopId, text) {
+        var gen = Number(generation);
+        // onRunningChanged is the failed-to-start fallback. Ignore duplicate or
+        // obsolete completion after onExited has already consumed this run.
+        if (gen <= 0 || gen !== Number(root.permissionsProbeInFlightGeneration))
+            return;
+        root.permissionsProbeInFlightGeneration = 0;
+        root.permissionsProbeInFlightDesktopId = "";
+
+        if (code !== 0)
+            root.applyPermissionsFailure(code, gen, desktopId);
+        else
+            root.parsePermissions(text, gen, desktopId);
+
+        // Only the latest generation may clear loading; keep refreshing while a newer intent is pending.
+        if (gen === Number(root.permissionsProbeGeneration) && !root.permissionsProbePending)
+            root.permissionsRefreshing = false;
+
+        if (root.permissionsProbePending)
+            root.schedulePendingPermissionsProbe();
     }
 
     Process {
@@ -336,31 +502,30 @@ Item {
     Process {
         id: permissionsProbe
         running: false
+        // command is assigned in startPermissionsProbe() so desktop identity is frozen for this generation.
+        command: []
         stdout: StdioCollector {
             id: permissionsOut
-            onStreamFinished: root.parsePermissions(permissionsOut.text)
+            onStreamFinished: {
+                // Cache stdout against the in-flight generation before exit reordering.
+                root.permissionsStdoutText = permissionsOut.text;
+                root.permissionsStdoutGeneration = root.permissionsProbeInFlightGeneration;
+            }
         }
         onExited: function(code, exitStatus) {
-            root.permissionsRefreshing = false;
-            if (code !== 0) {
-                root.permissionStatus = "error";
-                root.permissionDetail = "权限读取失败，退出码 " + String(code);
-                root.permissionItems = [];
-                root.staticPermissionItems = [];
-                root.snapConnectionItems = [];
-                root.storageInfo = ({ "total": "0 B", "totalBytes": 0, "items": [] });
-                root.sandboxInfo = root.sandboxForDesktopId(root.selectedDesktopId);
-                root.permissionCapability = ({
-                    "sandboxType": root.sandboxInfo.type || "unknown",
-                    "fullyEnforceable": root.sandboxInfo.fullyEnforceable === true,
-                    "portalStatus": "error",
-                    "defaultControl": "warning",
-                    "canTogglePortalPermissions": false,
-                    "writeScope": "none",
-                    "ordinaryAppWarning": root.sandboxInfo.type === "none"
-                });
-                root.revision += 1;
-            }
+            // Freeze identity and payload at exit entry; never start the next probe in this stack.
+            var gen = root.permissionsProbeInFlightGeneration;
+            var desktopId = root.permissionsProbeInFlightDesktopId;
+            var text = root.permissionsStdoutGeneration === gen
+                ? root.permissionsStdoutText
+                : permissionsOut.text;
+            root.finishPermissionsProbe(code, gen, desktopId, text);
+        }
+        onRunningChanged: {
+            // QuickShell Process does not emit exited when QProcess fails to start.
+            // In that path runningChanged is the only completion signal.
+            if (!permissionsProbe.running && root.permissionsProbeInFlightGeneration > 0)
+                root.finishPermissionsProbe(-1, root.permissionsProbeInFlightGeneration, root.permissionsProbeInFlightDesktopId, "");
         }
     }
 

@@ -326,8 +326,21 @@ PanelWindow {
            property real swipeStartX: 0
            property real swipeLastX: 0
            property real swipeStartY: 0
+           // Gesture phases for click vs horizontal swipe intent:
+           // armed → dragging (beginSwipe) | rejected (vertical) | idle.
            property bool armingSwipe: false
+           property bool gestureRejected: false
            property bool suppressClick: false
+
+           function resetGesturePhase() {
+               armingSwipe = false;
+               gestureRejected = false;
+           }
+
+           function suppressClickTemporarily() {
+               suppressClick = true;
+               swipeClickSuppress.restart();
+           }
        
            Timer {
                id: swipeClickSuppress
@@ -372,54 +385,105 @@ PanelWindow {
            onPressed: function(mouse) {
                hoverExpandDelay.stop();
                hoverCollapseDelay.stop();
+               // Pointer owns the gesture: abort any in-flight wheel swipe session.
+               if (root.dynamicIslandService && root.dynamicIslandService.swipeDragging)
+                   root.dynamicIslandService.cancelSwipe();
+               wheelSwipeSettle.stop();
                if (root.dynamicIslandService)
                    root.dynamicIslandService.setUserInteracting(true);
                swipeStartX = mouse.x;
                swipeStartY = mouse.y;
                swipeLastX = mouse.x;
+               gestureRejected = false;
                armingSwipe = (mouse.button === Qt.LeftButton)
                    && root.dynamicIslandService
                    && root.dynamicIslandService.canSwipe();
            }
            onPositionChanged: function(mouse) {
-               if (!pressed || !armingSwipe || !root.dynamicIslandService)
+               if (!pressed || !root.dynamicIslandService)
                    return;
-       
-               var deltaX = mouse.x - swipeLastX;
-               var deltaY = Math.abs(mouse.y - swipeStartY);
+
+               // Already dragging: stream incremental deltas only.
+               if (root.dynamicIslandService.swipeDragging) {
+                   var dragDeltaX = mouse.x - swipeLastX;
+                   var dragDeltaY = Math.abs(mouse.y - swipeStartY);
+                   swipeLastX = mouse.x;
+                   root.dynamicIslandService.advanceSwipe(dragDeltaX, dragDeltaY);
+                   return;
+               }
+
+               if (!armingSwipe || gestureRejected)
+                   return;
+
+               var totalDx = mouse.x - swipeStartX;
+               var totalDy = mouse.y - swipeStartY;
+               var absX = Math.abs(totalDx);
+               var absY = Math.abs(totalDy);
+
+               // Dominant vertical motion: cancel click, never beginSwipe.
+               if (absY >= IslandMotion.swipeVerticalRejectPx && absY > absX) {
+                   gestureRejected = true;
+                   armingSwipe = false;
+                   suppressClickTemporarily();
+                   return;
+               }
+
+               // Both axes below arm threshold: still a potential click (jitter OK).
+               if (absX < IslandMotion.swipeArmThresholdPx
+                       && absY < IslandMotion.swipeArmThresholdPx)
+                   return;
+
+               // Past arm without clear horizontal dominance: reject click
+               // (covers diagonal dead-band that used to mis-fire chip click).
+               if (!(absX > absY && absX >= IslandMotion.swipeArmThresholdPx)) {
+                   gestureRejected = true;
+                   armingSwipe = false;
+                   suppressClickTemporarily();
+                   return;
+               }
+
+               if (!root.dynamicIslandService.beginSwipe()) {
+                   armingSwipe = false;
+                   return;
+               }
+
+               // Seed with total displacement so the first frame is not lost.
                swipeLastX = mouse.x;
-               if (!root.dynamicIslandService.swipeDragging)
-                   root.dynamicIslandService.beginSwipe();
-               root.dynamicIslandService.advanceSwipe(deltaX, deltaY);
+               root.dynamicIslandService.advanceSwipe(totalDx, absY);
            }
            onReleased: function(mouse) {
                if (root.dynamicIslandService) {
                    if (root.dynamicIslandService.swipeDragging) {
-                       var moved = root.dynamicIslandService.consumeSwipeMoved();
+                       // Any committed swipe session owns the press; never click.
+                       root.dynamicIslandService.consumeSwipeMoved();
                        root.dynamicIslandService.resolveSwipe();
-                       if (moved) {
-                           suppressClick = true;
-                           swipeClickSuppress.restart();
-                       }
+                       suppressClickTemporarily();
+                   } else if (gestureRejected) {
+                       suppressClickTemporarily();
                    }
                    root.dynamicIslandService.setUserInteracting(false);
                }
-               armingSwipe = false;
+               resetGesturePhase();
            }
            onCanceled: {
                if (root.dynamicIslandService && root.dynamicIslandService.swipeDragging)
                    root.dynamicIslandService.cancelSwipe();
                if (root.dynamicIslandService)
                    root.dynamicIslandService.setUserInteracting(false);
-               armingSwipe = false;
+               resetGesturePhase();
            }
            onClicked: function(mouse) {
+               // suppressClick is set before phase reset in onReleased so
+               // reject / swipe sessions both block click here.
                if (suppressClick)
                    return;
                if (root.dynamicIslandService)
                    root.dynamicIslandService.handleChipClick(mouse.button);
            }
            onWheel: function(wheel) {
+               // Ignore wheel while a pointer gesture is active (mutual exclusion).
+               if (pressed || armingSwipe || gestureRejected)
+                   return;
                if (!root.dynamicIslandService || !root.dynamicIslandService.canSwipe())
                    return;
        

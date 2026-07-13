@@ -48,6 +48,11 @@ var swipeSettleEasing = QtQuick.Easing.OutCubic;
 var swipeEnterThreshold = 0.56;
 var swipeReturnThreshold = 0.44;
 var swipeVerticalTolerance = 24;
+// Gesture arming (Task 11): press stays click-eligible until horizontal
+// displacement crosses the arm threshold. Dominant vertical motion rejects
+// click without starting a meaningless settle path.
+var swipeArmThresholdPx = 10;
+var swipeVerticalRejectPx = 20;
 var swipeSettleIdleMs = 150;
 var swipeSuppressClickMs = 180;
 

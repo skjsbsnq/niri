@@ -12,6 +12,8 @@ WlSessionLock {
     property string password: ""
     property string statusText: ""
     property bool authFailed: false
+    // Single clock owner for HH:mm and the date line (Task 22).
+    property date clockNow: new Date()
     readonly property string userName: {
         var user = Quickshell.env("USER");
         return user ? String(user) : "用户";
@@ -22,6 +24,21 @@ WlSessionLock {
         root.statusText = "";
         root.authFailed = false;
         root.locked = true;
+        // Wake / re-lock: show current wall time immediately and re-arm minute edge.
+        root.syncLockClock();
+    }
+
+    // Align the sole Timer to the next minute boundary instead of 1s polling.
+    function msecsToNextMinute(from) {
+        var t = from || new Date();
+        return Math.max(250, 60000 - (t.getSeconds() * 1000 + t.getMilliseconds()));
+    }
+
+    function syncLockClock() {
+        root.clockNow = new Date();
+        minuteTimer.interval = root.msecsToNextMinute(root.clockNow);
+        if (root.locked)
+            minuteTimer.restart();
     }
 
     function unlock() {
@@ -49,8 +66,34 @@ WlSessionLock {
         }
     }
 
-    onLockedChanged: if (!locked && pam.active) {
-        pam.abort();
+    onLockedChanged: {
+        if (!locked && pam.active)
+            pam.abort();
+        if (locked)
+            root.syncLockClock();
+    }
+
+    // One Timer only: fire on minute boundaries, then recompute next interval.
+    // Not a 1s poll — HH:mm only needs minute resolution plus wake/show sync.
+    Timer {
+        id: minuteTimer
+        interval: root.msecsToNextMinute()
+        running: root.locked
+        repeat: true
+        onTriggered: {
+            root.clockNow = new Date();
+            // Re-arm to the following minute edge (handles drift / long ticks).
+            interval = root.msecsToNextMinute(root.clockNow);
+        }
+    }
+
+    // Suspend/resume: refresh wall clock without a second Timer.
+    Connections {
+        target: Qt.application
+        function onStateChanged() {
+            if (Qt.application.state === Qt.ApplicationActive && root.locked)
+                root.syncLockClock();
+        }
     }
 
     PamContext {
@@ -88,14 +131,6 @@ WlSessionLock {
         id: surface
         color: "#101215"
 
-        Timer {
-            id: minuteTimer
-            interval: 1000
-            running: true
-            repeat: true
-            onTriggered: clockText.now = new Date()
-        }
-
         Image {
             anchors.fill: parent
             source: Quickshell.shellPath("assets/backgrounds/iridescence.jpg")
@@ -116,9 +151,8 @@ WlSessionLock {
 
             Text {
                 id: clockText
-                property date now: new Date()
                 Layout.fillWidth: true
-                text: Qt.formatDateTime(now, "HH:mm")
+                text: Qt.formatDateTime(root.clockNow, "HH:mm")
                 color: "#ffffff"
                 font.pixelSize: 64
                 font.weight: Font.Light
@@ -127,7 +161,7 @@ WlSessionLock {
 
             Text {
                 Layout.fillWidth: true
-                text: Qt.formatDateTime(clockText.now, "yyyy年M月d日 dddd")
+                text: Qt.formatDateTime(root.clockNow, "yyyy年M月d日 dddd")
                 color: "#dce3ea"
                 font.pixelSize: 15
                 horizontalAlignment: Text.AlignHCenter

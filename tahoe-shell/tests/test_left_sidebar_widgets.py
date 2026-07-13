@@ -24,10 +24,19 @@ class LeftSidebarWidgetTests(unittest.TestCase):
         self.assertIn("openProcessMenuRequested", text)
         self.assertIn("cardsEnter", text)
 
-    def test_weather_gradient_no_stroke_cards(self) -> None:
+    def test_weather_animated_hero_no_stroke_cards(self) -> None:
         text = WEATHER.read_text(encoding="utf-8")
-        self.assertIn("heroGradientColors", text)
-        self.assertIn("WeatherCodes.slug", text)
+        # Medium intensity: particles only inside hero; rest is SoftCard over glass.
+        self.assertIn("WeatherBackground", text)
+        self.assertIn("heroCard", text)
+        self.assertIn("animate: root.sidebarOpen && root.active", text)
+        self.assertIn("heroSecondaryLine", text)
+        self.assertIn("heroFallbackColor", text)
+        self.assertIn("updatedText()", text)
+        # Must NOT full-bleed the scene (that produced the grey wallpaper look).
+        self.assertNotIn("Full-bleed animated scene", text)
+        # Update stamp must not be the hero detail under metric pills.
+        self.assertNotIn("return root.updatedText();", text)
         # Large temp is non-mono (no monoFontFamily on hero temp).
         self.assertIn("font.pixelSize: 56", text)
         self.assertNotIn("font.family: root.monoFontFamily", text.split("font.pixelSize: 56")[1][:200])
@@ -35,6 +44,14 @@ class LeftSidebarWidgetTests(unittest.TestCase):
         self.assertIn("逐时", text)
         # No 1px card stroke pattern on widget cards.
         self.assertNotIn("border.width: 1", text)
+
+    def test_weather_background_frame_animation(self) -> None:
+        bg = (SHELL_ROOT / "components" / "WeatherBackground.qml").read_text(encoding="utf-8")
+        self.assertIn("FrameAnimation", bg)
+        self.assertIn("running: root.animate", bg)
+        # Must not reintroduce <100ms Timer animation polls.
+        for match in re.finditer(r"Timer\s*\{[^}]*interval:\s*(\d+)", bg, re.S):
+            self.assertGreaterEqual(int(match.group(1)), 1000)
 
     def test_system_rings_top3_process_menu(self) -> None:
         text = SYSTEM.read_text(encoding="utf-8")
@@ -45,6 +62,9 @@ class LeftSidebarWidgetTests(unittest.TestCase):
         self.assertIn("openProcessMenu", text)
         self.assertIn("onFastDataChanged", text)
         self.assertIn("onMediumDataChanged", text)
+        # Placeholders until first medium/slow sample (no flash of 0 RPM / 0 tasks).
+        self.assertIn("hasSlow()", text)
+        self.assertIn("hasMedium()", text)
         # No card stroke.
         self.assertNotIn("border.width: 1", text)
 
@@ -71,7 +91,7 @@ class LeftSidebarWidgetTests(unittest.TestCase):
         self.assertIn("function sidebarCardEnterDuration", text)
 
     def test_system_stats_refresh_not_tightened(self) -> None:
-        # Guard: T19 must not encrypt SystemStats poll cadence.
+        # Guard: steady-state SystemStats poll cadence stays second-scale.
         text = SYSTEM_STATS.read_text(encoding="utf-8")
         # Historical intervals used by service (document presence of second-scale timers).
         self.assertRegex(text, r"interval:\s*(1000|2000|5000|10000)")
@@ -82,6 +102,15 @@ class LeftSidebarWidgetTests(unittest.TestCase):
         # Idle desktop must not keep the stats process always running.
         self.assertIn("property bool active:", text)
         self.assertIn("running: false", text)
+        # First open must bootstrap medium/slow (fan/tasks/uptime) without waiting 2s/5s.
+        self.assertIn("emit_medium", text)
+        self.assertIn("emit_slow", text)
+        self.assertIn("emit_fast_snapshot", text)
+        self.assertIn("hasMediumData", text)
+        self.assertIn("hasSlowData", text)
+        # Steady cadence markers preserved.
+        self.assertIn("tick % 2", text)
+        self.assertIn("tick % 5", text)
 
     def test_shell_gates_system_stats_on_left_sidebar(self) -> None:
         text = SHELL_QML.read_text(encoding="utf-8")

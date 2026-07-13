@@ -2,12 +2,14 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Effects
 import "Motion.js" as Motion
 import "settings/SettingsTheme.js" as Theme
-import "WeatherCodes.js" as WeatherCodes
 
-// T19 weather widget: status-gradient mid-size card, large non-mono temp,
-// embedded hourly strip, daily forecast gradient temp bars without stroke.
+// Weather sidebar page (medium intensity):
+// - WeatherBackground particles only inside the hero card
+// - remaining content = system-page SoftCard language over the glass shell
+// - update stamp lives in the toolbar (never over metric pills)
 // Glass shell remains owned by LeftSidebar.qml.
 Item {
     id: root
@@ -36,10 +38,21 @@ Item {
     readonly property color warningYellow: darkMode ? "#ffd60a" : "#b56a00"
     readonly property color dangerRed: Theme.danger(darkMode)
     readonly property color precipBlue: darkMode ? "#7dc8ff" : "#2c9cf2"
-    // Widget plates over denser glass shell (match system page language).
+    // Match system SoftCard plates (solid over glass shell — not a grey wallpaper).
     readonly property color cardFill: darkMode ? "#2c2c2e" : "#ffffff"
     readonly property color cardHover: darkMode ? "#3a3a3c" : "#f2f2f7"
     readonly property color separator: Theme.separator(darkMode)
+    // Hero type is always light-on-sky for contrast over the animated scene.
+    readonly property color heroText: "#ffffff"
+    readonly property color heroTextMuted: "#d9ffffff"
+    readonly property color heroTextSoft: "#b8ffffff"
+    readonly property real heroScrollProgress: {
+        // Only dim the hero scene a little as the user scrolls it away.
+        if (!contentFlick || contentFlick.contentHeight <= contentFlick.height)
+            return 0;
+        var p = contentFlick.contentY / Math.max(1, heroCard.height);
+        return Math.max(0, Math.min(0.55, p * 0.45));
+    }
 
     property real currentEpoch: Math.floor(Date.now() / 1000)
 
@@ -52,47 +65,42 @@ Item {
         onTriggered: root.currentEpoch = Math.floor(Date.now() / 1000)
     }
 
-    function heroGradientColors() {
-        var code = currentWeatherCode();
-        var night = currentIsNight();
-        var slug = WeatherCodes.slug(code, night);
-        // Richer status gradients (clear / rain / night / error / cloudy).
-        if (root.status === "error" && !root.hasData)
-            return ["#6b7280", "#374151"];
-        if (night || slug.indexOf("night") !== -1)
-            return ["#1e3a5f", "#0f172a"];
-        if (slug.indexOf("rain") !== -1 || slug.indexOf("drizzle") !== -1
-                || slug.indexOf("thunder") !== -1 || slug.indexOf("sleet") !== -1)
-            return ["#4b6cb7", "#182848"];
-        if (slug.indexOf("snow") !== -1)
-            return ["#a8c0d6", "#5b7a94"];
-        if (slug.indexOf("fog") !== -1 || slug.indexOf("cloudy") !== -1 || slug === "cloudy")
-            return ["#8e9eab", "#3b4a5a"];
-        // clear / mostly clear day — warm sky
-        return ["#56ccf2", "#2f80ed"];
-    }
-
     ColumnLayout {
         anchors.fill: parent
         spacing: 10
 
-        // Toolbar: location + refresh/settings (no chrome title).
+        // Toolbar: location + update status + refresh/settings (glass chrome).
         Item {
             Layout.fillWidth: true
-            Layout.preferredHeight: 28
+            Layout.preferredHeight: 42
 
-            Text {
+            Column {
                 anchors.left: parent.left
+                anchors.right: toolbarButtons.left
+                anchors.rightMargin: 8
                 anchors.verticalCenter: parent.verticalCenter
-                width: parent.width - 76
-                text: root.locationTitle()
-                color: root.textPrimary
-                font.pixelSize: 14
-                font.weight: Font.DemiBold
-                elide: Text.ElideRight
+                spacing: 1
+
+                Text {
+                    width: parent.width
+                    text: root.locationTitle()
+                    color: root.textPrimary
+                    font.pixelSize: 14
+                    font.weight: Font.DemiBold
+                    elide: Text.ElideRight
+                }
+
+                Text {
+                    width: parent.width
+                    text: root.updatedText()
+                    color: root.statusColor()
+                    font.pixelSize: 11
+                    elide: Text.ElideRight
+                }
             }
 
             Row {
+                id: toolbarButtons
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
                 spacing: 4
@@ -130,62 +138,109 @@ Item {
                 width: contentFlick.width
                 spacing: 12
 
-                // --- Hero gradient widget ---
+                // --- Hero: animated sky + white type (only weather-atmosphere zone) ---
                 WidgetCard {
                     id: heroCard
                     width: parent.width
-                    height: 188
+                    height: 208
                     cardIndex: 0
                     fillColor: "transparent"
 
-                    Rectangle {
+                    // Rounded sky plate: scene is layer-masked to radius 18 so
+                    // particles do not square-cut the SoftCard corners.
+                    Item {
+                        id: heroSky
                         anchors.fill: parent
-                        radius: 20
-                        gradient: Gradient {
-                            GradientStop {
-                                position: 0.0
-                                color: root.heroGradientColors()[0]
+
+                        // Solid fallback (rounded) under the masked scene.
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: 18
+                            color: root.heroFallbackColor()
+                        }
+
+                        // Offscreen source for MultiEffect (animate still runs).
+                        Item {
+                            id: heroSceneSource
+                            anchors.fill: parent
+                            visible: false
+                            layer.enabled: true
+
+                            WeatherBackground {
+                                anchors.fill: parent
+                                weatherCode: root.currentWeatherCode()
+                                night: root.currentIsNight()
+                                windSpeedMs: root.weatherNumber("currentWindSpeedMs", 0)
+                                windGustsMs: root.weatherNumber("currentWindGustMs", 0)
+                                animate: root.sidebarOpen && root.active && root.visible
+                                    && !Motion.reducedMotion(root.settingsService)
+                                // Sky palette only (not UI darkMode desaturation).
+                                darkMode: false
+                                scrollProgress: root.heroScrollProgress
                             }
-                            GradientStop {
-                                position: 1.0
-                                color: root.heroGradientColors()[1]
+
+                            // Readability scrim — stronger at bottom for metric pills.
+                            Rectangle {
+                                anchors.fill: parent
+                                gradient: Gradient {
+                                    GradientStop {
+                                        position: 0.0
+                                        color: root.currentIsNight() ? "#55000000" : "#28000000"
+                                    }
+                                    GradientStop {
+                                        position: 0.5
+                                        color: root.currentIsNight() ? "#40000000" : "#20000000"
+                                    }
+                                    GradientStop {
+                                        position: 1.0
+                                        color: root.currentIsNight() ? "#99000000" : "#66000000"
+                                    }
+                                }
                             }
                         }
-                    }
 
-                    // Soft bottom shadow plate (no stroke).
-                    Rectangle {
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.top: parent.bottom
-                        anchors.topMargin: -2
-                        height: 10
-                        radius: 5
-                        color: root.darkMode ? "#40000000" : "#22000000"
-                        z: -1
+                        // Invisible white rounded rect as alpha mask.
+                        Item {
+                            id: heroMask
+                            anchors.fill: parent
+                            visible: false
+                            layer.enabled: true
+                            Rectangle {
+                                anchors.fill: parent
+                                radius: 18
+                                color: "#ffffff"
+                            }
+                        }
+
+                        MultiEffect {
+                            anchors.fill: parent
+                            source: heroSceneSource
+                            maskEnabled: true
+                            maskSource: heroMask
+                        }
                     }
 
                     Column {
                         anchors.left: parent.left
                         anchors.right: heroIcon.left
                         anchors.top: parent.top
-                        anchors.margins: 18
+                        anchors.margins: 16
                         anchors.rightMargin: 8
-                        spacing: 4
+                        spacing: 2
+                        z: 2
 
                         Row {
                             spacing: 6
                             Text {
                                 text: root.fmtTemp(root.weatherNumber("currentTemperatureC", NaN), false)
-                                color: "#ffffff"
-                                // Large non-mono (T19).
+                                color: root.heroText
                                 font.pixelSize: 56
                                 font.weight: Font.DemiBold
                                 lineHeight: 0.88
                             }
                             Text {
                                 text: root.tempUnit() === "f" ? "°F" : "°C"
-                                color: "#d9ffffff"
+                                color: root.heroTextMuted
                                 font.pixelSize: 18
                                 font.weight: Font.Medium
                                 anchors.bottom: parent.bottom
@@ -202,20 +257,20 @@ Item {
                         Text {
                             width: parent.width
                             text: root.conditionText()
-                            color: "#f0ffffff"
+                            color: root.heroText
                             font.pixelSize: 16
                             font.weight: Font.DemiBold
                             elide: Text.ElideRight
                         }
 
+                        // High/low only — never the update stamp (toolbar owns that).
                         Text {
                             width: parent.width
-                            text: root.detailSummary()
-                            color: "#ccffffff"
+                            text: root.heroSecondaryLine()
+                            color: root.heroTextSoft
                             font.pixelSize: 12
-                            wrapMode: Text.Wrap
-                            maximumLineCount: 2
                             elide: Text.ElideRight
+                            visible: text.length > 0
                         }
                     }
 
@@ -227,6 +282,7 @@ Item {
                         anchors.topMargin: 14
                         width: 72
                         height: 72
+                        z: 2
 
                         MeteoIcon {
                             anchors.centerIn: parent
@@ -234,7 +290,7 @@ Item {
                             height: 64
                             weatherCode: root.currentWeatherCode()
                             night: root.currentIsNight()
-                            color: "#ffffff"
+                            color: root.heroText
                         }
                     }
 
@@ -244,6 +300,7 @@ Item {
                         anchors.bottom: parent.bottom
                         anchors.margins: 12
                         spacing: 8
+                        z: 2
 
                         MiniMetricPill {
                             width: (parent.width - 16) / 3
@@ -411,6 +468,7 @@ Item {
 
     EmptyState {
         anchors.fill: parent
+        anchors.topMargin: 52
         visible: !root.hasData && !root.updating
     }
 
@@ -622,19 +680,57 @@ Item {
         return text.length > 0 ? text : "未知天气";
     }
 
-    function detailSummary() {
+    // Solid fallback under the animated scene so rounded corners never flash empty.
+    function heroFallbackColor() {
+        if (root.status === "error" && !root.hasData)
+            return "#4b5563";
+        if (root.currentIsNight())
+            return "#1e3a5f";
+        var code = root.currentWeatherCode();
+        if (code >= 95)
+            return "#4b5563";
+        if ((code >= 71 && code <= 77) || code === 85 || code === 86)
+            return "#8aa4bc";
+        if ((code >= 51 && code <= 67) || (code >= 80 && code <= 82))
+            return "#5b7fa8";
+        if (code === 0 || code === 1)
+            return "#3a9ad9";
+        if (code === 2)
+            return "#6aa8d4";
+        // overcast / fog / unknown — cooler blue-grey, not cement grey
+        return "#6d8aa0";
+    }
+
+    // Hero secondary line: today's high/low (never the update stamp).
+    function heroSecondaryLine() {
         if (!root.hasData)
-            return root.updating ? "正在连接 Open-Meteo" : "还没有可显示的预报";
-        return root.updatedText();
+            return root.updating ? "正在连接 Open-Meteo" : "";
+        var day = todayDaily();
+        var low = dailyLow(day);
+        var high = dailyHigh(day);
+        if (validNumber(low) && validNumber(high))
+            return "今日 " + fmtTemp(low, false) + " ~ " + fmtTemp(high, true);
+        return "";
     }
 
     function lastErrorText() {
         return String(service().lastError || "").trim();
     }
 
-    function updatedText() {
+    function statusColor() {
+        if (root.status === "error")
+            return root.dangerRed;
+        if (root.status === "stale")
+            return root.warningYellow;
         if (root.updating)
-            return "正在更新";
+            return root.accentBlue;
+        return root.textTertiary;
+    }
+
+    function updatedText() {
+        // Lives only in the toolbar under the location name — never in hero metrics.
+        if (root.updating)
+            return "正在更新…";
         if (root.status === "error")
             return root.lastErrorText().length > 0 ? root.lastErrorText() : "更新失败";
         var raw = String(service().updatedAt || "").trim();
@@ -822,19 +918,18 @@ Item {
         id: wcard
         property int cardIndex: 0
         property color fillColor: root.cardFill
-
         // Soft drop shadow plate (no 1px stroke).
         Rectangle {
             anchors.fill: parent
             anchors.topMargin: 3
-            radius: 20
+            radius: 18
             color: root.darkMode ? "#40000000" : "#18000000"
             z: -1
         }
 
         Rectangle {
             anchors.fill: parent
-            radius: 20
+            radius: 18
             color: wcard.fillColor
         }
 
@@ -970,25 +1065,31 @@ Item {
         id: pill
         property string label: ""
         property string value: "--"
-        height: 36
+        height: 40
         radius: 12
-        color: "#28ffffff"
-        // No border.
+        // Frosted chip on the animated hero — white type, fixed height.
+        color: "#2affffff"
+        border.width: 0
         Column {
             anchors.centerIn: parent
-            spacing: 0
+            width: parent.width - 8
+            spacing: 1
             Text {
-                anchors.horizontalCenter: parent.horizontalCenter
+                width: parent.width
+                horizontalAlignment: Text.AlignHCenter
                 text: pill.label
-                color: "#ccffffff"
+                color: root.heroTextSoft
                 font.pixelSize: 10
+                elide: Text.ElideRight
             }
             Text {
-                anchors.horizontalCenter: parent.horizontalCenter
+                width: parent.width
+                horizontalAlignment: Text.AlignHCenter
                 text: pill.value
-                color: "#ffffff"
+                color: root.heroText
                 font.pixelSize: 12
                 font.weight: Font.DemiBold
+                elide: Text.ElideRight
             }
         }
     }

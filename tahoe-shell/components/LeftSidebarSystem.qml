@@ -112,6 +112,18 @@ Item {
         return root.systemStats;
     }
 
+    function hasFast() {
+        return !!(s() && s().hasFastData);
+    }
+
+    function hasMedium() {
+        return !!(s() && s().hasMediumData);
+    }
+
+    function hasSlow() {
+        return !!(s() && s().hasSlowData);
+    }
+
     Connections {
         target: root.systemStats || null
         function onFastDataChanged() {
@@ -308,43 +320,59 @@ Item {
                     ActivityRing {
                         width: 96
                         height: 96
-                        progress: numOr(s() ? s().cpuUsage : 0, 0) / 100.0
+                        progress: root.hasFast() ? numOr(s() ? s().cpuUsage : 0, 0) / 100.0 : 0
                         ringColor: root.colorCpu
-                        centerValue: Math.round(numOr(s() ? s().cpuUsage : 0, 0)) + "%"
+                        centerValue: root.hasFast()
+                            ? Math.round(numOr(s() ? s().cpuUsage : 0, 0)) + "%"
+                            : "--"
                         centerLabel: "CPU"
-                        subLabel: fixed(s() ? s().cpuTempC : 0, 0) + "°"
+                        subLabel: root.hasMedium()
+                            ? fixed(s() ? s().cpuTempC : 0, 0) + "°"
+                            : "--"
                     }
 
                     ActivityRing {
                         width: 96
                         height: 96
-                        progress: numOr(s() ? s().ramUsage : 0, 0) / 100.0
+                        progress: root.hasFast() ? numOr(s() ? s().ramUsage : 0, 0) / 100.0 : 0
                         ringColor: root.colorRam
-                        centerValue: Math.round(numOr(s() ? s().ramUsage : 0, 0)) + "%"
+                        centerValue: root.hasFast()
+                            ? Math.round(numOr(s() ? s().ramUsage : 0, 0)) + "%"
+                            : "--"
                         centerLabel: "内存"
-                        subLabel: fixed(s() ? s().ramUsedGB : 0, 1) + "G"
+                        subLabel: root.hasFast()
+                            ? fixed(s() ? s().ramUsedGB : 0, 1) + "G"
+                            : "--"
                     }
 
                     ActivityRing {
                         width: 96
                         height: 96
                         visible: root.gpuAvailable()
-                        progress: numOr(s() ? s().gpuUsage : 0, 0) / 100.0
+                        progress: root.hasMedium() ? numOr(s() ? s().gpuUsage : 0, 0) / 100.0 : 0
                         ringColor: root.colorGpu
-                        centerValue: Math.round(numOr(s() ? s().gpuUsage : 0, 0)) + "%"
+                        centerValue: root.hasMedium()
+                            ? Math.round(numOr(s() ? s().gpuUsage : 0, 0)) + "%"
+                            : "--"
                         centerLabel: "GPU"
-                        subLabel: fixed(s() ? s().gpuTempC : 0, 0) + "°"
+                        subLabel: root.hasMedium()
+                            ? fixed(s() ? s().gpuTempC : 0, 0) + "°"
+                            : "--"
                     }
 
                     ActivityRing {
                         width: 96
                         height: 96
                         visible: !root.gpuAvailable()
-                        progress: Math.min(1, numOr(s() ? s().load1 : 0, 0) / Math.max(1, numOr(s() ? s().cpuCount : 4, 4)))
+                        progress: root.hasMedium()
+                            ? Math.min(1, numOr(s() ? s().load1 : 0, 0) / Math.max(1, numOr(s() ? s().cpuCount : 4, 4)))
+                            : 0
                         ringColor: root.colorGpu
-                        centerValue: fixed(s() ? s().load1 : 0, 2)
+                        centerValue: root.hasMedium() ? fixed(s() ? s().load1 : 0, 2) : "--"
                         centerLabel: "负载"
-                        subLabel: fixed(s() ? s().cpuFrequencyGHz : 0, 1) + "G"
+                        subLabel: root.hasMedium()
+                            ? fixed(s() ? s().cpuFrequencyGHz : 0, 1) + "G"
+                            : "--"
                     }
                 }
             }
@@ -440,19 +468,25 @@ Item {
                         width: parent.width / 3
                         height: parent.height
                         title: "风扇"
-                        value: (s() ? s().fanRpm : 0) + " RPM"
+                        value: root.hasSlow()
+                            ? (s() ? s().fanRpm : 0) + " RPM"
+                            : "--"
                     }
                     StatCell {
                         width: parent.width / 3
                         height: parent.height
                         title: "任务"
-                        value: (s() ? s().runningTasks : 0) + "/" + (s() ? s().totalTasks : 0)
+                        value: root.hasMedium()
+                            ? (s() ? s().runningTasks : 0) + "/" + (s() ? s().totalTasks : 0)
+                            : "--"
                     }
                     StatCell {
                         width: parent.width / 3
                         height: parent.height
                         title: "运行"
-                        value: (s() ? s().uptimeText : "--")
+                        value: root.hasSlow()
+                            ? ((s() && s().uptimeText) ? s().uptimeText : "--")
+                            : "--"
                     }
                 }
             }
@@ -463,7 +497,9 @@ Item {
                 height: 68
                 cardIndex: 3
 
-                readonly property real perc: (s() ? s().diskUsage : 0) / 100.0
+                readonly property real perc: root.hasSlow()
+                    ? (s() ? s().diskUsage : 0) / 100.0
+                    : 0
 
                 Rectangle {
                     anchors.left: parent.left
@@ -489,13 +525,17 @@ Item {
                         anchors.verticalCenter: parent.verticalCenter
                         spacing: 2
                         Text {
-                            text: "磁盘  " + fixed(s() ? s().diskUsage : 0, 1) + "%"
+                            text: root.hasSlow()
+                                ? ("磁盘  " + fixed(s() ? s().diskUsage : 0, 1) + "%")
+                                : "磁盘  --"
                             color: root.textPrimary
                             font.pixelSize: 13
                             font.weight: Font.DemiBold
                         }
                         Text {
-                            text: fixed(s() ? s().diskUsedGB : 0, 1) + " / " + fixed(s() ? s().diskTotalGB : 0, 1) + " GB"
+                            text: root.hasSlow()
+                                ? (fixed(s() ? s().diskUsedGB : 0, 1) + " / " + fixed(s() ? s().diskTotalGB : 0, 1) + " GB")
+                                : "读取中"
                             color: root.textSecondary
                             font.pixelSize: 11
                         }

@@ -19,6 +19,12 @@ Item {
     property string lastError: ""
     property int parseErrorCount: 0
 
+    // First-sample readiness flags. UI shows placeholders until each class arrives
+    // so open does not flash 0 RPM / 0 tasks while the monitor warms up.
+    property bool hasFastData: false
+    property bool hasMediumData: false
+    property bool hasSlowData: false
+
     property real cpuUsage: 0
     property real cpuTempC: 0
     property real cpuFrequencyGHz: 0
@@ -129,6 +135,8 @@ Item {
             setValue("ramTotalGB", finiteNumber(packet.ramTotalGB, root.ramTotalGB, 0));
             setValue("netDownBps", finiteNumber(packet.netDownBps, 0, 0));
             setValue("netUpBps", finiteNumber(packet.netUpBps, 0, 0));
+            if (!root.hasFastData)
+                root.hasFastData = true;
             root.fastDataChanged();
             return;
         }
@@ -144,6 +152,8 @@ Item {
             setValue("gpuTempC", finiteNumber(packet.gpuTempC, 0, 0));
             setValue("gpuUsage", finiteNumber(packet.gpuUsage, 0, 0, 100));
             setValue("processes", sanitizeProcesses(packet.processes));
+            if (!root.hasMediumData)
+                root.hasMediumData = true;
             root.mediumDataChanged();
             return;
         }
@@ -154,6 +164,8 @@ Item {
             setValue("diskUsedGB", finiteNumber(packet.diskUsedGB, 0, 0));
             setValue("diskTotalGB", finiteNumber(packet.diskTotalGB, 0, 0));
             setValue("uptimeText", textValue(packet.uptimeText, ""));
+            if (!root.hasSlowData)
+                root.hasSlowData = true;
             root.slowDataChanged();
         }
     }
@@ -337,6 +349,41 @@ Item {
             "prev_time=$(date +%s 2>/dev/null || printf '0')",
             "tick=0",
             "",
+            "# Bootstrap: emit medium + slow immediately so fan/tasks/uptime/processes",
+            "# appear on first open without waiting for the 2s/5s steady cadence.",
+            "# Steady-state intervals below are unchanged (fast 1s / medium 2s / slow 5s).",
+            "emit_medium() {",
+            "  set -- $(read_load)",
+            "  load1=${1:-0}; load5=${2:-0}; load15=${3:-0}; running_tasks=${4:-0}; total_tasks=${5:-0}",
+            "  cpu_temp=$(read_cpu_temp)",
+            "  cpu_freq=$(read_cpu_freq)",
+            "  set -- $(read_gpu)",
+            "  gpu_temp=${1:-0}",
+            "  gpu_usage=${2:-0}",
+            "  processes=$(read_processes_json)",
+            "  printf '{\"c\":\"medium\",\"load1\":%s,\"load5\":%s,\"load15\":%s,\"runningTasks\":%s,\"totalTasks\":%s,\"cpuTempC\":%s,\"cpuFrequencyGHz\":%s,\"gpuTempC\":%s,\"gpuUsage\":%s,\"processes\":%s}\\n' \"$load1\" \"$load5\" \"$load15\" \"$running_tasks\" \"$total_tasks\" \"$cpu_temp\" \"$cpu_freq\" \"$gpu_temp\" \"$gpu_usage\" \"$processes\"",
+            "}",
+            "emit_slow() {",
+            "  fan_rpm=$(read_fan)",
+            "  set -- $(read_disk)",
+            "  disk_usage=${1:-0}",
+            "  disk_used=${2:-0}",
+            "  disk_total=${3:-0}",
+            "  uptime_text=$(read_uptime)",
+            "  printf '{\"c\":\"slow\",\"fanRpm\":%s,\"diskUsage\":%s,\"diskUsedGB\":%s,\"diskTotalGB\":%s,\"uptimeText\":\"%s\"}\\n' \"$fan_rpm\" \"$disk_usage\" \"$disk_used\" \"$disk_total\" \"$uptime_text\"",
+            "}",
+            "emit_fast_snapshot() {",
+            "  # CPU/net rates need a delta; first fast packet is RAM-only + zero rates.",
+            "  set -- $(read_mem)",
+            "  ram_usage=${1:-0}",
+            "  ram_used=${2:-0}",
+            "  ram_total=${3:-0}",
+            "  printf '{\"c\":\"fast\",\"cpuUsage\":0,\"ramUsage\":%s,\"ramUsedGB\":%s,\"ramTotalGB\":%s,\"netDownBps\":0,\"netUpBps\":0}\\n' \"$ram_usage\" \"$ram_used\" \"$ram_total\"",
+            "}",
+            "emit_fast_snapshot",
+            "emit_medium",
+            "emit_slow",
+            "",
             "while :; do",
             "  sleep 1",
             "  tick=$((tick + 1))",
@@ -368,25 +415,11 @@ Item {
             "  printf '{\"c\":\"fast\",\"cpuUsage\":%s,\"ramUsage\":%s,\"ramUsedGB\":%s,\"ramTotalGB\":%s,\"netDownBps\":%s,\"netUpBps\":%s}\\n' \"$cpu_usage\" \"$ram_usage\" \"$ram_used\" \"$ram_total\" \"$net_down\" \"$net_up\"",
             "",
             "  if [ $((tick % 2)) -eq 0 ]; then",
-            "    set -- $(read_load)",
-            "    load1=${1:-0}; load5=${2:-0}; load15=${3:-0}; running_tasks=${4:-0}; total_tasks=${5:-0}",
-            "    cpu_temp=$(read_cpu_temp)",
-            "    cpu_freq=$(read_cpu_freq)",
-            "    set -- $(read_gpu)",
-            "    gpu_temp=${1:-0}",
-            "    gpu_usage=${2:-0}",
-            "    processes=$(read_processes_json)",
-            "    printf '{\"c\":\"medium\",\"load1\":%s,\"load5\":%s,\"load15\":%s,\"runningTasks\":%s,\"totalTasks\":%s,\"cpuTempC\":%s,\"cpuFrequencyGHz\":%s,\"gpuTempC\":%s,\"gpuUsage\":%s,\"processes\":%s}\\n' \"$load1\" \"$load5\" \"$load15\" \"$running_tasks\" \"$total_tasks\" \"$cpu_temp\" \"$cpu_freq\" \"$gpu_temp\" \"$gpu_usage\" \"$processes\"",
+            "    emit_medium",
             "  fi",
             "",
             "  if [ $((tick % 5)) -eq 0 ]; then",
-            "    fan_rpm=$(read_fan)",
-            "    set -- $(read_disk)",
-            "    disk_usage=${1:-0}",
-            "    disk_used=${2:-0}",
-            "    disk_total=${3:-0}",
-            "    uptime_text=$(read_uptime)",
-            "    printf '{\"c\":\"slow\",\"fanRpm\":%s,\"diskUsage\":%s,\"diskUsedGB\":%s,\"diskTotalGB\":%s,\"uptimeText\":\"%s\"}\\n' \"$fan_rpm\" \"$disk_usage\" \"$disk_used\" \"$disk_total\" \"$uptime_text\"",
+            "    emit_slow",
             "  fi",
             "",
             "  prev_cpu_total=$cpu_total",

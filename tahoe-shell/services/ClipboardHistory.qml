@@ -546,7 +546,19 @@ Item {
     Process {
         id: clipboardWatcher
         running: false
-        command: root.commandRunner && root.commandRunner.clipboardWatchCommand ? root.commandRunner.clipboardWatchCommand() : ["wl-paste", "--watch", "cliphist", "store"]
+        // After each clipboard change, cliphist stores the payload and emits a
+        // one-line marker so QML can refresh history without a standing poll.
+        // Same Process owner as before — not a second watcher.
+        command: root.commandRunner && root.commandRunner.clipboardWatchCommand
+            ? root.commandRunner.clipboardWatchCommand()
+            : ["wl-paste", "--watch", "sh", "-c", "cliphist store; printf 'changed\\n'"]
+        stdout: SplitParser {
+            splitMarker: "\n"
+            onRead: function(line) {
+                // Event-driven history refresh: primary path after store.
+                root.scheduleRefresh();
+            }
+        }
         onExited: function(code, exitStatus) {
             if (root.cliphistAvailable && root.wlPasteAvailable)
                 watcherRestartTimer.restart();
@@ -567,11 +579,18 @@ Item {
         onTriggered: root.refresh()
     }
 
+    // Recovery-only probe: catch missed watcher events or external cliphist
+    // writes. Must not be a high-rate authority path (old 4s poll ≈ 900
+    // list processes/hour while idle). Same refresh() entry as events/UI.
     Timer {
-        interval: 4000
+        id: healthRecoveryTimer
+        interval: 300000
         running: true
         repeat: true
-        onTriggered: root.refresh()
+        onTriggered: {
+            if (root.cliphistAvailable)
+                root.refresh();
+        }
     }
 
     Connections {

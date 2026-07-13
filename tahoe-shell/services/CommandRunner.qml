@@ -238,7 +238,9 @@ Item {
     }
 
     function clipboardWatchCommand() {
-        return ["wl-paste", "--watch", "cliphist", "store"];
+        // Marker line after store lets ClipboardHistory's watcher SplitParser
+        // schedule a list refresh without a standing poll timer.
+        return ["wl-paste", "--watch", "sh", "-c", "cliphist store; printf 'changed\\n'"];
     }
 
     function runClipboardCopyEntry(raw, mimeType) {

@@ -51,6 +51,9 @@ PanelWindow {
     }
 
     onOpenChanged: {
+        // Session boundary: a prior modifier-release Timer must never confirm a
+        // later reopen (release → close → reopen within the 40ms window).
+        releaseConfirmTimer.stop();
         if (open) {
             if (windowChoices.length === 0) {
                 closeRequested();
@@ -201,6 +204,8 @@ PanelWindow {
     }
 
     function confirm() {
+        // End any pending modifier-release confirm before closing the session.
+        releaseConfirmTimer.stop();
         var window = currentWindow();
         if (window && windowsService) {
             if (window.isMinimized)
@@ -212,6 +217,7 @@ PanelWindow {
     }
 
     function cancel() {
+        releaseConfirmTimer.stop();
         closeRequested();
     }
 
@@ -276,6 +282,9 @@ PanelWindow {
         }
     }
 
+    // Single release-confirm Timer owned by this switcher. Stopped at every
+    // session boundary (open/close) and explicit confirm/cancel so a stale
+    // restart from a previous keyboard session cannot fire into a new one.
     Timer {
         id: releaseConfirmTimer
         interval: 40

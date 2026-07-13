@@ -126,6 +126,8 @@ Item {
     onHasMediaChanged: handleMediaAvailabilityChanged()
     onDynamicIslandAutoExpandMediaChanged: if (root.dynamicIslandAutoExpandMedia) handleMediaAvailabilityChanged()
 
+    onControlsServiceChanged: captureOsdBaselines()
+
     Component.onCompleted: {
         resetNotificationTracking();
         captureOsdBaselines();
@@ -952,14 +954,21 @@ Item {
         presentOsdEntry(entry);
     }
 
-    function handleVolumeChange() {
+    // Single volume/mute OSD path: lastVolume/lastMuted are the only baseline.
+    // Backend may emit volumeChanged and mutedChanged for one user action;
+    // Qt.callLater coalesces both into one semantic snapshot before present.
+    // Exact equality only — no rough epsilon that would swallow small steps.
+    function syncVolumeOsdFromControls() {
         if (!root.islandEnabled)
             return;
-
         if (!root.controlsService)
             return;
+
         var volume = Number(root.controlsService.volume) || 0;
         var muted = !!root.controlsService.muted;
+        if (volume === root.lastVolume && muted === root.lastMuted)
+            return;
+
         root.lastVolume = volume;
         root.lastMuted = muted;
         presentOsdEntry({
@@ -970,21 +979,12 @@ Item {
         });
     }
 
-    function handleMuteChange() {
-        if (!root.islandEnabled)
-            return;
+    function handleVolumeChange() {
+        Qt.callLater(root.syncVolumeOsdFromControls);
+    }
 
-        if (!root.controlsService)
-            return;
-        var muted = !!root.controlsService.muted;
-        root.lastMuted = muted;
-        var volume = Number(root.controlsService.volume) || 0;
-        presentOsdEntry({
-            "kind": "volume",
-            "progress": muted ? 0 : volume,
-            "muted": muted,
-            "icon": muted ? "\ue04f" : "\ue050"
-        });
+    function handleMuteChange() {
+        Qt.callLater(root.syncVolumeOsdFromControls);
     }
 
     function handleBrightnessChange() {

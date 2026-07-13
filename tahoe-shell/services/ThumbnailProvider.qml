@@ -267,7 +267,13 @@ Item {
         }
 
         if (state.loading) {
-            state.refreshPending = true;
+            // Coalesce equivalent in-flight work onto the single capture.
+            // A second capture is only scheduled when force is requested or
+            // desired dimensions exceed what the active job will produce.
+            // Same-or-smaller non-force requests share the in-flight result
+            // (all consumers already read the same per-window state).
+            if (force || loadingJobNeedsUpgrade(key, state))
+                state.refreshPending = true;
             touch();
             return true;
         }
@@ -276,6 +282,18 @@ Item {
         state.error = "";
         state.status = "queued";
         return queueKey(key);
+    }
+
+    /// True when the active capture for `key` cannot satisfy `state`'s desired
+    /// dimensions, so a follow-up capture must run after the current job exits.
+    function loadingJobNeedsUpgrade(key, state) {
+        var job = root.activeJob;
+        if (!job || String(job.key) !== String(key))
+            return true;
+
+        var desiredW = Number(state.desiredWidth) || 0;
+        var desiredH = Number(state.desiredHeight) || 0;
+        return desiredW > job.maxWidth || desiredH > job.maxHeight;
     }
 
     function requestThumbnails(windows, maxWidth, maxHeight, reason, force) {

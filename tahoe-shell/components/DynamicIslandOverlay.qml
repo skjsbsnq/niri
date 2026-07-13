@@ -302,6 +302,7 @@ PanelWindow {
                 canPlayPause: root.canPlayPause
                 canPrev: root.canPrev
                 canNext: root.canNext
+                settingsService: root.settingsService
                 summaryBatteryPercent: root.summaryBatteryPercent
                 summaryBatteryCharging: root.summaryBatteryCharging
                 summaryVolume: root.summaryVolume

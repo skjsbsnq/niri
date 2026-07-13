@@ -31,6 +31,7 @@ Item {
     property bool canPlayPause: false
     property bool canPrev: false
    property bool canNext: false
+    property var settingsService
     signal mediaPreviousRequested()
     signal mediaPlayPauseRequested()
     signal mediaNextRequested()
@@ -324,6 +325,7 @@ Item {
         canPlayPause: root.canPlayPause
         canPrev: root.canPrev
         canNext: root.canNext
+        settingsService: root.settingsService
         textPrimary: root.textPrimary
         textSecondary: root.textSecondary
         opacity: root.mediaExpandedContentVisible ? 1 : 0

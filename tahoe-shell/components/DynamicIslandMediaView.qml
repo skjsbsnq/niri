@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import "DynamicIslandMotion.js" as IslandMotion
+import "Motion.js" as Motion
 
 // Expanded media controls rendered inside the island capsule. Mirrors the
 // Tide expanded-player layout (art + title/artist + prev/play/next) using
@@ -21,9 +22,12 @@ Item {
     property bool canPlayPause: false
     property bool canPrev: false
     property bool canNext: false
+    // Optional: when motion profile is reduced, freeze visualizer (no phase ticks).
+    property var settingsService
     property color textPrimary: "#f7f9fc"
     property color textSecondary: "#b9c0cc"
     property color accent: "#b56cff"
+    readonly property bool reducedMotion: Motion.reducedMotion(root.settingsService)
     signal previousRequested()
     signal playPauseRequested()
     signal nextRequested()
@@ -143,16 +147,23 @@ Item {
                     delegate: Rectangle {
                         required property int index
                         width: 3
-                        height: root.isPlaying
+                        // Reduced motion: static paused silhouette even while playing.
+                        height: (root.isPlaying && !root.reducedMotion)
                             ? 4 + (parent.height - 4) * root.visualizerLevel(index)
                             : 4 + (parent.height - 4) * root.pausedLevel(index)
                         radius: 1.5
-                        color: root.isPlaying ? root.accent : "#5f4b72"
+                        color: (root.isPlaying && !root.reducedMotion) ? root.accent : "#5f4b72"
                         anchors.verticalCenter: parent.verticalCenter
 
                         Behavior on height {
                             NumberAnimation {
-                                duration: root.isPlaying ? 120 : 260
+                                // Match visualizerTimer so playing bars settle before retarget.
+                                // Reduced motion: zero duration (instant, no continuous work).
+                                duration: root.reducedMotion
+                                    ? 0
+                                    : (root.isPlaying
+                                        ? IslandMotion.visualizerPlayingDuration
+                                        : IslandMotion.visualizerPausedDuration)
                                 easing.type: IslandMotion.overlayColorEasing
                             }
                         }
@@ -290,12 +301,15 @@ Item {
         }
     }
 
+    // Single phase owner. Update interval equals playing bar animation duration
+    // so each height Behavior can settle before the next target (Task 21).
+    // Stops when paused, hidden, or reduced motion — no pointless phase ticks.
     Timer {
         id: visualizerTimer
-        interval: 64
+        interval: IslandMotion.visualizerUpdateMs
         repeat: true
-        running: root.isPlaying && root.visible
-        onTriggered: root.visualizerPhase += 0.18
+        running: root.isPlaying && root.visible && !root.reducedMotion
+        onTriggered: root.visualizerPhase += IslandMotion.visualizerPhaseStep
     }
 
     property real visualizerPhase: 0

@@ -59,3 +59,11 @@ var swipeSuppressClickMs = 180;
 // Hover expand (T09). Matches the Tide-derived hover timing guardrails.
 var hoverExpandDelayMs = 350;
 var hoverCollapseDelayMs = 250;
+
+// Media visualizer (Task 21): one phase owner, update period matched to bar
+// height settle so 5× NumberAnimation are not continuously redirected.
+// Old path: 64ms phase tick into 120ms height Behaviors → perpetual retarget.
+var visualizerUpdateMs = 120;
+var visualizerPhaseStep = 0.34;
+var visualizerPlayingDuration = 120;
+var visualizerPausedDuration = 260;

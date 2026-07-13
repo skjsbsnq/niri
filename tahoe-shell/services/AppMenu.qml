@@ -304,8 +304,14 @@ Item {
         running: false
     }
 
+    // Recovery-only probe: catch registrar appear/disappear or dependency
+    // recovery while idle. Must not be a high-rate authority path (old 5s
+    // poll ≈ 720 Python/D-Bus starts per idle hour). Primary drivers remain
+    // focused-window identity, menu open (AppMenuPopup), and initial load —
+    // all still call the single Task-03 refresh()/probe generation pipeline.
     Timer {
-        interval: 5000
+        id: healthRecoveryTimer
+        interval: 300000
         running: true
         repeat: true
         onTriggered: root.refresh()

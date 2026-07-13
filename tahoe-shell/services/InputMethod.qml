@@ -20,13 +20,53 @@ Item {
         ? (errorText.length > 0 ? errorText : "输入法不可用")
         : (active ? (currentName.length > 0 ? currentName : "中文输入") : "英文输入")
 
+    // Single label entry for the top-bar / chip language glyph.
+    // Maps common fcitx engine names; unknown engines use a non-Chinese fallback.
+    // Order: Japanese/Korean scripts & engines first so shared CJK ideographs
+    // (e.g. 日本語) are not mislabeled as Chinese.
     function languageLabel(name) {
-        var text = String(name || "").toLowerCase();
+        var raw = String(name || "");
+        var text = raw.toLowerCase().trim();
+        if (text.length === 0)
+            return "Aa";
+
+        // Japanese (mozc / anthy / skk / kkc / ja* / kana / kanji+kana names).
+        if (text.indexOf("mozc") !== -1 || text.indexOf("anthy") !== -1
+                || text.indexOf("kkc") !== -1 || text.indexOf("skk") !== -1
+                || text.indexOf("japanese") !== -1 || text.indexOf("japan") !== -1
+                || text.indexOf("ja-") !== -1 || text.indexOf("ja_") !== -1
+                || text === "ja" || text.indexOf("nihongo") !== -1
+                || /[\u3040-\u30ff]/.test(raw)
+                || (text.indexOf("\u65e5\u672c") !== -1))  // 日本
+            return "\u3042";  // あ
+
+        // Korean (hangul / ko* / Hangul syllables in name).
+        if (text.indexOf("hangul") !== -1 || text.indexOf("libhangul") !== -1
+                || text.indexOf("korean") !== -1 || text.indexOf("korea") !== -1
+                || text.indexOf("ko-") !== -1 || text.indexOf("ko_") !== -1
+                || text === "ko"
+                || /[\uac00-\ud7af]/.test(raw))
+            return "\ud55c";  // 한
+
+        // Chinese (pinyin / rime / wubi / zh* / Chinese-script names without JA/KO).
         if (text.indexOf("pinyin") !== -1 || text.indexOf("rime") !== -1
-                || text.indexOf("wubi") !== -1 || text.indexOf("zh") !== -1
-                || /[\u4e00-\u9fff]/.test(text))
-            return "中";
-        return "中";
+                || text.indexOf("wubi") !== -1 || text.indexOf("zhuyin") !== -1
+                || text.indexOf("cangjie") !== -1 || text.indexOf("chinese") !== -1
+                || text.indexOf("zh-") !== -1 || text.indexOf("zh_") !== -1
+                || text === "zh" || text.indexOf("zh ") !== -1
+                || text === "cn" || text.indexOf("cn-") === 0 || text.indexOf("cn_") === 0
+                || /[\u4e00-\u9fff]/.test(raw))
+            return "\u4e2d";  // 中
+
+        // Explicit English / latin keyboard engines.
+        if (text.indexOf("english") !== -1 || text.indexOf("keyboard-us") !== -1
+                || text.indexOf("keyboard-uk") !== -1 || text === "us"
+                || text === "en" || text.indexOf("en-") === 0
+                || text.indexOf("en_") === 0)
+            return "EN";
+
+        // Non-misleading fallback: never claim Chinese for unknown engines.
+        return "Aa";
     }
 
     function refresh() {

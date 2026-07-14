@@ -1,32 +1,31 @@
 #!/usr/bin/env python3
-"""Task 07: Apps model must refresh on identity/metadata changes, not count only.
+"""Task 07 / 07B: Apps model refreshes on identity changes without periodic sort.
 
-Root bug (old code):
-  refreshDesktopEntries compared only DesktopEntries.applications.values.length.
-  Equal-count install/uninstall swaps and in-place .desktop Name/Icon/Exec/NoDisplay
-  edits left desktopEntriesRevision unchanged, so realApplications / pinnedApps /
-  launchpad search kept stale objects and metadata.
+Root bugs:
+  - Old: refreshDesktopEntries gated on count only (equal-count swaps missed).
+  - Task 07B: 2s desktopEntriesRefreshTimer still copied, fingerprinted and sorted
+    the full application model even when DesktopEntries never rescanned.
 
 Fix contract:
   - Single Apps-owned refresh path: refreshDesktopEntries(force)
-  - Gate rebuilds with a lightweight identity+metadata fingerprint (not count)
-  - Fingerprint covers stable desktop id and UI/launch fields: name, genericName,
-    icon, execString, command, startupClass, noDisplay
-  - DesktopEntries.applicationsChanged drives the same refresh path
-  - Recovery Timer (if present) must call the same refreshDesktopEntries — not a
-    second competing refresh system
+  - Fingerprint gate for identity+metadata fields
+  - DesktopEntries.applicationsChanged is the only ongoing refresh driver
+  - No desktopEntriesRefreshTimer / 2s periodic fingerprint work
   - Unchanged fingerprint must not bump desktopEntriesRevision
-  - Force rebuild still works for initial load
+  - Force rebuild for initial load only
 
 Regression strategy:
-  1. Static contract extraction from Apps.qml (fails on old count-only gate).
-  2. Behavioral simulation of equal-count replace, metadata edit, count change,
-     no-op poll, and signal-driven refresh using the extracted fingerprint logic.
+  1. Static contract extraction from Apps.qml.
+  2. Behavioral simulation of fingerprint identity cases.
+  3. Real qmltestrunner against production Apps.qml (Task 07B).
 """
 
 from __future__ import annotations
 
+import os
 import re
+import shutil
+import subprocess
 import unittest
 from dataclasses import dataclass
 from pathlib import Path
@@ -35,6 +34,7 @@ from typing import Any
 
 SHELL_ROOT = Path(__file__).resolve().parents[1]
 APPS = SHELL_ROOT / "services" / "Apps.qml"
+QML_TEST = Path(__file__).with_name("tst_apps_desktop_entries_identity_refresh.qml")
 
 
 @dataclass(frozen=True)
@@ -55,7 +55,7 @@ class DesktopEntriesRefreshContract:
     no_desktop_entries_count_property: bool
     connects_applications_changed: bool
     applications_changed_calls_refresh: bool
-    timer_calls_same_refresh: bool
+    no_periodic_desktop_entries_timer: bool
     single_refresh_function: bool
     no_parallel_fingerprint_pipeline: bool
     no_second_desktop_entries_model: bool
@@ -193,13 +193,12 @@ def extract_contract(src: str) -> DesktopEntriesRefreshContract:
         re.search(r"refreshDesktopEntries\s*\(", de_connections)
     )
 
-    # Timer is optional recovery; if present it must share the same refresh path.
-    if timer.strip():
-        timer_calls_same_refresh = bool(
-            re.search(r"refreshDesktopEntries\s*\(\s*false\s*\)", timer)
-        )
-    else:
-        timer_calls_same_refresh = True
+    # Task 07B: no periodic recovery timer — event-driven only after 07A.
+    no_periodic_desktop_entries_timer = not bool(timer.strip()) and not bool(
+        re.search(r"desktopEntriesRefreshTimer", src)
+    ) and not bool(
+        re.search(r"Timer\s*\{[^}]*interval:\s*2000", src, re.DOTALL)
+    )
 
     single_refresh_function = len(re.findall(r"function\s+refreshDesktopEntries\s*\(", src)) == 1
     no_parallel_fingerprint_pipeline = not bool(
@@ -243,7 +242,7 @@ def extract_contract(src: str) -> DesktopEntriesRefreshContract:
         no_desktop_entries_count_property=no_desktop_entries_count_property,
         connects_applications_changed=connects_applications_changed,
         applications_changed_calls_refresh=applications_changed_calls_refresh,
-        timer_calls_same_refresh=timer_calls_same_refresh,
+        no_periodic_desktop_entries_timer=no_periodic_desktop_entries_timer,
         single_refresh_function=single_refresh_function,
         no_parallel_fingerprint_pipeline=no_parallel_fingerprint_pipeline,
         no_second_desktop_entries_model=no_second_desktop_entries_model,
@@ -544,8 +543,42 @@ class AppsDesktopEntriesIdentityRefreshTests(unittest.TestCase):
             "refreshDesktopEntries2",
             "newRefreshDesktopEntries",
             "desktopEntriesCount",
+            "desktopEntriesRefreshTimer",
         ):
             self.assertNotIn(forbidden, self.src)
+
+    def test_no_two_second_periodic_timer_in_source(self) -> None:
+        self.assertNotIn("desktopEntriesRefreshTimer", self.src)
+        self.assertNotRegex(
+            self.src,
+            r"Timer\s*\{[^}]*interval:\s*2000[^}]*repeat:\s*true",
+            re.DOTALL,
+        )
+
+    def test_real_qml_apps_event_driven_refresh(self) -> None:
+        qt6_runner = Path("/usr/lib/qt6/bin/qmltestrunner")
+        runner = str(qt6_runner) if qt6_runner.is_file() else shutil.which("qmltestrunner")
+        self.assertIsNotNone(runner, "Qt 6 qmltestrunner is required for Apps coverage")
+        env = os.environ.copy()
+        env.setdefault("QT_QPA_PLATFORM", "offscreen")
+        local_qml = Path.home() / ".local" / "lib" / "qt6" / "qml"
+        test_qml = SHELL_ROOT / "tests" / "qml_imports"
+        existing = env.get("QML2_IMPORT_PATH", "")
+        paths = [str(test_qml), str(local_qml)]
+        if existing:
+            paths.append(existing)
+        env["QML2_IMPORT_PATH"] = ":".join(paths)
+        result = subprocess.run(
+            [runner, "-input", str(QML_TEST)],
+            cwd=SHELL_ROOT,
+            env=env,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            timeout=90,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout)
 
 
 if __name__ == "__main__":

@@ -84,15 +84,9 @@ Item {
         onLoadFailed: root.loadPinnedState()
     }
 
-    // Recovery poll only. Same fingerprint-gated refresh path as the signal —
-    // not a second competing refresh system.
-    Timer {
-        id: desktopEntriesRefreshTimer
-        interval: 2000
-        repeat: true
-        running: true
-        onTriggered: root.refreshDesktopEntries(false)
-    }
+    // Desktop entry freshness is event-driven only: DesktopEntries.applicationsChanged
+    // (from QuickShell DesktopEntryMonitor after Task 07A) plus the forced initial
+    // load below. No periodic fingerprint/sort timer — idle hours must not rescan.
 
     Component.onCompleted: {
         refreshDesktopEntries(true);

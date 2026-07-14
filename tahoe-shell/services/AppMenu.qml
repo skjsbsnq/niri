@@ -45,7 +45,11 @@ Item {
         ? nativeMenuDetail
         : nativeMenuStatus
 
-    function refresh() {
+    // explicitDemand: menu open / registrar recovery / other freshness requests that
+    // must not be swallowed by a same-identity in-flight health/focus probe.
+    // Optional argument keeps a single refresh() entry (no demandRefresh parallel API).
+    function refresh(explicitDemand) {
+        var demand = !!explicitDemand;
         var targetIdentity = JSON.stringify([activeWindowId, activePid, activeAppId]);
         var targetChanged = targetIdentity !== probeTargetIdentity;
         if (targetChanged) {
@@ -95,10 +99,13 @@ Item {
         }
 
         if (probe.running) {
-            // The in-flight result is still current for the same stable target.  Coalesce
-            // periodic/manual refreshes so a slow probe cannot be starved indefinitely.
-            if (targetChanged) {
-                probeGeneration += 1;
+            // Same-identity health/focus probes may coalesce into the in-flight run.
+            // Explicit demand (menu open) and target changes must supersede that run so
+            // a probe that already read a stale snapshot cannot become the final menu.
+            // Multiple same-identity demands collapse to one pending follow-up generation.
+            if (targetChanged || demand) {
+                if (!probePending || targetChanged)
+                    probeGeneration += 1;
                 probePending = true;
             }
             return;

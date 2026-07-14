@@ -168,4 +168,64 @@ TestCase {
         compare(service.nativeMenuItems[0].label, "B");
         compare(service.probing, false);
     }
+
+    function test_explicit_demand_same_identity_supersedes_inflight_probe() {
+        // Recreate with a slow initial probe so demand lands while still in-flight.
+        service.destroy();
+        TestIo.TestProcessRegistry.reset();
+        delayA = 0.50;
+        windows.focusedWindow = windowObject("A");
+        service = serviceComponent.createObject(testCase, {
+            windowsService: windows,
+            appsService: apps,
+            commandRunner: runner
+        });
+        tryCompare(service, "probing", true, 1000);
+        var genBefore = service.probeGeneration;
+        service.refresh(true);
+        compare(service.probePending, true);
+        compare(service.probeGeneration > genBefore, true);
+        // Multiple explicit demands coalesce to one pending follow-up generation.
+        var genDemand = service.probeGeneration;
+        service.refresh(true);
+        service.refresh(true);
+        compare(service.probeGeneration, genDemand);
+        compare(service.probePending, true);
+
+        tryCompare(service, "nativeMenuService", "svc.A", 3000);
+        compare(service.nativeMenuItems[0].label, "A");
+        compare(service.probePending, false);
+        // Initial A + one demand follow-up (not one per demand).
+        compare(TestIo.TestProcessRegistry.startedIds.join(","), "A,A");
+        compare(service.probing, false);
+    }
+
+    function test_explicit_demand_during_a_then_focus_c_lands_on_c() {
+        delayA = 0.50;
+        delayC = 0.05;
+        tryCompare(service, "probing", true, 1000);
+        service.refresh(true);
+        compare(service.probePending, true);
+        windows.focusedWindow = windowObject("C");
+        wait(0);
+        service.refresh();
+        tryCompare(service, "nativeMenuService", "svc.C", 2000);
+        compare(service.nativeMenuItems[0].label, "C");
+        compare(service.nativeMenuAvailable, true);
+        // Final applied menu must be C, never a stale A demand result.
+        verify(TestIo.TestProcessRegistry.startedIds.indexOf("C") >= 0);
+    }
+
+    function test_non_demand_same_identity_still_coalesces() {
+        // Health/focus refresh without demand must not force pending follow-up.
+        delayA = 0.30;
+        tryCompare(service, "probing", true, 1000);
+        var genBefore = service.probeGeneration;
+        service.refresh();
+        service.refresh();
+        compare(service.probeGeneration, genBefore);
+        compare(service.probePending, false);
+        tryCompare(service, "nativeMenuService", "svc.A", 2000);
+        compare(TestIo.TestProcessRegistry.startedIds.join(","), "A");
+    }
 }

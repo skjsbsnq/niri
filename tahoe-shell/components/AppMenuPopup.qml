@@ -40,8 +40,10 @@ PanelWindow {
     WlrLayershell.namespace: "tahoe-application-menu"
 
     onOpenChanged: {
+        // Explicit demand: same-identity in-flight health/focus probes must not
+        // swallow menu-open freshness (single refresh() entry with demand flag).
         if (open && appMenuService)
-            appMenuService.refresh();
+            appMenuService.refresh(true);
     }
 
     anchors {

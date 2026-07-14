@@ -129,7 +129,7 @@ def extract_contract(app_menu_src: str, popup_src: str) -> AppMenuDemandProbeCon
         ),
         menu_open_refreshes=bool(
             re.search(r"onOpenChanged", popup_src)
-            and re.search(r"\.refresh\s*\(\s*\)", popup_src)
+            and re.search(r"\.refresh\s*\(\s*(?:true)?\s*\)", popup_src)
         ),
         completed_refreshes=bool(
             re.search(

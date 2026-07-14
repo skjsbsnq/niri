@@ -29,7 +29,10 @@ Regression strategy:
 
 from __future__ import annotations
 
+import os
 import re
+import shutil
+import subprocess
 import unittest
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -37,6 +40,7 @@ from pathlib import Path
 
 SHELL_ROOT = Path(__file__).resolve().parents[1]
 APPS_SETTINGS = SHELL_ROOT / "services" / "AppsSettings.qml"
+QML_TEST = Path(__file__).with_name("tst_apps_settings_permissions_identity.qml")
 
 
 @dataclass(frozen=True)
@@ -869,6 +873,39 @@ class AppsSettingsPermissionsIdentityTests(unittest.TestCase):
         self.assertTrue(m.state.refreshing)
         m.process_exited(_perm_payload("B.desktop"), code=0)
         self.assertEqual(m.state.items[0]["label"], "B.desktop")
+
+    def test_real_qml_permissions_identity_races(self) -> None:
+        """Drive production AppsSettings.qml via qmltestrunner + Process fake.
+
+        Covers A late success/parse/FailedToStart/cancel, A→B→C latest-only,
+        permissionsRefreshing generation gate, and sandbox fallback isolation.
+        """
+        qt6_runner = Path("/usr/lib/qt6/bin/qmltestrunner")
+        runner = str(qt6_runner) if qt6_runner.is_file() else shutil.which("qmltestrunner")
+        self.assertIsNotNone(
+            runner, "Qt 6 qmltestrunner is required for AppsSettings permissions coverage"
+        )
+        self.assertTrue(QML_TEST.is_file(), f"missing QML test: {QML_TEST}")
+        env = os.environ.copy()
+        env.setdefault("QT_QPA_PLATFORM", "offscreen")
+        local_qml = Path.home() / ".local" / "lib" / "qt6" / "qml"
+        test_qml = SHELL_ROOT / "tests" / "qml_imports"
+        existing = env.get("QML2_IMPORT_PATH", "")
+        paths = [str(test_qml), str(local_qml)]
+        if existing:
+            paths.append(existing)
+        env["QML2_IMPORT_PATH"] = ":".join(paths)
+        result = subprocess.run(
+            [runner, "-input", str(QML_TEST)],
+            cwd=SHELL_ROOT,
+            env=env,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            timeout=90,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout)
 
 
 if __name__ == "__main__":

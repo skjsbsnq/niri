@@ -1,26 +1,28 @@
 #!/usr/bin/env python3
-"""Task 21: media visualizer must not continuously redirect unfinished animations.
+"""Task 21 + Task 08: visualizer cadence and multi-screen ownership.
 
-Root waste (old code):
+Root waste (old cadence):
   - visualizerTimer interval: 64ms while Behavior height duration: 120ms
   - Every tick retargets five NumberAnimations before they settle
-  - ~15.6 phase updates/s × 5 bars of interrupted work on software renderers
+
+Root waste (multi-screen, Task 08):
+  - mediaContentVisible only checked global contentState
+  - every output's MediaView became visible in expanded_media and ran Timer
+  - only the target screen capsule was actually shown
 
 Fix contract:
-  - Single visualizerPhase owner (no per-bar phase Timers)
-  - Update interval >= playing bar animation duration (aligned via motion tokens)
-  - Timer only runs when isPlaying && visible (paused/hidden stop updates)
-  - No second Timer; no delete visualizer; no obvious jump (phase still advances)
-  - Motion tokens own the period/step/duration numbers
-
-Regression strategy:
-  1. Static contract from DynamicIslandMediaView.qml + DynamicIslandMotion.js
-  2. Budget model: retarget ratio and idle/paused work
+  - Single visualizerPhase owner; interval aligned via motion tokens
+  - Timer only when isPlaying && visible && !reducedMotion
+  - mediaContentVisible / expanded content gated with activeForScreen
+  - Two MediaView instances: only the visible (target) phase advances
 """
 
 from __future__ import annotations
 
+import os
 import re
+import shutil
+import subprocess
 import unittest
 from dataclasses import dataclass
 from pathlib import Path
@@ -31,6 +33,7 @@ MEDIA_VIEW = SHELL_ROOT / "components" / "DynamicIslandMediaView.qml"
 MOTION = SHELL_ROOT / "components" / "DynamicIslandMotion.js"
 CONTENT = SHELL_ROOT / "components" / "DynamicIslandContent.qml"
 OVERLAY = SHELL_ROOT / "components" / "DynamicIslandOverlay.qml"
+QML_TEST = Path(__file__).with_name("tst_dynamic_island_visualizer_animation_align.qml")
 
 
 def _timer_block(src: str, timer_id: str) -> str:
@@ -78,6 +81,8 @@ class VisualizerAlignContract:
     reduced_motion_static_bars: bool
     settings_wired_from_overlay: bool
     phase_angular_velocity_near_legacy: bool
+    media_content_gated_by_active_for_screen: bool
+    no_second_media_visibility_state: bool
 
     @property
     def complete(self) -> bool:
@@ -185,6 +190,22 @@ def extract_contract(
             and re.search(r"property\s+var\s+settingsService\b", media_src)
         ),
         phase_angular_velocity_near_legacy=omega_ok,
+        media_content_gated_by_active_for_screen=bool(
+            overlay_src
+            and re.search(
+                r"mediaContentVisible\s*:\s*contentState\s*===\s*[\"']expanded_media[\"']\s*&&\s*activeForScreen",
+                overlay_src,
+            )
+        ),
+        no_second_media_visibility_state=bool(
+            overlay_src
+            and not re.search(
+                r"property\s+bool\s+(mediaVisibleForScreen|visualizerScreenActive|secondMediaVisible)\b",
+                overlay_src,
+            )
+            and re.search(r"activeForScreen", overlay_src)
+            and re.search(r"capsuleShown", overlay_src)
+        ),
     )
 
 
@@ -315,6 +336,46 @@ class DynamicIslandVisualizerAlignTests(unittest.TestCase):
         playing = _js_number(motion, "visualizerPlayingDuration")
         assert update is not None and playing is not None
         self.assertGreaterEqual(float(update), float(playing))
+
+    def test_overlay_media_content_requires_active_for_screen(self) -> None:
+        src = OVERLAY.read_text(encoding="utf-8")
+        self.assertRegex(
+            src,
+            r"mediaContentVisible\s*:\s*contentState\s*===\s*[\"']expanded_media[\"']\s*&&\s*activeForScreen",
+        )
+        # Must not leave expanded_media visible on every output.
+        self.assertNotRegex(
+            src,
+            r"mediaContentVisible\s*:\s*contentState\s*===\s*[\"']expanded_media[\"']\s*$",
+            re.MULTILINE,
+        )
+
+    def test_real_qml_only_target_screen_phase_advances(self) -> None:
+        qt6_runner = Path("/usr/lib/qt6/bin/qmltestrunner")
+        runner = str(qt6_runner) if qt6_runner.is_file() else shutil.which("qmltestrunner")
+        self.assertIsNotNone(runner, "Qt 6 qmltestrunner is required")
+        env = os.environ.copy()
+        env.setdefault("QT_QPA_PLATFORM", "offscreen")
+        local_qml = Path.home() / ".local" / "lib" / "qt6" / "qml"
+        test_qml = SHELL_ROOT / "tests" / "qml_imports"
+        existing = env.get("QML2_IMPORT_PATH", "")
+        paths = [str(test_qml), str(local_qml)]
+        if existing:
+            paths.append(existing)
+        env["QML2_IMPORT_PATH"] = ":".join(paths)
+        # Prefer +test TahoeSymbol so media controls do not need icon fonts.
+        env["QML_FILE_SELECTORS"] = "test"
+        result = subprocess.run(
+            [runner, "-input", str(QML_TEST)],
+            cwd=SHELL_ROOT,
+            env=env,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            timeout=60,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout)
 
 
 if __name__ == "__main__":

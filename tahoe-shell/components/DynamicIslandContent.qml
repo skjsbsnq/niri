@@ -328,8 +328,12 @@ Item {
         settingsService: root.settingsService
         textPrimary: root.textPrimary
         textSecondary: root.textSecondary
+        // Visibility is the multi-screen / expanded gate (Overlay activeForScreen →
+        // mediaContentVisible → mediaExpandedContentVisible). Keep visible tied to
+        // that flag so visualizerTimer cannot run on hidden outputs while opacity
+        // still fades out (opacity>0.01 alone can leave Timer running mid-fade).
         opacity: root.mediaExpandedContentVisible ? 1 : 0
-        visible: opacity > 0.01
+        visible: root.mediaExpandedContentVisible
         onPreviousRequested: root.mediaPreviousRequested()
         onPlayPauseRequested: root.mediaPlayPauseRequested()
         onNextRequested: root.mediaNextRequested()

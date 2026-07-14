@@ -39,20 +39,13 @@ Item {
     readonly property int controlHit: 44
     readonly property int fadeDuration: IslandMotion.overlayContentDuration + 90
     readonly property bool showArt: artUrl.length > 0
-    readonly property real contentOpacity: visible ? 1 : 0
     readonly property real safeProgress: Math.max(0, Math.min(1, Number(progress) || 0))
     readonly property bool showTimeline: positionSupported || durationSupported || duration > 0
 
+    // Visibility/opacity are owned by DynamicIslandContent (mediaExpandedContentVisible).
+    // Do not force visible:true here — multi-screen Overlay instances must be able to
+    // hide non-target MediaViews so visualizerTimer stops (Task 08).
     anchors.fill: parent
-    opacity: root.contentOpacity
-    visible: true
-
-    Behavior on opacity {
-        NumberAnimation {
-            duration: root.fadeDuration
-            easing.type: IslandMotion.overlayColorEasing
-        }
-    }
 
     Item {
         id: topRow
@@ -303,7 +296,8 @@ Item {
 
     // Single phase owner. Update interval equals playing bar animation duration
     // so each height Behavior can settle before the next target (Task 21).
-    // Stops when paused, hidden, or reduced motion — no pointless phase ticks.
+    // Stops when paused, hidden, reduced motion, or not the active screen's
+    // expanded media instance (Task 08 multi-screen gate via parent visible).
     Timer {
         id: visualizerTimer
         interval: IslandMotion.visualizerUpdateMs

@@ -57,9 +57,11 @@ PanelWindow {
         capsuleTargetWidth / 2,
         capsuleTargetHeight / 2)
     readonly property bool compactResting: contentState === "resting_time" || contentState === "resting_media"
-    readonly property bool compactContentVisible: compactResting
-    readonly property bool mediaContentVisible: contentState === "expanded_media"
-    readonly property bool summaryContentVisible: contentState === "expanded_summary"
+    readonly property bool compactContentVisible: compactResting && activeForScreen
+    // Expanded media (and its visualizer Timer) only on the target screen.
+    // Reuses activeForScreen / capsuleShown ownership — not a second visibility model.
+    readonly property bool mediaContentVisible: contentState === "expanded_media" && activeForScreen
+    readonly property bool summaryContentVisible: contentState === "expanded_summary" && activeForScreen
     readonly property bool showSecondaryText: contentSecondaryText.length > 0
         && !(safeProgress(progress) >= 0 && capsuleTargetHeight <= 44)
     readonly property color glassFill: "#f00b0c10"

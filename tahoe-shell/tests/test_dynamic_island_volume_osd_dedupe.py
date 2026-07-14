@@ -1,15 +1,23 @@
 #!/usr/bin/env python3
-"""Task 20: Dynamic Island volume/mute OSD must suppress duplicate semantics.
+"""Task 20 + Task 11: volume OSD dedupe and baseline lifecycle.
 
-Root bug (old code):
+Root bug (Task 20 old code):
   - handleVolumeChange / handleMuteChange always presentOsdEntry
   - lastVolume / lastMuted written but never compared before show
   - Backend re-emitting the same volume/muted pair restarts OSD every time
   - volumeChanged + mutedChanged for one user action can double-present
 
+Root bug (Task 11 lifecycle):
+  - syncVolumeOsdFromControls returns early when island disabled without
+    updating lastVolume/lastMuted
+  - re-enable does not re-capture baseline from current controls
+  - sink reconnect first sample may present spuriously
+
 Fix contract:
   - lastVolume / lastMuted remain the only OSD baseline (no second baseline)
   - syncVolumeOsdFromControls compares exact volume + muted; no rough epsilon
+  - disabled path still updates baseline but never presents
+  - re-enable / audioReady reconnect re-capture without present
   - Both signal handlers defer via Qt.callLater into the same sync entry
   - captureOsdBaselines / service replace re-seeds without showing
   - Real volume steps and mute flips still present immediately (after callLater)
@@ -18,11 +26,15 @@ Fix contract:
 Regression strategy:
   1. Static contract extraction from DynamicIsland.qml
   2. Behavioral sim of baseline equality + dual-signal coalesce
+  3. Real production DynamicIsland.qml via qmltestrunner
 """
 
 from __future__ import annotations
 
+import os
 import re
+import shutil
+import subprocess
 import unittest
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -30,6 +42,7 @@ from pathlib import Path
 
 SHELL_ROOT = Path(__file__).resolve().parents[1]
 ISLAND = SHELL_ROOT / "services" / "DynamicIsland.qml"
+QML_TEST = Path(__file__).with_name("tst_dynamic_island_volume_osd_dedupe.qml")
 
 
 def _extract_function_body(src: str, name: str) -> str:
@@ -306,6 +319,53 @@ class DynamicIslandVolumeOsdDedupeTests(unittest.TestCase):
         self.assertNotIn("presentOsdEntry", mute)
         self.assertIn("callLater", vol)
         self.assertIn("callLater", mute)
+
+    def test_disabled_sync_still_updates_baseline_contract(self) -> None:
+        src = ISLAND.read_text(encoding="utf-8")
+        sync_body = _extract_function_body(src, "syncVolumeOsdFromControls")
+        enabled_body = _extract_function_body(src, "handleIslandEnabledChanged")
+        # Baseline write must precede any islandEnabled present gate.
+        last_vol_idx = sync_body.find("root.lastVolume = volume")
+        present_idx = sync_body.find("presentOsdEntry")
+        enabled_gate = re.search(
+            r"if\s*\(\s*!root\.islandEnabled\s*\)\s*\n\s*return\s*;",
+            sync_body,
+        )
+        self.assertGreaterEqual(last_vol_idx, 0)
+        self.assertGreaterEqual(present_idx, 0)
+        self.assertLess(last_vol_idx, present_idx)
+        self.assertIsNotNone(enabled_gate)
+        self.assertLess(last_vol_idx, enabled_gate.start())
+        self.assertGreater(present_idx, enabled_gate.start())
+        # Re-enable path must re-seed baselines without a second timer.
+        self.assertIn("captureOsdBaselines", enabled_body)
+        self.assertIn("handleAudioReadyChange", src)
+        self.assertIn("onAudioReadyChanged", src)
+
+    def test_real_qml_volume_osd_baseline_lifecycle(self) -> None:
+        qt6_runner = Path("/usr/lib/qt6/bin/qmltestrunner")
+        runner = str(qt6_runner) if qt6_runner.is_file() else shutil.which("qmltestrunner")
+        self.assertIsNotNone(runner, "Qt 6 qmltestrunner is required")
+        env = os.environ.copy()
+        env.setdefault("QT_QPA_PLATFORM", "offscreen")
+        local_qml = Path.home() / ".local" / "lib" / "qt6" / "qml"
+        test_qml = SHELL_ROOT / "tests" / "qml_imports"
+        existing = env.get("QML2_IMPORT_PATH", "")
+        paths = [str(test_qml), str(local_qml)]
+        if existing:
+            paths.append(existing)
+        env["QML2_IMPORT_PATH"] = ":".join(paths)
+        result = subprocess.run(
+            [runner, "-input", str(QML_TEST)],
+            cwd=SHELL_ROOT,
+            env=env,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            timeout=60,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout)
 
 
 if __name__ == "__main__":

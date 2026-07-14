@@ -1,0 +1,242 @@
+import QtQuick
+import QtTest
+import "../services" as Services
+
+TestCase {
+    id: testCase
+    name: "DynamicIslandVolumeOsdBaselineLifecycle"
+    when: windowShown
+
+    property var island: null
+
+    QtObject {
+        id: notifications
+        property var activeModel: []
+        property bool dndEnabled: false
+        signal notificationUpdated(int id)
+    }
+
+    QtObject {
+        id: settings
+        property bool dynamicIslandEnabled: true
+        property bool dynamicIslandHideTopbarTime: true
+        property string dynamicIslandLeftClickAction: "toggle_media"
+        property string dynamicIslandRightClickAction: "control_center"
+        property bool dynamicIslandAutoExpandMedia: false
+        property bool dynamicIslandHoverExpand: false
+    }
+
+    // Minimal Controls-shaped sink: volume/muted plus audioReady for reconnect.
+    QtObject {
+        id: controls
+        property real volume: 0.4
+        property bool muted: false
+        property real brightness: 1.0
+        property bool brightnessAvailable: false
+        property bool audioReady: true
+        property bool hasMedia: false
+        property string trackArtUrl: ""
+        property bool isPlaying: false
+        property real trackPosition: 0
+        property real trackLength: 0
+        property real trackProgress: 0
+        property bool trackPositionSupported: false
+        property bool trackLengthSupported: false
+        // Property change signals are automatic for QML properties.
+    }
+
+    QtObject {
+        id: windows
+        property string activeWorkspaceName: ""
+    }
+
+    Component {
+        id: islandComponent
+        Services.DynamicIsland {}
+    }
+
+    function init() {
+        notifications.activeModel = [];
+        notifications.dndEnabled = false;
+        settings.dynamicIslandEnabled = true;
+        controls.volume = 0.4;
+        controls.muted = false;
+        controls.brightness = 1.0;
+        controls.brightnessAvailable = false;
+        controls.audioReady = true;
+        island = islandComponent.createObject(testCase, {
+            notificationsService: notifications,
+            settingsService: settings,
+            controlsService: controls,
+            windowsService: windows
+        });
+        verify(island !== null);
+        wait(0);
+        island.reset();
+        wait(0);
+        // Seed baselines at known values without relying on timer side effects.
+        island.captureOsdBaselines();
+        wait(0);
+        compare(island.lastVolume, 0.4);
+        compare(island.lastMuted, false);
+        island.forcedState = "";
+        island.pendingOsd = null;
+        wait(0);
+    }
+
+    function cleanup() {
+        if (island) {
+            island.destroy();
+            island = null;
+        }
+        wait(0);
+    }
+
+    function isVolumeOsdVisible() {
+        return island.state === "transient_osd"
+                && island.transientDisplayText !== ""
+                && (island.transientDisplayText === "音量"
+                    || island.transientDisplayText === "静音");
+    }
+
+    function clearOsdPresentation() {
+        island.forcedState = "";
+        island.clearTransientFields();
+        island.pendingOsd = null;
+        wait(0);
+    }
+
+    function test_disabled_volume_change_resyncs_baseline_without_show() {
+        // disabled 期间 0.4→0.6: update baseline, never present.
+        settings.dynamicIslandEnabled = false;
+        wait(0);
+        verify(!island.islandEnabled);
+
+        controls.volume = 0.6;
+        wait(0); // property → Connections → callLater
+        wait(0); // callLater flush
+
+        compare(island.lastVolume, 0.6);
+        compare(isVolumeOsdVisible(), false);
+        compare(island.pendingOsd, null);
+    }
+
+    function test_reenable_same_volume_does_not_present() {
+        // After disable-period 0.4→0.6, reenable with 0.6 must not show OSD.
+        settings.dynamicIslandEnabled = false;
+        wait(0);
+        controls.volume = 0.6;
+        wait(0);
+        wait(0);
+        compare(island.lastVolume, 0.6);
+
+        clearOsdPresentation();
+        settings.dynamicIslandEnabled = true;
+        wait(0);
+        wait(0);
+
+        compare(island.islandEnabled, true);
+        compare(island.lastVolume, 0.6);
+        compare(isVolumeOsdVisible(), false);
+        // Explicit re-emit of the same pair after reenable still suppressed.
+        controls.volume = 0.6;
+        wait(0);
+        wait(0);
+        compare(isVolumeOsdVisible(), false);
+    }
+
+    function test_reenable_then_real_step_presents() {
+        settings.dynamicIslandEnabled = false;
+        wait(0);
+        controls.volume = 0.6;
+        wait(0);
+        wait(0);
+
+        settings.dynamicIslandEnabled = true;
+        wait(0);
+        wait(0);
+        clearOsdPresentation();
+
+        controls.volume = 0.5;
+        wait(0);
+        wait(0);
+
+        compare(island.lastVolume, 0.5);
+        verify(isVolumeOsdVisible() || island.pendingOsd !== null
+               || island.transientProgress === 0.5);
+        // Prefer direct OSD presentation when not blocked.
+        if (!island.blocksTransientOsd()) {
+            compare(island.state, "transient_osd");
+            compare(island.transientProgress, 0.5);
+            compare(island.transientDisplayText, "音量");
+        }
+    }
+
+    function test_sink_reconnect_first_value_only_baselines() {
+        // Production-shaped cascade: volume follows audioReady (Controls binds
+        // volume to 0 while !audioReady, then to the live sink on reconnect).
+        island.captureOsdBaselines();
+        clearOsdPresentation();
+        compare(island.lastVolume, 0.4);
+        compare(island.volumeOsdTrackingReady, true);
+
+        controls.audioReady = false;
+        controls.volume = 0;
+        wait(0);
+        wait(0);
+        compare(island.volumeOsdTrackingReady, false);
+        compare(island.lastVolume, 0);
+        clearOsdPresentation();
+
+        // Ready first, then binding publishes sink volume (production order).
+        controls.audioReady = true;
+        wait(0);
+        controls.volume = 0.72;
+        wait(0);
+        wait(0);
+
+        compare(island.lastVolume, 0.72);
+        compare(island.lastMuted, false);
+        compare(island.volumeOsdTrackingReady, true);
+        // First reconnect value is baseline-only: no volume OSD for that sample.
+        compare(isVolumeOsdVisible(), false);
+
+        // A subsequent real step after reconnect still presents.
+        clearOsdPresentation();
+        controls.volume = 0.5;
+        wait(0);
+        wait(0);
+        if (!island.blocksTransientOsd()) {
+            compare(island.state, "transient_osd");
+            compare(island.transientProgress, 0.5);
+        }
+    }
+
+    function test_mute_and_volume_same_turn_present_once() {
+        clearOsdPresentation();
+        island.captureOsdBaselines();
+        wait(0);
+        compare(island.lastVolume, 0.4);
+        compare(island.lastMuted, false);
+
+        // One user action: set both before callLater flushes.
+        controls.volume = 0.55;
+        controls.muted = true;
+        wait(0);
+        wait(0);
+
+        compare(island.lastVolume, 0.55);
+        compare(island.lastMuted, true);
+        if (!island.blocksTransientOsd()) {
+            compare(island.state, "transient_osd");
+            compare(island.transientDisplayText, "静音");
+            compare(island.transientProgress, 0);
+        }
+        // A second flush with identical pair must not re-present a new step.
+        var textAfter = island.transientDisplayText;
+        island.syncVolumeOsdFromControls();
+        wait(0);
+        compare(island.transientDisplayText, textAfter);
+        compare(island.lastVolume, 0.55);
+    }
+}

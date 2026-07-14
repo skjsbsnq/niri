@@ -46,6 +46,10 @@ Item {
     property int displayingNotificationId: -1
     property real lastVolume: 0
     property bool lastMuted: false
+    // False while PipeWire sink is absent/unready so the first live sample
+    // after reconnect only reseeds lastVolume/lastMuted (same pattern as
+    // brightnessTrackingReady). Missing audioReady on fakes counts as ready.
+    property bool volumeOsdTrackingReady: true
     property real lastBrightness: 1.0
     property bool brightnessTrackingReady: false
     property var pendingOsd: null
@@ -300,12 +304,17 @@ Item {
 
     function handleIslandEnabledChanged() {
         if (root.islandEnabled) {
+            // Re-enable must seed lastVolume/lastMuted from the live controls
+            // snapshot so disable-period steps do not present as fresh changes.
+            captureOsdBaselines();
             handleMediaAvailabilityChanged();
             maybeShowPendingNotification();
             maybeShowPendingOsd();
             return;
         }
 
+        // While disabled, keep baselines aligned with controls without showing.
+        captureOsdBaselines();
         transientTimer.stop();
         swipeSettleTimer.stop();
         root.clearPendingNotificationIds();
@@ -968,6 +977,8 @@ Item {
             return;
         root.lastVolume = Number(root.controlsService.volume) || 0;
         root.lastMuted = !!root.controlsService.muted;
+        // audioReady is optional; only explicit false means sink not live.
+        root.volumeOsdTrackingReady = root.controlsService.audioReady !== false;
         root.lastBrightness = Number(root.controlsService.brightness);
         if (!(root.lastBrightness > 0))
             root.lastBrightness = 1.0;
@@ -1014,19 +1025,41 @@ Item {
     // Backend may emit volumeChanged and mutedChanged for one user action;
     // Qt.callLater coalesces both into one semantic snapshot before present.
     // Exact equality only — no rough epsilon that would swallow small steps.
+    // Disabled / audio-not-ready / first post-reconnect sample still advance
+    // the baseline so re-enable and sink reconnect never treat the first live
+    // sample as a user change.
     function syncVolumeOsdFromControls() {
-        if (!root.islandEnabled)
-            return;
         if (!root.controlsService)
             return;
 
         var volume = Number(root.controlsService.volume) || 0;
         var muted = !!root.controlsService.muted;
+        var audioReady = root.controlsService.audioReady !== false;
+
+        if (!audioReady) {
+            root.lastVolume = volume;
+            root.lastMuted = muted;
+            root.volumeOsdTrackingReady = false;
+            return;
+        }
+
+        if (!root.volumeOsdTrackingReady) {
+            // First live sample after sink reconnect: baseline only.
+            root.lastVolume = volume;
+            root.lastMuted = muted;
+            root.volumeOsdTrackingReady = true;
+            return;
+        }
+
         if (volume === root.lastVolume && muted === root.lastMuted)
             return;
 
         root.lastVolume = volume;
         root.lastMuted = muted;
+
+        if (!root.islandEnabled)
+            return;
+
         presentOsdEntry({
             "kind": "volume",
             "progress": muted ? 0 : volume,
@@ -1041,6 +1074,19 @@ Item {
 
     function handleMuteChange() {
         Qt.callLater(root.syncVolumeOsdFromControls);
+    }
+
+    function handleAudioReadyChange() {
+        // Drop tracking while sink is gone; first post-ready volume/mute
+        // sample reseeds via syncVolumeOsdFromControls without presenting.
+        // Do not sync immediately on ready=true: Controls still reports the
+        // unbound 0 placeholder until the volume binding refreshes.
+        if (!root.controlsService || root.controlsService.audioReady === false) {
+            root.volumeOsdTrackingReady = false;
+            captureOsdBaselines();
+            return;
+        }
+        root.volumeOsdTrackingReady = false;
     }
 
     function handleBrightnessChange() {
@@ -1271,10 +1317,14 @@ Item {
             root.handleBrightnessChange();
         }
 
-       function onBrightnessAvailableChanged() {
-           root.captureOsdBaselines();
-       }
-   }
+        function onBrightnessAvailableChanged() {
+            root.captureOsdBaselines();
+        }
+
+        function onAudioReadyChanged() {
+            root.handleAudioReadyChange();
+        }
+    }
 
     Connections {
         target: root.windowsService

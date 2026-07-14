@@ -526,7 +526,7 @@ class MotionTokenConvergenceTests(unittest.TestCase):
     def test_phase_b_press_feedback_uses_motion_single_outlet(self) -> None:
         # T06 moved menu press feedback into the shared MenuRow.qml outlet.
         required_counts = {
-            "TopBar.qml": 11,
+            "TopBar.qml": 12,
             "Tray.qml": 1,
             "Dock.qml": 2,
             "WindowButton.qml": 1,

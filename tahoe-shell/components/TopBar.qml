@@ -50,6 +50,10 @@ PanelWindow {
     readonly property bool showTopbarTimeFallback: !dynamicIslandOverlayHandlesResting
     readonly property bool chipInteractive: dynamicIslandEnabled && !dynamicIslandOverlayHandlesResting
     readonly property bool batteryAvailable: batteryService && batteryService.available
+    // Single InputMethod owner language glyph (中/EN/あ/한/Aa/--).
+    readonly property string inputMethodDisplayText: inputMethodService
+        ? String(inputMethodService.displayText || "--")
+        : "--"
     readonly property color glassFill: darkMode ? "#d01d1f24" : GlassStyle.FillTopBar
     readonly property color glassStroke: darkMode ? "#38ffffff" : GlassStyle.StrokeTopBar
     readonly property string accentId: settingsService ? settingsService.accentColor : "blue"
@@ -608,6 +612,45 @@ PanelWindow {
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
                     onClicked: root.toggleBattery(root.anchorRectFor(batteryButton))
+                }
+            }
+
+            Item {
+                id: inputMethodButton
+
+                Layout.preferredWidth: Math.max(root.statusIconWidth, inputMethodLabel.implicitWidth + 10)
+                Layout.preferredHeight: root.statusItemHeight
+                Layout.alignment: Qt.AlignVCenter
+                // Always show the language glyph; unavailable uses "--" from displayText.
+                scale: Motion.pressScaleFor(root.settingsService, inputMethodMouse.pressed)
+                opacity: inputMethodMouse.pressed ? 0.75 : (root.inputMethodService && root.inputMethodService.available ? 1 : 0.55)
+
+                Behavior on scale { NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing } }
+                Behavior on opacity { NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing } }
+
+                Rectangle {
+                    anchors.fill: parent
+                    radius: root.statusRadius
+                    color: inputMethodMouse.containsMouse ? root.buttonHover : root.buttonFill
+                    border.width: 0
+                }
+
+                Text {
+                    id: inputMethodLabel
+                    anchors.centerIn: parent
+                    // Unique InputMethod.displayText consumer — 中 / EN / あ / 한 / Aa / --
+                    text: root.inputMethodDisplayText
+                    color: root.statusText
+                    font.pixelSize: 11
+                    font.weight: Font.DemiBold
+                }
+
+                MouseArea {
+                    id: inputMethodMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: root.toggleInputMethod()
                 }
             }
 

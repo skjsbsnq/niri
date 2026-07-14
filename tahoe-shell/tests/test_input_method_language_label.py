@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
-"""Task 12: InputMethod languageLabel must not label all IME as Chinese.
+"""Task 12 + Task 09: InputMethod language labels and TopBar UI consumer.
 
-Root cause: languageLabel() returned \"中\" on both branches, so Japanese,
-Korean, and unknown engines all displayed as Chinese.
-
-Tests parse the live QML if-blocks (indexOf / equality / regex / returns)
-so removing or relocating engine tokens in the QML fails the suite.
+Task 12: languageLabel must not label all IME as Chinese.
+Task 09: TopBar must display inputMethodService.displayText and wire
+toggleInputMethod to the unique InputMethod.toggle owner.
 """
 
 from __future__ import annotations
 
+import os
 import re
+import shutil
+import subprocess
 import unittest
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -18,6 +19,8 @@ from pathlib import Path
 
 SHELL_ROOT = Path(__file__).resolve().parents[1]
 INPUT_METHOD = SHELL_ROOT / "services" / "InputMethod.qml"
+TOP_BAR = SHELL_ROOT / "components" / "TopBar.qml"
+QML_TEST = Path(__file__).with_name("tst_input_method_language_label.qml")
 
 
 def extract_language_label_body(src: str) -> str:
@@ -341,6 +344,61 @@ class TestToggleSurfaceUnchanged(unittest.TestCase):
         self.assertIn("fcitx5-remote", src)
         self.assertIn("function applyProbe", src)
         self.assertEqual(len(re.findall(r"function languageLabel\(", src)), 1)
+
+
+class TestTopBarConsumesDisplayText(unittest.TestCase):
+    def setUp(self) -> None:
+        self.topbar = TOP_BAR.read_text(encoding="utf-8")
+        self.im = INPUT_METHOD.read_text(encoding="utf-8")
+
+    def test_topbar_reads_display_text_not_duplicate_label(self) -> None:
+        self.assertIn("inputMethodService", self.topbar)
+        self.assertIn("inputMethodDisplayText", self.topbar)
+        self.assertRegex(
+            self.topbar,
+            r"inputMethodDisplayText\s*:\s*inputMethodService[\s\S]*?displayText",
+        )
+        self.assertIn("inputMethodLabel", self.topbar)
+        self.assertIn("text: root.inputMethodDisplayText", self.topbar)
+        # No second languageLabel / second IME service in TopBar.
+        self.assertNotIn("function languageLabel", self.topbar)
+        self.assertEqual(len(re.findall(r"function languageLabel\(", self.im)), 1)
+
+    def test_topbar_click_emits_unique_toggle_signal(self) -> None:
+        self.assertIn("signal toggleInputMethod()", self.topbar)
+        self.assertIn("onClicked: root.toggleInputMethod()", self.topbar)
+        self.assertIn("id: inputMethodButton", self.topbar)
+        self.assertIn("id: inputMethodMouse", self.topbar)
+
+    def test_shell_still_wires_toggle_to_input_method(self) -> None:
+        shell = (SHELL_ROOT / "shell.qml").read_text(encoding="utf-8")
+        self.assertIn("onToggleInputMethod: inputMethod.toggle()", shell)
+        self.assertIn("inputMethodService: inputMethod", shell)
+
+    def test_real_qml_display_text_consumer(self) -> None:
+        qt6_runner = Path("/usr/lib/qt6/bin/qmltestrunner")
+        runner = str(qt6_runner) if qt6_runner.is_file() else shutil.which("qmltestrunner")
+        self.assertIsNotNone(runner, "Qt 6 qmltestrunner is required")
+        env = os.environ.copy()
+        env.setdefault("QT_QPA_PLATFORM", "offscreen")
+        local_qml = Path.home() / ".local" / "lib" / "qt6" / "qml"
+        test_qml = SHELL_ROOT / "tests" / "qml_imports"
+        existing = env.get("QML2_IMPORT_PATH", "")
+        paths = [str(test_qml), str(local_qml)]
+        if existing:
+            paths.append(existing)
+        env["QML2_IMPORT_PATH"] = ":".join(paths)
+        result = subprocess.run(
+            [runner, "-input", str(QML_TEST)],
+            cwd=SHELL_ROOT,
+            env=env,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            timeout=60,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout)
 
 
 if __name__ == "__main__":

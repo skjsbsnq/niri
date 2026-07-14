@@ -12,8 +12,8 @@ WlSessionLock {
     property string password: ""
     property string statusText: ""
     property bool authFailed: false
-    // Single clock owner for HH:mm and the date line (Task 22).
-    property date clockNow: new Date()
+    // Display only: wall time comes from the sole SystemClock owner below.
+    readonly property date clockNow: lockClock.date
     readonly property string userName: {
         var user = Quickshell.env("USER");
         return user ? String(user) : "用户";
@@ -24,21 +24,13 @@ WlSessionLock {
         root.statusText = "";
         root.authFailed = false;
         root.locked = true;
-        // Wake / re-lock: show current wall time immediately and re-arm minute edge.
+        // Wake / re-lock: explicit resync on the SystemClock owner.
         root.syncLockClock();
     }
 
-    // Align the sole Timer to the next minute boundary instead of 1s polling.
-    function msecsToNextMinute(from) {
-        var t = from || new Date();
-        return Math.max(250, 60000 - (t.getSeconds() * 1000 + t.getMilliseconds()));
-    }
-
     function syncLockClock() {
-        root.clockNow = new Date();
-        minuteTimer.interval = root.msecsToNextMinute(root.clockNow);
-        if (root.locked)
-            minuteTimer.restart();
+        // Single authorized refresh entry from Task 12A (SystemClock.resync).
+        lockClock.resync();
     }
 
     function unlock() {
@@ -69,25 +61,20 @@ WlSessionLock {
     onLockedChanged: {
         if (!locked && pam.active)
             pam.abort();
+        // enabled is bound to locked; only reseed wall time when locking.
         if (locked)
             root.syncLockClock();
     }
 
-    // One Timer only: fire on minute boundaries, then recompute next interval.
-    // Not a 1s poll — HH:mm only needs minute resolution plus wake/show sync.
-    Timer {
-        id: minuteTimer
-        interval: root.msecsToNextMinute()
-        running: root.locked
-        repeat: true
-        onTriggered: {
-            root.clockNow = new Date();
-            // Re-arm to the following minute edge (handles drift / long ticks).
-            interval = root.msecsToNextMinute(root.clockNow);
-        }
+    // Sole wall-clock owner: Minutes precision, no parallel LockScreen Timer.
+    // Explicit resync on lock / ApplicationActive; minute ticks via SystemClock.
+    SystemClock {
+        id: lockClock
+        precision: SystemClock.Minutes
+        enabled: root.locked
     }
 
-    // Suspend/resume: refresh wall clock without a second Timer.
+    // Suspend/resume: call the same SystemClock.resync entry (no local Timer).
     Connections {
         target: Qt.application
         function onStateChanged() {

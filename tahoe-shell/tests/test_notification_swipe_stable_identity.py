@@ -20,7 +20,11 @@ Regression strategy:
 
 from __future__ import annotations
 
+import os
 import re
+import shutil
+import subprocess
+import tempfile
 import unittest
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -507,6 +511,135 @@ class NotificationSwipeStableIdentityTests(unittest.TestCase):
         card.rebind_stack(service.active)
         card.fire_timer()
         self.assertEqual([n.id for n in service.active], [2])
+
+
+
+    def _rewrite_toast_shell_for_tests(self, dest: Path) -> None:
+        """Shell-only rewrite so production swipe Timer/card body stays intact."""
+        import re as _re
+
+        src = TOAST.read_text(encoding="utf-8")
+        src = src.replace("import Quickshell.Wayland\n", "")
+        src = src.replace("import Quickshell\n", "")
+        src = src.replace("PanelWindow {", "Window {", 1)
+        if "import QtQuick.Window" not in src:
+            src = src.replace(
+                "import QtQuick\n",
+                "import QtQuick\nimport QtQuick.Window\n",
+                1,
+            )
+        out = []
+        drop = (
+            "aboveWindows",
+            "exclusionMode",
+            "exclusiveZone",
+            "focusable",
+        )
+        for line in src.splitlines(True):
+            if _re.search(r"\bWlrLayershell\.", line):
+                continue
+            if any(_re.search(rf"\b{prop}\s*:", line) for prop in drop):
+                continue
+            out.append(line)
+        src = "".join(out)
+        # Multi-line TahoeGlass.regions: [ ... ]
+        src = _re.sub(
+            r"\n\s*TahoeGlass\.regions:\s*\[[\s\S]*?\n\s*\]",
+            "",
+            src,
+            count=1,
+        )
+
+        def remove_block(text: str, pattern: str) -> str:
+            m = _re.search(pattern, text)
+            if not m:
+                return text
+            start = m.start()
+            brace = text.find("{", m.start())
+            depth = 0
+            i = brace
+            while i < len(text):
+                if text[i] == "{":
+                    depth += 1
+                elif text[i] == "}":
+                    depth -= 1
+                    if depth == 0:
+                        i += 1
+                        break
+                i += 1
+            while start > 0 and text[start - 1] in " \t":
+                start -= 1
+            if start > 0 and text[start - 1] == "\n":
+                start -= 1
+            return text[:start] + text[i:]
+
+        src = remove_block(src, r"mask:\s*Region\s*\{")
+        src = remove_block(src, r"anchors\s*\{\s*\n\s*top:\s*true")
+        src = remove_block(src, r"margins\s*\{")
+        # screenWidth without real screen
+        src = src.replace(
+            "readonly property int screenWidth: Math.max(1, root.numberOr(root.screen && root.screen.width, 1))",
+            "readonly property int screenWidth: Math.max(1, Number(root.width) || 360)",
+        )
+        # Keep toast always "shown" when model non-empty under simplified shell.
+        src = src.replace("Behavior on implicitHeight", "Behavior on height")
+        src = src.replace("implicitHeight:", "height:")
+        src = src.replace("implicitWidth:", "width:")
+        src = src.replace("width: root.implicitWidth", "width: root.width")
+        dest.write_text(src, encoding="utf-8")
+
+    def test_real_qml_swipe_identity_race(self) -> None:
+        qt6_runner = Path("/usr/lib/qt6/bin/qmltestrunner")
+        runner = str(qt6_runner) if qt6_runner.is_file() else shutil.which("qmltestrunner")
+        self.assertIsNotNone(runner, "Qt 6 qmltestrunner is required")
+        with tempfile.TemporaryDirectory() as tmp:
+            rewritten = Path(tmp) / "NotificationToast.qml"
+            self._rewrite_toast_shell_for_tests(rewritten)
+            body = rewritten.read_text(encoding="utf-8")
+            self.assertIn("pendingId", body)
+            self.assertIn("dismissNotificationId", body)
+            self.assertIn("resolveSwipe", body)
+            self.assertNotIn("PanelWindow", body)
+
+            work = Path(tmp) / "components"
+            work.mkdir()
+            import os as _os
+            for entry in (SHELL_ROOT / "components").iterdir():
+                if entry.name == "NotificationToast.qml":
+                    continue
+                _os.symlink(entry, work / entry.name)
+            _os.symlink(rewritten, work / "NotificationToast.qml")
+
+            qml_test = Path(tmp) / "tst_swipe.qml"
+            base = Path(__file__).with_name("tst_notification_swipe_stable_identity.qml").read_text(
+                encoding="utf-8"
+            )
+            base = base.replace(
+                'property string toastSource: ""',
+                f'property string toastSource: "{work / "NotificationToast.qml"}"',
+            )
+            qml_test.write_text(base, encoding="utf-8")
+
+            env = os.environ.copy()
+            env.setdefault("QT_QPA_PLATFORM", "offscreen")
+            local_qml = Path.home() / ".local" / "lib" / "qt6" / "qml"
+            test_qml = SHELL_ROOT / "tests" / "qml_imports"
+            existing = env.get("QML2_IMPORT_PATH", "")
+            paths = [str(test_qml), str(local_qml)]
+            if existing:
+                paths.append(existing)
+            env["QML2_IMPORT_PATH"] = ":".join(paths)
+            result = subprocess.run(
+                [runner, "-input", str(qml_test), "-file-selector", "test"],
+                cwd=SHELL_ROOT,
+                env=env,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                timeout=90,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout)
 
 
 if __name__ == "__main__":

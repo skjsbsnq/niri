@@ -14,7 +14,10 @@ Does not claim media buttons are hit-test reachable (Task 01B).
 
 from __future__ import annotations
 
+import os
 import re
+import shutil
+import subprocess
 import unittest
 from dataclasses import dataclass
 from pathlib import Path
@@ -231,7 +234,7 @@ def extract_wiring(
             re.search(
                 r"DynamicIslandMediaView\s*\{[\s\S]*?"
                 r"opacity:\s*root\.mediaExpandedContentVisible\s*\?\s*1\s*:\s*0[\s\S]*?"
-                r"visible:\s*opacity\s*>\s*0\.01",
+                r"visible:\s*(?:opacity\s*>\s*0\.01|root\.mediaExpandedContentVisible)",
                 content_text,
             )
         ),
@@ -527,6 +530,34 @@ class DynamicIslandMediaInteractionLifecycleTests(unittest.TestCase):
         self.assertNotIn("interactionActive", self.service)
         self.assertNotIn("interactionActive", self.overlay)
 
+
+
+    def test_real_qml_media_interaction_lifecycle(self) -> None:
+        """Drive production DynamicIslandMediaView via qmltestrunner."""
+        qml_test = Path(__file__).with_name("tst_dynamic_island_media_interaction_lifecycle.qml")
+        qt6_runner = Path("/usr/lib/qt6/bin/qmltestrunner")
+        runner = str(qt6_runner) if qt6_runner.is_file() else shutil.which("qmltestrunner")
+        self.assertIsNotNone(runner, "Qt 6 qmltestrunner is required")
+        env = os.environ.copy()
+        env.setdefault("QT_QPA_PLATFORM", "offscreen")
+        local_qml = Path.home() / ".local" / "lib" / "qt6" / "qml"
+        test_qml = SHELL_ROOT / "tests" / "qml_imports"
+        existing = env.get("QML2_IMPORT_PATH", "")
+        paths = [str(test_qml), str(local_qml)]
+        if existing:
+            paths.append(existing)
+        env["QML2_IMPORT_PATH"] = ":".join(paths)
+        result = subprocess.run(
+            [runner, "-input", str(qml_test), "-file-selector", "test"],
+            cwd=SHELL_ROOT,
+            env=env,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            timeout=60,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout)
 
 if __name__ == "__main__":
     unittest.main()

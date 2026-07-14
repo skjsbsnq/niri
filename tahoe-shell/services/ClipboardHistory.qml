@@ -19,6 +19,9 @@ Item {
     property string errorText: ""
     property bool listLoaded: false
     property string lastListText: ""
+    // Coalesce refresh intents that arrive while listProbe is already running.
+    // Single latest-pending flag owned by ClipboardHistory — not a second Process.
+    property bool refreshPending: false
     property bool loadingPinnedState: false
     property bool pinning: false
     property string pendingPinRaw: ""
@@ -305,9 +308,31 @@ Item {
             root.detectTools();
             return;
         }
+        if (listProbe.running) {
+            // Keep only a single latest pending re-run; do not drop the intent.
+            root.refreshPending = true;
+            return;
+        }
+        root.refreshPending = false;
+        root.updating = true;
+        listProbe.running = true;
         if (!listProbe.running) {
-            root.updating = true;
-            listProbe.running = true;
+            // FailedToStart can race synchronously; terminal path recovers pending.
+            root.finishListProbe(1);
+        }
+    }
+
+    function finishListProbe(code) {
+        root.updating = false;
+        if (code !== 0) {
+            root.listLoaded = false;
+            root.lastListText = "";
+            root.clearEntries();
+            root.setValue("statusText", "暂无历史");
+        }
+        if (root.refreshPending) {
+            root.refreshPending = false;
+            Qt.callLater(root.refresh);
         }
     }
 
@@ -517,13 +542,12 @@ Item {
             onStreamFinished: root.parseList(listProbeOut.text)
         }
         onExited: function(code, exitStatus) {
-            root.updating = false;
-            if (code !== 0) {
-                root.listLoaded = false;
-                root.lastListText = "";
-                root.clearEntries();
-                root.setValue("statusText", "暂无历史");
-            }
+            root.finishListProbe(code);
+        }
+        onRunningChanged: {
+            // QuickShell Process does not emit exited on FailedToStart.
+            if (!listProbe.running && root.updating)
+                root.finishListProbe(1);
         }
     }
 

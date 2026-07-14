@@ -21,7 +21,10 @@ Regression strategy:
 
 from __future__ import annotations
 
+import os
 import re
+import shutil
+import subprocess
 import unittest
 from dataclasses import dataclass
 from pathlib import Path
@@ -31,6 +34,7 @@ SHELL_ROOT = Path(__file__).resolve().parents[1]
 CLIPBOARD = SHELL_ROOT / "services" / "ClipboardHistory.qml"
 COMMAND_RUNNER = SHELL_ROOT / "services" / "CommandRunner.qml"
 CLIPBOARD_POPUP = SHELL_ROOT / "components" / "ClipboardPopup.qml"
+QML_TEST = Path(__file__).with_name("tst_clipboard_history_event_refresh.qml")
 
 
 def _extract_function_body(src: str, name: str) -> str:
@@ -106,6 +110,11 @@ class ClipboardEventRefreshContract:
     popup_refreshes_on_open: bool
     delete_and_clear_still_schedule: bool
     no_second_watcher: bool
+    has_refresh_pending: bool
+    refresh_sets_pending_when_running: bool
+    finish_list_probe_replays_pending: bool
+    list_probe_running_changed_fallback: bool
+    no_parallel_refresh_api: bool
 
     @property
     def complete(self) -> bool:
@@ -151,6 +160,29 @@ def extract_contract(clipboard_src: str, runner_src: str, popup_src: str) -> Cli
         and re.search(r"cliphist store", watch_cmd_body)
     )
 
+    refresh_fn = _extract_function_body(clipboard_src, "refresh")
+    finish_fn = _extract_function_body(clipboard_src, "finishListProbe")
+    list_probe = _process_block(clipboard_src, "listProbe")
+    has_refresh_pending = bool(
+        re.search(r"property\s+bool\s+refreshPending\b", clipboard_src)
+    )
+    refresh_sets_pending_when_running = bool(
+        re.search(r"listProbe\.running", refresh_fn)
+        and re.search(r"refreshPending\s*=\s*true", refresh_fn)
+    )
+    finish_list_probe_replays_pending = bool(
+        finish_fn
+        and re.search(r"refreshPending", finish_fn)
+        and re.search(r"Qt\.callLater\s*\(\s*root\.refresh", finish_fn)
+    )
+    list_probe_running_changed_fallback = bool(
+        re.search(r"onRunningChanged\s*:", list_probe)
+        and re.search(r"finishListProbe", list_probe)
+    )
+    no_parallel_refresh_api = not bool(
+        re.search(r"function\s+(refreshNow|refreshSafe|safeRefresh)\s*\(", clipboard_src)
+    )
+
     return ClipboardEventRefreshContract(
         no_4s_unconditional_poll=not poll_4s
         and not re.search(
@@ -180,6 +212,11 @@ def extract_contract(clipboard_src: str, runner_src: str, popup_src: str) -> Cli
         no_second_watcher=not re.search(
             r"clipboardWatcher2|secondWatcher|safeStartWatcher", clipboard_src
         ),
+        has_refresh_pending=has_refresh_pending,
+        refresh_sets_pending_when_running=refresh_sets_pending_when_running,
+        finish_list_probe_replays_pending=finish_list_probe_replays_pending,
+        list_probe_running_changed_fallback=list_probe_running_changed_fallback,
+        no_parallel_refresh_api=no_parallel_refresh_api,
     )
 
 
@@ -285,6 +322,44 @@ class ClipboardHistoryEventRefreshTests(unittest.TestCase):
         self.assertIn("cliphist store", body)
         self.assertIn("wl-paste", body)
         self.assertRegex(body, r"printf|echo")
+
+
+    def test_source_has_refresh_pending_coalesce(self) -> None:
+        contract = extract_contract(
+            CLIPBOARD.read_text(encoding="utf-8"),
+            COMMAND_RUNNER.read_text(encoding="utf-8"),
+            CLIPBOARD_POPUP.read_text(encoding="utf-8"),
+        )
+        self.assertTrue(contract.has_refresh_pending)
+        self.assertTrue(contract.refresh_sets_pending_when_running)
+        self.assertTrue(contract.finish_list_probe_replays_pending)
+        self.assertTrue(contract.list_probe_running_changed_fallback)
+        self.assertTrue(contract.no_parallel_refresh_api)
+
+    def test_real_qml_lossless_refresh(self) -> None:
+        qt6_runner = Path("/usr/lib/qt6/bin/qmltestrunner")
+        runner = str(qt6_runner) if qt6_runner.is_file() else shutil.which("qmltestrunner")
+        self.assertIsNotNone(runner, "Qt 6 qmltestrunner is required for ClipboardHistory coverage")
+        env = os.environ.copy()
+        env.setdefault("QT_QPA_PLATFORM", "offscreen")
+        local_qml = Path.home() / ".local" / "lib" / "qt6" / "qml"
+        test_qml = SHELL_ROOT / "tests" / "qml_imports"
+        existing = env.get("QML2_IMPORT_PATH", "")
+        paths = [str(test_qml), str(local_qml)]
+        if existing:
+            paths.append(existing)
+        env["QML2_IMPORT_PATH"] = ":".join(paths)
+        result = subprocess.run(
+            [runner, "-input", str(QML_TEST)],
+            cwd=SHELL_ROOT,
+            env=env,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            timeout=60,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout)
 
 
 if __name__ == "__main__":

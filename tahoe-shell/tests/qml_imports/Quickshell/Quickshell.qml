@@ -7,4 +7,5 @@ QtObject {
     property string shellDir: "."
 
     function shellPath(path) { return path; }
+    function execDetached(args) { return true; }
 }

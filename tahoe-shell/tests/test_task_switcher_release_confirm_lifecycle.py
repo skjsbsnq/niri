@@ -25,7 +25,11 @@ Regression strategy:
 
 from __future__ import annotations
 
+import os
 import re
+import shutil
+import subprocess
+import tempfile
 import unittest
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -33,6 +37,7 @@ from pathlib import Path
 
 SHELL_ROOT = Path(__file__).resolve().parents[1]
 TASK_SWITCHER = SHELL_ROOT / "components" / "TaskSwitcher.qml"
+QML_TEST = Path(__file__).with_name("tst_task_switcher_release_confirm_lifecycle.qml")
 
 
 @dataclass(frozen=True)
@@ -806,6 +811,145 @@ class BranchParserUnitTests(unittest.TestCase):
         }
         """
         self.assertTrue(_stop_before_if_open(body))
+
+
+class TaskSwitcherReleaseConfirmQmlTests(unittest.TestCase):
+    """Real Qt Timer + production TaskSwitcher session boundary via qmltestrunner."""
+
+    def _rewrite_switcher_shell_for_tests(self, dest: Path) -> None:
+        """Rewrite only PanelWindow / Wayland shell so Timer/Keys stay production."""
+        src = TASK_SWITCHER.read_text(encoding="utf-8")
+        src = src.replace("import Quickshell.Wayland\n", "")
+        src = src.replace("import Quickshell\n", "")
+        src = src.replace("PanelWindow {", "Window {", 1)
+        if "import QtQuick.Window" not in src:
+            src = src.replace(
+                "import QtQuick\n",
+                "import QtQuick\nimport QtQuick.Window\n",
+                1,
+            )
+
+        out_lines = []
+        drop_props = (
+            "aboveWindows",
+            "exclusionMode",
+            "exclusiveZone",
+            "focusable",
+            "implicitWidth",
+            "implicitHeight",
+        )
+        for line in src.splitlines(True):
+            if re.search(r"\bWlrLayershell\.", line):
+                continue
+            if re.search(r"\bTahoeGlass\.regions\b", line):
+                continue
+            if any(re.search(rf"\b{prop}\s*:", line) for prop in drop_props):
+                continue
+            out_lines.append(line)
+        src = "".join(out_lines)
+
+        def remove_block(text: str, pattern: str) -> str:
+            m = re.search(pattern, text)
+            if not m:
+                return text
+            start = m.start()
+            brace = text.find("{", m.start())
+            depth = 0
+            i = brace
+            while i < len(text):
+                if text[i] == "{":
+                    depth += 1
+                elif text[i] == "}":
+                    depth -= 1
+                    if depth == 0:
+                        i += 1
+                        break
+                i += 1
+            while start > 0 and text[start - 1] in " \t":
+                start -= 1
+            if start > 0 and text[start - 1] == "\n":
+                start -= 1
+            return text[:start] + text[i:]
+
+        src = remove_block(src, r"anchors\s*\{\s*\n\s*left:\s*true")
+        # GlassPanel / ScriptModel / WindowPreviewFallback are heavy for Timer-only tests.
+        # Replace GlassPanel block with empty Item; keep ListView model as plain array binding.
+        src = remove_block(src, r"GlassPanel\s*\{")
+        src = src.replace(
+            "model: ScriptModel {\n                    values: root.windowChoices\n                }",
+            "model: root.windowChoices",
+        )
+        # WindowPreviewFallback may reference unavailable types; keep if present in components.
+        src = src.replace(
+            "readonly property int screenWidth: Math.max(1, numberOr(root.screen && root.screen.width, root.width))",
+            "readonly property int screenWidth: Math.max(1, numberOr(root.width, 800))",
+        )
+        src = src.replace(
+            "readonly property int screenHeight: Math.max(1, numberOr(root.screen && root.screen.height, root.height))",
+            "readonly property int screenHeight: Math.max(1, numberOr(root.height, 600))",
+        )
+        dest.write_text(src, encoding="utf-8")
+
+    def test_real_qml_release_timer_session_race(self) -> None:
+        qt6_runner = Path("/usr/lib/qt6/bin/qmltestrunner")
+        runner = str(qt6_runner) if qt6_runner.is_file() else shutil.which("qmltestrunner")
+        self.assertIsNotNone(runner, "Qt 6 qmltestrunner is required")
+        self.assertTrue(QML_TEST.is_file(), f"missing {QML_TEST}")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp) / "components"
+            work.mkdir()
+            rewritten = work / "TaskSwitcher.qml"
+            self._rewrite_switcher_shell_for_tests(rewritten)
+            body = rewritten.read_text(encoding="utf-8")
+            # Keep rewrite checks structural so the same harness can RED on the
+            # pre-fix baseline (no session-boundary stop) via real Timer races.
+            self.assertIn("releaseConfirmTimer", body)
+            self.assertIn("onOpenChanged", body)
+            self.assertIn("interval: 40", body)
+            self.assertNotIn("PanelWindow", body)
+            self.assertNotIn("WlrLayershell", body)
+
+            for entry in (SHELL_ROOT / "components").iterdir():
+                if entry.name == "TaskSwitcher.qml":
+                    continue
+                # Prefer symlink so Motion.js / WindowPreviewFallback stay real.
+                try:
+                    os.symlink(entry, work / entry.name)
+                except OSError:
+                    if entry.is_file():
+                        shutil.copy2(entry, work / entry.name)
+
+            qml_test = Path(tmp) / "tst_task_switcher.qml"
+            base = QML_TEST.read_text(encoding="utf-8")
+            base = base.replace(
+                'property string switcherSource: ""',
+                f'property string switcherSource: "{rewritten.as_posix()}"',
+            )
+            qml_test.write_text(base, encoding="utf-8")
+
+            env = os.environ.copy()
+            env.setdefault("QT_QPA_PLATFORM", "offscreen")
+            local_qml = Path.home() / ".local" / "lib" / "qt6" / "qml"
+            test_qml = SHELL_ROOT / "tests" / "qml_imports"
+            existing = env.get("QML2_IMPORT_PATH", "")
+            paths = [str(test_qml), str(local_qml), str(work)]
+            if existing:
+                paths.append(existing)
+            env["QML2_IMPORT_PATH"] = ":".join(paths)
+            # Import path for relative "Motion.js" / sibling components.
+            env["QML_IMPORT_PATH"] = env.get("QML_IMPORT_PATH", "")
+            result = subprocess.run(
+                [runner, "-input", str(qml_test)],
+                cwd=str(work),
+                env=env,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                timeout=90,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout)
 
 
 if __name__ == "__main__":

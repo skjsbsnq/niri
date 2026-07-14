@@ -144,6 +144,7 @@ def extract_contract(island_src: str, notifications_src: str) -> NotificationIde
     present = _extract_function_body(island_src, "presentNotificationEntry")
     apply_text = _extract_function_body(island_src, "applyNotificationEntryText")
     enqueue = _extract_function_body(island_src, "enqueuePendingNotificationId")
+    enqueue_entry = _extract_function_body(island_src, "enqueuePendingNotificationEntry")
     remove_pending = _extract_function_body(island_src, "removePendingNotificationId")
     find_live = _extract_function_body(island_src, "findLiveNotificationById")
     handle_dnd = _extract_function_body(island_src, "handleDndChanged")
@@ -178,8 +179,13 @@ def extract_contract(island_src: str, notifications_src: str) -> NotificationIde
     has_find_live_by_id = bool(find_live.strip()) and bool(
         re.search(r"activeModel", find_live)
     )
-    has_enqueue_dedupe = bool(enqueue.strip()) and bool(
-        re.search(r"isPendingNotificationId|return", enqueue)
+    # Live ID enqueue dedupe lives on the shared tagged entry helper (or thin wrapper).
+    has_enqueue_dedupe = bool(
+        (
+            enqueue_entry.strip()
+            and re.search(r"isPendingNotificationId", enqueue_entry)
+        )
+        or (enqueue.strip() and re.search(r"isPendingNotificationId|return", enqueue))
     )
     has_remove_pending = bool(remove_pending.strip()) or bool(
         re.search(r"pendingNotificationIds", handle_changed)

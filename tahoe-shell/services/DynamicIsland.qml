@@ -35,10 +35,12 @@ Item {
     property real transientProgress: -1
     property string transientIconCode: ""
     property bool userInteracting: false
-    // Stable notification identity tracking (Task 09).
+    // Stable notification identity tracking (Task 09 / Task 04).
     // seenNotificationIds: IDs already observed in activeModel (set membership).
-    // pendingNotificationIds: FIFO of IDs waiting to present (replaces scalar pending entry).
-    // displayingNotificationId: ID currently shown as transient_notification (-1 if none).
+    // pendingNotificationIds: single FIFO of tagged entries (not a second queue):
+    //   live   → { kind: "live", id: <stable Notifications id> }
+    //   manual → { kind: "manual", summary, body, appName } immutable IPC payload
+    // displayingNotificationId: live ID currently shown (-1 for manual / none).
     property var seenNotificationIds: ({})
     property var pendingNotificationIds: []
     property int displayingNotificationId: -1
@@ -433,17 +435,25 @@ Item {
    }
 
    function showTransientNotification(summary, body, appName) {
-        // Manual/smoke path: no stable Notifications model id. Present as a
-        // one-shot transient without enqueueing into the identity FIFO.
+        // Manual/smoke IPC: no live Notifications owner. Queue on the same FIFO
+        // as live IDs using an immutable command payload (not a second queue).
         if (!root.islandEnabled || notificationsDndEnabled())
             return;
-        if (blocksTransientNotification())
-            return;
-        presentNotificationEntry({
-            "id": -1,
+        var entry = {
+            "kind": "manual",
             "summary": sanitizeNotificationText(summary, ""),
             "body": sanitizeNotificationText(body, ""),
             "appName": sanitizeNotificationText(appName, "")
+        };
+        if (blocksTransientNotification()) {
+            enqueuePendingNotificationEntry(entry);
+            return;
+        }
+        presentNotificationEntry({
+            "id": -1,
+            "summary": entry.summary,
+            "body": entry.body,
+            "appName": entry.appName
         });
     }
 
@@ -727,6 +737,34 @@ Item {
         return String(Number(id));
     }
 
+    function normalizePendingEntry(entry) {
+        // Accept legacy bare IDs (pre-tagged FIFO) and tagged live/manual entries.
+        if (entry === undefined || entry === null)
+            return null;
+        if (typeof entry === "number" || typeof entry === "string") {
+            var bare = Number(entry);
+            if (!isFinite(bare) || bare < 0)
+                return null;
+            return { "kind": "live", "id": bare };
+        }
+        var kind = String(entry.kind || "");
+        if (kind === "live") {
+            var lid = Number(entry.id);
+            if (!isFinite(lid) || lid < 0)
+                return null;
+            return { "kind": "live", "id": lid };
+        }
+        if (kind === "manual") {
+            return {
+                "kind": "manual",
+                "summary": sanitizeNotificationText(entry.summary, ""),
+                "body": sanitizeNotificationText(entry.body, ""),
+                "appName": sanitizeNotificationText(entry.appName, "")
+            };
+        }
+        return null;
+    }
+
     function isPendingNotificationId(id) {
         var nid = Number(id);
         if (!isFinite(nid) || nid < 0)
@@ -734,21 +772,28 @@ Item {
         var key = pendingNotificationIdKey(nid);
         var queue = root.pendingNotificationIds || [];
         for (var i = 0; i < queue.length; i++) {
-            if (pendingNotificationIdKey(queue[i]) === key)
+            var item = normalizePendingEntry(queue[i]);
+            if (item && item.kind === "live" && pendingNotificationIdKey(item.id) === key)
                 return true;
         }
         return false;
     }
 
     function enqueuePendingNotificationId(id) {
-        var nid = Number(id);
-        if (!isFinite(nid) || nid < 0)
+        enqueuePendingNotificationEntry({ "kind": "live", "id": id });
+    }
+
+    function enqueuePendingNotificationEntry(entry) {
+        var item = normalizePendingEntry(entry);
+        if (!item)
             return;
-        if (isPendingNotificationId(nid))
-            return;
-        if (Number(root.displayingNotificationId) === nid)
-            return;
-        root.pendingNotificationIds = (root.pendingNotificationIds || []).concat([nid]);
+        if (item.kind === "live") {
+            if (isPendingNotificationId(item.id))
+                return;
+            if (Number(root.displayingNotificationId) === Number(item.id))
+                return;
+        }
+        root.pendingNotificationIds = (root.pendingNotificationIds || []).concat([item]);
     }
 
     function removePendingNotificationId(id) {
@@ -756,8 +801,13 @@ Item {
         var queue = root.pendingNotificationIds || [];
         var next = [];
         for (var i = 0; i < queue.length; i++) {
-            if (pendingNotificationIdKey(queue[i]) !== key)
-                next.push(queue[i]);
+            var item = normalizePendingEntry(queue[i]);
+            if (!item) {
+                continue;
+            }
+            if (item.kind === "live" && pendingNotificationIdKey(item.id) === key)
+                continue;
+            next.push(item);
         }
         if (next.length !== queue.length)
             root.pendingNotificationIds = next;
@@ -794,13 +844,19 @@ Item {
                 newIds.push(id);
         }
 
-        // Drop pending IDs that left the model (dismissed / expired).
+        // Drop pending live IDs that left the model; keep manual IPC payloads.
         var queue = root.pendingNotificationIds || [];
         var kept = [];
         for (var q = 0; q < queue.length; q++) {
-            var qid = Number(queue[q]);
-            if (isFinite(qid) && nextSeen[String(qid)])
-                kept.push(qid);
+            var item = normalizePendingEntry(queue[q]);
+            if (!item)
+                continue;
+            if (item.kind === "manual") {
+                kept.push(item);
+                continue;
+            }
+            if (item.kind === "live" && nextSeen[String(item.id)])
+                kept.push(item);
         }
         if (kept.length !== queue.length)
             root.pendingNotificationIds = kept;
@@ -1030,19 +1086,32 @@ Item {
         if (blocksTransientNotification())
             return;
 
-        // Drain FIFO: skip IDs whose live object is gone; present first still-alive.
+        // Drain single FIFO: live IDs re-resolve from activeModel; manual uses payload.
         while ((root.pendingNotificationIds || []).length > 0) {
             if (blocksTransientNotification())
                 return;
 
             var queue = root.pendingNotificationIds || [];
-            var nextId = Number(queue[0]);
+            var next = normalizePendingEntry(queue[0]);
             root.pendingNotificationIds = queue.slice(1);
 
-            if (!isFinite(nextId) || nextId < 0)
+            if (!next)
                 continue;
 
-            var live = findLiveNotificationById(nextId);
+            if (next.kind === "manual") {
+                presentNotificationEntry({
+                    "id": -1,
+                    "summary": next.summary,
+                    "body": next.body,
+                    "appName": next.appName
+                });
+                return;
+            }
+
+            if (next.kind !== "live")
+                continue;
+
+            var live = findLiveNotificationById(next.id);
             if (!live)
                 continue;
 

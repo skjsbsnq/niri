@@ -23,7 +23,10 @@ Regression strategy:
 
 from __future__ import annotations
 
+import os
 import re
+import shutil
+import subprocess
 import unittest
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -31,6 +34,7 @@ from pathlib import Path
 
 SHELL_ROOT = Path(__file__).resolve().parents[1]
 PROVIDER = SHELL_ROOT / "services" / "ThumbnailProvider.qml"
+QML_TEST = Path(__file__).with_name("tst_thumbnail_inflight_coalesce.qml")
 
 
 def _extract_function_body(src: str, name: str) -> str:
@@ -497,6 +501,33 @@ class ThumbnailInflightCoalesceTests(unittest.TestCase):
                 sim.pump()
         self.assertEqual(old.capture_starts, 2)
         self.assertEqual(fixed.capture_starts, 1)
+
+    def test_real_qml_production_capture_coalescing(self) -> None:
+        """Drive production ThumbnailProvider + Process fake; count real starts."""
+        qt6_runner = Path("/usr/lib/qt6/bin/qmltestrunner")
+        runner = str(qt6_runner) if qt6_runner.is_file() else shutil.which("qmltestrunner")
+        self.assertIsNotNone(runner, "Qt 6 qmltestrunner is required")
+        self.assertTrue(QML_TEST.is_file(), f"missing {QML_TEST}")
+        env = os.environ.copy()
+        env.setdefault("QT_QPA_PLATFORM", "offscreen")
+        local_qml = Path.home() / ".local" / "lib" / "qt6" / "qml"
+        test_qml = SHELL_ROOT / "tests" / "qml_imports"
+        existing = env.get("QML2_IMPORT_PATH", "")
+        paths = [str(test_qml), str(local_qml)]
+        if existing:
+            paths.append(existing)
+        env["QML2_IMPORT_PATH"] = ":".join(paths)
+        result = subprocess.run(
+            [runner, "-input", str(QML_TEST)],
+            cwd=SHELL_ROOT,
+            env=env,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            timeout=90,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout)
 
 
 if __name__ == "__main__":

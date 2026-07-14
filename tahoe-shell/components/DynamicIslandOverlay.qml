@@ -333,7 +333,11 @@ PanelWindow {
            // armed → dragging (beginSwipe) | rejected (vertical) | idle.
            property bool armingSwipe: false
            property bool gestureRejected: false
-           property bool suppressClick: false
+           // Session-scoped click suppression: only the composed click from the
+           // current press→release can be suppressed. A new press ends the prior
+           // suppression lifecycle so a follow-up click within 180ms is not eaten.
+           property int pointerSession: 0
+           property int suppressClickSession: -1
 
            function resetGesturePhase() {
                armingSwipe = false;
@@ -341,15 +345,23 @@ PanelWindow {
            }
 
            function suppressClickTemporarily() {
-               suppressClick = true;
+               suppressClickSession = pointerSession;
                swipeClickSuppress.restart();
+           }
+
+           function clickSuppressedForCurrentSession() {
+               return suppressClickSession === pointerSession;
            }
        
            Timer {
                id: swipeClickSuppress
                interval: IslandMotion.swipeSuppressClickMs
                repeat: false
-               onTriggered: parent.suppressClick = false
+               onTriggered: {
+                   // Only clear if this timer still belongs to the suppress session.
+                   if (parent.suppressClickSession === parent.pointerSession)
+                       parent.suppressClickSession = -1;
+               }
            }
 
             Timer {
@@ -388,6 +400,10 @@ PanelWindow {
            onPressed: function(mouse) {
                hoverExpandDelay.stop();
                hoverCollapseDelay.stop();
+               // New pointer session: prior swipe/reject suppress must not carry over.
+               pointerSession += 1;
+               suppressClickSession = -1;
+               swipeClickSuppress.stop();
                // Pointer owns the gesture: abort any in-flight wheel swipe session.
                if (root.dynamicIslandService && root.dynamicIslandService.swipeDragging)
                    root.dynamicIslandService.cancelSwipe();
@@ -476,9 +492,9 @@ PanelWindow {
                resetGesturePhase();
            }
            onClicked: function(mouse) {
-               // suppressClick is set before phase reset in onReleased so
-               // reject / swipe sessions both block click here.
-               if (suppressClick)
+               // Session-scoped: only the composed click of this press is blocked
+               // after swipe/reject; the next press starts a new session.
+               if (clickSuppressedForCurrentSession())
                    return;
                if (root.dynamicIslandService)
                    root.dynamicIslandService.handleChipClick(mouse.button);

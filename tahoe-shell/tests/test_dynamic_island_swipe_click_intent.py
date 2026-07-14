@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
-"""Task 11: Dynamic Island swipe must separate click vs drag intent.
+"""Task 11 + Task 10: swipe vs click intent and session-scoped suppress.
 
-Root cause: capsule MouseArea called beginSwipe() on any position change,
-so micro-jitter and vertical/diagonal drags started settle animations or
-mis-fired chip clicks. Fix: IslandMotion arm/reject tokens + phase machine
-with horizontal-only begin and ambiguous-intent reject.
+Task 11: arm/reject tokens so jitter does not beginSwipe or mis-click.
+Task 10: suppressClick must bind to the current pointer session so a new
+press within 180ms is not eaten by the previous swipe/reject suppress.
 """
 
 from __future__ import annotations
 
+import os
 import re
+import shutil
+import subprocess
 import unittest
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -20,6 +22,7 @@ SHELL_ROOT = Path(__file__).resolve().parents[1]
 OVERLAY = SHELL_ROOT / "components" / "DynamicIslandOverlay.qml"
 MOTION = SHELL_ROOT / "components" / "DynamicIslandMotion.js"
 SERVICE = SHELL_ROOT / "services" / "DynamicIsland.qml"
+QML_TEST = Path(__file__).with_name("tst_dynamic_island_swipe_click_intent.qml")
 
 Decision = Literal["click_eligible", "begin_swipe", "reject"]
 
@@ -33,6 +36,8 @@ class SourceContract:
     has_both_axes_jitter_gate: bool
     has_ambiguous_reject: bool
     always_suppress_after_swipe_session: bool
+    session_scoped_click_suppress: bool
+    press_clears_prior_suppress: bool
     wheel_ignores_pointer_pressed: bool
     press_cancels_inflight_swipe: bool
     uses_motion_arm_token: bool
@@ -149,6 +154,17 @@ def extract_source_contract(overlay: str, motion: str) -> SourceContract:
             and "suppressClickTemporarily()" in rel_body
             and "if (moved)" not in rel_body
         ),
+        session_scoped_click_suppress=(
+            "pointerSession" in capsule
+            and "suppressClickSession" in capsule
+            and "clickSuppressedForCurrentSession()" in capsule
+            and "property bool suppressClick" not in capsule
+        ),
+        press_clears_prior_suppress=(
+            "pointerSession += 1" in press_body
+            and "suppressClickSession = -1" in press_body
+            and "swipeClickSuppress.stop()" in press_body
+        ),
         wheel_ignores_pointer_pressed=(
             "if (pressed || armingSwipe || gestureRejected)" in wheel_body
         ),
@@ -246,14 +262,21 @@ class CapsuleGestureModel:
         self.swipe_last_x = 0.0
         self.arming_swipe = False
         self.gesture_rejected = False
-        self.suppress_click = False
+        self.pointer_session = 0
+        self.suppress_click_session = -1
         self.pressed = False
 
     def reset_phase(self) -> None:
         self.arming_swipe = False
         self.gesture_rejected = False
 
+    def click_suppressed(self) -> bool:
+        return self.suppress_click_session == self.pointer_session
+
     def on_pressed(self, x: float, y: float, button: int = LEFT) -> None:
+        # Task 10: new press ends prior suppression lifecycle.
+        self.pointer_session += 1
+        self.suppress_click_session = -1
         if self.service.swipe_dragging:
             self.service.cancelSwipe()
         self.pressed = True
@@ -289,7 +312,7 @@ class CapsuleGestureModel:
         if decision == "reject":
             self.gesture_rejected = True
             self.arming_swipe = False
-            self.suppress_click = True
+            self.suppress_click_session = self.pointer_session
             return
         if not self.service.beginSwipe():
             self.arming_swipe = False
@@ -301,9 +324,9 @@ class CapsuleGestureModel:
         if self.service.swipe_dragging:
             self.service.consumeSwipeMoved()
             self.service.resolveSwipe()
-            self.suppress_click = True
+            self.suppress_click_session = self.pointer_session
         elif self.gesture_rejected:
-            self.suppress_click = True
+            self.suppress_click_session = self.pointer_session
         self.service.setUserInteracting(False)
         self.pressed = False
         self.reset_phase()
@@ -316,7 +339,7 @@ class CapsuleGestureModel:
         self.reset_phase()
 
     def on_clicked(self, button: int = LEFT) -> None:
-        if self.suppress_click:
+        if self.click_suppressed():
             return
         self.service.handleChipClick(button)
 
@@ -500,7 +523,7 @@ class TestSwipeClickIntentBehavior(unittest.TestCase):
         self.g.on_pressed(100, 50)
         self.g.on_position_changed(100 + self.arm + 5, 50 + self.arm + 6)
         self.assertEqual(self.service.begin_calls, 0)
-        self.assertTrue(self.g.suppress_click)
+        self.assertTrue(self.g.click_suppressed())
         self.g.on_released()
         self.g.on_clicked()
         self.assertEqual(self.service.chip_clicks, [])
@@ -579,6 +602,76 @@ class TestSwipeClickIntentBehavior(unittest.TestCase):
         self.assertFalse(self.service.swipe_dragging)
 
 
+class TestSessionScopedClickSuppress(unittest.TestCase):
+    def setUp(self) -> None:
+        self.contract = extract_source_contract(
+            OVERLAY.read_text(encoding="utf-8"),
+            MOTION.read_text(encoding="utf-8"),
+        )
+        self.service = FakeIslandService()
+        self.g = CapsuleGestureModel(self.service, self.contract)
+
+    def test_source_uses_session_scoped_suppress(self) -> None:
+        self.assertTrue(self.contract.session_scoped_click_suppress)
+        self.assertTrue(self.contract.press_clears_prior_suppress)
+
+    def test_swipe_composed_click_suppressed_next_press_not(self) -> None:
+        # Swipe session suppresses its own composed click.
+        self.g.on_pressed(100, 50)
+        self.g.on_position_changed(100 + self.contract.arm_px + 20, 50)
+        self.g.on_released()
+        self.g.on_clicked()
+        self.assertEqual(self.service.chip_clicks, [])
+
+        # New press within suppress window must not inherit old suppress.
+        self.g.on_pressed(100, 50)
+        self.g.on_released()
+        self.g.on_clicked()
+        self.assertEqual(self.service.chip_clicks, [1])
+
+    def test_vertical_reject_then_second_click(self) -> None:
+        self.g.on_pressed(100, 50)
+        self.g.on_position_changed(100, 50 + self.contract.vertical_reject_px + 5)
+        self.g.on_released()
+        self.g.on_clicked()
+        self.assertEqual(self.service.chip_clicks, [])
+
+        self.g.on_pressed(100, 50)
+        self.g.on_released()
+        self.g.on_clicked()
+        self.assertEqual(self.service.chip_clicks, [1])
+
+    def test_old_shared_bool_would_eat_second_click(self) -> None:
+        # Reproduce pre-Task-10 shared suppressClick boolean.
+        class OldModel(CapsuleGestureModel):
+            def on_pressed(self, x, y, button=CapsuleGestureModel.LEFT):
+                if self.service.swipe_dragging:
+                    self.service.cancelSwipe()
+                self.pressed = True
+                self.service.setUserInteracting(True)
+                self.swipe_start_x = x
+                self.swipe_start_y = y
+                self.swipe_last_x = x
+                self.gesture_rejected = False
+                self.arming_swipe = button == self.LEFT and self.service.canSwipe()
+                # Intentionally does NOT clear suppress_click_session.
+
+            def on_clicked(self, button=CapsuleGestureModel.LEFT):
+                if self.suppress_click_session != -1:  # shared sticky suppress
+                    return
+                self.service.handleChipClick(button)
+
+        old = OldModel(FakeIslandService(), self.contract)
+        old.on_pressed(100, 50)
+        old.on_position_changed(100 + self.contract.arm_px + 20, 50)
+        old.on_released()
+        old.on_clicked()
+        old.on_pressed(100, 50)
+        old.on_released()
+        old.on_clicked()
+        self.assertEqual(old.service.chip_clicks, [], "old sticky suppress must eat second click")
+
+
 class TestOldBugWouldFail(unittest.TestCase):
     def test_old_policy_begins_on_jitter_new_does_not(self) -> None:
         old = FakeIslandService()
@@ -616,6 +709,33 @@ class TestOldBugWouldFail(unittest.TestCase):
         )
         # Confirm source has ambiguous reject gate so this is not oracle-only.
         self.assertTrue(contract.has_ambiguous_reject)
+
+
+class TestRealQmlSessionScopedSuppress(unittest.TestCase):
+    def test_real_qml_session_scoped_click_suppress(self) -> None:
+        qt6_runner = Path("/usr/lib/qt6/bin/qmltestrunner")
+        runner = str(qt6_runner) if qt6_runner.is_file() else shutil.which("qmltestrunner")
+        self.assertIsNotNone(runner, "Qt 6 qmltestrunner is required")
+        env = os.environ.copy()
+        env.setdefault("QT_QPA_PLATFORM", "offscreen")
+        local_qml = Path.home() / ".local" / "lib" / "qt6" / "qml"
+        test_qml = SHELL_ROOT / "tests" / "qml_imports"
+        existing = env.get("QML2_IMPORT_PATH", "")
+        paths = [str(test_qml), str(local_qml)]
+        if existing:
+            paths.append(existing)
+        env["QML2_IMPORT_PATH"] = ":".join(paths)
+        result = subprocess.run(
+            [runner, "-input", str(QML_TEST)],
+            cwd=SHELL_ROOT,
+            env=env,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            timeout=60,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout)
 
 
 if __name__ == "__main__":

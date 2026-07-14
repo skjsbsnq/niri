@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import "Motion.js" as Motion
 
 // LS09: 天气页动画背景 —— Canvas 粒子场景。
 //
@@ -50,8 +51,8 @@ Item {
     property real pointerY: height * 0.28
     readonly property real parallaxX: width > 0 ? (pointerX / width - 0.5) * 18 : 0
     readonly property real parallaxY: height > 0 ? (pointerY / height - 0.35) * 14 : 0
-    Behavior on pointerX { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
-    Behavior on pointerY { NumberAnimation { duration: 260; easing.type: Easing.OutCubic } }
+    Behavior on pointerX { NumberAnimation { duration: 260; easing.type: Motion.emphasizedDecel } }
+    Behavior on pointerY { NumberAnimation { duration: 260; easing.type: Motion.emphasizedDecel } }
 
     // --- 粒子状态数组（视图内，照 LeftSidebarSystem 历史数组模式）---
     property var cloudBands: []

@@ -2,3 +2,5 @@ module Quickshell
 singleton Quickshell 1.0 Quickshell.qml
 singleton DesktopEntries 1.0 DesktopEntries.qml
 SystemClock 1.0 SystemClock.qml
+Region 1.0 Region.qml
+PanelWindow 1.0 PanelWindow.qml

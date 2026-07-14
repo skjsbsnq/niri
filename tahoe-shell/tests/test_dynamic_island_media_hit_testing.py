@@ -356,27 +356,222 @@ class DynamicIslandMediaHitTestingTests(unittest.TestCase):
             self.assertNotIn("safeSetUserInteracting", text)
         self.assertEqual(self.service.count("function setUserInteracting"), 1)
 
-    def test_real_qml_pointer_delivery(self) -> None:
-        """Drive the production component through Qt Quick's actual hit tester."""
+    def _rewrite_overlay_shell_for_tests(self, dest: Path) -> None:
+        """Rewrite only PanelWindow shell so contentHost/MouseArea stay production.
+
+        qmltestrunner cannot load Quickshell shared plugins; the body of
+        DynamicIslandOverlay (contentHost z-order + capsule MouseArea) is kept
+        verbatim from production sources.
+        """
+        import re as _re
+
+        src = OVERLAY.read_text(encoding="utf-8")
+        src = src.replace("import Quickshell.Wayland\n", "")
+        src = src.replace("import Quickshell\n", "")
+        src = src.replace("PanelWindow {", "Window {", 1)
+        if "import QtQuick.Window" not in src:
+            src = src.replace(
+                "import QtQuick\n",
+                "import QtQuick\nimport QtQuick.Window\n",
+                1,
+            )
+
+        out_lines = []
+        drop_props = (
+            "aboveWindows",
+            "exclusionMode",
+            "exclusiveZone",
+            "focusable",
+            "implicitWidth",
+            "implicitHeight",
+        )
+        for line in src.splitlines(True):
+            if _re.search(r"\bWlrLayershell\.", line):
+                continue
+            if _re.search(r"\bTahoeGlass\.regions\b", line):
+                continue
+            if any(_re.search(rf"\b{prop}\s*:", line) for prop in drop_props):
+                continue
+            out_lines.append(line)
+        src = "".join(out_lines)
+
+        def remove_block(text: str, pattern: str) -> str:
+            m = _re.search(pattern, text)
+            if not m:
+                return text
+            start = m.start()
+            brace = text.find("{", m.start())
+            depth = 0
+            i = brace
+            while i < len(text):
+                if text[i] == "{":
+                    depth += 1
+                elif text[i] == "}":
+                    depth -= 1
+                    if depth == 0:
+                        i += 1
+                        break
+                i += 1
+            while start > 0 and text[start - 1] in " \t":
+                start -= 1
+            if start > 0 and text[start - 1] == "\n":
+                start -= 1
+            return text[:start] + text[i:]
+
+        src = remove_block(src, r"mask:\s*Region\s*\{")
+        src = remove_block(src, r"anchors\s*\{\s*\n\s*left:\s*true")
+        src = src.replace(
+            "readonly property int screenWidth: Math.max(1, Number(root.screen && root.screen.width) || root.width)",
+            "readonly property int screenWidth: Math.max(1, Number(root.width) || 800)",
+        )
+        # Writable own screen name for multi-screen activeForScreen tests under Window.
+        src = src.replace(
+            "readonly property string ownScreenName: root.screen ? String(root.screen.name || \"\") : \"\"",
+            "property string ownScreenName: \"\"",
+        )
+        src = src.replace(
+            'readonly property string ownScreenName: root.screen ? String(root.screen.name || "") : ""',
+            'property string ownScreenName: ""',
+        )
+        dest.write_text(src, encoding="utf-8")
+
+    def test_real_qml_production_overlay_hit_testing(self) -> None:
+        import tempfile
         qt6_runner = Path("/usr/lib/qt6/bin/qmltestrunner")
         runner = str(qt6_runner) if qt6_runner.is_file() else shutil.which("qmltestrunner")
-        self.assertIsNotNone(runner, "Qt 6 qmltestrunner is required for pointer regression coverage")
-        env = os.environ.copy()
-        env.setdefault("QT_QPA_PLATFORM", "offscreen")
-        local_qml = Path.home() / ".local" / "lib" / "qt6" / "qml"
-        existing = env.get("QML2_IMPORT_PATH", "")
-        env["QML2_IMPORT_PATH"] = str(local_qml) + ((":" + existing) if existing else "")
-        result = subprocess.run(
-            [runner, "-file-selector", "test", "-input", str(QML_TEST), "-o", "-,txt"],
-            cwd=SHELL_ROOT,
-            env=env,
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            timeout=30,
-            check=False,
-        )
-        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIsNotNone(runner, "Qt 6 qmltestrunner is required")
+        with tempfile.TemporaryDirectory() as tmp:
+            rewritten = Path(tmp) / "DynamicIslandOverlay.qml"
+            self._rewrite_overlay_shell_for_tests(rewritten)
+            # Verify production contentHost + MouseArea tokens survive rewrite.
+            body = rewritten.read_text(encoding="utf-8")
+            self.assertIn("id: contentHost", body)
+            self.assertIn("z: 1", body)
+            self.assertIn("DynamicIslandContent", body)
+            self.assertIn("swipeStartX", body)
+            self.assertIn("onMediaControlPressed", body)
+            self.assertNotIn("PanelWindow", body)
+
+            env = os.environ.copy()
+            env.setdefault("QT_QPA_PLATFORM", "offscreen")
+            local_qml = Path.home() / ".local" / "lib" / "qt6" / "qml"
+            test_qml = SHELL_ROOT / "tests" / "qml_imports"
+            existing = env.get("QML2_IMPORT_PATH", "")
+            paths = [str(test_qml), str(local_qml)]
+            if existing:
+                paths.append(existing)
+            env["QML2_IMPORT_PATH"] = ":".join(paths)
+            # Pass rewritten path into the QML test via env.
+            env["TAHOE_TEST_OVERLAY_SOURCE"] = str(rewritten)
+            # Patch QML to read env: inject property default via -input still uses file.
+            # Write a small wrapper that sets overlaySource from env.
+            qml_test = Path(tmp) / "tst_hit.qml"
+            base = QML_TEST.read_text(encoding="utf-8")
+            base = base.replace(
+                'property string overlaySource: ""',
+                f'property string overlaySource: "{rewritten}"',
+            )
+            qml_test.write_text(base, encoding="utf-8")
+            # Also need components path: rewrite GlassPanel TahoeGlassRegion dependency
+            # by ensuring components are importable from original tree via relative path
+            # in createComponent file URL — Overlay imports "./" relative components.
+            # Copy rewritten overlay next to components via symlink tree.
+            work = Path(tmp) / "components"
+            work.mkdir()
+            # Symlink production components except Overlay which we replace.
+            import os as _os
+            for entry in (SHELL_ROOT / "components").iterdir():
+                if entry.name == "DynamicIslandOverlay.qml":
+                    continue
+                _os.symlink(entry, work / entry.name)
+            _os.symlink(rewritten, work / "DynamicIslandOverlay.qml")
+            # Point createComponent at work tree overlay.
+            base2 = qml_test.read_text(encoding="utf-8")
+            base2 = base2.replace(
+                f'property string overlaySource: "{rewritten}"',
+                f'property string overlaySource: "{work / "DynamicIslandOverlay.qml"}"',
+            )
+            qml_test.write_text(base2, encoding="utf-8")
+
+            result = subprocess.run(
+                [runner, "-input", str(qml_test), "-file-selector", "test"],
+                cwd=SHELL_ROOT,
+                env=env,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                timeout=90,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout)
+
+
+
+    def test_real_qml_missing_content_host_z_fails(self) -> None:
+        """Negative: stripping contentHost z must fail the production Overlay QML suite."""
+        import tempfile
+        import re as _re
+
+        qt6_runner = Path("/usr/lib/qt6/bin/qmltestrunner")
+        runner = str(qt6_runner) if qt6_runner.is_file() else shutil.which("qmltestrunner")
+        self.assertIsNotNone(runner)
+        with tempfile.TemporaryDirectory() as tmp:
+            rewritten = Path(tmp) / "DynamicIslandOverlay.qml"
+            self._rewrite_overlay_shell_for_tests(rewritten)
+            body = rewritten.read_text(encoding="utf-8")
+            mutated = _re.sub(
+                r"(id:\s*contentHost[\s\S]{0,120}?)z:\s*1\b",
+                r"\1/* MUTATED no elevated z */",
+                body,
+                count=1,
+            )
+            self.assertNotEqual(mutated, body, "mutation must remove contentHost z:1")
+            rewritten.write_text(mutated, encoding="utf-8")
+            work = Path(tmp) / "components"
+            work.mkdir()
+            import os as _os
+            for entry in (SHELL_ROOT / "components").iterdir():
+                if entry.name == "DynamicIslandOverlay.qml":
+                    continue
+                _os.symlink(entry, work / entry.name)
+            _os.symlink(rewritten, work / "DynamicIslandOverlay.qml")
+            qml_test = Path(tmp) / "tst_hit.qml"
+            base = QML_TEST.read_text(encoding="utf-8")
+            base = base.replace(
+                'property string overlaySource: ""',
+                f'property string overlaySource: "{work / "DynamicIslandOverlay.qml"}"',
+            )
+            qml_test.write_text(base, encoding="utf-8")
+            env = os.environ.copy()
+            env.setdefault("QT_QPA_PLATFORM", "offscreen")
+            local_qml = Path.home() / ".local" / "lib" / "qt6" / "qml"
+            test_qml = SHELL_ROOT / "tests" / "qml_imports"
+            existing = env.get("QML2_IMPORT_PATH", "")
+            paths = [str(test_qml), str(local_qml)]
+            if existing:
+                paths.append(existing)
+            env["QML2_IMPORT_PATH"] = ":".join(paths)
+            result = subprocess.run(
+                [runner, "-input", str(qml_test), "-file-selector", "test"],
+                cwd=SHELL_ROOT,
+                env=env,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                timeout=90,
+                check=False,
+            )
+            self.assertNotEqual(
+                result.returncode,
+                0,
+                "missing contentHost z must fail real Overlay hit tests:\n" + result.stdout,
+            )
+            self.assertTrue(
+                "FAIL!" in result.stdout
+                or "contentHost" in result.stdout
+                or "Compared values are not the same" in result.stdout,
+                result.stdout,
+            )
 
 
 if __name__ == "__main__":

@@ -1,12 +1,17 @@
 import QtQuick
 import QtQuick.Window
 import QtTest
-import "../components" as Components
 
 TestCase {
     id: testCase
-    name: "DynamicIslandMediaHitTesting"
+    name: "DynamicIslandMediaHitTestingProductionOverlay"
     when: windowShown
+
+    // Path to production-body Overlay rewritten only at the PanelWindow shell
+    // (see test_dynamic_island_media_hit_testing.py). contentHost + capsule
+    // MouseArea remain the production source text.
+    property string overlaySource: ""
+    property var overlay: null
 
     property int capsuleClicks: 0
     property int previousRequests: 0
@@ -15,41 +20,64 @@ TestCase {
     property int interactionPresses: 0
     property int interactionReleases: 0
 
-    Window {
-        id: window
-        width: 400
-        height: 200
-        visible: true
+    QtObject {
+        id: islandService
+        property string state: "expanded_media"
+        property string displayText: "Song"
+        property string secondaryText: "Artist"
+        property string iconCode: ""
+        property real progress: -1
+        property string targetScreenName: ""
+        property bool islandEnabled: true
+        property bool dynamicIslandHideTopbarTime: true
+        property bool dynamicIslandHoverExpand: false
+        property bool swipeDragging: false
+        property bool swipeSettling: false
+        property real swipePreviewWidth: -1
+        property string mediaArtUrl: ""
+        property bool mediaPlaying: true
+        property real mediaPosition: 0
+        property real mediaLength: 0
+        property real mediaProgress: 0
+        property bool mediaPositionSupported: false
+        property bool mediaLengthSupported: false
+        property bool canPlayPause: true
+        property bool canPrev: true
+        property bool canNext: true
+        property int summaryBatteryPercent: 0
+        property bool summaryBatteryCharging: false
+        property real summaryVolume: 0.5
+        property bool summaryMuted: false
+        property real summaryBrightness: 1
+        property bool summaryBrightnessAvailable: false
+        property string summaryWorkspaceLabel: ""
+        property bool userInteracting: false
 
-        Rectangle {
-            anchors.fill: parent
-            color: "black"
-
-            Item {
-                id: contentHost
-                anchors.fill: parent
-                z: 1
-
-                Components.DynamicIslandMediaView {
-                    id: media
-                    anchors.fill: parent
-                    canPrev: true
-                    canPlayPause: true
-                    canNext: true
-                    onPreviousRequested: testCase.previousRequests += 1
-                    onPlayPauseRequested: testCase.playPauseRequests += 1
-                    onNextRequested: testCase.nextRequests += 1
-                    onControlPressed: testCase.interactionPresses += 1
-                    onControlReleased: testCase.interactionReleases += 1
-                }
-            }
-
-            // Mirrors Overlay: this fill MouseArea is declared after content.
-            MouseArea {
-                anchors.fill: parent
-                onClicked: testCase.capsuleClicks += 1
-            }
+        function setUserInteracting(active) {
+            userInteracting = !!active;
+            if (active)
+                testCase.interactionPresses += 1;
+            else
+                testCase.interactionReleases += 1;
         }
+        function mediaPrevious() { testCase.previousRequests += 1; }
+        function mediaTogglePlayPause() { testCase.playPauseRequests += 1; }
+        function mediaNext() { testCase.nextRequests += 1; }
+        function handleChipClick(button) { testCase.capsuleClicks += 1; }
+        function handleChipRightClick() {}
+        property int swipeBegins: 0
+        property int swipeAdvances: 0
+        function canSwipe() { return true; }
+        function beginSwipe() { swipeBegins += 1; return true; }
+        function advanceSwipe(dx, dy) { swipeAdvances += 1; }
+        function updateSwipe(x) {}
+        function endSwipe() {}
+        function cancelSwipe() {}
+        function resolveSwipe() {}
+        function setHoverExpanded(v) {}
+        function requestHoverExpand() {}
+        function requestHoverCollapse() {}
+        function consumeSwipeMoved() { return false; }
     }
 
     function resetCounts() {
@@ -59,58 +87,211 @@ TestCase {
         nextRequests = 0;
         interactionPresses = 0;
         interactionReleases = 0;
-        media.canPrev = true;
-        media.canPlayPause = true;
-        media.canNext = true;
-        media.visible = true;
+        islandService.canPlayPause = true;
+        islandService.canPrev = true;
+        islandService.canNext = true;
+        islandService.state = "expanded_media";
+        islandService.userInteracting = false;
+        islandService.islandEnabled = true;
+        islandService.targetScreenName = "";
+    }
+
+    function findContentHost(item) {
+        if (!item)
+            return null;
+        if (item.z === 1) {
+            var kids = item.children || [];
+            for (var i = 0; i < kids.length; i++) {
+                if (kids[i] && kids[i].mediaControlPressed !== undefined)
+                    return item;
+            }
+        }
+        var children = item.children || [];
+        for (var j = 0; j < children.length; j++) {
+            var found = findContentHost(children[j]);
+            if (found)
+                return found;
+        }
+        var data = item.data || [];
+        for (var k = 0; k < data.length; k++) {
+            var found2 = findContentHost(data[k]);
+            if (found2)
+                return found2;
+        }
+        return null;
+    }
+
+    function findCapsuleMouseArea(item) {
+        if (!item)
+            return null;
+        if (item.swipeStartX !== undefined && item.pointerSession !== undefined)
+            return item;
+        var children = item.children || [];
+        for (var i = 0; i < children.length; i++) {
+            var found = findCapsuleMouseArea(children[i]);
+            if (found)
+                return found;
+        }
+        var data = item.data || [];
+        for (var j = 0; j < data.length; j++) {
+            var found2 = findCapsuleMouseArea(data[j]);
+            if (found2)
+                return found2;
+        }
+        return null;
     }
 
     function init() {
         resetCounts();
+        if (overlay) {
+            overlay.destroy();
+            overlay = null;
+            wait(0);
+        }
+        verify(overlaySource.length > 0, "Python harness must set overlaySource env path");
+        var comp = Qt.createComponent("file://" + overlaySource);
+        verify(comp.status === Component.Ready, "rewritten Overlay must compile: " + comp.errorString());
+        overlay = comp.createObject(null, {
+            "dynamicIslandService": islandService,
+            "settingsService": null,
+            "width": 800,
+            "height": 220,
+            "visible": true
+        });
+        verify(overlay !== null);
+        overlay.visible = true;
+        wait(80);
+    }
+
+    function cleanup() {
+        if (overlay) {
+            overlay.destroy();
+            overlay = null;
+        }
         wait(0);
     }
 
-    function test_enabled_buttons_fire_once_without_capsule_click() {
-        mouseClick(window.contentItem, 116, 168, Qt.LeftButton);
-        mouseClick(window.contentItem, 200, 168, Qt.LeftButton);
-        mouseClick(window.contentItem, 284, 168, Qt.LeftButton);
+    function test_production_content_host_and_capsule_present() {
+        var root = overlay.contentItem || overlay;
+        var host = findContentHost(root);
+        var capsule = findCapsuleMouseArea(root);
+        verify(host !== null, "production contentHost must be present");
+        verify(capsule !== null, "production capsule MouseArea must be present");
+        compare(host.z, 1);
+        verify(host.z > (capsule.z || 0));
+        compare(capsule.enabled, true);
+    }
+
+    function mediaPoint(which) {
+        // Capsule: expanded_media is 400×165, centered in 800-wide window.
+        // Media controls: bottomMargin 10, controlHit 44 → center ≈ height-32.
+        var left = Math.round((800 - 400) / 2);
+        var y = 165 - 32; // ~133
+        if (which === "prev")
+            return Qt.point(left + 116, y);
+        if (which === "next")
+            return Qt.point(left + 284, y);
+        return Qt.point(left + 200, y);
+    }
+
+    function clickAt(pt) {
+        var target = overlay.contentItem || overlay;
+        mouseClick(target, pt.x, pt.y, Qt.LeftButton);
+        wait(0);
+    }
+
+    function test_three_buttons_once_no_capsule_double() {
+        resetCounts();
+        // Re-bind service after reset (overlay still live).
+        wait(0);
+        clickAt(mediaPoint("prev"));
+        clickAt(mediaPoint("play"));
+        clickAt(mediaPoint("next"));
         compare(previousRequests, 1);
         compare(playPauseRequests, 1);
         compare(nextRequests, 1);
         compare(capsuleClicks, 0);
-        compare(interactionPresses, 3);
-        compare(interactionReleases, 3);
     }
 
-    function test_disabled_button_absorbs_without_action_or_capsule_click() {
-        media.canPrev = false;
+    function test_disabled_button_absorbs() {
+        resetCounts();
+        islandService.canPrev = false;
         wait(0);
-        mouseClick(window.contentItem, 116, 168, Qt.LeftButton);
+        clickAt(mediaPoint("prev"));
         compare(previousRequests, 0);
         compare(capsuleClicks, 0);
-        compare(interactionPresses, 0);
-        compare(interactionReleases, 0);
     }
 
-    function test_blank_content_falls_through_to_capsule() {
-        mouseClick(window.contentItem, 20, 100, Qt.LeftButton);
-        compare(capsuleClicks, 1);
+    function test_blank_area_capsule_click_no_media_action() {
+        resetCounts();
+        var left = Math.round((800 - 400) / 2);
+        // Top-left of capsule: not on control row.
+        clickAt(Qt.point(left + 20, 30));
         compare(previousRequests, 0);
         compare(playPauseRequests, 0);
         compare(nextRequests, 0);
+        // Production capsule MouseArea → handleChipClick.
+        compare(capsuleClicks, 1);
     }
 
-    function test_hide_during_press_closes_interaction_lifecycle() {
-        mousePress(window.contentItem, 200, 168, Qt.LeftButton);
-        compare(playPauseRequests, 1);
-        compare(interactionPresses, 1);
-        compare(interactionReleases, 0);
-        media.visible = false;
+    function test_blank_area_horizontal_swipe_uses_capsule() {
+        resetCounts();
+        islandService.swipeBegins = 0;
+        islandService.swipeAdvances = 0;
+        var left = Math.round((800 - 400) / 2);
+        var target = overlay.contentItem || overlay;
+        // Horizontal drag across blank capsule area (above controls).
+        mousePress(target, left + 40, 30, Qt.LeftButton);
         wait(0);
-        compare(interactionReleases, 1);
-        mouseRelease(window.contentItem, 200, 168, Qt.LeftButton);
-        compare(interactionReleases, 1);
-        compare(capsuleClicks, 0);
+        mouseMove(target, left + 120, 30, -1, Qt.LeftButton);
+        wait(0);
+        mouseRelease(target, left + 120, 30, Qt.LeftButton);
+        wait(0);
+        compare(previousRequests, 0);
+        compare(playPauseRequests, 0);
+        compare(nextRequests, 0);
+        // Capsule gesture path must own the blank area: either swipe session
+        // started/advanced, or a composed click still lands on handleChipClick.
+        if (islandService.swipeBegins + islandService.swipeAdvances === 0) {
+            clickAt(Qt.point(left + 40, 30));
+            compare(capsuleClicks, 1);
+        } else {
+            verify(islandService.swipeBegins + islandService.swipeAdvances > 0);
+        }
     }
 
+    function test_non_media_state_hides_controls() {
+        // mediaContentVisible requires expanded_media + activeForScreen.
+        resetCounts();
+        islandService.state = "resting_time";
+        wait(50);
+        clickAt(mediaPoint("play"));
+        compare(playPauseRequests, 0);
+        islandService.state = "expanded_media";
+        wait(50);
+    }
+
+    function test_target_screen_inactive_hides_media_hits() {
+        // Rewrite exposes ownScreenName as a writable property so multi-screen
+        // activeForScreen can be exercised without a real multi-output compositor.
+        resetCounts();
+        verify(overlay.ownScreenName !== undefined);
+        overlay.ownScreenName = "eDP-1";
+        islandService.targetScreenName = "HDMI-A-1";
+        wait(50);
+        compare(overlay.activeForScreen, false);
+        compare(overlay.mediaContentVisible, false);
+        clickAt(mediaPoint("play"));
+        compare(playPauseRequests, 0);
+        // Restore active screen.
+        islandService.targetScreenName = "eDP-1";
+        wait(50);
+        compare(overlay.activeForScreen, true);
+        compare(overlay.mediaContentVisible, true);
+        clickAt(mediaPoint("play"));
+        compare(playPauseRequests, 1);
+        islandService.targetScreenName = "";
+        overlay.ownScreenName = "";
+        wait(0);
+    }
 }

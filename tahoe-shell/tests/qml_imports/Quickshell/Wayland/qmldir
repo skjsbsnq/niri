@@ -1,3 +1,4 @@
 module Quickshell.Wayland
 WlSessionLock 1.0 WlSessionLock.qml
 WlSessionLockSurface 1.0 WlSessionLockSurface.qml
+TahoeGlassRegion 1.0 TahoeGlassRegion.qml

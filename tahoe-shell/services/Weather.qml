@@ -926,6 +926,13 @@ Item {
             var text = geocodeOut.text;
             root.finishGeocodeRequest(code, text, generation);
         }
+        onRunningChanged: {
+            // QuickShell Process does not emit exited when QProcess fails to start.
+            // runningChanged is the only completion signal for that path; finishGeocodeRequest
+            // is idempotent and rejects already-consumed generations after a normal onExited.
+            if (!geocodeProcess.running && root.geocodeInFlightGeneration > 0)
+                root.finishGeocodeRequest(1, "", root.geocodeInFlightGeneration);
+        }
     }
 
     Process {

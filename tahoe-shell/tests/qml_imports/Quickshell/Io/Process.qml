@@ -9,20 +9,22 @@ QtObject {
     signal exited(int code, int exitStatus)
 
     property Timer completionTimer: Timer {
-        interval: root.activeCommand.length > 2 ? Number(root.activeCommand[2]) : 0
+        interval: 0
         repeat: false
         onTriggered: {
             if (!root.running)
                 return;
-            if (root.activeCommand[0] === "test-failed-start") {
+            // Mirrors QuickShell: FailedToStart emits runningChanged only, never exited.
+            if (root.activeCommand[0] === "test-failed-start"
+                    || TestProcessRegistry.shouldFailStart(root.activeCommand)) {
                 root.running = false;
                 return;
             }
             if (root.stdout) {
-                root.stdout.text = String(root.activeCommand[3] || "");
+                root.stdout.text = TestProcessRegistry.payloadFor(root.activeCommand);
                 root.stdout.streamFinished();
             }
-            var code = root.activeCommand.length > 4 ? Number(root.activeCommand[4]) : 0;
+            var code = TestProcessRegistry.exitCodeFor(root.activeCommand);
             root.exited(code, 0);
             root.running = false;
         }
@@ -32,8 +34,16 @@ QtObject {
         if (running) {
             activeCommand = command.slice(0);
             TestProcessRegistry.record(activeCommand);
+            var delay = TestProcessRegistry.delayMsFor(activeCommand);
+            // Async FailedToStart: running reads true first, then drops without exited.
+            if (delay <= 0
+                    && (activeCommand[0] === "test-failed-start"
+                        || TestProcessRegistry.shouldFailStart(activeCommand)))
+                delay = 1;
+            completionTimer.interval = Math.max(0, delay);
             completionTimer.restart();
-        } else
+        } else {
             completionTimer.stop();
+        }
     }
 }

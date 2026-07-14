@@ -28,7 +28,10 @@ Regression strategy:
 
 from __future__ import annotations
 
+import os
 import re
+import shutil
+import subprocess
 import unittest
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -36,6 +39,7 @@ from pathlib import Path
 
 SHELL_ROOT = Path(__file__).resolve().parents[1]
 WEATHER = SHELL_ROOT / "services" / "Weather.qml"
+QML_TEST = Path(__file__).with_name("tst_weather_geocode_request_identity.qml")
 
 
 @dataclass(frozen=True)
@@ -61,6 +65,7 @@ class GeocodeIdentityContract:
     deferred_pending_restart: bool
     on_exited_freezes_generation: bool
     on_exited_uses_finish_geocode: bool
+    on_running_changed_failed_start_fallback: bool
     clear_bumps_generation: bool
     empty_query_bumps_generation: bool
     failed_start_uses_finish: bool
@@ -242,6 +247,14 @@ def extract_contract(src: str) -> GeocodeIdentityContract:
         re.search(r"finishGeocodeRequest\s*\(", on_exited)
     )
 
+    # Async FailedToStart: QuickShell emits only runningChanged, never exited.
+    on_running_changed_failed_start_fallback = bool(
+        re.search(r"onRunningChanged\s*:", process)
+        and re.search(r"finishGeocodeRequest\s*\(", process)
+        and re.search(r"geocodeInFlightGeneration", process)
+        and re.search(r"!geocodeProcess\.running|!running", process)
+    )
+
     clear_bumps_generation = bool(
         re.search(r"geocodeGeneration\s*\+=\s*1", clear_fn)
     )
@@ -307,6 +320,7 @@ def extract_contract(src: str) -> GeocodeIdentityContract:
         deferred_pending_restart=deferred_pending_restart,
         on_exited_freezes_generation=on_exited_freezes_generation,
         on_exited_uses_finish_geocode=on_exited_uses_finish_geocode,
+        on_running_changed_failed_start_fallback=on_running_changed_failed_start_fallback,
         clear_bumps_generation=clear_bumps_generation,
         empty_query_bumps_generation=empty_query_bumps_generation,
         failed_start_uses_finish=failed_start_uses_finish,
@@ -926,6 +940,38 @@ class WeatherGeocodeRequestIdentityTests(unittest.TestCase):
         self.assertEqual(new.state.finished_signals, 1)
         self.assertFalse(new.state.searching)
         self.assertEqual(new.finish_rejected, 1)
+
+    def test_source_has_running_changed_failed_start_fallback(self) -> None:
+        contract = extract_contract(self.src)
+        self.assertTrue(
+            contract.on_running_changed_failed_start_fallback,
+            "geocodeProcess must finish via onRunningChanged when FailedToStart omits exited",
+        )
+
+    def test_real_qml_geocode_failed_start_lifecycle(self) -> None:
+        qt6_runner = Path("/usr/lib/qt6/bin/qmltestrunner")
+        runner = str(qt6_runner) if qt6_runner.is_file() else shutil.which("qmltestrunner")
+        self.assertIsNotNone(runner, "Qt 6 qmltestrunner is required for Weather geocode coverage")
+        env = os.environ.copy()
+        env.setdefault("QT_QPA_PLATFORM", "offscreen")
+        local_qml = Path.home() / ".local" / "lib" / "qt6" / "qml"
+        test_qml = SHELL_ROOT / "tests" / "qml_imports"
+        existing = env.get("QML2_IMPORT_PATH", "")
+        paths = [str(test_qml), str(local_qml)]
+        if existing:
+            paths.append(existing)
+        env["QML2_IMPORT_PATH"] = ":".join(paths)
+        result = subprocess.run(
+            [runner, "-input", str(QML_TEST)],
+            cwd=SHELL_ROOT,
+            env=env,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            timeout=60,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout)
 
 
 if __name__ == "__main__":

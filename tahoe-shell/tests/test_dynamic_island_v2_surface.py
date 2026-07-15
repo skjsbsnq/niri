@@ -131,6 +131,11 @@ class DynamicIslandV2SurfaceTests(unittest.TestCase):
         clock_width = _function_body(self.overlay, "restingClockTargetWidth")
         self.assertIn("v2ClockWidthMin", clock_width)
         self.assertIn("v2ClockWidthMax", clock_width)
+        # T16: resting_media width is content-driven via compactMediaTargetWidth.
+        self.assertIn("compactMediaTargetWidth", width_body)
+        media_width = _function_body(self.overlay, "compactMediaTargetWidth")
+        self.assertIn("v2CompactMediaWidthMin", media_width)
+        self.assertIn("v2CompactMediaWidthMax", media_width)
         # T14: notification compact size is content/overflow-driven.
         self.assertIn("notificationCompactTargetWidth", width_body)
         notif_width = _function_body(self.overlay, "notificationCompactTargetWidth")

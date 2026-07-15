@@ -71,6 +71,11 @@ PanelWindow {
         : ""
     // Horizontal padding around measured clock row (matches content host margins).
     readonly property int restingClockHorizontalPad: 28
+    // Compact media horizontal pad around measured content (T16).
+    readonly property int compactMediaHorizontalPad: 0
+    readonly property string accentId: settingsService ? String(settingsService.accentColor || "blue") : "blue"
+    readonly property color accentColor: Theme.accent(root.darkMode, root.accentId)
+    readonly property color progressTrackColor: Theme.islandProgressTrack(root.darkMode)
     readonly property real progress: (!!screenRole && screenRole.showActivity && dynamicIslandService)
         ? Number(dynamicIslandService.progress)
         : -1
@@ -149,7 +154,11 @@ PanelWindow {
     readonly property string mediaArtUrl: (activeForScreen && dynamicIslandService)
         ? String(dynamicIslandService.mediaArtUrl || "")
         : ""
-    readonly property string mediaTrackTitle: contentDisplayText
+    // T16: title comes from Controls via service — never contentDisplayText /
+    // fallbackTimeText, so media→clock exit cannot flash the clock string.
+    readonly property string mediaTrackTitle: (activeForScreen && dynamicIslandService)
+        ? String(dynamicIslandService.mediaTrackTitle || "")
+        : ""
     readonly property string mediaTrackArtist: contentSecondaryText
     readonly property bool mediaPlaying: activeForScreen && dynamicIslandService
         ? !!dynamicIslandService.mediaPlaying
@@ -185,7 +194,9 @@ PanelWindow {
         case "transient_workspace":
             return Math.round((IslandMotion.v2WorkspaceWidthMin + IslandMotion.v2WorkspaceWidthMax) / 2);
         case "resting_media":
-            return Math.round((IslandMotion.v2CompactMediaWidthMin + IslandMotion.v2CompactMediaWidthMax) / 2);
+            // Content-driven compact media width (T16).
+            // Band: IslandMotion.v2CompactMediaWidthMin .. v2CompactMediaWidthMax.
+            return compactMediaTargetWidth();
         case "resting_time":
         default:
             // Content-driven clock width (T12). Fall back to mid-band before measure.
@@ -200,6 +211,15 @@ PanelWindow {
         if (measured <= 0)
             measured = Math.round((IslandMotion.v2ClockWidthMin + IslandMotion.v2ClockWidthMax) / 2);
         return clampInt(measured, IslandMotion.v2ClockWidthMin, IslandMotion.v2ClockWidthMax);
+    }
+
+    function compactMediaTargetWidth() {
+        var measured = 0;
+        if (islandContent && islandContent.compactMediaContentWidth > 0)
+            measured = Math.round(islandContent.compactMediaContentWidth) + root.compactMediaHorizontalPad;
+        if (measured <= 0)
+            measured = Math.round((IslandMotion.v2CompactMediaWidthMin + IslandMotion.v2CompactMediaWidthMax) / 2);
+        return clampInt(measured, IslandMotion.v2CompactMediaWidthMin, IslandMotion.v2CompactMediaWidthMax);
     }
 
     function notificationCompactTargetWidth() {
@@ -466,6 +486,8 @@ PanelWindow {
                 canPrev: root.canPrev
                 canNext: root.canNext
                 settingsService: root.settingsService
+                accentColor: root.accentColor
+                progressTrackColor: root.progressTrackColor
                 summaryBatteryPercent: root.summaryBatteryPercent
                 summaryBatteryCharging: root.summaryBatteryCharging
                 summaryVolume: root.summaryVolume

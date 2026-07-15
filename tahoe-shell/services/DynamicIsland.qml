@@ -106,6 +106,13 @@ Item {
     readonly property bool hasMedia: controlsService ? controlsService.hasMedia : false
     readonly property bool expanded: presentation === "expanded_media" || presentation === "expanded_summary"
     readonly property string mediaArtUrl: controlsService ? String(controlsService.trackArtUrl || "") : ""
+    // Stable track title from Controls only — never displayText / clock fallback.
+    // Compact and expanded media both consume this so exit morphs cannot flash time.
+    readonly property string mediaTrackTitle: {
+        if (!root.controlsService)
+            return "";
+        return String(root.controlsService.trackTitle || "").trim();
+    }
     readonly property bool mediaPlaying: controlsService ? !!controlsService.isPlaying : false
     readonly property real mediaPosition: controlsService ? Number(controlsService.trackPosition) : 0
     readonly property real mediaLength: controlsService ? Number(controlsService.trackLength) : 0

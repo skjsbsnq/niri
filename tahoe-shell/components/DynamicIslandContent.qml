@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import "DynamicIslandMotion.js" as IslandMotion
+import "Motion.js" as Motion
 
 // Scene host for the Dynamic Island capsule.
 // Compact/transient chrome stays lightweight and always present.
@@ -61,6 +62,8 @@ Item {
     property bool canPrev: false
     property bool canNext: false
     property var settingsService
+    property color accentColor: "#0a84ff"
+    property color progressTrackColor: "#30ffffff"
     signal mediaPreviousRequested()
     signal mediaPlayPauseRequested()
     signal mediaNextRequested()
@@ -75,6 +78,30 @@ Item {
     property string summaryWorkspaceLabel: ""
     readonly property bool mediaExpanded: islandState === "expanded_media"
     readonly property bool summaryExpanded: islandState === "expanded_summary"
+    readonly property bool compactMediaActive: islandState === "resting_media"
+    // Measured compact media content width (no capsule padding). Overlay clamps.
+    // While compact media is exiting, freeze measured width on the latch so the
+    // capsule does not shrink mid-fade when the player disappears.
+    readonly property int compactMediaContentWidth: {
+        if (root.compactMediaActive || root.compactLayerHeld)
+            return Math.max(compactMedia.contentWidth, root.latchedCompactMediaWidth);
+        return compactMedia.contentWidth;
+    }
+    // Last non-empty title/width while compact media is shown or exit-held so
+    // player disappear does not rewrite the fading scene with clock text.
+    property string latchedCompactMediaTitle: ""
+    property int latchedCompactMediaWidth: 0
+    readonly property string compactMediaTitle: {
+        var live = String(root.mediaTrackTitle || "").trim();
+        if (live.length > 0)
+            return live;
+        // Keep latched title through exit fade (including media→clock without
+        // compactLayerHeld, when both stay in the compact resting layer).
+        return root.latchedCompactMediaTitle;
+    }
+    readonly property int compactContentMotionMs: Motion.reducedMotion(root.settingsService)
+        ? IslandMotion.v2ReducedContentMs
+        : (root.osdActive ? IslandMotion.v2OsdEnterMs : IslandMotion.v2ContentExitMs)
 
     readonly property bool notificationActive: islandState === "transient_notification"
     readonly property bool standardDetailActive: !compactResting && !notificationActive && !osdActive && !mediaExpanded && !summaryExpanded
@@ -213,11 +240,15 @@ Item {
 
     Timer {
         id: compactExitHold
-        interval: IslandMotion.v2ContentExitMs + 20
+        interval: root.compactContentMotionMs + 20
         repeat: false
         onTriggered: {
             root.compactLayerHeld = false;
             root.compactLayerY = 0;
+            if (!root.compactMediaActive) {
+                root.latchedCompactMediaTitle = "";
+                root.latchedCompactMediaWidth = 0;
+            }
         }
     }
 
@@ -242,51 +273,104 @@ Item {
 
         Behavior on opacity {
             NumberAnimation {
-                duration: root.osdActive ? IslandMotion.v2OsdEnterMs : IslandMotion.v2ContentExitMs
+                duration: root.compactContentMotionMs
                 easing.type: IslandMotion.v2ContentEasing
             }
         }
         Behavior on anchors.topMargin {
             NumberAnimation {
-                duration: root.osdActive ? IslandMotion.v2OsdEnterMs : IslandMotion.v2ContentExitMs
+                duration: root.compactContentMotionMs
                 easing.type: IslandMotion.v2ContentEasing
             }
         }
     }
 
-    Text {
-        id: compactLabel
+    // Latch non-empty compact title/width while media is active so exit fades
+    // keep the last track identity (never clock displayText).
+    onMediaTrackTitleChanged: {
+        var live = String(root.mediaTrackTitle || "").trim();
+        if (live.length > 0)
+            root.latchedCompactMediaTitle = live;
+    }
+
+    onCompactMediaActiveChanged: {
+        if (root.compactMediaActive) {
+            compactMediaExitLatch.stop();
+            var live = String(root.mediaTrackTitle || "").trim();
+            if (live.length > 0)
+                root.latchedCompactMediaTitle = live;
+            if (compactMedia.contentWidth > 0)
+                root.latchedCompactMediaWidth = compactMedia.contentWidth;
+        } else if (!root.compactLayerHeld) {
+            // media→clock (compact layer stays wanted): clear latch after fade.
+            compactMediaExitLatch.restart();
+        }
+    }
+
+    Timer {
+        id: compactMediaExitLatch
+        interval: root.compactContentMotionMs + 20
+        repeat: false
+        onTriggered: {
+            if (!root.compactMediaActive && !root.compactLayerHeld) {
+                root.latchedCompactMediaTitle = "";
+                root.latchedCompactMediaWidth = 0;
+            }
+        }
+    }
+
+    Connections {
+        target: compactMedia
+        function onContentWidthChanged() {
+            if (root.compactMediaActive
+                    && compactMedia.contentWidth > 0
+                    && String(root.mediaTrackTitle || "").trim().length > 0)
+                root.latchedCompactMediaWidth = compactMedia.contentWidth;
+        }
+    }
+
+    // T16: V2 compact media (art + title + play/pause). Shares compactLayer
+    // opacity/y with the resting clock so clock↔media morph has no black frame.
+    DynamicIslandCompactMediaView {
+        id: compactMedia
 
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: parent.top
         anchors.topMargin: root.compactLayerY
-        width: parent.width - 32
+        width: Math.min(parent.width - 8, Math.max(contentWidth, IslandMotion.v2CompactMediaWidthMin))
         height: IslandMotion.v2CompactMediaHeight
-        // Compact media (and any non-clock resting) until T16 redesign.
-        text: (!root.restingClockActive && (root.compactResting || root.compactLayerHeld))
-              ? root.displayText
-              : ""
-        color: root.textPrimary
-        font.pixelSize: 12
-        font.weight: Font.DemiBold
-        horizontalAlignment: Text.AlignHCenter
-        verticalAlignment: Text.AlignVCenter
-        elide: Text.ElideRight
-        maximumLineCount: 1
-        opacity: (!root.restingClockActive && root.compactLayerShown)
-                 ? root.compactLayerOpacity
-                 : 0
-        visible: opacity > 0.01 && text.length > 0
+        artUrl: root.mediaArtUrl
+        // Never fall back to displayText (clock) — use live or latched title only.
+        trackTitle: root.compactMediaTitle
+        isPlaying: root.mediaPlaying
+        progress: root.mediaProgress
+        // Show progress only when Controls reports position support (and length > 0).
+        progressSupported: root.mediaPositionSupported && root.mediaLength > 0
+        textPrimary: root.textPrimary
+        textSecondary: root.textSecondary
+        accentColor: root.accentColor
+        trackColor: root.progressTrackColor
+        // Active media: follow compact layer. Leave media: fade to 0 (Behavior)
+        // while latched title keeps geometry; leave compact entirely: follow
+        // compactLayerOpacity during exit hold.
+        opacity: {
+            if (root.compactMediaActive)
+                return root.compactLayerOpacity;
+            if (root.compactLayerHeld && root.latchedCompactMediaTitle.length > 0)
+                return root.compactLayerOpacity;
+            return 0;
+        }
+        visible: opacity > 0.01
 
         Behavior on opacity {
             NumberAnimation {
-                duration: root.osdActive ? IslandMotion.v2OsdEnterMs : IslandMotion.v2ContentExitMs
+                duration: root.compactContentMotionMs
                 easing.type: IslandMotion.v2ContentEasing
             }
         }
         Behavior on anchors.topMargin {
             NumberAnimation {
-                duration: root.osdActive ? IslandMotion.v2OsdEnterMs : IslandMotion.v2ContentExitMs
+                duration: root.compactContentMotionMs
                 easing.type: IslandMotion.v2ContentEasing
             }
         }

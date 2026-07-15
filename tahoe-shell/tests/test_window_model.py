@@ -136,6 +136,12 @@ class WindowModelTests(unittest.TestCase):
             "sameLayout",
             "sameGeometry",
             "sameFocusTimestamp",
+            "applyWorkspaceActivated",
+            "applyWorkspaceUrgencyChanged",
+            "applyWorkspaceActiveWindowChanged",
+            "focusedOutputName",
+            "activeWorkspaceForOutput",
+            "activeWorkspaceIndexForOutput",
         ):
             self.assertIn(f"function {function}(", text)
 
@@ -239,11 +245,16 @@ process.stdout.write(JSON.stringify({
             "closeWindow",
             "mergeWindowModels",
             "normalizeIpcWindow",
+            "activeWorkspaceForOutput",
+            "activeWorkspaceIndexForOutput",
+            "publishWorkspaces",
         ):
             self.assertIn(f"function {function_name}(", text)
 
         self.assertIn("WindowModel.mergeWindowModels", text)
         self.assertIn("WindowModel.normalizeIpcWindow", text)
+        self.assertIn("WindowModel.applyWorkspaceActivated", text)
+        self.assertIn("readonly property string focusedOutputName", text)
         self.assertIn('action(["focus-window", "--id", String(window.id)])', text)
         self.assertIn('action(["minimize-window", "--id", String(window.id)])', text)
         self.assertIn('action(["restore-window", "--id", String(window.id)])', text)

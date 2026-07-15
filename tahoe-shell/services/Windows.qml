@@ -20,9 +20,14 @@ import "windows/WindowModel.js" as WindowModel
 // - {"WindowUrgencyChanged":{"id":u64,"urgent":bool}}
 // - {"WindowLayoutsChanged":{"changes":[[u64,WindowLayout]...]}}
 // - {"WorkspacesChanged":{"workspaces":[Workspace...]}}
+// - {"WorkspaceActivated":{"id":u64,"focused":bool}}
+// - {"WorkspaceUrgencyChanged":{"id":u64,"urgent":bool}}
+// - {"WorkspaceActiveWindowChanged":{"workspace_id":u64,"active_window_id":u64|null}}
 //
 // Window fields are snake_case in JSON: app_id, workspace_id, is_focused,
 // is_floating, is_urgent, is_minimized, layout, focus_timestamp.
+// Workspace idx is the user-visible per-output index and changes on reorder;
+// workspace id is the stable niri entity key.
 
 Item {
     id: root
@@ -33,8 +38,12 @@ Item {
     readonly property var activeToplevel: ToplevelManager.activeToplevel
     readonly property var windowsets: WindowManager.windowsets
     readonly property var visibleWindowsets: displayableWindowsets(WindowManager.windowsets)
-    readonly property var activeWorkspace: findActiveWorkspace(WindowManager.windowsets)
+    // Prefer the IPC-focused workspace (niri EventStream). Fall back to
+    // Quickshell WindowManager only before the first WorkspacesChanged baseline.
+    readonly property var activeWorkspace: findIpcFocusedWorkspace(ipcWorkspaces)
+        || findActiveWorkspace(WindowManager.windowsets)
     readonly property string activeWorkspaceName: workspaceLabel(activeWorkspace, 0)
+    readonly property string focusedOutputName: WindowModel.focusedOutputName(ipcWorkspaces)
 
     property bool available: false
     property string lastError: ""
@@ -451,21 +460,87 @@ Item {
             applyWindowsFromMap({ "mode": "layout" });
     }
 
-    function loadWorkspaces(rawWorkspaces) {
+    function publishWorkspaces(normalized) {
+        var list = Array.isArray(normalized) ? normalized : [];
         var byId = {};
+        for (var i = 0; i < list.length; i++) {
+            var workspace = list[i];
+            if (!workspace || workspace.id === undefined || workspace.id === null)
+                continue;
+            byId[String(workspace.id)] = workspace;
+        }
+        root.ipcWorkspaces = list;
+        root.workspacesById = byId;
+    }
+
+    function clearIpcWorkspaceBaseline() {
+        // Used on event-stream exit/reconnect so stale isFocused rows cannot
+        // mask WindowManager fallback before the next WorkspacesChanged.
+        if ((root.ipcWorkspaces || []).length === 0
+                && Object.keys(root.workspacesById || {}).length === 0)
+            return;
+        root.ipcWorkspaces = [];
+        root.workspacesById = ({});
+    }
+
+    function loadWorkspaces(rawWorkspaces) {
         var normalized = [];
         var workspaces = Array.isArray(rawWorkspaces) ? rawWorkspaces : [];
         for (var i = 0; i < workspaces.length; i++) {
             var workspace = normalizeWorkspace(workspaces[i]);
             if (!workspace || workspace.id === undefined || workspace.id === null)
                 continue;
-
-            byId[String(workspace.id)] = workspace;
             normalized.push(workspace);
         }
-        root.ipcWorkspaces = normalized;
-        root.workspacesById = byId;
+        publishWorkspaces(normalized);
+        // Structure baseline: re-merge windows so workspace/output labels refresh.
         applyWindowsFromMap({ "mode": "full" });
+    }
+
+    function applyWorkspaceList(nextWorkspaces, options) {
+        if (!nextWorkspaces)
+            return false;
+
+        publishWorkspaces(nextWorkspaces);
+        var mode = options && options.mode ? options.mode : "activation";
+        if (mode === "full")
+            applyWindowsFromMap({ "mode": "full" });
+        return true;
+    }
+
+    function activeWorkspaceForOutput(outputName) {
+        return WindowModel.activeWorkspaceForOutput(root.ipcWorkspaces, outputName);
+    }
+
+    function activeWorkspaceIndexForOutput(outputName) {
+        return WindowModel.activeWorkspaceIndexForOutput(root.ipcWorkspaces, outputName);
+    }
+
+    function findIpcFocusedWorkspace(workspaces) {
+        return WindowModel.findFocusedWorkspace(workspaces);
+    }
+
+    // Output hotplug: niri emits full WorkspacesChanged when outputs or
+    // workspace membership change (ipc/server.rs need_workspaces_changed).
+    // That structural baseline is the primary cleanup path. pruneStale* is an
+    // optional local helper for tests or future screen-model wiring.
+    function pruneStaleOutputWorkspaces(connectedOutputs) {
+        var next = WindowModel.pruneWorkspacesForOutputs(root.ipcWorkspaces, connectedOutputs);
+        if (!next)
+            return false;
+        // Only publish when membership actually changes.
+        if (next.length === (root.ipcWorkspaces || []).length) {
+            var same = true;
+            for (var i = 0; i < next.length; i++) {
+                if (!root.ipcWorkspaces[i] || String(next[i].id) !== String(root.ipcWorkspaces[i].id)) {
+                    same = false;
+                    break;
+                }
+            }
+            if (same)
+                return false;
+        }
+        return applyWorkspaceList(next, { "mode": "full" });
     }
 
     function handleEventLine(line) {
@@ -504,6 +579,24 @@ Item {
                 applyLayoutChanges(event.WindowLayoutsChanged.changes || []);
             } else if (event.WorkspacesChanged) {
                 loadWorkspaces(event.WorkspacesChanged.workspaces || []);
+            } else if (event.WorkspaceActivated) {
+                applyWorkspaceList(WindowModel.applyWorkspaceActivated(
+                    root.ipcWorkspaces,
+                    event.WorkspaceActivated.id,
+                    !!event.WorkspaceActivated.focused
+                ), { "mode": "activation" });
+            } else if (event.WorkspaceUrgencyChanged) {
+                applyWorkspaceList(WindowModel.applyWorkspaceUrgencyChanged(
+                    root.ipcWorkspaces,
+                    event.WorkspaceUrgencyChanged.id,
+                    !!event.WorkspaceUrgencyChanged.urgent
+                ), { "mode": "activation" });
+            } else if (event.WorkspaceActiveWindowChanged) {
+                applyWorkspaceList(WindowModel.applyWorkspaceActiveWindowChanged(
+                    root.ipcWorkspaces,
+                    event.WorkspaceActiveWindowChanged.workspace_id,
+                    event.WorkspaceActiveWindowChanged.active_window_id
+                ), { "mode": "activation" });
             }
         } catch (error) {
             root.setValue("lastError", String(error));
@@ -559,9 +652,12 @@ Item {
         if (name.length > 0)
             return name;
 
-        var id = String(workspace.id || "").trim();
-        if (id.length > 0)
-            return id;
+        // User-visible ordinal: prefer niri idx (per-output index). Stable entity
+        // id must not be used as a display/action reference — idx changes on
+        // reorder while id stays fixed; users expect the 1-based number.
+        var index = workspaceSortIndex(workspace, fallbackIndex);
+        if (index > 0)
+            return String(index);
 
         if (workspace.coordinates && workspace.coordinates.length > 0)
             return String(workspace.coordinates[0] + 1);
@@ -703,6 +799,9 @@ Item {
             }
         }
         onStarted: {
+            // Drop any pre-reconnect IPC snapshot so focused queries fall back
+            // to WindowManager until niri replicate() sends WorkspacesChanged.
+            root.clearIpcWorkspaceBaseline();
             root.setValue("lastError", "");
         }
         onRunningChanged: {
@@ -711,6 +810,7 @@ Item {
         }
         onExited: function(code, exitStatus) {
             root.setValue("available", false);
+            root.clearIpcWorkspaceBaseline();
             if (code !== 0)
                 root.setValue("lastError", "niri event-stream exited with code " + code);
         }

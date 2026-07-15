@@ -417,3 +417,170 @@ function asOptionalNumber(value) {
     var number = Number(value);
     return isFinite(number) ? number : null;
 }
+
+function cloneWorkspace(workspace) {
+    if (!workspace)
+        return null;
+
+    return {
+        "id": workspace.id,
+        "idx": workspace.idx,
+        "name": workspace.name,
+        "output": workspace.output,
+        "isActive": !!workspace.isActive,
+        "isFocused": !!workspace.isFocused,
+        "isUrgent": !!workspace.isUrgent,
+        "activeWindowId": workspace.activeWindowId === undefined ? null : workspace.activeWindowId,
+        "coordinates": workspace.coordinates || null
+    };
+}
+
+function workspaceListSnapshot(workspaces) {
+    var list = Array.isArray(workspaces) ? workspaces : [];
+    var next = [];
+    for (var i = 0; i < list.length; i++) {
+        var workspace = cloneWorkspace(list[i]);
+        if (workspace)
+            next.push(workspace);
+    }
+    return next;
+}
+
+function findWorkspaceById(workspaces, id) {
+    if (id === undefined || id === null)
+        return null;
+
+    var key = String(id);
+    var list = Array.isArray(workspaces) ? workspaces : [];
+    for (var i = 0; i < list.length; i++) {
+        var workspace = list[i];
+        if (workspace && String(workspace.id) === key)
+            return workspace;
+    }
+    return null;
+}
+
+function findFocusedWorkspace(workspaces) {
+    var list = Array.isArray(workspaces) ? workspaces : [];
+    for (var i = 0; i < list.length; i++) {
+        if (list[i] && list[i].isFocused)
+            return list[i];
+    }
+    return null;
+}
+
+function focusedOutputName(workspaces) {
+    var focused = findFocusedWorkspace(workspaces);
+    return focused ? textOrEmpty(focused.output) : "";
+}
+
+function activeWorkspaceForOutput(workspaces, outputName) {
+    var target = String(outputName || "").trim();
+    if (target.length === 0)
+        return null;
+
+    var list = Array.isArray(workspaces) ? workspaces : [];
+    for (var i = 0; i < list.length; i++) {
+        var workspace = list[i];
+        if (!workspace || !workspace.isActive)
+            continue;
+        if (String(workspace.output || "").trim() === target)
+            return workspace;
+    }
+    return null;
+}
+
+function activeWorkspaceIndexForOutput(workspaces, outputName) {
+    var workspace = activeWorkspaceForOutput(workspaces, outputName);
+    if (!workspace)
+        return null;
+
+    var idx = Number(workspace.idx);
+    if (isFinite(idx) && idx > 0)
+        return idx;
+
+    return workspaceSortIndex(workspace, 0);
+}
+
+// Match niri EventStreamState WorkspacesState::apply for WorkspaceActivated:
+// activate id on its output; if focused, clear isFocused on others.
+function applyWorkspaceActivated(workspaces, id, focused) {
+    var target = findWorkspaceById(workspaces, id);
+    if (!target)
+        return null;
+
+    var output = String(target.output || "");
+    var becomeFocused = !!focused;
+    var next = workspaceListSnapshot(workspaces);
+    for (var i = 0; i < next.length; i++) {
+        var workspace = next[i];
+        var gotActivated = String(workspace.id) === String(target.id);
+        if (String(workspace.output || "") === output)
+            workspace.isActive = gotActivated;
+        if (becomeFocused)
+            workspace.isFocused = gotActivated;
+    }
+    return next;
+}
+
+function applyWorkspaceUrgencyChanged(workspaces, id, urgent) {
+    if (!findWorkspaceById(workspaces, id))
+        return null;
+
+    var next = workspaceListSnapshot(workspaces);
+    var value = !!urgent;
+    var changed = false;
+    for (var i = 0; i < next.length; i++) {
+        if (String(next[i].id) !== String(id))
+            continue;
+        if (next[i].isUrgent === value)
+            return null;
+        next[i].isUrgent = value;
+        changed = true;
+    }
+    return changed ? next : null;
+}
+
+function applyWorkspaceActiveWindowChanged(workspaces, workspaceId, activeWindowId) {
+    if (!findWorkspaceById(workspaces, workspaceId))
+        return null;
+
+    var next = workspaceListSnapshot(workspaces);
+    var windowId = asOptionalNumber(activeWindowId);
+    for (var i = 0; i < next.length; i++) {
+        if (String(next[i].id) !== String(workspaceId))
+            continue;
+        if (next[i].activeWindowId === windowId)
+            return null;
+        next[i].activeWindowId = windowId;
+        return next;
+    }
+    return null;
+}
+
+// Drop workspaces whose output is no longer present. Empty outputs (no monitors)
+// are kept only when no connected outputs remain.
+function pruneWorkspacesForOutputs(workspaces, connectedOutputs) {
+    var outputs = Array.isArray(connectedOutputs) ? connectedOutputs : [];
+    var allowed = {};
+    for (var i = 0; i < outputs.length; i++) {
+        var name = String(outputs[i] || "").trim();
+        if (name.length > 0)
+            allowed[name] = true;
+    }
+
+    var list = Array.isArray(workspaces) ? workspaces : [];
+    if (Object.keys(allowed).length === 0)
+        return workspaceListSnapshot(list);
+
+    var next = [];
+    for (var j = 0; j < list.length; j++) {
+        var workspace = list[j];
+        if (!workspace)
+            continue;
+        var output = String(workspace.output || "").trim();
+        if (output.length === 0 || allowed[output])
+            next.push(cloneWorkspace(workspace));
+    }
+    return next;
+}

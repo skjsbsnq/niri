@@ -67,6 +67,16 @@ TAHOE_XWAYLAND_COMPAT_CHECK_TARGET="${TAHOE_XWAYLAND_COMPAT_CHECK_TARGET:-"$TAHO
 RUN_TAHOE_GLASS_GUARDRAILS="${RUN_TAHOE_GLASS_GUARDRAILS:-true}"
 TAHOE_GLASS_GUARDRAILS_SCRIPT="${TAHOE_GLASS_GUARDRAILS_SCRIPT:-"$REPO_DIR/scripts/check-tahoe-glass-guardrails.sh"}"
 ALLOW_NIRI_VRR="${ALLOW_NIRI_VRR:-false}"
+# Tahoe shell deploy parity (T01). State files live under TAHOE_STATE_DIR only.
+TAHOE_SHELL_DEPLOY_ROOT_COMMIT_FILE="${TAHOE_SHELL_DEPLOY_ROOT_COMMIT_FILE:-"$TAHOE_STATE_DIR/tahoe-shell-deployed-root-commit"}"
+TAHOE_SHELL_DEPLOY_MANIFEST_HASH_FILE="${TAHOE_SHELL_DEPLOY_MANIFEST_HASH_FILE:-"$TAHOE_STATE_DIR/tahoe-shell-deployed-manifest.sha256"}"
+TAHOE_SHELL_DEPLOY_MANIFEST_FILE="${TAHOE_SHELL_DEPLOY_MANIFEST_FILE:-"$TAHOE_STATE_DIR/tahoe-shell-deployed-manifest.txt"}"
+# Exact cache excludes shared by sync and manifest. Do not widen without review.
+TAHOE_SHELL_RSYNC_EXCLUDES=(
+  "--exclude=__pycache__/"
+  "--exclude=*.pyc"
+  "--exclude=.pytest_cache/"
+)
 
 QUICKSHELL_BUILD_PACKAGES=(
   base-devel
@@ -488,6 +498,183 @@ sync_dir() {
   fi
 }
 
+# Filtered sync for Tahoe shell: same exclude list as the parity manifest.
+sync_tahoe_shell_tree() {
+  local src="$1"
+  local dst="$2"
+
+  [[ -d "$src" ]] || die "source directory does not exist: $src"
+  mkdir -p "$dst"
+
+  if command -v rsync >/dev/null 2>&1; then
+    rsync -a --delete "${TAHOE_SHELL_RSYNC_EXCLUDES[@]}" "$src"/ "$dst"/
+  else
+    find "$dst" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+    cp -a "$src"/. "$dst"/
+    # Mirror rsync excludes without a broad runtime wipe.
+    find "$dst" \( -type d -name '__pycache__' -o -type d -name '.pytest_cache' -o -type f -name '*.pyc' \) -prune -exec rm -rf -- {} + 2>/dev/null || true
+  fi
+}
+
+# Return 0 if relative path under a tree is a cache artifact (not in desired tree).
+tahoe_shell_path_is_cache() {
+  local rel="${1#./}"
+
+  case "$rel" in
+    __pycache__|__pycache__/*|*/__pycache__|*/__pycache__/*) return 0 ;;
+    .pytest_cache|.pytest_cache/*|*/.pytest_cache|*/.pytest_cache/*) return 0 ;;
+    *.pyc) return 0 ;;
+  esac
+  [[ "$rel" == *.pyc ]] && return 0
+  return 1
+}
+
+# Sorted "sha256  relpath" lines (two spaces; path may contain spaces).
+write_tahoe_shell_tree_manifest() {
+  local root="$1"
+  local out="$2"
+  local rel
+  local digest
+
+  [[ -d "$root" ]] || die "manifest root does not exist: $root"
+  require_cmd sha256sum
+  : > "$out"
+
+  (
+    cd "$root"
+    find . -type f -print0 \
+      | sort -z \
+      | while IFS= read -r -d '' rel; do
+          rel="${rel#./}"
+          if tahoe_shell_path_is_cache "$rel"; then
+            continue
+          fi
+          digest="$(sha256sum -- "./$rel" | awk '{print $1}')"
+          printf '%s  %s\n' "$digest" "$rel"
+        done
+  ) >> "$out"
+}
+
+# Desired deployed tree = filtered tahoe-shell + declared overlay script.
+write_tahoe_shell_desired_manifest() {
+  local out="$1"
+  local tmp
+  local overlay_digest
+
+  require_cmd sha256sum
+  tmp="$(mktemp)"
+  write_tahoe_shell_tree_manifest "$TAHOE_SHELL_DIR" "$tmp"
+
+  if [[ -f "$XWAYLAND_SATELLITE_COMPAT_CHECK_SCRIPT" ]]; then
+    overlay_digest="$(sha256sum -- "$XWAYLAND_SATELLITE_COMPAT_CHECK_SCRIPT" | awk '{print $1}')"
+    {
+      cat "$tmp"
+      printf '%s  %s\n' "$overlay_digest" "scripts/check-xwayland-satellite-compat.sh"
+    } | LC_ALL=C sort -t ' ' -k2 > "$out"
+  else
+    LC_ALL=C sort -t ' ' -k2 "$tmp" > "$out"
+  fi
+  rm -f "$tmp"
+}
+
+manifest_file_hash() {
+  local path="$1"
+  require_cmd sha256sum
+  sha256sum -- "$path" | awk '{print $1}'
+}
+
+# Compare desired manifest to an installed tree. Prints mismatches to stderr.
+# Returns 0 when equal (ignoring allowed cache files at destination).
+verify_tahoe_shell_parity_from_manifest() {
+  local desired_manifest="$1"
+  local installed_root="$2"
+  local rel
+  local want_hash
+  local got_hash
+  local status=0
+  local -A desired=()
+
+  [[ -f "$desired_manifest" ]] || die "desired manifest missing: $desired_manifest"
+  if [[ ! -d "$installed_root" ]]; then
+    printf '[arch-update] ERROR: installed Tahoe shell root missing: %s\n' "$installed_root" >&2
+    return 1
+  fi
+
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    [[ -n "$line" ]] || continue
+    want_hash="${line%%  *}"
+    rel="${line#*  }"
+    [[ -n "$rel" && -n "$want_hash" ]] || continue
+    desired["$rel"]="$want_hash"
+  done < "$desired_manifest"
+
+  while IFS= read -r rel; do
+    [[ -n "$rel" ]] || continue
+    want_hash="${desired[$rel]}"
+    if [[ ! -f "$installed_root/$rel" ]]; then
+      printf '[arch-update] ERROR: missing deployed file: %s\n' "$rel" >&2
+      status=1
+      continue
+    fi
+    got_hash="$(sha256sum -- "$installed_root/$rel" | awk '{print $1}')"
+    if [[ "$got_hash" != "$want_hash" ]]; then
+      printf '[arch-update] ERROR: content differs: %s (desired %s, installed %s)\n' \
+        "$rel" "$want_hash" "$got_hash" >&2
+      status=1
+    fi
+  done < <(printf '%s\n' "${!desired[@]}" | LC_ALL=C sort)
+
+  while IFS= read -r -d '' rel; do
+    rel="${rel#./}"
+    if tahoe_shell_path_is_cache "$rel"; then
+      continue
+    fi
+    if [[ -z "${desired[$rel]+x}" ]]; then
+      printf '[arch-update] ERROR: extra deployed file: %s\n' "$rel" >&2
+      status=1
+    fi
+  done < <(cd "$installed_root" && find . -type f -print0)
+
+  return "$status"
+}
+
+record_tahoe_shell_deploy_state() {
+  local manifest="$1"
+  local root_commit=""
+  local manifest_hash
+
+  mkdir -p "$TAHOE_STATE_DIR"
+  if is_git_repo "$REPO_DIR"; then
+    root_commit="$(git -C "$REPO_DIR" rev-parse HEAD 2>/dev/null || true)"
+  fi
+  if [[ -z "$root_commit" ]]; then
+    root_commit="unknown"
+  fi
+  manifest_hash="$(manifest_file_hash "$manifest")"
+  printf '%s\n' "$root_commit" > "$TAHOE_SHELL_DEPLOY_ROOT_COMMIT_FILE"
+  printf '%s\n' "$manifest_hash" > "$TAHOE_SHELL_DEPLOY_MANIFEST_HASH_FILE"
+  install -m644 "$manifest" "$TAHOE_SHELL_DEPLOY_MANIFEST_FILE"
+  log "recorded Tahoe shell deploy state: root_commit=$root_commit manifest_hash=$manifest_hash"
+}
+
+# Read-only parity check. Does not write user config.
+verify_deployed_tahoe_shell() {
+  local desired
+  local rc=0
+
+  desired="$(mktemp)"
+  write_tahoe_shell_desired_manifest "$desired"
+  log "verifying Tahoe shell parity: source=$TAHOE_SHELL_DIR installed=$TAHOE_CONFIG_DIR"
+  if verify_tahoe_shell_parity_from_manifest "$desired" "$TAHOE_CONFIG_DIR"; then
+    log "Tahoe shell parity OK (manifest $(manifest_file_hash "$desired"))"
+  else
+    rc=1
+    log "Tahoe shell parity FAILED"
+  fi
+  rm -f "$desired"
+  return "$rc"
+}
+
 quickshell_tahoe_state_dir() {
   local state_home="${XDG_STATE_HOME:-"$HOME/.local/state"}"
   printf '%s\n' "$state_home/quickshell/by-shell/tahoe"
@@ -657,6 +844,8 @@ build_xwayland_satellite() {
 }
 
 deploy_tahoe_shell() {
+  local desired_manifest
+
   if [[ ! -d "$TAHOE_SHELL_DIR" ]]; then
     log "skipping Tahoe shell deploy; directory does not exist: $TAHOE_SHELL_DIR"
     return
@@ -664,12 +853,24 @@ deploy_tahoe_shell() {
 
   log "deploying Tahoe shell to $TAHOE_CONFIG_DIR"
   migrate_legacy_tahoe_shell_state
-  sync_dir "$TAHOE_SHELL_DIR" "$TAHOE_CONFIG_DIR"
+
+  desired_manifest="$(mktemp)"
+  write_tahoe_shell_desired_manifest "$desired_manifest"
+  log "pre-deploy Tahoe shell manifest hash: $(manifest_file_hash "$desired_manifest")"
+
+  sync_tahoe_shell_tree "$TAHOE_SHELL_DIR" "$TAHOE_CONFIG_DIR"
   if [[ -x "$XWAYLAND_SATELLITE_COMPAT_CHECK_SCRIPT" ]]; then
     install -Dm755 "$XWAYLAND_SATELLITE_COMPAT_CHECK_SCRIPT" "$TAHOE_XWAYLAND_COMPAT_CHECK_TARGET"
   else
     log "xwayland-satellite compatibility check script not deployed; missing $XWAYLAND_SATELLITE_COMPAT_CHECK_SCRIPT"
   fi
+
+  if ! verify_tahoe_shell_parity_from_manifest "$desired_manifest" "$TAHOE_CONFIG_DIR"; then
+    rm -f "$desired_manifest"
+    die "Tahoe shell deploy parity check failed for $TAHOE_CONFIG_DIR"
+  fi
+  record_tahoe_shell_deploy_state "$desired_manifest"
+  rm -f "$desired_manifest"
   shell_deployed=true
 }
 
@@ -781,6 +982,45 @@ run_xwayland_satellite_compat_check() {
 }
 
 main() {
+  local mode="${1:-}"
+
+  if [[ "$mode" == "-h" || "$mode" == "--help" ]]; then
+    cat <<'EOF'
+Usage: arch-update.sh [options]
+
+Update Tahoe niri/Quickshell sources and deploy managed configs.
+
+Options:
+  --verify-tahoe-shell   Read-only: verify the installed Tahoe shell tree matches
+                         filtered tahoe-shell plus the xwayland compat overlay.
+                         Does not write user config.
+  --deploy-tahoe-shell   Deploy only the Tahoe shell tree (filtered sync +
+                         overlay), verify parity, and record deploy state.
+                         Does not pull/build niri or Quickshell.
+  -h, --help             Show this help.
+EOF
+    return 0
+  fi
+
+  if [[ "$mode" == "--verify-tahoe-shell" ]]; then
+    require_cmd sha256sum
+    require_cmd find
+    verify_deployed_tahoe_shell
+    return
+  fi
+
+  if [[ "$mode" == "--deploy-tahoe-shell" ]]; then
+    require_cmd sha256sum
+    require_cmd find
+    require_cmd install
+    deploy_tahoe_shell
+    return
+  fi
+
+  if [[ -n "$mode" ]]; then
+    die "unknown argument: $mode (try --help)"
+  fi
+
   require_cmd git
   require_cmd grep
   require_cmd install
@@ -1116,6 +1356,12 @@ main() {
     log "  xwayland-satellite patch applied: $xwayland_satellite_patch_applied"
   fi
   log "  Tahoe shell deployed: $shell_deployed"
+  if [[ -f "$TAHOE_SHELL_DEPLOY_MANIFEST_HASH_FILE" ]]; then
+    log "  Tahoe shell deploy manifest hash: $(<"$TAHOE_SHELL_DEPLOY_MANIFEST_HASH_FILE")"
+  fi
+  if [[ -f "$TAHOE_SHELL_DEPLOY_ROOT_COMMIT_FILE" ]]; then
+    log "  Tahoe shell deploy root commit: $(<"$TAHOE_SHELL_DEPLOY_ROOT_COMMIT_FILE")"
+  fi
   log "  niri Tahoe config deployed: $niri_config_deployed"
   log "  niri Tahoe config target: $NIRI_CONFIG_TARGET"
   log "  Tahoe session launcher deployed: $session_launcher_deployed"

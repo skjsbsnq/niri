@@ -192,6 +192,39 @@ After running it, log out and log back in so locale, fontconfig, and input metho
 - user Wayland session entry: `~/.local/share/wayland-sessions/tahoe-niri.desktop`
 - system Wayland session entry: `/usr/share/wayland-sessions/tahoe-niri.desktop`
 
+### Tahoe shell source/runtime parity
+
+`arch-update.sh` is the only normal deploy entry for the Tahoe shell tree. Do not add parallel deploy scripts or hand-run ungoverned `rsync` of `tahoe-shell/`.
+
+Desired installed tree:
+
+1. filtered contents of `tahoe-shell/`
+2. plus the single declared overlay `scripts/check-xwayland-satellite-compat.sh` → `~/.config/quickshell/tahoe/scripts/check-xwayland-satellite-compat.sh`
+
+Sync and manifest share the same exclude list. Only these cache paths are excluded:
+
+- `__pycache__/`
+- `*.pyc`
+- `.pytest_cache/`
+
+After every shell deploy, the script verifies missing files, extra files, and content hashes. On success it records under `~/.local/state/tahoe-niri/`:
+
+- `tahoe-shell-deployed-root-commit`
+- `tahoe-shell-deployed-manifest.sha256`
+- `tahoe-shell-deployed-manifest.txt`
+
+Read-only check (does not write user config):
+
+```sh
+bash scripts/arch-update.sh --verify-tahoe-shell
+```
+
+Deploy only the shell tree (filtered sync + overlay + verify + state record; no niri/Quickshell build):
+
+```sh
+bash scripts/arch-update.sh --deploy-tahoe-shell
+```
+
 It does not overwrite `~/.config/niri/config.kdl` or the stock `niri.desktop` session.
 
 Run `arch-update.sh` as the target user, not with `sudo`. The script may prompt for `sudo` internally when it installs or removes system session files.

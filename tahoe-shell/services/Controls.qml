@@ -144,7 +144,6 @@ Item {
 
     onAudioReadyChanged: root.syncVolumeFromPipewire()
     onAudioSinkChanged: root.syncVolumeFromPipewire()
-    Component.onCompleted: root.syncVolumeFromPipewire()
 
     // ------------------------------------------------------------------
     // Brightness (brightnessctl via Process — no Quickshell module exists)
@@ -338,6 +337,7 @@ Item {
     }
 
     Component.onCompleted: {
+        root.syncVolumeFromPipewire();
         if (root.commandRunner)
             root.commandRunner.refreshDependencies();
         root.refreshBrightness();

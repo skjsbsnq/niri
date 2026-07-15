@@ -147,7 +147,8 @@ class DynamicIslandReducerTests(unittest.TestCase):
         self.assertEqual(out["state"]["forcedState"], "")
         self.assertEqual(out["presentation"], "resting_time")
         self.assertIn("stopTransientTimer", out["effects"])
-        self.assertIn("maybeShowPendingNotification", out["effects"])
+        self.assertIn("endNotificationLease", out["effects"])
+        self.assertNotIn("maybeShowPendingNotification", out["effects"])
 
         media = reduce_ev(
             "SHOW_MEDIA",
@@ -191,7 +192,7 @@ class DynamicIslandReducerTests(unittest.TestCase):
             context={"islandEnabled": True, "hasMedia": True},
         )
         self.assertEqual(collapsed["state"]["forcedState"], "")
-        self.assertIn("maybeShowPendingNotification", collapsed["effects"])
+        self.assertIn("endNotificationLease", collapsed["effects"])
 
         open_media = reduce_ev(
             "TOGGLE_EXPANDED",
@@ -207,7 +208,7 @@ class DynamicIslandReducerTests(unittest.TestCase):
         )
         self.assertEqual(open_summary["state"]["forcedState"], "expanded_summary")
 
-        # Click collapse without drainPending must not enqueue drain effects.
+        # Collapse ends any notification lease; orchestrator drains once after apply.
         click_collapse = reduce_ev(
             "COLLAPSE",
             state={"forcedState": "expanded_summary", "hoverExpanded": True},
@@ -215,7 +216,7 @@ class DynamicIslandReducerTests(unittest.TestCase):
         )
         self.assertEqual(click_collapse["state"]["forcedState"], "")
         self.assertFalse(click_collapse["state"]["hoverExpanded"])
-        self.assertEqual(click_collapse["effects"], [])
+        self.assertEqual(click_collapse["effects"], ["endNotificationLease"])
 
     def test_media_availability_and_auto_expand(self) -> None:
         lost = reduce_ev(
@@ -295,16 +296,17 @@ class DynamicIslandReducerTests(unittest.TestCase):
         self.assertTrue(reset_while_disabled["state"]["preferMediaWhenAvailable"])
         self.assertNotIn("clearSwipe", reset_while_disabled["effects"])
 
-    def test_show_time_cleanup_effects_precede_drain(self) -> None:
-        # Contract for applyReducerResult: cleanup types must appear before
-        # maybeShowPending* so orchestrator can run them before forcedState commit.
+    def test_show_time_ends_notification_lease_before_clear(self) -> None:
+        # Abort paths must end the notification lease before/with cleanup so
+        # displayingNotificationId cannot stick after SHOW_TIME.
         out = reduce_ev("SHOW_TIME", context={"islandEnabled": True, "hasMedia": True})
         effects = out["effects"]
         stop_i = effects.index("stopTransientTimer")
+        lease_i = effects.index("endNotificationLease")
         clear_i = effects.index("clearTransientFields")
-        drain_i = effects.index("maybeShowPendingNotification")
-        self.assertLess(stop_i, drain_i)
-        self.assertLess(clear_i, drain_i)
+        self.assertLess(stop_i, clear_i)
+        self.assertLess(lease_i, clear_i)
+        self.assertNotIn("maybeShowPendingNotification", effects)
 
     def test_apply_order_helpers_exist_in_orchestrator(self) -> None:
         text = ISLAND.read_text(encoding="utf-8")
@@ -333,8 +335,8 @@ class DynamicIslandReducerTests(unittest.TestCase):
         )
         self.assertFalse(collapse["state"]["hoverExpanded"])
         self.assertEqual(collapse["state"]["forcedState"], "")
-        self.assertIn("maybeShowPendingNotification", collapse["effects"])
-        self.assertIn("maybeShowPendingOsd", collapse["effects"])
+        self.assertIn("endNotificationLease", collapse["effects"])
+        self.assertNotIn("maybeShowPendingNotification", collapse["effects"])
 
     def test_determinism_and_immutability(self) -> None:
         det = run_node({

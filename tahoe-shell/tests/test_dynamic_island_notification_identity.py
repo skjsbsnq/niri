@@ -10,15 +10,16 @@ Root bugs (old code):
   3. replace-id mutates live Notification without activeModelChanged, so
      island never refreshed displayed text (or could re-popup incorrectly).
 
-Fix contract:
-  - Notifications owns live objects + narrow notificationUpdated(id)
-  - DynamicIsland tracks seenNotificationIds set (ID membership, not count)
-  - pendingNotificationIds FIFO of stable IDs only (no scalar pending entry)
-  - dequeue resolves live object via activeModel → notificationEntry()
+Fix contract (T07 lease model):
+  - Notifications owns live objects + FIFO + narrow notificationUpdated(id)
+  - DynamicIsland tracks seenNotificationIds + completedNotificationIds
+  - pendingNotificationIds is manual IPC payloads only (not a live ID queue)
+  - Live presentation resolves via Notifications activeModel order / head lease
   - replace-id while displaying: in-place text, no timer/animation restart
-  - replace-id while queued: keep queue position; not displaying → no re-popup
-  - DND / island disable clear queue; removed IDs drop from pending
+  - replace-id while not displaying → no re-popup
+  - DND / island disable clear manual queue; completed markers prune with model
   - No second notification model / snapshot cache in island
+  - Single restoreAfterTransient drain entry
 
 Regression strategy:
   1. Static contract extraction from DynamicIsland.qml + Notifications.qml
@@ -179,31 +180,37 @@ def extract_contract(island_src: str, notifications_src: str) -> NotificationIde
     has_find_live_by_id = bool(find_live.strip()) and bool(
         re.search(r"activeModel", find_live)
     )
-    # Live ID enqueue dedupe lives on the shared tagged entry helper (or thin wrapper).
+    # T07: live IDs are not island-enqueued; manual entry helper rejects live.
     has_enqueue_dedupe = bool(
-        (
-            enqueue_entry.strip()
-            and re.search(r"isPendingNotificationId", enqueue_entry)
-        )
-        or (enqueue.strip() and re.search(r"isPendingNotificationId|return", enqueue))
+        enqueue_entry.strip()
+        and re.search(r'kind === "live"|kind !== "manual"', enqueue_entry)
+    ) or bool(
+        enqueue.strip() and re.search(r"void id|return;", enqueue)
     )
     has_remove_pending = bool(remove_pending.strip()) or bool(
         re.search(r"pendingNotificationIds", handle_changed)
-        and re.search(r"nextSeen|seen", handle_changed)
+        and re.search(r"manual|completedNotificationIds", handle_changed)
     )
 
     handle_changed_uses_id_diff = bool(
-        re.search(r"seenNotificationIds", handle_changed)
-        and re.search(r"newIds|enqueuePendingNotificationId", handle_changed)
+        re.search(r"seenNotificationIds|nextSeen", handle_changed)
+        and re.search(r"completedNotificationIds|restoreAfterTransient", handle_changed)
         and not re.search(r"list\[nextCount\s*-\s*1\]", handle_changed)
+        and not re.search(r"enqueuePendingNotificationId\(newIds", handle_changed)
     )
     maybe_show_drains_fifo = bool(
-        re.search(r"pendingNotificationIds", maybe_show)
-        and re.search(r"while|slice\(1\)|shift", maybe_show)
+        (
+            re.search(r"pendingNotificationIds", maybe_show)
+            and re.search(r"while|slice\(1\)|shift", maybe_show)
+        )
+        or re.search(r"nextPresentableLiveNotification", maybe_show)
     )
     maybe_show_skips_missing_live = bool(
-        re.search(r"findLiveNotificationById", maybe_show)
-        and re.search(r"continue", maybe_show)
+        re.search(r"nextPresentableLiveNotification|findLiveNotificationById", maybe_show)
+        or re.search(
+            r"completedNotificationIds|completed\[",
+            _extract_function_body(island_src, "nextPresentableLiveNotification"),
+        )
     )
     present_sets_displaying_id = bool(
         re.search(r"displayingNotificationId\s*=", present)
@@ -234,9 +241,11 @@ def extract_contract(island_src: str, notifications_src: str) -> NotificationIde
         and not re.search(r"enqueuePendingNotificationId", handle_updated)
         and not re.search(r"presentNotificationEntry", handle_updated)
     )
+    # T07: no island live queue position; idle replace must not re-popup.
     handle_updated_keeps_queue_position = bool(
-        re.search(r"isPendingNotificationId", handle_updated)
-        and re.search(r"return", handle_updated)
+        handle_updated.strip()
+        and not re.search(r"presentNotificationEntry", handle_updated)
+        and not re.search(r"enqueuePendingNotification", handle_updated)
     )
     # Strip comments so documentation of "does not restart transientTimer"
     # is not mistaken for a real call.
@@ -255,7 +264,7 @@ def extract_contract(island_src: str, notifications_src: str) -> NotificationIde
     )
     timer_clears_displaying_and_drains = bool(
         re.search(r"displayingNotificationId\s*=\s*-1", timer)
-        and re.search(r"maybeShowPendingNotification", timer)
+        and re.search(r"restoreAfterTransient|maybeShowPendingNotification", timer)
     )
 
     single_pending_queue = (
@@ -326,16 +335,19 @@ class IslandState:
 
 
 class IslandNotificationModel:
-    """Simulates DynamicIsland identity + FIFO + replace-id handling.
+    """Simulates DynamicIsland identity + Notifications-owned FIFO lease (T07).
 
     use_identity=False mirrors the old count-only + scalar pending path.
+    use_identity=True mirrors T07: no island live ID queue; completed set +
+    activeModel order decide the next presentable notification.
     """
 
     def __init__(self, *, use_identity: bool) -> None:
         self.use_identity = use_identity
         self.active: list[LiveNotification] = []
         self.seen: dict[str, bool] = {}
-        self.pending_ids: list[int] = []
+        self.completed: dict[str, bool] = {}
+        self.pending_ids: list[int] = []  # legacy field for old-path / assertions
         self.pending_entry: dict[str, Any] | None = None  # old path only
         self.observed_count = 0
         self.last_seen_id = -1
@@ -393,34 +405,34 @@ class IslandNotificationModel:
 
     def _handle_changed_identity(self) -> None:
         next_seen: dict[str, bool] = {}
-        new_ids: list[int] = []
         for n in self.active:
-            key = str(n.id)
-            next_seen[key] = True
-            if key not in self.seen:
-                new_ids.append(n.id)
+            next_seen[str(n.id)] = True
 
-        self.pending_ids = [i for i in self.pending_ids if str(i) in next_seen]
+        self.completed = {k: True for k in self.completed if k in next_seen}
+        # legacy pending_ids field unused for live; keep empty for T07 assertions
+        self.pending_ids = []
         if self.displaying_id >= 0 and str(self.displaying_id) not in next_seen:
             self.displaying_id = -1
         self.seen = next_seen
 
         if self.ui.dnd or not self.ui.island_enabled:
-            self.pending_ids = []
             return
 
-        for nid in new_ids:
-            self._enqueue(nid)
         self.maybe_show()
 
     def _enqueue(self, nid: int) -> None:
-        if nid < 0:
-            return
-        if nid in self.pending_ids:
-            return
-        if self.displaying_id == nid:
-            return
-        self.pending_ids.append(nid)
+        # T07: live IDs are not island-queued.
+        return
+
+    def _waiting_ids(self) -> list[int]:
+        waiting: list[int] = []
+        for n in self.active:
+            if n.id == self.displaying_id:
+                continue
+            if str(n.id) in self.completed:
+                continue
+            waiting.append(n.id)
+        return waiting
 
     def _blocks(self) -> bool:
         if self.ui.expanded or self.ui.user_interacting:
@@ -439,18 +451,15 @@ class IslandNotificationModel:
             return
 
         if not self.ui.island_enabled or self.ui.dnd:
-            self.pending_ids = []
             return
         if self._blocks():
             return
-        while self.pending_ids:
-            if self._blocks():
-                return
-            next_id = self.pending_ids.pop(0)
-            live = self._find(next_id)
-            if not live:
+        for n in self.active:
+            if n.id == self.displaying_id:
                 continue
-            self._present(self._entry(live))
+            if str(n.id) in self.completed:
+                continue
+            self._present(self._entry(n))
             return
 
     def on_notification_updated(self, nid: int) -> None:
@@ -468,12 +477,12 @@ class IslandNotificationModel:
             self.ui.secondary_text = entry["body"]
             # no timer restart
             return
-        if nid in self.pending_ids:
-            return
-        # idle: no re-popup
+        # idle / waiting: no re-popup; latest content read on next present
 
     def hide_transient(self) -> None:
         if self.ui.state == "transient_notification":
+            if self.displaying_id >= 0:
+                self.completed[str(self.displaying_id)] = True
             self.displaying_id = -1
         self.ui.state = "resting_time"
         self.ui.display_text = ""
@@ -492,6 +501,8 @@ class IslandNotificationModel:
             self.pending_ids = []
             self.pending_entry = None
             if self.ui.state == "transient_notification":
+                if self.displaying_id >= 0:
+                    self.completed[str(self.displaying_id)] = True
                 self.ui.state = "resting_time"
                 self.displaying_id = -1
                 self.ui.display_text = ""
@@ -584,7 +595,7 @@ class DynamicIslandNotificationIdentityTests(unittest.TestCase):
 
     def test_batch_append_fifo_order(self) -> None:
         m = IslandNotificationModel(use_identity=True)
-        # Single model change with two new IDs (batch).
+        # Single model change with two new IDs (batch) — Notifications FIFO order.
         m.set_active(
             [
                 LiveNotification(10, summary="First"),
@@ -592,7 +603,8 @@ class DynamicIslandNotificationIdentityTests(unittest.TestCase):
             ]
         )
         self.assertEqual(m.ui.presented_ids, [10])
-        self.assertEqual(m.pending_ids, [11])
+        self.assertEqual(m._waiting_ids(), [11])
+        self.assertEqual(m.pending_ids, [])  # no island live queue
         m.hide_transient()
         self.assertEqual(m.ui.presented_ids, [10, 11])
         self.assertEqual(m.ui.display_text, "Second")
@@ -612,11 +624,12 @@ class DynamicIslandNotificationIdentityTests(unittest.TestCase):
         m.set_busy(expanded=True)
         m.append(LiveNotification(1, summary="A"))
         m.append(LiveNotification(2, summary="B"))
-        self.assertEqual(m.pending_ids, [1, 2])
+        self.assertEqual(m.pending_ids, [])
+        self.assertEqual(m._waiting_ids(), [1, 2])
         self.assertEqual(m.ui.present_count, 0)
         m.set_busy(expanded=False)
         self.assertEqual(m.ui.presented_ids, [1])
-        self.assertEqual(m.pending_ids, [2])
+        self.assertEqual(m._waiting_ids(), [2])
         m.hide_transient()
         self.assertEqual(m.ui.presented_ids, [1, 2])
 
@@ -625,9 +638,9 @@ class DynamicIslandNotificationIdentityTests(unittest.TestCase):
         m.set_busy(interacting=True)
         m.append(LiveNotification(1, summary="A"))
         m.append(LiveNotification(2, summary="B"))
-        self.assertEqual(m.pending_ids, [1, 2])
+        self.assertEqual(m._waiting_ids(), [1, 2])
         m.remove_id(1)
-        self.assertEqual(m.pending_ids, [2])
+        self.assertEqual(m._waiting_ids(), [2])
         m.set_busy(interacting=False)
         self.assertEqual(m.ui.presented_ids, [2])
         self.assertEqual(m.ui.display_text, "B")
@@ -636,12 +649,12 @@ class DynamicIslandNotificationIdentityTests(unittest.TestCase):
         m = IslandNotificationModel(use_identity=True)
         m.set_busy(expanded=True)
         m.append(LiveNotification(1, summary="A"))
-        self.assertEqual(m.pending_ids, [1])
+        self.assertEqual(m._waiting_ids(), [1])
         m.set_dnd(True)
         self.assertEqual(m.pending_ids, [])
         m.append(LiveNotification(2, summary="B"))
-        self.assertEqual(m.pending_ids, [])
         self.assertEqual(m.ui.present_count, 0)
+        self.assertNotEqual(m.ui.state, "transient_notification")
 
     def test_disable_clears_queue(self) -> None:
         m = IslandNotificationModel(use_identity=True)
@@ -649,6 +662,7 @@ class DynamicIslandNotificationIdentityTests(unittest.TestCase):
         m.append(LiveNotification(1, summary="A"))
         m.disable_island()
         self.assertEqual(m.pending_ids, [])
+        self.assertEqual(m.ui.present_count, 0)
 
     def test_replace_id_while_displaying_updates_text_no_timer(self) -> None:
         m = IslandNotificationModel(use_identity=True)
@@ -667,9 +681,9 @@ class DynamicIslandNotificationIdentityTests(unittest.TestCase):
         m.set_busy(expanded=True)
         m.append(LiveNotification(1, summary="A"))
         m.append(LiveNotification(2, summary="B-old"))
-        self.assertEqual(m.pending_ids, [1, 2])
+        self.assertEqual(m._waiting_ids(), [1, 2])
         m.replace_id_content(2, summary="B-new")
-        self.assertEqual(m.pending_ids, [1, 2])  # position preserved
+        self.assertEqual(m._waiting_ids(), [1, 2])  # Notifications order preserved
         m.set_busy(expanded=False)
         self.assertEqual(m.ui.presented_ids, [1])
         m.hide_transient()
@@ -690,9 +704,16 @@ class DynamicIslandNotificationIdentityTests(unittest.TestCase):
         m = IslandNotificationModel(use_identity=True)
         m.set_busy(expanded=True)
         m.append(LiveNotification(1, summary="A"))
-        # Same model rewrite with same IDs must not re-enqueue.
+        # Same model rewrite with same IDs must not re-present.
         m.set_active([LiveNotification(1, summary="A")])
-        self.assertEqual(m.pending_ids, [1])
+        self.assertEqual(m.pending_ids, [])
+        self.assertEqual(m._waiting_ids(), [1])
+        m.set_busy(expanded=False)
+        self.assertEqual(m.ui.presented_ids, [1])
+        m.hide_transient()
+        # Still in model but completed — no second present.
+        m.set_active([LiveNotification(1, summary="A")])
+        self.assertEqual(m.ui.present_count, 1)
 
     def test_delete_after_append_then_append_other(self) -> None:
         m = IslandNotificationModel(use_identity=True)

@@ -12,7 +12,7 @@ Design (review round 2):
 - Anchor tests (non-xfail) assert the V1 bug still exists; when production is
   fixed those anchors fail and must be updated in the same task.
 
-Target tasks: T05 brightness, T07 priority, T08 output owner, T09 swipe.
+Target tasks: T08 output owner, T09 swipe (T05 brightness and T07 priority fixed).
 """
 
 from __future__ import annotations
@@ -63,12 +63,25 @@ def _compact(text: str) -> str:
 
 def osd_yields_to_active_notification(src: str) -> bool:
     body = _function_body(src, "blocksTransientOsd")
-    return "transient_notification" in body or "displayingNotificationId" in body
+    flags = _function_body(src, "arbitrationFlags")
+    if "transient_notification" in body or "displayingNotificationId" in body:
+        return True
+    # T07: blocks via reducer + arbitration flags that surface the notification lease.
+    return (
+        ("blocksOsd" in body or "IslandReducer.blocksOsd" in body)
+        and ("displayingNotification" in flags or "transient_notification" in flags)
+    )
 
 
 def workspace_yields_to_active_notification(src: str) -> bool:
     body = _function_body(src, "blocksTransientWorkspace")
-    return "transient_notification" in body or "displayingNotificationId" in body
+    flags = _function_body(src, "arbitrationFlags")
+    if "transient_notification" in body or "displayingNotificationId" in body:
+        return True
+    return (
+        ("blocksWorkspace" in body or "IslandReducer.blocksWorkspace" in body)
+        and ("displayingNotification" in flags or "transient_notification" in flags)
+    )
 
 
 def resolve_swipe_keeps_settle_target(src: str) -> bool:
@@ -236,14 +249,13 @@ class DynamicIslandV2ExpectedFailureTests(unittest.TestCase):
 
     # ----- V1 anchors (must stay failing until the fix task updates them) -----
 
-    def test_v1_osd_ignores_active_notification(self) -> None:
-        self.assertFalse(osd_yields_to_active_notification(self.island_src))
+    def test_v1_osd_sim_documents_old_bug(self) -> None:
+        # Historical V1 sim still overwrites notifications; production is fixed in T07.
         sim = IslandSimV1(state="transient_notification", displaying_notification_id=7)
         sim.present_osd()
         self.assertEqual(sim.state, "transient_osd")
 
-    def test_v1_workspace_ignores_active_notification(self) -> None:
-        self.assertFalse(workspace_yields_to_active_notification(self.island_src))
+    def test_v1_workspace_sim_documents_old_bug(self) -> None:
         sim = IslandSimV1(state="transient_notification", displaying_notification_id=3)
         sim.present_workspace()
         self.assertEqual(sim.state, "transient_workspace")
@@ -292,18 +304,12 @@ class DynamicIslandV2ExpectedFailureTests(unittest.TestCase):
 
     # ----- Desired V2 strict xfails (XPASS when production gains the structure) -----
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="target T07: blocksTransientOsd must yield to active notification",
-    )
     def test_desired_osd_yields_to_active_notification(self) -> None:
+        # T07: expected-failure removed; production yields to active notification.
         self.assertTrue(osd_yields_to_active_notification(self.island_src))
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="target T07: blocksTransientWorkspace must yield to active notification",
-    )
     def test_desired_workspace_yields_to_active_notification(self) -> None:
+        # T07: expected-failure removed; production yields to active notification.
         self.assertTrue(workspace_yields_to_active_notification(self.island_src))
 
     @pytest.mark.xfail(

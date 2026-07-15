@@ -14,6 +14,70 @@ var VALID_STATES = [
     "expanded_summary"
 ];
 
+
+// Presentation priority table (roadmap 14.5). Higher wins.
+var PRIORITY = {
+    "interaction": 100,
+    "critical_notification": 90,
+    "notification": 80,
+    "timer_completion": 70,
+    "osd": 50,
+    "workspace": 40,
+    "media_preview": 30,
+    "clock": 0
+};
+
+function priorityValue(kind) {
+    var key = String(kind || "");
+    if (PRIORITY[key] !== undefined)
+        return PRIORITY[key];
+    return 0;
+}
+
+function presentationPriority(presentation, flags) {
+    var f = flags || {};
+    if (f.userInteracting || f.expanded)
+        return PRIORITY.interaction;
+    var p = String(presentation || "");
+    if (p === "transient_notification" || f.displayingNotification)
+        return f.critical ? PRIORITY.critical_notification : PRIORITY.notification;
+    if (p === "transient_osd")
+        return PRIORITY.osd;
+    if (p === "transient_workspace")
+        return PRIORITY.workspace;
+    if (p === "resting_media" || p === "expanded_media")
+        return p === "expanded_media" ? PRIORITY.interaction : PRIORITY.media_preview;
+    if (p === "expanded_summary")
+        return PRIORITY.interaction;
+    return PRIORITY.clock;
+}
+
+function blocksCandidate(currentPriority, candidatePriority) {
+    // Strict: only higher-or-equal current blocks lower candidate.
+    // Equal priority: existing presentation holds (no steal).
+    return Number(currentPriority) >= Number(candidatePriority);
+}
+
+function blocksOsd(presentation, flags) {
+    return blocksCandidate(presentationPriority(presentation, flags), PRIORITY.osd);
+}
+
+function blocksWorkspace(presentation, flags) {
+    return blocksCandidate(presentationPriority(presentation, flags), PRIORITY.workspace);
+}
+
+function blocksNotification(presentation, flags) {
+    var f = flags || {};
+    // One notification at a time; expanded/interaction always block.
+    if (f.userInteracting || f.expanded)
+        return true;
+    if (String(presentation || "") === "transient_notification")
+        return true;
+    if (f.displayingNotification)
+        return true;
+    return false;
+}
+
 function cloneState(state) {
     var source = state || {};
     return {
@@ -154,12 +218,14 @@ function reduce(state, event, context) {
 
     case "SHOW_TIME":
         // Historical showTime did not touch hoverExpanded.
+        // Abort any active notification lease before changing presentation.
         slice.preferMediaWhenAvailable = false;
         slice.forcedState = "";
         return result(slice, [
             effect("stopTransientTimer"),
-            effect("clearTransientFields"),
-            effect("maybeShowPendingNotification")
+            effect("endNotificationLease"),
+            effect("clearTransientFields")
+            // Drain happens once via onStateChanged after forcedState commit.
         ]);
 
     case "SHOW_MEDIA":
@@ -167,8 +233,8 @@ function reduce(state, event, context) {
         slice.forcedState = ctx.hasMedia ? "resting_media" : "";
         return result(slice, [
             effect("stopTransientTimer"),
-            effect("clearTransientFields"),
-            effect("maybeShowPendingNotification")
+            effect("endNotificationLease"),
+            effect("clearTransientFields")
         ]);
 
     case "SHOW_EXPANDED_MEDIA":
@@ -176,6 +242,7 @@ function reduce(state, event, context) {
         slice.forcedState = ctx.hasMedia ? "expanded_media" : "expanded_summary";
         return result(slice, [
             effect("stopTransientTimer"),
+            effect("endNotificationLease"),
             effect("clearTransientFields")
         ]);
 
@@ -183,22 +250,18 @@ function reduce(state, event, context) {
         slice.forcedState = "expanded_summary";
         return result(slice, [
             effect("stopTransientTimer"),
+            effect("endNotificationLease"),
             effect("clearTransientFields")
         ]);
 
     case "COLLAPSE": {
-        // payload.drainPending mirrors historical call sites: toggle/hover
-        // collapse drain queues; click actions that only clear forcedState do not.
+        // payload.drainPending is retained for API compatibility; drain itself
+        // is performed once by onStateChanged after forcedState changes.
         slice.forcedState = "";
         slice.hoverExpanded = false;
-        var drainPending = !!(ev.payload && ev.payload.drainPending);
-        if (drainPending) {
-            return result(slice, [
-                effect("maybeShowPendingNotification"),
-                effect("maybeShowPendingOsd")
-            ]);
-        }
-        return result(slice, []);
+        return result(slice, [
+            effect("endNotificationLease")
+        ]);
     }
 
     case "TOGGLE_EXPANDED": {
@@ -206,19 +269,21 @@ function reduce(state, event, context) {
         var current = presentationState(slice, ctx);
         if (isExpandedPresentation(current)) {
             slice.forcedState = "";
-            return result(slice, [effect("maybeShowPendingNotification")]);
+            return result(slice, [effect("endNotificationLease")]);
         }
         if (ctx.hasMedia) {
             slice.preferMediaWhenAvailable = true;
             slice.forcedState = "expanded_media";
             return result(slice, [
                 effect("stopTransientTimer"),
+                effect("endNotificationLease"),
                 effect("clearTransientFields")
             ]);
         }
         slice.forcedState = "expanded_summary";
         return result(slice, [
             effect("stopTransientTimer"),
+            effect("endNotificationLease"),
             effect("clearTransientFields")
         ]);
     }
@@ -241,6 +306,7 @@ function reduce(state, event, context) {
             slice.forcedState = "expanded_media";
             return result(slice, [
                 effect("stopTransientTimer"),
+                effect("endNotificationLease"),
                 effect("clearTransientFields")
             ]);
         }
@@ -263,6 +329,7 @@ function reduce(state, event, context) {
         }
         return result(slice, [
             effect("stopTransientTimer"),
+            effect("endNotificationLease"),
             effect("clearTransientFields")
         ]);
     }
@@ -274,10 +341,7 @@ function reduce(state, event, context) {
         var hoverCurrent = presentationState(slice, ctx);
         if (isExpandedPresentation(hoverCurrent)) {
             slice.forcedState = "";
-            return result(slice, [
-                effect("maybeShowPendingNotification"),
-                effect("maybeShowPendingOsd")
-            ]);
+            return result(slice, [effect("endNotificationLease")]);
         }
         return result(slice, []);
     }

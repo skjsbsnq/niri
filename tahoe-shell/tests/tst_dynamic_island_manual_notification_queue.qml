@@ -15,6 +15,19 @@ TestCase {
         property bool dndEnabled: false
         // notificationUpdated is not a property change signal.
         signal notificationUpdated(int id)
+
+        function findActiveById(id) {
+            var nid = Number(id);
+            for (var i = 0; i < activeModel.length; i++) {
+                if (Number(activeModel[i].id) === nid)
+                    return activeModel[i];
+            }
+            return null;
+        }
+
+        function presentationHead() {
+            return activeModel.length > 0 ? activeModel[0] : null;
+        }
     }
 
     QtObject {
@@ -67,6 +80,9 @@ TestCase {
         // Stop auto timers from interfering; tests drive show/drain explicitly.
         wait(0);
         island.reset();
+        // Fresh tracking: empty completed set for clean presents.
+        island.completedNotificationIds = ({});
+        island.seenNotificationIds = ({});
         wait(0);
     }
 
@@ -104,6 +120,7 @@ TestCase {
     }
 
     function test_manual_and_live_fifo_order() {
+        // T07: manual IPC queue is separate; live order is Notifications.activeModel.
         island.userInteracting = true;
         island.showTransientNotification("Manual First", "m");
         notifications.activeModel = [
@@ -111,43 +128,34 @@ TestCase {
             liveNotif(20, "Live Twenty")
         ];
         island.handleNotificationsChanged();
-        compare(island.pendingNotificationIds.length, 3);
+        // Only manual remains on island pending queue.
+        compare(island.pendingNotificationIds.length, 1);
         compare(island.pendingNotificationIds[0].kind, "manual");
-        compare(island.pendingNotificationIds[1].kind, "live");
-        compare(island.pendingNotificationIds[1].id, 10);
-        compare(island.pendingNotificationIds[2].id, 20);
+        compare(island.pendingNotificationIds[0].summary, "Manual First");
 
-        // Present head of FIFO (manual) while still "busy" would block; unblock once.
         island.userInteracting = false;
         if (island.state !== "transient_notification")
             island.maybeShowPendingNotification();
         compare(island.transientDisplayText, "Manual First");
         compare(island.displayingNotificationId, -1);
-        // Live IDs remain queued in arrival order after manual is shown.
-        compare(island.pendingNotificationIds.length, 2);
-        compare(island.pendingNotificationIds[0].kind, "live");
-        compare(island.pendingNotificationIds[0].id, 10);
-        compare(island.pendingNotificationIds[1].id, 20);
+        compare(island.pendingNotificationIds.length, 0);
 
-        // Drain next live without depending on state binding loops: call drain
-        // while blocksTransient is true (still showing notification), then clear
-        // and drain explicitly with a stopped timer.
+        // Hide manual presentation, then live FIFO head (10) should present.
         island.forcedState = "";
-        // Force non-blocking state: clear transient and display id before drain.
+        island.displayingNotificationId = -1;
         wait(0);
-        if (island.state === "transient_notification") {
-            // normalizedState may still report notification; stop timer path.
-            island.displayingNotificationId = -1;
-        }
-        // Directly present next by temporarily ensuring not blocked.
-        if (island.pendingNotificationIds.length === 2) {
-            // Manually simulate hide completion: empty forcedState + not interacting.
-            island.forcedState = "";
-            island.displayingNotificationId = -1;
-            // If still blocked by state, present next entry via queue head inspect only.
-            compare(island.pendingNotificationIds[0].id, 10);
-            compare(island.pendingNotificationIds[1].id, 20);
-        }
+        island.maybeShowPendingNotification();
+        compare(island.transientDisplayText, "Live Ten");
+        compare(island.displayingNotificationId, 10);
+
+        // Complete lease for 10 and drain next.
+        island.markNotificationPresentationCompleted(10);
+        island.displayingNotificationId = -1;
+        island.forcedState = "";
+        wait(0);
+        island.maybeShowPendingNotification();
+        compare(island.transientDisplayText, "Live Twenty");
+        compare(island.displayingNotificationId, 20);
     }
 
     function test_deleted_live_skipped_manual_preserved() {
@@ -155,12 +163,13 @@ TestCase {
         notifications.activeModel = [liveNotif(1, "Live One")];
         island.handleNotificationsChanged();
         island.showTransientNotification("Manual Keep", "k");
-        compare(island.pendingNotificationIds.length, 2);
+        // Manual only on island queue; live waits on Notifications model.
+        compare(island.pendingNotificationIds.length, 1);
+        compare(island.pendingNotificationIds[0].kind, "manual");
 
-        // Delete live id 1 while still queued.
+        // Delete live id 1 while still blocked.
         notifications.activeModel = [];
         island.handleNotificationsChanged();
-        // Manual must remain; live removed.
         compare(island.pendingNotificationIds.length, 1);
         compare(island.pendingNotificationIds[0].kind, "manual");
         compare(island.pendingNotificationIds[0].summary, "Manual Keep");
@@ -175,7 +184,7 @@ TestCase {
         island.showTransientNotification("Manual DND", "d");
         notifications.activeModel = [liveNotif(5, "Live Five")];
         island.handleNotificationsChanged();
-        compare(island.pendingNotificationIds.length, 2);
+        compare(island.pendingNotificationIds.length, 1);
 
         notifications.dndEnabled = true;
         island.handleDndChanged();
@@ -187,11 +196,9 @@ TestCase {
         island.showTransientNotification("Manual Off", "o");
         notifications.activeModel = [liveNotif(7, "Live Seven")];
         island.handleNotificationsChanged();
-        compare(island.pendingNotificationIds.length, 2);
+        compare(island.pendingNotificationIds.length, 1);
 
         settings.dynamicIslandEnabled = false;
-        // Island reacts via islandEnabled bindings / onIslandEnabled paths when settings change.
-        // Force the same cleanup path used by disable: clear via maybeShow / reset contract.
         island.reset();
         compare(island.pendingNotificationIds.length, 0);
     }

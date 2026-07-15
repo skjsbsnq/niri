@@ -38,13 +38,15 @@ Item {
     property real transientProgress: -1
     property string transientIconCode: ""
     property bool userInteracting: false
-    // Stable notification identity tracking (Task 09 / Task 04).
+    // Stable notification identity tracking (T07 lease model).
     // seenNotificationIds: IDs already observed in activeModel (set membership).
-    // pendingNotificationIds: single FIFO of tagged entries (not a second queue):
-    //   live   → { kind: "live", id: <stable Notifications id> }
+    // completedNotificationIds: live IDs whose island presentation finished.
+    // pendingNotificationIds: manual IPC payloads only (not a live ID queue).
     //   manual → { kind: "manual", summary, body, appName } immutable IPC payload
+    // Live notifications resolve from Notifications.qml FIFO head/order.
     // displayingNotificationId: live ID currently shown (-1 for manual / none).
     property var seenNotificationIds: ({})
+    property var completedNotificationIds: ({})
     property var pendingNotificationIds: []
     property int displayingNotificationId: -1
     property real lastVolume: 0
@@ -59,6 +61,9 @@ Item {
     property string lastWorkspaceName: ""
     property bool workspaceTrackingReady: false
     property bool hoverExpanded: false
+    // Suppress onStateChanged restore while applyReducerResult runs so a single
+    // presentation commit drains pending work exactly once (T07 H1).
+    property bool applyingPresentationReducer: false
 
     readonly property bool islandEnabled: settingsService ? !!settingsService.dynamicIslandEnabled : true
     readonly property bool dynamicIslandHideTopbarTime: settingsService ? !!settingsService.dynamicIslandHideTopbarTime : true
@@ -123,12 +128,12 @@ Item {
     signal openNotificationCenterRequested()
 
     onStateChanged: {
-        maybeShowPendingNotification();
-        maybeShowPendingOsd();
+        if (!root.applyingPresentationReducer)
+            root.restoreAfterTransient();
     }
     onUserInteractingChanged: {
-        maybeShowPendingNotification();
-        maybeShowPendingOsd();
+        if (!root.applyingPresentationReducer)
+            root.restoreAfterTransient();
     }
     onNotificationsServiceChanged: resetNotificationTracking()
     onIslandEnabledChanged: handleIslandEnabledChanged()
@@ -179,6 +184,14 @@ Item {
             root.clearPendingNotificationIds();
             break;
         case "clearDisplayingNotification":
+            // Abort/reset lease without marking completed (RESET / disable).
+            root.displayingNotificationId = -1;
+            break;
+        case "endNotificationLease":
+            // Abort an active notification presentation: mark completed so the
+            // same live ID is not re-shown, then drop the lease id.
+            if (root.displayingNotificationId >= 0)
+                root.markNotificationPresentationCompleted(root.displayingNotificationId);
             root.displayingNotificationId = -1;
             break;
         case "clearPendingOsd":
@@ -196,10 +209,11 @@ Item {
             root.swipeStartProgress = 0;
             break;
         case "maybeShowPendingNotification":
-            root.maybeShowPendingNotification();
-            break;
         case "maybeShowPendingOsd":
-            root.maybeShowPendingOsd();
+        case "restoreAfterTransient":
+            // Drain is owned solely by onStateChanged / explicit restore call
+            // sites. Reducer drain effect types are accepted but ignored here
+            // so a single state commit cannot double-invoke restoreAfterTransient.
             break;
         }
     }
@@ -212,12 +226,14 @@ Item {
         // fields BEFORE assigning forcedState. Commit cleanup effects first so
         // onStateChanged drain cannot start a transient that later effects
         // immediately kill (stuck transient_notification with no hide timer).
+        root.applyingPresentationReducer = true;
         var effects = outcome.effects || [];
         var cleanupTypes = {
             "stopTransientTimer": true,
             "clearTransientFields": true,
             "clearPendingNotifications": true,
             "clearDisplayingNotification": true,
+            "endNotificationLease": true,
             "clearPendingOsd": true,
             "clearUserInteracting": true,
             "clearSwipe": true
@@ -236,6 +252,10 @@ Item {
             if (effects[j] && !cleanupTypes[String(effects[j].type || "")])
                 root.runReducerEffect(effects[j]);
         }
+
+        root.applyingPresentationReducer = false;
+        // Exactly one drain after reducer apply (covers forcedState no-op too).
+        root.restoreAfterTransient();
 
         return outcome;
     }
@@ -405,8 +425,7 @@ Item {
             // snapshot so disable-period steps do not present as fresh changes.
             captureOsdBaselines();
             handleMediaAvailabilityChanged();
-            maybeShowPendingNotification();
-            maybeShowPendingOsd();
+            root.restoreAfterTransient();
             return;
         }
 
@@ -476,8 +495,8 @@ Item {
    }
 
    function showTransientNotification(summary, body, appName) {
-        // Manual/smoke IPC: no live Notifications owner. Queue on the same FIFO
-        // as live IDs using an immutable command payload (not a second queue).
+        // Manual/smoke IPC: no live Notifications owner. Queue as a manual-only
+        // payload (not a live ID queue). Live order remains on Notifications.qml.
         if (!root.islandEnabled || notificationsDndEnabled())
             return;
         var entry = {
@@ -509,7 +528,16 @@ Item {
     }
 
     function blocksTransientWorkspace() {
-        return root.expanded || root.userInteracting;
+        return IslandReducer.blocksWorkspace(root.state, root.arbitrationFlags());
+    }
+
+    function arbitrationFlags() {
+        return {
+            "expanded": root.expanded,
+            "userInteracting": root.userInteracting,
+            "displayingNotification": Number(root.displayingNotificationId) >= 0
+                || root.state === "transient_notification"
+        };
     }
 
     function handleWorkspaceChange() {
@@ -650,7 +678,7 @@ Item {
         swipeSettleTimer.restart();
         root.swipeMoved = false;
         if (entered)
-            root.maybeShowPendingNotification();
+            root.restoreAfterTransient();
     }
 
     function cancelSwipe() {
@@ -728,21 +756,25 @@ Item {
 
         root.userInteracting = !!active;
         if (!root.userInteracting)
-            maybeShowPendingNotification();
+            root.restoreAfterTransient();
     }
 
     function resetNotificationTracking() {
-        // Seed seen set from current activeModel without enqueueing history as new.
+        // Seed seen + completed from current activeModel so history is not re-presented.
         var seen = {};
+        var completed = {};
         var list = root.notificationsService ? root.notificationsService.activeModel : [];
         if (list) {
             for (var i = 0; i < list.length; i++) {
                 var id = notificationId(list[i]);
-                if (id >= 0)
+                if (id >= 0) {
                     seen[String(id)] = true;
+                    completed[String(id)] = true;
+                }
             }
         }
         root.seenNotificationIds = seen;
+        root.completedNotificationIds = completed;
         root.clearPendingNotificationIds();
         root.displayingNotificationId = -1;
     }
@@ -810,19 +842,21 @@ Item {
     }
 
     function enqueuePendingNotificationId(id) {
-        enqueuePendingNotificationEntry({ "kind": "live", "id": id });
+        // T07: live IDs are not island-queued. Notifications.qml owns FIFO order;
+        // island resolves the next presentable live notification on restore.
+        // Keep this helper as a no-op so older call sites cannot rebuild a queue.
+        void id;
     }
 
     function enqueuePendingNotificationEntry(entry) {
         var item = normalizePendingEntry(entry);
         if (!item)
             return;
-        if (item.kind === "live") {
-            if (isPendingNotificationId(item.id))
-                return;
-            if (Number(root.displayingNotificationId) === Number(item.id))
-                return;
-        }
+        // Live IDs must not enter the island pending queue (T07).
+        if (item.kind === "live")
+            return;
+        if (item.kind !== "manual")
+            return;
         root.pendingNotificationIds = (root.pendingNotificationIds || []).concat([item]);
     }
 
@@ -844,6 +878,8 @@ Item {
     }
 
     function findLiveNotificationById(id) {
+        if (root.notificationsService && root.notificationsService.findActiveById)
+            return root.notificationsService.findActiveById(id);
         var nid = Number(id);
         if (!isFinite(nid) || nid < 0)
             return null;
@@ -857,35 +893,63 @@ Item {
         return null;
     }
 
+    function markNotificationPresentationCompleted(id) {
+        var nid = Number(id);
+        if (!isFinite(nid) || nid < 0)
+            return;
+        var next = Object.assign({}, root.completedNotificationIds || {});
+        next[String(nid)] = true;
+        root.completedNotificationIds = next;
+    }
+
+    function nextPresentableLiveNotification() {
+        // Walk Notifications-owned FIFO; skip active lease and completed presentations.
+        var list = root.notificationsService ? root.notificationsService.activeModel : [];
+        if (!list)
+            return null;
+        var completed = root.completedNotificationIds || {};
+        var displaying = Number(root.displayingNotificationId);
+        for (var i = 0; i < list.length; i++) {
+            var nid = notificationId(list[i]);
+            if (nid < 0)
+                continue;
+            if (nid === displaying)
+                continue;
+            if (completed[String(nid)])
+                continue;
+            return list[i];
+        }
+        return null;
+    }
+
     function handleNotificationsChanged() {
         var list = root.notificationsService ? root.notificationsService.activeModel : [];
         if (!list)
             list = [];
 
         var nextSeen = {};
-        var newIds = [];
         for (var i = 0; i < list.length; i++) {
             var id = notificationId(list[i]);
             if (id < 0)
                 continue;
-            var key = String(id);
-            nextSeen[key] = true;
-            if (!root.seenNotificationIds || !root.seenNotificationIds[key])
-                newIds.push(id);
+            nextSeen[String(id)] = true;
         }
 
-        // Drop pending live IDs that left the model; keep manual IPC payloads.
+        // Drop completed markers for IDs that left the Notifications model.
+        var completed = root.completedNotificationIds || {};
+        var nextCompleted = {};
+        for (var ck in completed) {
+            if (completed.hasOwnProperty(ck) && nextSeen[ck])
+                nextCompleted[ck] = true;
+        }
+        root.completedNotificationIds = nextCompleted;
+
+        // Manual IPC queue only — strip any legacy live entries.
         var queue = root.pendingNotificationIds || [];
         var kept = [];
         for (var q = 0; q < queue.length; q++) {
             var item = normalizePendingEntry(queue[q]);
-            if (!item)
-                continue;
-            if (item.kind === "manual") {
-                kept.push(item);
-                continue;
-            }
-            if (item.kind === "live" && nextSeen[String(item.id)])
+            if (item && item.kind === "manual")
                 kept.push(item);
         }
         if (kept.length !== queue.length)
@@ -904,11 +968,8 @@ Item {
             return;
         }
 
-        // Enqueue newly appeared IDs in activeModel append order (FIFO).
-        for (var n = 0; n < newIds.length; n++)
-            enqueuePendingNotificationId(newIds[n]);
-
-        maybeShowPendingNotification();
+        // Live FIFO is owned by Notifications.qml; resolve head/order on restore.
+        root.restoreAfterTransient();
     }
 
     function handleNotificationUpdated(id) {
@@ -929,11 +990,8 @@ Item {
             return;
         }
 
-        // Queued: keep position; dequeue will read latest live content.
-        if (isPendingNotificationId(nid))
-            return;
-
-        // Not displaying and not queued → do not re-popup as a new notification.
+        // Not the active lease → do not re-popup; live content stays on Notifications model.
+        // Completed or waiting IDs re-resolve from Notifications FIFO on restore.
     }
 
     function notificationEntry(notification) {
@@ -980,17 +1038,22 @@ Item {
     }
 
    function blocksTransientNotification() {
-       // Expanded / user interacting, or already showing a notification transient
-       // (one at a time; queue drains after hide).
-       if (root.expanded || root.userInteracting)
-           return true;
-       if (root.state === "transient_notification")
-           return true;
-       return false;
+       return IslandReducer.blocksNotification(root.state, root.arbitrationFlags());
    }
 
     function blocksTransientOsd() {
-        return root.expanded || root.userInteracting;
+        // Yield to an active notification lease (T07 priority).
+        return IslandReducer.blocksOsd(root.state, root.arbitrationFlags());
+    }
+
+    // Single restore/drain entry after any presentation change (T07).
+    // Priority: notification lease first, then coalesced OSD. Workspace is
+    // latest-only and never queued as a pending presenter.
+    function restoreAfterTransient() {
+        if (!root.islandEnabled)
+            return;
+        root.maybeShowPendingNotification();
+        root.maybeShowPendingOsd();
     }
 
     function captureOsdBaselines() {
@@ -1164,7 +1227,7 @@ Item {
         if (blocksTransientNotification())
             return;
 
-        // Drain single FIFO: live IDs re-resolve from activeModel; manual uses payload.
+        // Manual IPC payloads first (smoke / debug), then Notifications FIFO order.
         while ((root.pendingNotificationIds || []).length > 0) {
             if (blocksTransientNotification())
                 return;
@@ -1173,29 +1236,22 @@ Item {
             var next = normalizePendingEntry(queue[0]);
             root.pendingNotificationIds = queue.slice(1);
 
-            if (!next)
+            if (!next || next.kind !== "manual")
                 continue;
 
-            if (next.kind === "manual") {
-                presentNotificationEntry({
-                    "id": -1,
-                    "summary": next.summary,
-                    "body": next.body,
-                    "appName": next.appName
-                });
-                return;
-            }
-
-            if (next.kind !== "live")
-                continue;
-
-            var live = findLiveNotificationById(next.id);
-            if (!live)
-                continue;
-
-            presentNotificationEntry(notificationEntry(live));
+            presentNotificationEntry({
+                "id": -1,
+                "summary": next.summary,
+                "body": next.body,
+                "appName": next.appName
+            });
             return;
         }
+
+        var live = root.nextPresentableLiveNotification();
+        if (!live)
+            return;
+        presentNotificationEntry(notificationEntry(live));
     }
 
     function presentNotificationEntry(entry) {
@@ -1217,12 +1273,14 @@ Item {
 
     function handleDndChanged() {
         if (!notificationsDndEnabled()) {
-            maybeShowPendingNotification();
+            root.restoreAfterTransient();
             return;
         }
 
         root.clearPendingNotificationIds();
         if (root.state === "transient_notification") {
+            if (root.displayingNotificationId >= 0)
+                root.markNotificationPresentationCompleted(root.displayingNotificationId);
             transientTimer.stop();
             root.displayingNotificationId = -1;
             root.forcedState = "";
@@ -1380,11 +1438,14 @@ Item {
         interval: root.smokeTransientHideMs
         repeat: false
         onTriggered: {
-            if (root.state === "transient_notification")
+            if (root.state === "transient_notification") {
+                if (root.displayingNotificationId >= 0)
+                    root.markNotificationPresentationCompleted(root.displayingNotificationId);
                 root.displayingNotificationId = -1;
+            }
             root.clearTransientFields();
             root.forcedState = "";
-            root.maybeShowPendingNotification();
+            root.restoreAfterTransient();
         }
     }
 

@@ -256,7 +256,31 @@ Item {
         return groups;
     }
 
+    // Island presentation lease helpers (T07). Island must not copy the FIFO;
+    // it only resolves live head/identity against this owner model.
+    function findActiveById(id) {
+        var nid = Number(id);
+        if (!isFinite(nid) || nid < 0)
+            return null;
+        var list = root.activeModel || [];
+        for (var i = 0; i < list.length; i++) {
+            if (!list[i])
+                continue;
+            try {
+                if (Number(list[i].id) === nid)
+                    return list[i];
+            } catch (e) {}
+        }
+        return null;
+    }
+
+    function presentationHead() {
+        // Oldest active notification (Notifications-owned FIFO head).
+        return root.current;
+    }
+
     function isCritical(notification) {
+
         try {
             return Number(notification.urgency) === 2;
         } catch (e) {

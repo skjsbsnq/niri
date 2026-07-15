@@ -1600,11 +1600,13 @@ Item {
     }
 
     function handleVolumeChange() {
-        Qt.callLater(root.syncVolumeOsdFromControls);
+        // Sync immediately for sticky ramps. Mute+volume same event still
+        // coalesce via lastVolume/lastMuted equality in syncVolumeOsdFromControls.
+        root.syncVolumeOsdFromControls();
     }
 
     function handleMuteChange() {
-        Qt.callLater(root.syncVolumeOsdFromControls);
+        root.syncVolumeOsdFromControls();
     }
 
     function handleAudioReadyChange() {

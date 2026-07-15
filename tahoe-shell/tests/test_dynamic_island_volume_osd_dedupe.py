@@ -317,8 +317,10 @@ class DynamicIslandVolumeOsdDedupeTests(unittest.TestCase):
         mute = _extract_function_body(src, "handleMuteChange")
         self.assertNotIn("presentOsdEntry", vol)
         self.assertNotIn("presentOsdEntry", mute)
-        self.assertIn("callLater", vol)
-        self.assertIn("callLater", mute)
+        # Sticky ramps: handlers call sync immediately (not callLater).
+        # Same-turn mute+volume still coalesce via lastVolume/lastMuted equality.
+        self.assertIn("syncVolumeOsdFromControls", vol)
+        self.assertIn("syncVolumeOsdFromControls", mute)
 
     def test_disabled_sync_still_updates_baseline_contract(self) -> None:
         src = ISLAND.read_text(encoding="utf-8")

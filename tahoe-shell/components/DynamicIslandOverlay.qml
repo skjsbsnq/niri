@@ -353,24 +353,39 @@ PanelWindow {
         opacity: root.capsuleShown ? 1 : 0
 
         // Geometry → TahoeGlassRegion: eased NumberAnimation only (no Spring).
+        // Use V2 compact↔expanded timings (shorter than legacy 380ms) so content
+        // does not feel like it is sliding/sinking during click expand/collapse.
+        readonly property int geometryMorphMs: {
+            var fromExpanded = root.effectiveGeometryState.indexOf("expanded_") === 0;
+            // Target-based: expanded states use expanded morph budget.
+            if (fromExpanded || root.geometryState.indexOf("expanded_") === 0)
+                return IslandMotion.v2CompactToExpandedMs;
+            if (root.effectiveGeometryState.indexOf("transient_") === 0)
+                return IslandMotion.v2CompactToTransientMs;
+            return IslandMotion.v2ExpandedToCompactMs;
+        }
+
         Behavior on x {
             NumberAnimation { duration: root.swipeWidthDuration; easing.type: root.swipeWidthEasing }
         }
 
         Behavior on y {
-            NumberAnimation { duration: IslandMotion.overlayMorphDuration; easing.type: IslandMotion.overlayMorphEasing }
+            NumberAnimation { duration: islandSurface.geometryMorphMs; easing.type: IslandMotion.v2GeometryEasing }
         }
 
         Behavior on width {
-            NumberAnimation { duration: root.swipeWidthDuration; easing.type: root.swipeWidthEasing }
+            NumberAnimation {
+                duration: root.swipeInteractive ? 0 : (root.swipeSettling ? IslandMotion.swipeSettleDuration : islandSurface.geometryMorphMs)
+                easing.type: root.swipeInteractive ? IslandMotion.overlayColorEasing : (root.swipeSettling ? IslandMotion.swipeSettleEasing : IslandMotion.v2GeometryEasing)
+            }
         }
 
         Behavior on height {
-            NumberAnimation { duration: IslandMotion.overlayMorphDuration; easing.type: IslandMotion.overlayMorphEasing }
+            NumberAnimation { duration: islandSurface.geometryMorphMs; easing.type: IslandMotion.v2GeometryEasing }
         }
 
         Behavior on radius {
-            NumberAnimation { duration: IslandMotion.overlayMorphDuration; easing.type: IslandMotion.overlayMorphEasing }
+            NumberAnimation { duration: islandSurface.geometryMorphMs; easing.type: IslandMotion.v2GeometryEasing }
         }
 
         Behavior on fillColor {

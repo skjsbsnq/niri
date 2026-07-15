@@ -85,9 +85,9 @@ class DynamicIslandOsdSceneTests(unittest.TestCase):
         self.assertIn("volumeValue,muted)", compact)
         self.assertIn(',false);', compact)
 
-    def test_progress_bar_has_width_behavior_only(self) -> None:
-        self.assertIn("Behavior on width", self.osd)
-        self.assertIn("overlayProgressDuration", self.osd)
+    def test_progress_bar_tracks_without_width_behavior(self) -> None:
+        # Sticky ramps: no width Behavior (animation lags key-repeat).
+        self.assertNotIn("Behavior on width", self.osd)
         # OsdView itself should not Behavior on opacity (host does once).
         self.assertNotIn("Behavior on opacity", self.osd)
 

@@ -73,20 +73,13 @@ Item {
 
                 Rectangle {
                     id: fill
-                    // Bind width from progress each tick; short Behavior so ramps stay live.
+                    // No Behavior: live volume/brightness ramps must track input 1:1.
+                    // Any width animation lags behind key-repeat / scroll and feels "not sticky".
                     width: Math.max(0, track.width * root.barProgress)
                     height: parent.height
                     radius: parent.radius
                     // Neutral accent for volume/brightness; muted stays neutral (not danger red).
                     color: root.muted ? "#70ffffff" : root.accentColor
-
-                    Behavior on width {
-                        NumberAnimation {
-                            // Keep shorter than typical key-repeat so the bar tracks live input.
-                            duration: Math.min(120, IslandMotion.overlayProgressDuration)
-                            easing.type: IslandMotion.overlayProgressEasing
-                        }
-                    }
                 }
             }
         }

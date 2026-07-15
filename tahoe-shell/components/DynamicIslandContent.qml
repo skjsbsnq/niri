@@ -137,12 +137,15 @@ Item {
     }
 
     // V2 resting clock (T12). Media compact still uses compactLabel until T16.
+    // Top-anchored (not centerIn): capsule height morph must not drag text downward.
     DynamicIslandRestingClockView {
         id: restingClock
 
-        anchors.centerIn: parent
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.top: parent.top
+        anchors.topMargin: 0
         width: Math.min(parent.width - 16, Math.max(contentWidth, 1))
-        height: parent.height
+        height: IslandMotion.v2ClockHeight
         weekdayText: root.clockWeekdayText
         // Prefer split time; never fall back to combined displayText (would re-show weekday).
         timeText: root.clockTimeText
@@ -152,15 +155,18 @@ Item {
         visible: opacity > 0.01
 
         Behavior on opacity {
-            NumberAnimation { duration: IslandMotion.overlayContentDuration; easing.type: IslandMotion.overlayColorEasing }
+            NumberAnimation { duration: IslandMotion.v2ContentExitMs; easing.type: IslandMotion.overlayColorEasing }
         }
     }
 
     Text {
         id: compactLabel
 
-        anchors.centerIn: parent
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.top: parent.top
+        anchors.topMargin: 0
         width: parent.width - 32
+        height: IslandMotion.v2CompactMediaHeight
         // Compact media (and any non-clock resting) until T16 redesign.
         text: (root.compactResting && !root.restingClockActive) ? root.displayText : ""
         color: root.textPrimary
@@ -174,7 +180,7 @@ Item {
         visible: opacity > 0.01
 
         Behavior on opacity {
-            NumberAnimation { duration: IslandMotion.overlayContentDuration; easing.type: IslandMotion.overlayColorEasing }
+            NumberAnimation { duration: IslandMotion.v2ContentExitMs; easing.type: IslandMotion.overlayColorEasing }
         }
     }
 
@@ -184,7 +190,8 @@ Item {
         anchors {
             left: parent.left
             right: parent.right
-            verticalCenter: parent.verticalCenter
+            top: parent.top
+            topMargin: 8
             leftMargin: root.islandState.indexOf("expanded_") === 0 ? 24 : 16
             rightMargin: root.islandState.indexOf("expanded_") === 0 ? 24 : 16
         }
@@ -283,18 +290,18 @@ Item {
     }
 
     // T13: single OSD scene (icon + horizontal bar + value). No Canvas ring.
-    // Opacity binds only to osdActive so rapid progress ticks do not re-enter.
+    // Top-anchored at OSD design height so capsule morph does not drag the bar.
     DynamicIslandOsdView {
         id: osdView
 
         anchors {
             left: parent.left
             right: parent.right
-            verticalCenter: parent.verticalCenter
+            top: parent.top
             leftMargin: 0
             rightMargin: 0
         }
-        height: Math.min(parent.height, 44)
+        height: IslandMotion.v2OsdHeight
         iconCode: root.iconCode
         valueText: root.secondaryText
         // Bind progress directly so continuous OSD ticks update the bar/value.

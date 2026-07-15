@@ -77,6 +77,18 @@ PanelWindow {
     readonly property bool contentOsdMuted: (!!screenRole && screenRole.showActivity && dynamicIslandService)
         ? !!dynamicIslandService.transientOsdMuted
         : false
+    readonly property string contentNotificationAppName: (!!screenRole && screenRole.showActivity && dynamicIslandService)
+        ? String(dynamicIslandService.transientNotificationAppName || "")
+        : ""
+    readonly property string contentNotificationIconUrl: (!!screenRole && screenRole.showActivity && dynamicIslandService)
+        ? String(dynamicIslandService.transientNotificationIconUrl || "")
+        : ""
+    readonly property string contentNotificationUrgency: (!!screenRole && screenRole.showActivity && dynamicIslandService)
+        ? String(dynamicIslandService.transientNotificationUrgency || "normal")
+        : "normal"
+    readonly property bool contentNotificationHasOverflow: (!!screenRole && screenRole.showActivity && dynamicIslandService)
+        ? !!dynamicIslandService.transientNotificationHasOverflow
+        : false
     readonly property int screenWidth: Math.max(1, Number(root.screen && root.screen.width) || root.width)
     readonly property int screenHeight: Math.max(1, Number(root.screen && root.screen.height) || root.height)
     readonly property real swipePreviewWidth: dynamicIslandService ? Number(dynamicIslandService.swipePreviewWidth) : -1
@@ -151,7 +163,7 @@ PanelWindow {
         case "expanded_summary":
             return 360;
         case "transient_notification":
-            return Math.round((IslandMotion.v2NotificationCompactWidthMin + IslandMotion.v2NotificationCompactWidthMax) / 2);
+            return notificationCompactTargetWidth();
         case "transient_osd":
             return Math.round((IslandMotion.v2OsdWidthMin + IslandMotion.v2OsdWidthMax) / 2);
         case "transient_workspace":
@@ -174,6 +186,25 @@ PanelWindow {
         return clampInt(measured, IslandMotion.v2ClockWidthMin, IslandMotion.v2ClockWidthMax);
     }
 
+    function notificationCompactTargetWidth() {
+        // Short ≈ 300, long/overflow up to 420 (roadmap §10.4).
+        var overflow = false;
+        if (dynamicIslandService && (!!screenRole && screenRole.showActivity))
+            overflow = !!dynamicIslandService.transientNotificationHasOverflow;
+        if (overflow)
+            return IslandMotion.v2NotificationCompactWidthMax;
+        return IslandMotion.v2NotificationCompactWidthMin;
+    }
+
+    function notificationCompactTargetHeight() {
+        var overflow = false;
+        if (dynamicIslandService && (!!screenRole && screenRole.showActivity))
+            overflow = !!dynamicIslandService.transientNotificationHasOverflow;
+        if (overflow)
+            return IslandMotion.v2NotificationCompactHeightMax;
+        return IslandMotion.v2NotificationCompactHeightMin;
+    }
+
     function heightForState(stateName) {
         switch (stateName) {
         case "expanded_media":
@@ -181,7 +212,7 @@ PanelWindow {
         case "expanded_summary":
             return 132;
         case "transient_notification":
-            return Math.round((IslandMotion.v2NotificationCompactHeightMin + IslandMotion.v2NotificationCompactHeightMax) / 2);
+            return notificationCompactTargetHeight();
         case "transient_osd":
             return IslandMotion.v2OsdHeight;
         case "transient_workspace":
@@ -390,6 +421,10 @@ PanelWindow {
                 clockTimeText: root.contentClockTime
                 progress: root.progress
                 osdMuted: root.contentOsdMuted
+                notificationAppName: root.contentNotificationAppName
+                notificationIconUrl: root.contentNotificationIconUrl
+                notificationUrgency: root.contentNotificationUrgency
+                notificationHasOverflow: root.contentNotificationHasOverflow
                 compactResting: root.compactResting
                 compactContentVisible: root.compactContentVisible
                 mediaExpandedContentVisible: root.mediaContentVisible
@@ -424,6 +459,14 @@ PanelWindow {
                 onMediaNextRequested: if (root.dynamicIslandService) root.dynamicIslandService.mediaNext()
                 onMediaControlPressed: if (root.dynamicIslandService) root.dynamicIslandService.setUserInteracting(true)
                 onMediaControlReleased: if (root.dynamicIslandService) root.dynamicIslandService.setUserInteracting(false)
+                onNotificationBodyClicked: {
+                    if (root.dynamicIslandService)
+                        root.dynamicIslandService.invokeNotificationDefaultAction();
+                }
+                onNotificationDismissRequested: {
+                    if (root.dynamicIslandService)
+                        root.dynamicIslandService.dismissDisplayedNotification();
+                }
             }
         }
 
@@ -583,6 +626,13 @@ PanelWindow {
                        // Any committed swipe session owns the press; never click.
                        root.dynamicIslandService.consumeSwipeMoved();
                        root.dynamicIslandService.resolveSwipe(root.ownScreenName);
+                       suppressClickTemporarily();
+                   } else if (root.effectiveContentState === "transient_notification"
+                              && !gestureRejected
+                              && Math.abs(mouse.x - swipeStartX) >= IslandMotion.swipeArmThresholdPx * 2
+                              && Math.abs(mouse.x - swipeStartX) > Math.abs(mouse.y - swipeStartY)) {
+                       // T14: horizontal swipe dismisses the leased notification by stable id.
+                       root.dynamicIslandService.dismissDisplayedNotification();
                        suppressClickTemporarily();
                    } else if (gestureRejected) {
                        suppressClickTemporarily();

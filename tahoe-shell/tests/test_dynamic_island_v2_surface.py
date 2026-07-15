@@ -123,7 +123,6 @@ class DynamicIslandV2SurfaceTests(unittest.TestCase):
             "v2MediaExpandedWidthMax",
             "v2CompactMediaWidthMin",
             "v2OsdWidthMin",
-            "v2NotificationCompactWidthMin",
             "v2WorkspaceWidthMin",
         ):
             self.assertIn(token, width_body)
@@ -132,15 +131,23 @@ class DynamicIslandV2SurfaceTests(unittest.TestCase):
         clock_width = _function_body(self.overlay, "restingClockTargetWidth")
         self.assertIn("v2ClockWidthMin", clock_width)
         self.assertIn("v2ClockWidthMax", clock_width)
+        # T14: notification compact size is content/overflow-driven.
+        self.assertIn("notificationCompactTargetWidth", width_body)
+        notif_width = _function_body(self.overlay, "notificationCompactTargetWidth")
+        self.assertIn("v2NotificationCompactWidthMin", notif_width)
+        self.assertIn("v2NotificationCompactWidthMax", notif_width)
         for token in (
             "v2MediaExpandedHeightMin",
             "v2ClockHeight",
             "v2CompactMediaHeight",
             "v2OsdHeight",
-            "v2NotificationCompactHeightMin",
             "v2WorkspaceHeight",
         ):
             self.assertIn(token, height_body)
+        self.assertIn("notificationCompactTargetHeight", height_body)
+        notif_height = _function_body(self.overlay, "notificationCompactTargetHeight")
+        self.assertIn("v2NotificationCompactHeightMin", notif_height)
+        self.assertIn("v2NotificationCompactHeightMax", notif_height)
         # Legacy V1 hardcodes must be gone from geometry helpers.
         self.assertNotIn("return 400;", width_body)
         self.assertNotIn("return 140;", width_body)

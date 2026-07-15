@@ -47,6 +47,11 @@ Item {
     property string transientIconCode: ""
     // T13: explicit OSD muted flag for the view (not locale-dependent).
     property bool transientOsdMuted: false
+    // T14: compact notification presentation fields (not a second model).
+    property string transientNotificationAppName: ""
+    property string transientNotificationIconUrl: ""
+    property string transientNotificationUrgency: "normal"
+    property bool transientNotificationHasOverflow: false
     property bool userInteracting: false
     // Stable notification identity tracking (T07 lease model).
     // seenNotificationIds: IDs already observed in activeModel (set membership).
@@ -545,6 +550,11 @@ Item {
         root.transientSecondaryText = "";
         root.transientProgress = -1;
         root.transientIconCode = "";
+        root.transientOsdMuted = false;
+        root.transientNotificationAppName = "";
+        root.transientNotificationIconUrl = "";
+        root.transientNotificationUrgency = "normal";
+        root.transientNotificationHasOverflow = false;
     }
 
     function handleIslandEnabledChanged() {
@@ -1180,32 +1190,112 @@ Item {
         if (summary.length === 0)
             summary = appName.length > 0 ? appName : "通知";
 
+        var urgency = "normal";
+        try {
+            if (Number(notification.urgency) === 2)
+                urgency = "critical";
+        } catch (e) {}
+
+        var iconUrl = "";
+        if (root.notificationsService && root.notificationsService.iconUrlFor)
+            iconUrl = String(root.notificationsService.iconUrlFor(notification) || "");
+
         return {
             "id": notificationId(notification),
             "summary": summary,
             "body": body,
-            "appName": appName
+            "appName": appName,
+            "iconUrl": iconUrl,
+            "urgency": urgency
         };
     }
 
-    function applyNotificationEntryText(entry) {
-        // In-place text update for replace-id while the same id is displayed.
-        // Does not restart transientTimer or reassign forcedState.
+    function notificationHasOverflow(summary, body, appName) {
+        // Long content drives wider compact geometry (up to 420) and two-line body.
+        var s = String(summary || "");
+        var b = String(body || "");
+        var a = String(appName || "");
+        return s.length > 28 || b.length > 36 || (a.length + s.length + b.length) > 64;
+    }
+
+    function applyNotificationPresentation(entry, restartTimer) {
+        // Shared mapping for present + replace-id refresh.
+        // restartTimer=false keeps the active lease timer (in-place replace).
         if (!entry)
             return;
 
         var title = sanitizeNotificationText(entry.summary, "通知");
         var detail = sanitizeNotificationText(entry.body, "");
         var appName = sanitizeNotificationText(entry.appName, "");
-        if (detail.length === 0 && appName.length > 0 && appName !== title)
-            detail = appName;
-        if (detail === title)
-            detail = "";
+        var iconUrl = String(entry.iconUrl || "");
+        var urgency = String(entry.urgency || "normal");
+        var overflow = notificationHasOverflow(title, detail, appName);
 
         root.transientDisplayText = title;
         root.transientSecondaryText = detail;
         root.transientProgress = -1;
-        root.transientIconCode = "\ue7f4";
+        root.transientIconCode = "";
+        root.transientNotificationAppName = appName;
+        root.transientNotificationIconUrl = iconUrl;
+        root.transientNotificationUrgency = urgency === "critical" ? "critical" : "normal";
+        root.transientNotificationHasOverflow = overflow;
+
+        if (restartTimer) {
+            root.captureEventOwnerOutput();
+            root.forcedState = "transient_notification";
+            transientTimer.interval = Math.max(250, root.notificationHideMs);
+            transientTimer.restart();
+        }
+    }
+
+    function applyNotificationEntryText(entry) {
+        // In-place text update for replace-id while the same id is displayed.
+        // Does not restart transientTimer or reassign forcedState.
+        // restartTimer=false → applyNotificationPresentation skips timer/showTransient.
+        if (!entry)
+            return;
+        var title = sanitizeNotificationText(entry.summary, "通知");
+        var detail = sanitizeNotificationText(entry.body, "");
+        var appName = sanitizeNotificationText(entry.appName, "");
+        var iconUrl = String(entry.iconUrl || "");
+        var urgency = String(entry.urgency || "normal");
+        var overflow = notificationHasOverflow(title, detail, appName);
+        root.transientDisplayText = title;
+        root.transientSecondaryText = detail;
+        root.transientProgress = -1;
+        root.transientIconCode = "";
+        root.transientNotificationAppName = appName;
+        root.transientNotificationIconUrl = iconUrl;
+        root.transientNotificationUrgency = urgency === "critical" ? "critical" : "normal";
+        root.transientNotificationHasOverflow = overflow;
+    }
+
+    // T14 freeze: body click invokes default action via Notifications API.
+    // T15 must not rewrite this body-click → default-action contract.
+    function invokeNotificationDefaultAction() {
+        var nid = Number(root.displayingNotificationId);
+        if (!isFinite(nid) || nid < 0)
+            return;
+        if (!root.notificationsService || !root.notificationsService.invokeAction)
+            return;
+        // Single invoke: FreeDesktop default action id is "default".
+        root.notificationsService.invokeAction(nid, "default");
+    }
+
+    function dismissDisplayedNotification() {
+        var nid = Number(root.displayingNotificationId);
+        if (isFinite(nid) && nid >= 0) {
+            if (root.notificationsService && root.notificationsService.dismissId)
+                root.notificationsService.dismissId(nid, "dismiss");
+            root.markNotificationPresentationCompleted(nid);
+        }
+        // Also ends manual (id=-1) presentation leases cleanly.
+        root.displayingNotificationId = -1;
+        transientTimer.stop();
+        root.forcedState = "";
+        clearTransientFields();
+        root.clearEventOwnerOutput();
+        root.restoreAfterTransient();
     }
 
     function notificationsDndEnabled() {
@@ -1442,17 +1532,18 @@ Item {
         if (!entry || notificationsDndEnabled())
             return;
 
-        var title = sanitizeNotificationText(entry.summary, "通知");
-        var detail = sanitizeNotificationText(entry.body, "");
-        var appName = sanitizeNotificationText(entry.appName, "");
-        if (detail.length === 0 && appName.length > 0 && appName !== title)
-            detail = appName;
-        if (detail === title)
-            detail = "";
-
         var nid = Number(entry.id);
         root.displayingNotificationId = (isFinite(nid) && nid >= 0) ? nid : -1;
-        showTransient("transient_notification", title, detail, -1, "\ue7f4", root.notificationHideMs);
+        // Manual IPC entries may omit icon/urgency; keep empty URL + normal.
+        if (!entry.iconUrl && entry.id !== undefined && Number(entry.id) >= 0) {
+            var live = findLiveNotificationById(Number(entry.id));
+            if (live) {
+                var enriched = notificationEntry(live);
+                if (enriched)
+                    entry = enriched;
+            }
+        }
+        applyNotificationPresentation(entry, true);
     }
 
     function handleDndChanged() {

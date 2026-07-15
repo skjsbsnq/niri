@@ -22,7 +22,14 @@ Item {
     property real progress: -1
     // T13: explicit muted flag from service (avoid locale string probes).
     property bool osdMuted: false
+    // T14: compact notification presentation (from service lease fields).
+    property string notificationAppName: ""
+    property string notificationIconUrl: ""
+    property string notificationUrgency: "normal"
+    property bool notificationHasOverflow: false
     property bool compactResting: true
+    signal notificationBodyClicked()
+    signal notificationDismissRequested()
     property bool compactContentVisible: compactResting
     property bool mediaExpandedContentVisible: mediaExpanded
     property bool summaryExpandedContentVisible: summaryExpanded
@@ -228,68 +235,30 @@ Item {
         }
     }
 
-    Row {
-        id: notificationRow
+    // T14: compact notification with app identity (no generic-only bell).
+    DynamicIslandNotificationView {
+        id: notificationView
 
-        anchors {
-            left: parent.left
-            right: parent.right
-            verticalCenter: parent.verticalCenter
-            leftMargin: 16
-            rightMargin: 18
-        }
-        height: Math.min(parent.height - 14, 42)
-        spacing: 10
+        anchors.fill: parent
+        appName: root.notificationAppName
+        summary: root.displayText
+        body: root.secondaryText
+        iconUrl: root.notificationIconUrl
+        urgency: root.notificationUrgency
+        hasOverflow: root.notificationHasOverflow
+        textPrimary: root.textPrimary
+        textSecondary: root.textSecondary
         opacity: root.notificationActive ? 1 : 0
         visible: opacity > 0.01
+        onBodyClicked: root.notificationBodyClicked()
+        onDismissRequested: root.notificationDismissRequested()
 
         Behavior on opacity {
             NumberAnimation {
-                duration: root.notificationActive ? root.notificationFadeInDuration : root.notificationFadeOutDuration
+                duration: root.notificationActive
+                    ? root.notificationFadeInDuration
+                    : root.notificationFadeOutDuration
                 easing.type: IslandMotion.overlayColorEasing
-            }
-        }
-
-        TahoeSymbol {
-            name: root.iconCode.length > 0 ? root.iconCode : "\ue7f4"
-            color: root.textPrimary
-            size: 20
-        }
-
-        Item {
-            width: Math.max(1, parent.width - 34)
-            height: parent.height
-
-            Text {
-                id: notificationTitle
-
-                anchors {
-                    left: parent.left
-                    right: parent.right
-                    top: parent.top
-                    topMargin: root.secondaryText.length > 0 ? 3 : Math.round((parent.height - height) / 2)
-                }
-                text: root.displayText
-                color: root.textPrimary
-                font.pixelSize: 13
-                font.weight: Font.DemiBold
-                elide: Text.ElideRight
-                maximumLineCount: 1
-            }
-
-            Text {
-                anchors {
-                    left: parent.left
-                    right: parent.right
-                    top: notificationTitle.bottom
-                    topMargin: 2
-                }
-                text: root.secondaryText
-                color: root.textSecondary
-                font.pixelSize: 11
-                elide: Text.ElideRight
-                maximumLineCount: 1
-                visible: text.length > 0
             }
         }
     }

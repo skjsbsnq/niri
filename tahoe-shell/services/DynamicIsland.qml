@@ -52,6 +52,9 @@ Item {
     property string transientNotificationIconUrl: ""
     property string transientNotificationUrgency: "normal"
     property bool transientNotificationHasOverflow: false
+    // T15: expand + actions stay on the same transient_notification presentation.
+    property bool transientNotificationExpanded: false
+    property var transientNotificationActions: []
     property bool userInteracting: false
     // Stable notification identity tracking (T07 lease model).
     // seenNotificationIds: IDs already observed in activeModel (set membership).
@@ -555,6 +558,8 @@ Item {
         root.transientNotificationIconUrl = "";
         root.transientNotificationUrgency = "normal";
         root.transientNotificationHasOverflow = false;
+        root.transientNotificationExpanded = false;
+        root.transientNotificationActions = [];
     }
 
     function handleIslandEnabledChanged() {
@@ -1140,11 +1145,20 @@ Item {
         if (kept.length !== queue.length)
             root.pendingNotificationIds = kept;
 
-        // If the currently displayed notification left the model, clear display id
-        // (timer/state may still be finishing; do not force-hide unrelated transients).
+        // If the currently displayed notification left the model, end the lease
+        // (including expanded UI) so the island does not stick open.
         if (root.displayingNotificationId >= 0
-                && !nextSeen[String(root.displayingNotificationId)])
+                && !nextSeen[String(root.displayingNotificationId)]) {
             root.displayingNotificationId = -1;
+            if (root.state === "transient_notification") {
+                root.transientNotificationExpanded = false;
+                root.setUserInteracting(false);
+                transientTimer.stop();
+                root.forcedState = "";
+                clearTransientFields();
+                root.clearEventOwnerOutput();
+            }
+        }
 
         root.seenNotificationIds = nextSeen;
 
@@ -1206,16 +1220,50 @@ Item {
             "body": body,
             "appName": appName,
             "iconUrl": iconUrl,
-            "urgency": urgency
+            "urgency": urgency,
+            "actions": extractNotificationActions(notification)
         };
     }
 
-    function notificationHasOverflow(summary, body, appName) {
-        // Long content drives wider compact geometry (up to 420) and two-line body.
+    function notificationHasOverflow(summary, body, appName, actionCount) {
+        // Long content or available actions drive wider compact geometry / chevron.
         var s = String(summary || "");
         var b = String(body || "");
         var a = String(appName || "");
-        return s.length > 28 || b.length > 36 || (a.length + s.length + b.length) > 64;
+        var actions = Number(actionCount) || 0;
+        return s.length > 28 || b.length > 36 || (a.length + s.length + b.length) > 64 || actions > 0;
+    }
+
+    function extractNotificationActions(notification) {
+        // Up to 3 non-default actions. Default is body-click only (T14 freeze).
+        var out = [];
+        if (!notification)
+            return out;
+        try {
+            var actions = notification.actions;
+            if (!actions)
+                return out;
+            for (var i = 0; i < actions.length && out.length < 3; i++) {
+                var act = actions[i];
+                if (!act)
+                    continue;
+                var id = String(act.identifier !== undefined ? act.identifier : (act.id || "")).trim();
+                if (id.length === 0)
+                    continue;
+                var lower = id.toLowerCase();
+                if (lower === "default" || lower === "default_action")
+                    continue;
+                var label = String(act.text !== undefined ? act.text : (act.label || id)).trim();
+                if (label.length === 0)
+                    label = id;
+                // Skip Chinese/English "Open" labels that only mirror default.
+                var labelLower = label.toLowerCase();
+                if (labelLower === "open" || label === "打开")
+                    continue;
+                out.push({ "id": id, "label": label });
+            }
+        } catch (e) {}
+        return out;
     }
 
     function applyNotificationPresentation(entry, restartTimer) {
@@ -1229,7 +1277,8 @@ Item {
         var appName = sanitizeNotificationText(entry.appName, "");
         var iconUrl = String(entry.iconUrl || "");
         var urgency = String(entry.urgency || "normal");
-        var overflow = notificationHasOverflow(title, detail, appName);
+        var actions = entry.actions && entry.actions.length ? entry.actions : [];
+        var overflow = notificationHasOverflow(title, detail, appName, actions.length);
 
         root.transientDisplayText = title;
         root.transientSecondaryText = detail;
@@ -1239,19 +1288,23 @@ Item {
         root.transientNotificationIconUrl = iconUrl;
         root.transientNotificationUrgency = urgency === "critical" ? "critical" : "normal";
         root.transientNotificationHasOverflow = overflow;
+        root.transientNotificationActions = actions;
+        if (restartTimer)
+            root.transientNotificationExpanded = false;
 
         if (restartTimer) {
             root.captureEventOwnerOutput();
             root.forcedState = "transient_notification";
-            transientTimer.interval = Math.max(250, root.notificationHideMs);
-            transientTimer.restart();
+            if (!root.userInteracting) {
+                transientTimer.interval = Math.max(250, root.notificationHideMs);
+                transientTimer.restart();
+            }
         }
     }
 
     function applyNotificationEntryText(entry) {
         // In-place text update for replace-id while the same id is displayed.
         // Does not restart transientTimer or reassign forcedState.
-        // restartTimer=false → applyNotificationPresentation skips timer/showTransient.
         if (!entry)
             return;
         var title = sanitizeNotificationText(entry.summary, "通知");
@@ -1259,7 +1312,10 @@ Item {
         var appName = sanitizeNotificationText(entry.appName, "");
         var iconUrl = String(entry.iconUrl || "");
         var urgency = String(entry.urgency || "normal");
-        var overflow = notificationHasOverflow(title, detail, appName);
+        var actions = entry.actions && entry.actions.length
+            ? entry.actions
+            : (root.transientNotificationActions || []);
+        var overflow = notificationHasOverflow(title, detail, appName, actions.length);
         root.transientDisplayText = title;
         root.transientSecondaryText = detail;
         root.transientProgress = -1;
@@ -1268,6 +1324,10 @@ Item {
         root.transientNotificationIconUrl = iconUrl;
         root.transientNotificationUrgency = urgency === "critical" ? "critical" : "normal";
         root.transientNotificationHasOverflow = overflow;
+        root.transientNotificationActions = actions;
+        // Keep expanded flag; if overflow disappears, collapse.
+        if (!overflow)
+            root.transientNotificationExpanded = false;
     }
 
     // T14 freeze: body click invokes default action via Notifications API.
@@ -1282,6 +1342,56 @@ Item {
         root.notificationsService.invokeAction(nid, "default");
     }
 
+    function toggleNotificationExpanded() {
+        if (root.state !== "transient_notification")
+            return;
+        if (!root.transientNotificationHasOverflow)
+            return;
+        root.transientNotificationExpanded = !root.transientNotificationExpanded;
+        // Expanded interaction pauses auto-collapse (T15).
+        if (root.transientNotificationExpanded) {
+            root.setUserInteracting(true);
+            transientTimer.stop();
+        } else {
+            root.setUserInteracting(false);
+            if (root.state === "transient_notification") {
+                transientTimer.interval = Math.max(250, root.notificationHideMs);
+                transientTimer.restart();
+            }
+        }
+    }
+
+    function invokeNotificationAction(actionId) {
+        var nid = Number(root.displayingNotificationId);
+        var id = String(actionId || "").trim();
+        if (!isFinite(nid) || nid < 0 || id.length === 0)
+            return;
+        if (!root.notificationsService || !root.notificationsService.invokeAction)
+            return;
+        // Only end lease when the action is one we presented (identity match).
+        var known = false;
+        var list = root.transientNotificationActions || [];
+        for (var i = 0; i < list.length; i++) {
+            if (list[i] && String(list[i].id) === id) {
+                known = true;
+                break;
+            }
+        }
+        if (!known)
+            return;
+        root.notificationsService.invokeAction(nid, id);
+        // After a presented action, end the lease (server/dismiss semantics own the object).
+        root.markNotificationPresentationCompleted(nid);
+        root.displayingNotificationId = -1;
+        root.transientNotificationExpanded = false;
+        root.setUserInteracting(false);
+        transientTimer.stop();
+        root.forcedState = "";
+        clearTransientFields();
+        root.clearEventOwnerOutput();
+        root.restoreAfterTransient();
+    }
+
     function dismissDisplayedNotification() {
         var nid = Number(root.displayingNotificationId);
         if (isFinite(nid) && nid >= 0) {
@@ -1291,6 +1401,8 @@ Item {
         }
         // Also ends manual (id=-1) presentation leases cleanly.
         root.displayingNotificationId = -1;
+        root.transientNotificationExpanded = false;
+        root.setUserInteracting(false);
         transientTimer.stop();
         root.forcedState = "";
         clearTransientFields();
@@ -1558,6 +1670,8 @@ Item {
                 root.markNotificationPresentationCompleted(root.displayingNotificationId);
             transientTimer.stop();
             root.displayingNotificationId = -1;
+            root.transientNotificationExpanded = false;
+            root.setUserInteracting(false);
             root.forcedState = "";
             clearTransientFields();
             root.clearEventOwnerOutput();

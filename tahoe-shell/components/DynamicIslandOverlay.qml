@@ -89,6 +89,12 @@ PanelWindow {
     readonly property bool contentNotificationHasOverflow: (!!screenRole && screenRole.showActivity && dynamicIslandService)
         ? !!dynamicIslandService.transientNotificationHasOverflow
         : false
+    readonly property bool contentNotificationExpanded: (!!screenRole && screenRole.showActivity && dynamicIslandService)
+        ? !!dynamicIslandService.transientNotificationExpanded
+        : false
+    readonly property var contentNotificationActions: (!!screenRole && screenRole.showActivity && dynamicIslandService)
+        ? (dynamicIslandService.transientNotificationActions || [])
+        : []
     readonly property int screenWidth: Math.max(1, Number(root.screen && root.screen.width) || root.width)
     readonly property int screenHeight: Math.max(1, Number(root.screen && root.screen.height) || root.height)
     readonly property real swipePreviewWidth: dynamicIslandService ? Number(dynamicIslandService.swipePreviewWidth) : -1
@@ -187,7 +193,10 @@ PanelWindow {
     }
 
     function notificationCompactTargetWidth() {
-        // Short ≈ 300, long/overflow up to 420 (roadmap §10.4).
+        // Expanded: up to 440. Compact short ≈ 300, long/overflow up to 420.
+        if (dynamicIslandService && (!!screenRole && screenRole.showActivity)
+                && !!dynamicIslandService.transientNotificationExpanded)
+            return IslandMotion.v2NotificationExpandedWidthMax;
         var overflow = false;
         if (dynamicIslandService && (!!screenRole && screenRole.showActivity))
             overflow = !!dynamicIslandService.transientNotificationHasOverflow;
@@ -197,6 +206,16 @@ PanelWindow {
     }
 
     function notificationCompactTargetHeight() {
+        if (dynamicIslandService && (!!screenRole && screenRole.showActivity)
+                && !!dynamicIslandService.transientNotificationExpanded) {
+            // Content-driven expanded height within 96–176.
+            var base = IslandMotion.v2NotificationExpandedHeightMin;
+            var actions = dynamicIslandService.transientNotificationActions || [];
+            var actionRows = actions.length > 0 ? 1 : 0;
+            var h = base + 40 + (actionRows * 40);
+            return clampInt(h, IslandMotion.v2NotificationExpandedHeightMin,
+                IslandMotion.v2NotificationExpandedHeightMax);
+        }
         var overflow = false;
         if (dynamicIslandService && (!!screenRole && screenRole.showActivity))
             overflow = !!dynamicIslandService.transientNotificationHasOverflow;
@@ -425,6 +444,8 @@ PanelWindow {
                 notificationIconUrl: root.contentNotificationIconUrl
                 notificationUrgency: root.contentNotificationUrgency
                 notificationHasOverflow: root.contentNotificationHasOverflow
+                notificationExpanded: root.contentNotificationExpanded
+                notificationActions: root.contentNotificationActions
                 compactResting: root.compactResting
                 compactContentVisible: root.compactContentVisible
                 mediaExpandedContentVisible: root.mediaContentVisible
@@ -466,6 +487,22 @@ PanelWindow {
                 onNotificationDismissRequested: {
                     if (root.dynamicIslandService)
                         root.dynamicIslandService.dismissDisplayedNotification();
+                }
+                onNotificationExpandToggleRequested: {
+                    if (root.dynamicIslandService)
+                        root.dynamicIslandService.toggleNotificationExpanded();
+                }
+                onNotificationActionInvoked: function(actionId) {
+                    if (root.dynamicIslandService)
+                        root.dynamicIslandService.invokeNotificationAction(actionId);
+                }
+                onNotificationInteractionBegan: {
+                    if (root.dynamicIslandService)
+                        root.dynamicIslandService.setUserInteracting(true);
+                }
+                onNotificationInteractionEnded: {
+                    if (root.dynamicIslandService)
+                        root.dynamicIslandService.setUserInteracting(false);
                 }
             }
         }

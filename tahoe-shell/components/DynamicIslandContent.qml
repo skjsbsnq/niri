@@ -27,9 +27,15 @@ Item {
     property string notificationIconUrl: ""
     property string notificationUrgency: "normal"
     property bool notificationHasOverflow: false
+    property bool notificationExpanded: false
+    property var notificationActions: []
     property bool compactResting: true
     signal notificationBodyClicked()
     signal notificationDismissRequested()
+    signal notificationExpandToggleRequested()
+    signal notificationActionInvoked(string actionId)
+    signal notificationInteractionBegan()
+    signal notificationInteractionEnded()
     property bool compactContentVisible: compactResting
     property bool mediaExpandedContentVisible: mediaExpanded
     property bool summaryExpandedContentVisible: summaryExpanded
@@ -235,7 +241,7 @@ Item {
         }
     }
 
-    // T14: compact notification with app identity (no generic-only bell).
+    // T14/T15: notification with app identity, expand chevron, and actions.
     DynamicIslandNotificationView {
         id: notificationView
 
@@ -246,12 +252,25 @@ Item {
         iconUrl: root.notificationIconUrl
         urgency: root.notificationUrgency
         hasOverflow: root.notificationHasOverflow
+        expanded: root.notificationExpanded
+        actions: root.notificationActions
         textPrimary: root.textPrimary
         textSecondary: root.textSecondary
         opacity: root.notificationActive ? 1 : 0
         visible: opacity > 0.01
         onBodyClicked: root.notificationBodyClicked()
         onDismissRequested: root.notificationDismissRequested()
+        onExpandToggleRequested: root.notificationExpandToggleRequested()
+        onActionInvoked: function(actionId) { root.notificationActionInvoked(actionId); }
+        // Expanded hold owns userInteracting; do not clear it on flick/action press end.
+        onInteractionBegan: {
+            if (!root.notificationExpanded)
+                root.notificationInteractionBegan();
+        }
+        onInteractionEnded: {
+            if (!root.notificationExpanded)
+                root.notificationInteractionEnded();
+        }
 
         Behavior on opacity {
             NumberAnimation {

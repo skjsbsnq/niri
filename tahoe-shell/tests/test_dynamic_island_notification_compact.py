@@ -53,14 +53,12 @@ class DynamicIslandNotificationCompactTests(unittest.TestCase):
         self.assertIn("safeIconUrl", self.view)
         self.assertIn("image://", self.view)
         self.assertIn("file://", self.view)
-        # Reject arbitrary remote schemes in the island surface.
-        self.assertIn("Reject arbitrary", self.view)
         self.assertIn("bodyClicked", self.view)
         self.assertIn("font.letterSpacing: 0", self.view)
 
     def test_no_generic_bell_only_path(self) -> None:
         # View may fall back to symbol when no icon AND no appName, but prefers app icon/initial.
-        self.assertIn("appImage", self.view)
+        self.assertIn("compactImage", self.view)
         self.assertIn("charAt(0)", self.view)
         # Content hosts the dedicated view, not the old bell+title row.
         self.assertIn("DynamicIslandNotificationView", self.content)

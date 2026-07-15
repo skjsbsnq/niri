@@ -810,7 +810,34 @@ Item {
     }
 
    function showTransientOsd(text, progressValue) {
-        showTransientOsdWithIcon(text, progressValue, "\ue050");
+        showTransientOsdWithIcon(text, progressValue,
+            root.volumeIconCode(progressValue, false));
+    }
+
+    function volumeIconCode(progressValue, muted) {
+        if (muted)
+            return "\ue04f"; // volume_off
+        var sample = Number(progressValue);
+        if (!isFinite(sample))
+            sample = 0;
+        var progress = Math.max(0, Math.min(1, sample));
+        if (progress <= 0)
+            return "\ue04e"; // volume_mute: speaker without waves
+        if (progress < 0.5)
+            return "\ue04d"; // volume_down: one wave
+        return "\ue050"; // volume_up: two waves
+    }
+
+    function brightnessIconCode(progressValue) {
+        var sample = Number(progressValue);
+        if (!isFinite(sample))
+            sample = 0;
+        var progress = Math.max(0, Math.min(1, sample));
+        if (progress < 0.34)
+            return "\ue1ad"; // brightness_low
+        if (progress < 0.67)
+            return "\ue1ae"; // brightness_medium
+        return "\ue1ac"; // brightness_high
     }
 
     function showTransientOsdWithIcon(text, progressValue, icon, valueText, osdMuted) {
@@ -1666,7 +1693,6 @@ Item {
        root.pendingOsd = null;
        // T13 presentation: primary label is kind; secondary is exact value text;
        // progress is 0–1 for the horizontal bar (muted forces 0).
-       var icon = String(entry.icon || "\ue050");
        if (entry.kind === "volume") {
            var muted = !!entry.muted;
            var volumeProgress = muted ? 0 : Math.max(0, Math.min(1, Number(entry.progress)));
@@ -1674,12 +1700,13 @@ Item {
                volumeProgress = 0;
            var volumeValue = muted ? "静音" : (Math.round(volumeProgress * 100) + "%");
            showTransientOsdWithIcon(muted ? "静音" : "音量", volumeProgress,
-               muted ? "\ue04f" : "\ue050", volumeValue, muted);
+               root.volumeIconCode(volumeProgress, muted), volumeValue, muted);
        } else {
            var brightnessProgress = Math.max(0, Math.min(1, Number(entry.progress)));
            if (!isFinite(brightnessProgress))
                brightnessProgress = 0;
-           showTransientOsdWithIcon("亮度", brightnessProgress, "\ue518",
+           showTransientOsdWithIcon("亮度", brightnessProgress,
+               root.brightnessIconCode(brightnessProgress),
                Math.round(brightnessProgress * 100) + "%", false);
        }
    }
@@ -1740,7 +1767,7 @@ Item {
             "kind": "volume",
             "progress": muted ? 0 : volume,
             "muted": muted,
-            "icon": muted ? "\ue04f" : "\ue050"
+            "icon": root.volumeIconCode(volume, muted)
         });
     }
 
@@ -1802,7 +1829,7 @@ Item {
         presentOsdEntry({
             "kind": "brightness",
             "progress": brightness,
-            "icon": "\ue518"
+            "icon": root.brightnessIconCode(brightness)
         });
     }
 

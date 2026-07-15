@@ -143,6 +143,26 @@ class DynamicIslandOsdSceneTests(unittest.TestCase):
         sync = _function_body(self.island, "syncVolumeOsdFromControls")
         self.assertIn('"progress": muted ? 0 : volume', sync)
 
+    def test_volume_icon_tracks_level(self) -> None:
+        body = _function_body(self.island, "volumeIconCode")
+        self.assertIn('return "\\ue04f"', body)  # muted/off
+        self.assertIn('return "\\ue04e"', body)  # zero/no waves
+        self.assertIn("progress < 0.5", body)
+        self.assertIn('return "\\ue04d"', body)  # low/one wave
+        self.assertIn('return "\\ue050"', body)  # high/two waves
+        present = _function_body(self.island, "presentOsdEntry")
+        self.assertIn("volumeIconCode(volumeProgress, muted)", present)
+
+    def test_brightness_icon_tracks_level(self) -> None:
+        body = _function_body(self.island, "brightnessIconCode")
+        self.assertIn("progress < 0.34", body)
+        self.assertIn('return "\\ue1ad"', body)  # low
+        self.assertIn("progress < 0.67", body)
+        self.assertIn('return "\\ue1ae"', body)  # medium
+        self.assertIn('return "\\ue1ac"', body)  # high
+        present = _function_body(self.island, "presentOsdEntry")
+        self.assertIn("brightnessIconCode(brightnessProgress)", present)
+
     def test_osd_bar_is_monochrome_not_accent_colored(self) -> None:
         self.assertNotIn("accentColor", self.osd)
         self.assertNotIn("Theme.accent", self.osd)

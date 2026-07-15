@@ -244,17 +244,19 @@ TestCase {
         clearOsdPresentation();
         island.captureOsdBaselines();
 
-        controls.volume = 0.5;
+        controls.volume = 0.41;
         wait(0);
         compare(island.presentation, "transient_osd");
-        compare(island.transientProgress, 0.5);
+        compare(island.transientProgress, 0.41);
+        compare(island.transientIconCode, "\ue04d");
         compare(island.pendingOsd, null);
 
-        controls.volume = 0.73;
+        controls.volume = 0.64;
         wait(0);
         compare(island.presentation, "transient_osd");
-        compare(island.transientProgress, 0.73);
-        compare(island.transientSecondaryText, "73%");
+        compare(island.transientProgress, 0.64);
+        compare(island.transientSecondaryText, "64%");
+        compare(island.transientIconCode, "\ue050");
         compare(island.pendingOsd, null);
     }
 
@@ -274,6 +276,27 @@ TestCase {
         wait(140);
         compare(island.presentation, "expanded_summary");
         compare(island.transientOsdExiting, false);
+    }
+
+    function test_brightness_icon_tracks_low_medium_high() {
+        clearOsdPresentation();
+        controls.brightnessAvailable = true;
+        wait(0);
+        island.captureOsdBaselines();
+
+        controls.brightness = 0.2;
+        wait(0);
+        compare(island.presentation, "transient_osd");
+        compare(island.transientIconCode, "\ue1ad");
+
+        controls.brightness = 0.5;
+        wait(0);
+        compare(island.transientIconCode, "\ue1ae");
+
+        controls.brightness = 0.8;
+        wait(0);
+        compare(island.transientIconCode, "\ue1ac");
+        compare(island.pendingOsd, null);
     }
 
     function test_osd_click_defers_action_until_retained_exit_finishes() {

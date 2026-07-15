@@ -125,3 +125,74 @@ function screenPresentationRole(screenName, ownerName, presentation, flags) {
         "maskFollowsCapsule": true
     };
 }
+
+
+// T09: one-shot swipe settle decision. No QML access.
+// Returns target progress for preview width, target forcedState, and whether entered expanded.
+function resolveSwipeSettle(progress, startProgress, hasMedia, enterThreshold, returnThreshold) {
+    var p = Number(progress) || 0;
+    var start = Number(startProgress) || 0;
+    var enter = Number(enterThreshold);
+    var ret = Number(returnThreshold);
+    if (!isFinite(enter))
+        enter = 0.56;
+    if (!isFinite(ret))
+        ret = 0.44;
+
+    if (p >= enter) {
+        // Right enter: media when available; otherwise summary still uses the
+        // summary/left geometry (360), not the media/right width (400).
+        if (hasMedia) {
+            return {
+                "swipeProgress": 1,
+                "forcedState": "expanded_media",
+                "entered": true,
+                "collapsed": false
+            };
+        }
+        return {
+            "swipeProgress": -1,
+            "forcedState": "expanded_summary",
+            "entered": true,
+            "collapsed": false
+        };
+    }
+    if (p <= -enter) {
+        return {
+            "swipeProgress": -1,
+            "forcedState": "expanded_summary",
+            "entered": true,
+            "collapsed": false
+        };
+    }
+    if (start >= 0.5 && p <= ret) {
+        return {
+            "swipeProgress": 0,
+            "forcedState": "",
+            "entered": false,
+            "collapsed": true
+        };
+    }
+    if (start <= -0.5 && p >= -ret) {
+        return {
+            "swipeProgress": 0,
+            "forcedState": "",
+            "entered": false,
+            "collapsed": true
+        };
+    }
+    // Snap back to start presentation; keep start progress for continuous geometry.
+    return {
+        "swipeProgress": start,
+        "forcedState": null,
+        "entered": false,
+        "collapsed": false
+    };
+}
+
+function swipePreviewWidthFor(progress, restingWidth, leftWidth, rightWidth) {
+    var p = Number(progress) || 0;
+    var resting = Number(restingWidth) || 0;
+    var side = p >= 0 ? Number(rightWidth) : Number(leftWidth);
+    return resting + (side - resting) * Math.min(1, Math.abs(p));
+}

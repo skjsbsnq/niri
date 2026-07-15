@@ -21,6 +21,7 @@ Item {
     property var settingsService
     property real swipeProgress: 0 // -1 = summary (left), +1 = media (right)
     property real swipeStartProgress: 0
+    property string swipeStartForcedState: ""
     property bool swipeDragging: false
     property bool swipeSettling: false
     property bool swipeMoved: false
@@ -28,7 +29,11 @@ Item {
     readonly property int swipeRightWidth: 400
     readonly property int swipeRestingWidth: restingWidthForState(restingState())
     readonly property real swipePreviewWidth: swipeDragging || swipeSettling
-        ? swipeRestingWidth + (swipeSideWidthForProgress(swipeProgress) - swipeRestingWidth) * Math.min(1, Math.abs(swipeProgress))
+        ? IslandOwnership.swipePreviewWidthFor(
+            root.swipeProgress,
+            root.swipeRestingWidth,
+            root.swipeLeftWidth,
+            root.swipeRightWidth)
         : -1
 
     property bool preferMediaWhenAvailable: true
@@ -216,6 +221,7 @@ Item {
             root.swipeMoved = false;
             root.swipeProgress = 0;
             root.swipeStartProgress = 0;
+            root.swipeStartForcedState = "";
             break;
         case "maybeShowPendingNotification":
         case "maybeShowPendingOsd":
@@ -733,6 +739,8 @@ Item {
         root.swipeDragging = true;
         root.swipeSettling = false;
         root.swipeMoved = false;
+        // Record start presentation for cancel restore (T09).
+        root.swipeStartForcedState = root.forcedState;
         if (root.state === "expanded_media")
             root.swipeStartProgress = 1;
         else if (root.state === "expanded_summary")
@@ -769,32 +777,20 @@ Item {
 
         root.swipeDragging = false;
         root.setUserInteracting(false);
-        var progress = root.swipeProgress;
-        var startProgress = root.swipeStartProgress;
-        var entered = false;
-
-        if (progress >= IslandMotion.swipeEnterThreshold) {
-            root.swipeSettling = true;
-            root.swipeProgress = 0;
-            root.forcedState = root.hasMedia ? "expanded_media" : "expanded_summary";
-            entered = true;
-        } else if (progress <= -IslandMotion.swipeEnterThreshold) {
-            root.swipeSettling = true;
-            root.swipeProgress = 0;
-            root.forcedState = "expanded_summary";
-            entered = true;
-        } else if (startProgress >= 0.5 && progress <= IslandMotion.swipeReturnThreshold) {
-            root.swipeSettling = true;
-            root.swipeProgress = 0;
-            root.forcedState = "";
-        } else if (startProgress <= -0.5 && progress >= -IslandMotion.swipeReturnThreshold) {
-            root.swipeSettling = true;
-            root.swipeProgress = 0;
-            root.forcedState = "";
-        } else {
-            root.swipeSettling = true;
-            root.swipeProgress = 0;
-        }
+        // One-shot settle: target progress + state computed together (T09).
+        // Do NOT zero swipeProgress while settling — preview width must hold target.
+        var decision = IslandOwnership.resolveSwipeSettle(
+            root.swipeProgress,
+            root.swipeStartProgress,
+            root.hasMedia,
+            IslandMotion.swipeEnterThreshold,
+            IslandMotion.swipeReturnThreshold
+        );
+        root.swipeSettling = true;
+        root.swipeProgress = Number(decision.swipeProgress) || 0;
+        if (decision.forcedState !== null && decision.forcedState !== undefined)
+            root.forcedState = String(decision.forcedState);
+        var entered = !!decision.entered;
 
         swipeSettleTimer.restart();
         root.swipeMoved = false;
@@ -814,8 +810,9 @@ Item {
 
         root.swipeDragging = false;
         root.swipeSettling = true;
-        root.swipeStartProgress = 0;
-        root.swipeProgress = 0;
+        // Restore start presentation and progress for continuous geometry.
+        root.swipeProgress = root.swipeStartProgress;
+        root.forcedState = root.swipeStartForcedState;
         root.setUserInteracting(false);
         swipeSettleTimer.restart();
     }
@@ -1598,8 +1595,11 @@ Item {
         interval: IslandMotion.swipeSettleDuration
         repeat: false
         onTriggered: {
+            // Settle complete: drop gesture phase only. Geometry follows state.
             root.swipeSettling = false;
             root.swipeStartProgress = 0;
+            root.swipeStartForcedState = "";
+            root.swipeProgress = 0;
         }
     }
 

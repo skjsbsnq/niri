@@ -12,7 +12,7 @@ Design (review round 2):
 - Anchor tests (non-xfail) assert the V1 bug still exists; when production is
   fixed those anchors fail and must be updated in the same task.
 
-Target tasks: T09 swipe (T05/T07/T08 fixed).
+Target tasks: none remaining in this file (T05–T09 fixed).
 """
 
 from __future__ import annotations
@@ -260,8 +260,8 @@ class DynamicIslandV2ExpectedFailureTests(unittest.TestCase):
         sim.present_workspace()
         self.assertEqual(sim.state, "transient_workspace")
 
-    def test_v1_swipe_settle_uses_resting_width(self) -> None:
-        self.assertFalse(resolve_swipe_keeps_settle_target(self.island_src))
+    def test_v1_swipe_settle_sim_documents_old_bug(self) -> None:
+        # Historical V1 sim still zeros progress on resolve; production fixed in T09.
         sim = IslandSimV1(has_media=True)
         drag, settle, final = sim.resolve_swipe_enter_media_widths()
         resting = float(sim.resting_width(sim.resting_state()))
@@ -309,21 +309,14 @@ class DynamicIslandV2ExpectedFailureTests(unittest.TestCase):
         # T07: expected-failure removed; production yields to active notification.
         self.assertTrue(workspace_yields_to_active_notification(self.island_src))
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="target T09: resolveSwipe must not zero swipeProgress during settle",
-    )
     def test_desired_swipe_settle_keeps_target(self) -> None:
+        # T09: expected-failure removed; resolve keeps settle target progress.
         self.assertTrue(resolve_swipe_keeps_settle_target(self.island_src))
-        # When fixed, settle width must not collapse to resting_media (190).
         sim = IslandSimV1(has_media=True)
-        # Desired production would not clear progress; simulate fixed path:
-        # if progress kept at enter threshold, settle ≈ side width.
-        if resolve_swipe_keeps_settle_target(self.island_src):
-            sim.swipe_settling = True
-            sim.swipe_progress = 1.0
-            settle = sim.swipe_preview_width()
-            self.assertGreaterEqual(settle, 360.0)
+        sim.swipe_settling = True
+        sim.swipe_progress = 1.0
+        settle = sim.swipe_preview_width()
+        self.assertGreaterEqual(settle, 360.0)
 
     def test_desired_event_owner_pin_in_target_screen(self) -> None:
         # T08: expected-failure removed; production pins event/session owners.

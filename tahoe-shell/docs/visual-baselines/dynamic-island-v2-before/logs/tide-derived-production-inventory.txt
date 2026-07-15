@@ -1,0 +1,23 @@
+tahoe-shell/services/DynamicIsland.qml:573:        // matching Tide's sideSwipeVerticalTolerance behaviour.
+tahoe-shell/components/DynamicIslandMediaView.qml:8:// Tide expanded-player layout (art + title/artist + prev/play/next) using
+tahoe-shell/components/DynamicIslandSummaryView.qml:8:// expanded_summary, or as the left-swipe page. Mirrors the Tide "custom info"
+tahoe-shell/services/AppMenu.qml:28:    property string probeTargetIdentity: ""
+tahoe-shell/services/AppMenu.qml:29:    property string probeInFlightIdentity: ""
+tahoe-shell/services/AppMenu.qml:41:    readonly property bool nativeMenuAvailable: menuOwnerIdentity === probeTargetIdentity
+tahoe-shell/services/AppMenu.qml:53:        var targetIdentity = JSON.stringify([activeWindowId, activePid, activeAppId]);
+tahoe-shell/services/AppMenu.qml:54:        var targetChanged = targetIdentity !== probeTargetIdentity;
+tahoe-shell/services/AppMenu.qml:56:            probeTargetIdentity = targetIdentity;
+tahoe-shell/services/AppMenu.qml:57:            if (menuOwnerIdentity !== targetIdentity) {
+tahoe-shell/services/AppMenu.qml:83:                }), probeGeneration, targetIdentity);
+tahoe-shell/services/AppMenu.qml:96:                applyProbe("{\"status\":\"应用菜单不可用\",\"detail\":\"缺少 " + missing.join(" ") + "\"}", probeGeneration, targetIdentity);
+tahoe-shell/services/AppMenu.qml:115:        startProbe(probeGeneration, targetIdentity);
+tahoe-shell/services/AppMenu.qml:122:        if (String(identity) !== probeTargetIdentity)
+tahoe-shell/services/AppMenu.qml:131:        probeInFlightIdentity = identity;
+tahoe-shell/services/AppMenu.qml:160:        if (String(identity) !== probeTargetIdentity)
+tahoe-shell/services/AppMenu.qml:200:            root.startProbe(root.probeGeneration, root.probeTargetIdentity);
+tahoe-shell/services/AppMenu.qml:212:        probeInFlightIdentity = "";
+tahoe-shell/services/AppMenu.qml:295:            var identity = root.probeInFlightIdentity;
+tahoe-shell/services/AppMenu.qml:305:                root.finishProbe(-1, root.probeInFlightGeneration, root.probeInFlightIdentity, "");
+tahoe-shell/components/DynamicIslandMotion.js:5:// Dynamic Island motion tokens. Keep Tide-derived timings here instead of
+tahoe-shell/components/DynamicIslandMotion.js:45:// Side-swipe (T07). Thresholds and timing mirror Tide's side-swipe feel.
+tahoe-shell/components/DynamicIslandMotion.js:59:// Hover expand (T09). Matches the Tide-derived hover timing guardrails.

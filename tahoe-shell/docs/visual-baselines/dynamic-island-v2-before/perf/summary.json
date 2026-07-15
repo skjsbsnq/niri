@@ -1,0 +1,13 @@
+{
+  "samples": 300,
+  "cpu_median_pct": 2.2,
+  "cpu_p95_pct": 7.810000000000002,
+  "cpu_mean_pct": 3.1003333333333334,
+  "cpu_min_pct": 1.8,
+  "cpu_max_pct": 11.8,
+  "rss_median_kib": 648812.0,
+  "rss_peak_kib": 766648,
+  "rss_min_kib": 633296,
+  "rss_median_mib": 633.60546875,
+  "rss_peak_mib": 748.6796875
+}

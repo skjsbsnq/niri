@@ -1,0 +1,3 @@
+只在 tahoe-shell/docs 中存在：dynamic-island-v2-task-reports
+只在 tahoe-shell/docs/visual-baselines 中存在：dynamic-island-v2-before
+只在 /home/wwt/.config/quickshell/tahoe/scripts 中存在：check-xwayland-satellite-compat.sh

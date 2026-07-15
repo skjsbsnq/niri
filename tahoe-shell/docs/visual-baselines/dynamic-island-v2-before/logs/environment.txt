@@ -1,0 +1,15 @@
+repo_root_head=2f96d003a6741dece84b47dfd5bf736a83289020
+repo_branch=main
+upstream=2f96d003a6741dece84b47dfd5bf736a83289020
+quickshell_version=Quickshell 0.3.0 (revision 1f9ca7a915619632ff143a5ea0382ee988f4d9c4, distributed by Tahoe fork)
+niri_version=niri 26.04 (ad948d24)
+niri_msg_version=Compositor version: 26.04 (ad948d24) CLI version:        26.04 (ad948d24)
+qs_pid=81938
+qs_cmd=/home/wwt/.local/bin/quickshell -p /home/wwt/.config/quickshell/tahoe
+config_path=/home/wwt/.config/quickshell/tahoe
+output=eDP-2
+mode_physical=2560x1600@239.998
+logical=2048x1280
+scale=1.25
+access_date_utc=2026-07-14T23:48:13Z
+local_date=2026-07-15

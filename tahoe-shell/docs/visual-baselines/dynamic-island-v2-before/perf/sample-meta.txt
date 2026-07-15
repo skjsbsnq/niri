@@ -1,0 +1,7 @@
+start_utc=2026-07-14T23:51:39Z
+pid=81938
+cmd=ps -o pcpu=,rss=,etime= -p 81938 every 2s for 300 samples (600s)
+scene=resting_time idle, no forced island state changes during sample
+output=eDP-2 scale=1.25 logical=2048x1280 physical=2560x1600
+theme=appearance darkMode=false; wallpaper=/home/wwt/Pictures/1.png
+end_utc=2026-07-15T00:01:40Z

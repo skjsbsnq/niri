@@ -1,0 +1,1 @@
+enabled=true; hideTopbarTime=true; leftClickAction=toggle_media; rightClickAction=none; autoExpandMedia=false; hoverExpand=false

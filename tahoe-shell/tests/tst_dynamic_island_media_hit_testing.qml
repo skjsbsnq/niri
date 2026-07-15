@@ -279,6 +279,29 @@ TestCase {
         wait(50);
     }
 
+    function test_scene_swap_exits_before_replacing_content() {
+        resetCounts();
+        compare(overlay.contentState, "expanded_media");
+        islandService.presentation = "resting_time";
+        wait(0);
+        compare(overlay.desiredContentState, "resting_time");
+        compare(overlay.contentState, "expanded_media");
+        compare(overlay.contentTransitionRunning, true);
+
+        // V2 exit is 110ms. The old scene remains mounted until it is fully
+        // transparent, then the compact scene enters during the geometry morph.
+        wait(130);
+        compare(overlay.contentState, "resting_time");
+        verify(overlay.contentLayerOpacity < 1);
+        wait(190);
+        compare(overlay.contentTransitionRunning, false);
+        compare(overlay.contentLayerOpacity, 1);
+
+        // The settled compact capsule still routes its center to handleChipClick.
+        clickAt(Qt.point(400, 20));
+        compare(capsuleClicks, 1);
+    }
+
     function test_target_screen_inactive_hides_media_hits() {
         // Rewrite exposes ownScreenName as a writable property so multi-screen
         // activeForScreen can be exercised without a real multi-output compositor.

@@ -85,6 +85,10 @@ Item {
     property bool timerPaused: false
     property bool timerFinished: false
     property bool timerContentVisible: false
+    // Overlay owns scene-to-scene crossfades. While it is swapping at zero
+    // opacity, local scene Behaviors must settle immediately instead of adding
+    // a second fade on top of the host transition.
+    property bool sceneTransitionExternallyOwned: false
     signal timerPauseResumeRequested()
     signal timerCancelRequested()
     signal timerControlPressed()
@@ -274,12 +278,14 @@ Item {
         visible: opacity > 0.01
 
         Behavior on opacity {
+            enabled: !root.sceneTransitionExternallyOwned
             NumberAnimation {
                 duration: root.compactContentMotionMs
                 easing.type: IslandMotion.v2ContentEasing
             }
         }
         Behavior on anchors.topMargin {
+            enabled: !root.sceneTransitionExternallyOwned
             NumberAnimation {
                 duration: root.compactContentMotionMs
                 easing.type: IslandMotion.v2ContentEasing
@@ -365,12 +371,14 @@ Item {
         visible: opacity > 0.01
 
         Behavior on opacity {
+            enabled: !root.sceneTransitionExternallyOwned
             NumberAnimation {
                 duration: root.compactContentMotionMs
                 easing.type: IslandMotion.v2ContentEasing
             }
         }
         Behavior on anchors.topMargin {
+            enabled: !root.sceneTransitionExternallyOwned
             NumberAnimation {
                 duration: root.compactContentMotionMs
                 easing.type: IslandMotion.v2ContentEasing
@@ -395,6 +403,7 @@ Item {
         visible: opacity > 0.01
 
         Behavior on opacity {
+            enabled: !root.sceneTransitionExternallyOwned
             NumberAnimation { duration: IslandMotion.contentEnterMs(root.settingsService); easing.type: IslandMotion.v2ContentEasing }
         }
 
@@ -474,6 +483,7 @@ Item {
         }
 
         Behavior on opacity {
+            enabled: !root.sceneTransitionExternallyOwned
             NumberAnimation {
                 duration: root.notificationActive
                     ? root.notificationFadeInDuration
@@ -540,12 +550,14 @@ Item {
         }
 
         Behavior on opacity {
+            enabled: !root.sceneTransitionExternallyOwned
             NumberAnimation {
                 duration: root.compactContentMotionMs
                 easing.type: IslandMotion.v2ContentEasing
             }
         }
         Behavior on x {
+            enabled: !root.sceneTransitionExternallyOwned
             NumberAnimation {
                 duration: root.compactContentMotionMs
                 easing.type: IslandMotion.v2ContentEasing
@@ -576,6 +588,7 @@ Item {
         onTimerInteractionReleased: root.timerControlReleased()
 
         Behavior on opacity {
+            enabled: !root.sceneTransitionExternallyOwned
             NumberAnimation {
                 duration: IslandMotion.contentEnterMs(root.settingsService)
                 easing.type: IslandMotion.v2ContentEasing
@@ -625,7 +638,7 @@ Item {
             onControlReleased: root.mediaControlReleased()
 
             Behavior on opacity {
-                enabled: root.mediaExpandedContentVisible
+                enabled: root.mediaExpandedContentVisible && !root.sceneTransitionExternallyOwned
                 NumberAnimation {
                     duration: IslandMotion.contentEnterMs(root.settingsService)
                     easing.type: IslandMotion.v2ContentEasing
@@ -665,6 +678,7 @@ Item {
         }
 
         Behavior on opacity {
+            enabled: !root.sceneTransitionExternallyOwned
             NumberAnimation { duration: IslandMotion.contentEnterMs(root.settingsService); easing.type: IslandMotion.v2ContentEasing }
         }
     }

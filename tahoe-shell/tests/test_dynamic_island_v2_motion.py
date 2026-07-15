@@ -66,6 +66,21 @@ class DynamicIslandV2MotionTests(unittest.TestCase):
         self.assertNotIn("notificationFadeInDuration: 280", self.content)
         self.assertNotIn("notificationFadeOutDuration: 140", self.content)
 
+    def test_overlay_coordinates_scene_swap_with_geometry(self) -> None:
+        self.assertIn("id: contentSwap", self.overlay)
+        self.assertIn('property: "contentLayerOpacity"', self.overlay)
+        self.assertIn("contentExitMs(root.settingsService)", self.overlay)
+        self.assertIn("root.contentState = root.pendingContentState", self.overlay)
+        self.assertIn("root.renderedNotificationExpanded = root.pendingNotificationExpanded", self.overlay)
+        self.assertIn("contentEnterMs(root.settingsService)", self.overlay)
+        self.assertIn("sceneTransitionExternallyOwned", self.overlay)
+        self.assertIn("sceneTransitionExternallyOwned", self.content)
+        # OSD remains immediate instead of joining the staged scene swap.
+        self.assertIn('if (next === "transient_osd")', self.overlay)
+        # Same-presentation notification expand/collapse also uses the swap.
+        self.assertIn("onContentNotificationExpandedChanged", self.overlay)
+        self.assertIn("root.syncContentTransition(true)", self.overlay)
+
     def test_no_inline_out_cubic_in_island_scenes(self) -> None:
         offenders = []
         for path in COMPONENTS.glob("DynamicIsland*.qml"):

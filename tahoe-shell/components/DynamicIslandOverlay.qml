@@ -20,7 +20,6 @@ PanelWindow {
     property bool darkMode: false
     readonly property string islandState: dynamicIslandService ? String(dynamicIslandService.presentation || "resting_time") : "resting_time"
     readonly property string geometryState: islandState
-    readonly property string contentState: islandState
     readonly property string displayText: dynamicIslandService ? String(dynamicIslandService.displayText || "") : ""
     readonly property string secondaryText: dynamicIslandService ? String(dynamicIslandService.secondaryText || "") : ""
     readonly property string iconCode: dynamicIslandService ? String(dynamicIslandService.iconCode || "") : ""
@@ -49,9 +48,21 @@ PanelWindow {
     readonly property string effectiveGeometryState: (!!screenRole && screenRole.showActivity)
         ? geometryState
         : "resting_time"
-    readonly property string effectiveContentState: (!!screenRole && screenRole.showActivity)
-        ? contentState
+    readonly property string desiredContentState: (!!screenRole && screenRole.showActivity)
+        ? islandState
         : "resting_time"
+    readonly property string effectiveContentState: desiredContentState
+    // Geometry starts immediately, while content performs one coordinated
+    // exit/swap/enter sequence. This prevents expanded scenes from appearing
+    // inside a still-compact capsule and compact scenes from flashing inside a
+    // still-expanded capsule during collapse.
+    property string contentState: "resting_time"
+    property string pendingContentState: "resting_time"
+    property bool renderedNotificationExpanded: false
+    property bool pendingNotificationExpanded: false
+    property real contentLayerOpacity: 1
+    property bool contentTransitionsReady: false
+    readonly property bool contentTransitionRunning: contentSwap.running || contentRestore.running
     // Non-owner screens always render the resting clock, never owner activity text.
     readonly property string contentDisplayText: (!!screenRole && screenRole.showActivity)
         ? displayText
@@ -153,10 +164,10 @@ PanelWindow {
         radiusForState(effectiveGeometryState, capsuleTargetHeight),
         capsuleTargetWidth / 2,
         capsuleTargetHeight / 2)
-    readonly property bool compactResting: effectiveContentState === "resting_time" || effectiveContentState === "resting_media" || effectiveContentState === "resting_timer"
+    readonly property bool compactResting: contentState === "resting_time" || contentState === "resting_media" || contentState === "resting_timer"
     readonly property bool compactContentVisible: compactResting && capsuleShown
     // Expanded media only on the owner screen.
-    readonly property bool mediaContentVisible: effectiveContentState === "expanded_media" && activeForScreen
+    readonly property bool mediaContentVisible: contentState === "expanded_media" && activeForScreen
     readonly property bool summaryContentVisible: false
     readonly property bool showSecondaryText: contentSecondaryText.length > 0
         && !(safeProgress(progress) >= 0 && capsuleTargetHeight <= 44)
@@ -212,9 +223,9 @@ PanelWindow {
     readonly property bool timerFinished: activeForScreen && dynamicIslandService
         ? !!dynamicIslandService.timerFinished
         : false
-    readonly property bool timerContentVisible: (effectiveContentState === "resting_timer"
-            || effectiveContentState === "expanded_timer"
-            || effectiveContentState === "transient_timer_complete") && activeForScreen
+    readonly property bool timerContentVisible: (contentState === "resting_timer"
+            || contentState === "expanded_timer"
+            || contentState === "transient_timer_complete") && activeForScreen
     readonly property int workspaceCount: dynamicIslandService
         ? Number(dynamicIslandService.workspaceCount) || 0
         : 0
@@ -379,6 +390,79 @@ PanelWindow {
         return Math.max(0, Math.min(1, number));
     }
 
+    function syncContentTransition(forceSwap) {
+        var next = String(root.desiredContentState || "resting_time");
+        root.pendingContentState = next;
+        root.pendingNotificationExpanded = root.contentNotificationExpanded;
+
+        if (!root.contentTransitionsReady) {
+            root.contentState = next;
+            root.renderedNotificationExpanded = root.pendingNotificationExpanded;
+            root.contentLayerOpacity = 1;
+            return;
+        }
+
+        contentSwap.stop();
+        contentRestore.stop();
+
+        // OSD is direct hardware feedback and must own its first frame.
+        if (next === "transient_osd") {
+            root.contentState = next;
+            root.renderedNotificationExpanded = root.pendingNotificationExpanded;
+            root.contentLayerOpacity = 1;
+            return;
+        }
+
+        if (!forceSwap && next === root.contentState) {
+            contentRestore.restart();
+            return;
+        }
+
+        contentSwap.restart();
+    }
+
+    onDesiredContentStateChanged: root.syncContentTransition(false)
+    onContentNotificationExpandedChanged: {
+        if (root.desiredContentState === "transient_notification")
+            root.syncContentTransition(true);
+        else
+            root.pendingNotificationExpanded = root.contentNotificationExpanded;
+    }
+
+    SequentialAnimation {
+        id: contentSwap
+
+        NumberAnimation {
+            target: root
+            property: "contentLayerOpacity"
+            to: 0
+            duration: IslandMotion.contentExitMs(root.settingsService)
+            easing.type: IslandMotion.v2ContentEasing
+        }
+        ScriptAction {
+            script: {
+                root.contentState = root.pendingContentState;
+                root.renderedNotificationExpanded = root.pendingNotificationExpanded;
+            }
+        }
+        NumberAnimation {
+            target: root
+            property: "contentLayerOpacity"
+            to: 1
+            duration: IslandMotion.contentEnterMs(root.settingsService)
+            easing.type: IslandMotion.v2ContentEasing
+        }
+    }
+
+    NumberAnimation {
+        id: contentRestore
+        target: root
+        property: "contentLayerOpacity"
+        to: 1
+        duration: IslandMotion.contentEnterMs(root.settingsService)
+        easing.type: IslandMotion.v2ContentEasing
+    }
+
     visible: true
     aboveWindows: true
     exclusionMode: ExclusionMode.Ignore
@@ -479,6 +563,8 @@ PanelWindow {
             id: contentHost
             anchors.fill: parent
             z: 1
+            opacity: root.contentLayerOpacity
+            enabled: !root.contentTransitionRunning && opacity > 0.99
             // Keep scale fixed at 1. useSpring remains on Overlay for API/tests
             // but must not drive glass-adjacent content scale enter.
             scale: 1.0
@@ -487,7 +573,7 @@ PanelWindow {
             DynamicIslandContent {
                 id: islandContent
                 anchors.fill: parent
-                islandState: root.effectiveContentState
+                islandState: root.contentState
                 displayText: root.contentDisplayText
                 secondaryText: root.contentSecondaryText
                 iconCode: root.contentIconCode
@@ -500,7 +586,7 @@ PanelWindow {
                 notificationIconUrl: root.contentNotificationIconUrl
                 notificationUrgency: root.contentNotificationUrgency
                 notificationHasOverflow: root.contentNotificationHasOverflow
-                notificationExpanded: root.contentNotificationExpanded
+                notificationExpanded: root.renderedNotificationExpanded
                 notificationActions: root.contentNotificationActions
                 compactResting: root.compactResting
                 compactContentVisible: root.compactContentVisible
@@ -541,6 +627,7 @@ PanelWindow {
                 timerPaused: root.timerPaused
                 timerFinished: root.timerFinished
                 timerContentVisible: root.timerContentVisible
+                sceneTransitionExternallyOwned: root.contentTransitionRunning
                 onMediaPreviousRequested: if (root.dynamicIslandService) root.dynamicIslandService.mediaPrevious()
                 onMediaPlayPauseRequested: if (root.dynamicIslandService) root.dynamicIslandService.mediaTogglePlayPause()
                 onMediaNextRequested: if (root.dynamicIslandService) root.dynamicIslandService.mediaNext()
@@ -801,5 +888,14 @@ PanelWindow {
                }
            }
        }
+    }
+
+    Component.onCompleted: {
+        root.contentState = root.desiredContentState;
+        root.pendingContentState = root.desiredContentState;
+        root.renderedNotificationExpanded = root.contentNotificationExpanded;
+        root.pendingNotificationExpanded = root.contentNotificationExpanded;
+        root.contentLayerOpacity = 1;
+        root.contentTransitionsReady = true;
     }
 }

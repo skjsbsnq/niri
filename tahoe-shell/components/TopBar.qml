@@ -53,6 +53,9 @@ PanelWindow {
     readonly property bool dynamicIslandOverlayHandlesResting: dynamicIslandEnabled && dynamicIslandHideTopbarTime
     readonly property bool showTopbarTimeFallback: !dynamicIslandEnabled || !dynamicIslandHideTopbarTime
     readonly property bool chipInteractive: dynamicIslandEnabled && !dynamicIslandOverlayHandlesResting
+    readonly property int islandInputCutoutWidth: Math.min(root.width, root.dynamicIslandInputWidth())
+    readonly property int islandInputCutoutLeft: Math.max(0, Math.floor((root.width - root.islandInputCutoutWidth) / 2))
+    readonly property int islandInputCutoutRight: Math.min(root.width, root.islandInputCutoutLeft + root.islandInputCutoutWidth)
     readonly property bool batteryAvailable: batteryService && batteryService.available
     // Single InputMethod owner language glyph (中/EN/あ/한/Aa/--).
     readonly property string inputMethodDisplayText: inputMethodService
@@ -109,12 +112,71 @@ PanelWindow {
         };
     }
 
+    function dynamicIslandInputWidth() {
+        if (!root.dynamicIslandOverlayHandlesResting)
+            return 0;
+
+        var presentation = root.dynamicIslandService
+            ? String(root.dynamicIslandService.presentation || "resting_time")
+            : "resting_time";
+        switch (presentation) {
+        case "expanded_media":
+            return IslandMotion.v2MediaExpandedWidthMax;
+        case "expanded_timer":
+            return IslandMotion.v2TimerExpandedWidthMax;
+        case "transient_notification":
+            return IslandMotion.v2NotificationExpandedWidthMax;
+        case "transient_osd":
+            return IslandMotion.v2OsdWidthMax;
+        case "transient_workspace":
+        case "resting_timer":
+        case "transient_timer_complete":
+            return IslandMotion.v2WorkspaceWidthMax;
+        case "resting_media":
+        case "resting_time":
+        default:
+            // The visual clock may be narrower, but the stable center reserve is
+            // intentionally non-interactive while the overlay owns the island.
+            return IslandMotion.v2CompactMediaWidthMax;
+        }
+    }
+
     visible: true
 
     anchors {
         left: true
         right: true
         top: true
+    }
+
+    // TopBar and DynamicIslandOverlay are sibling Top-layer surfaces. Keep a
+    // center input region aligned with the live island so islandInputProxy can
+    // forward clicks when the compositor stacks TopBar above the overlay.
+    mask: Region {
+        Region {
+            x: 0
+            y: 0
+            width: root.dynamicIslandOverlayHandlesResting
+                ? root.islandInputCutoutLeft
+                : root.width
+            height: root.height
+        }
+        Region {
+            x: root.islandInputCutoutRight
+            y: 0
+            width: root.dynamicIslandOverlayHandlesResting
+                ? Math.max(0, root.width - root.islandInputCutoutRight)
+                : 0
+            height: root.height
+        }
+        Region {
+            x: root.islandInputCutoutLeft
+            y: 0
+            width: root.dynamicIslandOverlayHandlesResting
+                ? root.islandInputCutoutWidth
+                : 0
+            height: root.height
+        }
     }
 
     exclusiveZone: 40
@@ -870,6 +932,65 @@ PanelWindow {
                     }
                 }
             }
+        }
+    }
+
+    // Wayland does not guarantee sibling Top-layer stacking order. If TopBar is
+    // above DynamicIslandOverlay, this proxy owns the center input span and
+    // forwards the same click/hover contract instead of silently swallowing it.
+    Item {
+        id: islandInputProxy
+        anchors.top: parent.top
+        anchors.horizontalCenter: parent.horizontalCenter
+        width: root.islandInputCutoutWidth
+        height: root.height
+        z: 100
+        visible: root.dynamicIslandOverlayHandlesResting
+
+        MouseArea {
+            anchors.fill: parent
+            enabled: islandInputProxy.visible && !!root.dynamicIslandService
+            acceptedButtons: Qt.LeftButton | Qt.RightButton
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onPressed: {
+                proxyHoverExpand.stop();
+                proxyHoverCollapse.stop();
+                root.dynamicIslandService.setUserInteracting(true);
+            }
+            onReleased: root.dynamicIslandService.setUserInteracting(false)
+            onCanceled: root.dynamicIslandService.setUserInteracting(false)
+            onClicked: function(mouse) {
+                root.dynamicIslandService.handleChipClick(
+                    mouse.button,
+                    root.screen ? String(root.screen.name || "") : "");
+            }
+            onEntered: {
+                if (!root.dynamicIslandHoverExpand)
+                    return;
+                proxyHoverCollapse.stop();
+                proxyHoverExpand.restart();
+            }
+            onExited: {
+                proxyHoverExpand.stop();
+                if (root.dynamicIslandHoverExpand)
+                    proxyHoverCollapse.restart();
+            }
+        }
+
+        Timer {
+            id: proxyHoverExpand
+            interval: IslandMotion.hoverExpandDelayMs
+            repeat: false
+            onTriggered: root.dynamicIslandService.requestHoverExpand(
+                root.screen ? String(root.screen.name || "") : "")
+        }
+
+        Timer {
+            id: proxyHoverCollapse
+            interval: IslandMotion.hoverCollapseDelayMs
+            repeat: false
+            onTriggered: root.dynamicIslandService.requestHoverCollapse()
         }
     }
 }

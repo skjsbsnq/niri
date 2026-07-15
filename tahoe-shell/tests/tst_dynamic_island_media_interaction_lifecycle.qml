@@ -73,7 +73,8 @@ TestCase {
         resetState();
     }
 
-    // Play/pause center button coordinates (same layout as hit-testing tests).
+    // Play/pause center button: MediaView fills 400×200 window; control row
+    // bottomMargin 10, hit 44 → center y = 200 - 10 - 22 = 168.
     property int btnX: 200
     property int btnY: 168
 

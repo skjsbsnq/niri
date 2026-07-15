@@ -186,16 +186,19 @@ TestCase {
         // Capsule: expanded_media mid-band 418×166 (T11 V2), top inset 4,
         // centered in 800-wide window. Controls: bottomMargin 10, hit 44 →
         // button center ≈ surface.y + height - 32.
+        // T17 Row: three 44px hits, spacing 18 → centers at mid ± 62.
         var mediaW = 418;
         var mediaH = 166;
         var topInset = 4;
         var left = Math.round((800 - mediaW) / 2);
+        var midX = left + Math.round(mediaW / 2);
         var y = topInset + mediaH - 32;
+        var gap = 62; // 44/2 + 18 + 44/2
         if (which === "prev")
-            return Qt.point(left + Math.round(mediaW * 0.29), y);
+            return Qt.point(midX - gap, y);
         if (which === "next")
-            return Qt.point(left + Math.round(mediaW * 0.71), y);
-        return Qt.point(left + Math.round(mediaW * 0.5), y);
+            return Qt.point(midX + gap, y);
+        return Qt.point(midX, y);
     }
 
     function clickAt(pt) {

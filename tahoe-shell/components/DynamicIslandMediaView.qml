@@ -4,9 +4,10 @@ import QtQuick
 import "DynamicIslandMotion.js" as IslandMotion
 import "Motion.js" as Motion
 
-// Expanded media controls rendered inside the island capsule. Mirrors the
-// Tide expanded-player layout (art + title/artist + prev/play/next) using
-// Tahoe's own MPRIS service. No scrubber in the first version.
+// V2 expanded media (T17): 64×64 art, 16px title / 12px artist, timeline,
+// 36px accent play/pause + 32px prev/next (44px hit). TahoeSymbol only.
+// No hand-drawn path glyphs, no fake sine spectrum, no album-art blur.
+// Active player / capabilities come from Controls via DynamicIsland.
 Item {
     id: root
 
@@ -22,61 +23,77 @@ Item {
     property bool canPlayPause: false
     property bool canPrev: false
     property bool canNext: false
-    // Optional: when motion profile is reduced, freeze visualizer (no phase ticks).
     property var settingsService
-    property color textPrimary: "#f7f9fc"
-    property color textSecondary: "#b9c0cc"
-    property color accent: "#b56cff"
+    property color textPrimary: "#f7f8fa"
+    property color textSecondary: "#aeb6c2"
+    property color accentColor: "#0a84ff"
+    property color trackColor: "#30ffffff"
+    property color controlFill: "#20ffffff"
+    property color artFallbackFill: "#28ffffff"
     readonly property bool reducedMotion: Motion.reducedMotion(root.settingsService)
+
     signal previousRequested()
     signal playPauseRequested()
     signal nextRequested()
     signal controlPressed()
     signal controlReleased()
 
-    readonly property int badgeSize: 56
-    readonly property int controlSize: 26
+    readonly property int badgeSize: 64
+    readonly property int playSize: 36
+    readonly property int skipSize: 32
     readonly property int controlHit: 44
-    readonly property int fadeDuration: IslandMotion.overlayContentDuration + 90
-    readonly property bool showArt: artUrl.length > 0
+    readonly property bool showArt: root.safeArtUrl.length > 0
+    readonly property string safeArtUrl: {
+        var url = String(root.artUrl || "").trim();
+        if (url.length === 0)
+            return "";
+        if (url.indexOf("http://") === 0
+                || url.indexOf("https://") === 0
+                || url.indexOf("file://") === 0
+                || url.indexOf("image://") === 0
+                || url.indexOf("/") === 0)
+            return url;
+        return "";
+    }
     readonly property real safeProgress: Math.max(0, Math.min(1, Number(progress) || 0))
     readonly property bool showTimeline: positionSupported || durationSupported || duration > 0
+    readonly property int progressDurationMs: root.reducedMotion
+        ? IslandMotion.v2ReducedContentMs
+        : IslandMotion.overlayProgressDuration
 
-    // Visibility/opacity are owned by DynamicIslandContent (mediaExpandedContentVisible).
-    // Do not force visible:true here — multi-screen Overlay instances must be able to
-    // hide non-target MediaViews so visualizerTimer stops (Task 08).
+    // Visibility/opacity owned by DynamicIslandContent (mediaExpandedContentVisible).
     anchors.fill: parent
 
     Item {
         id: topRow
-
         anchors {
             left: parent.left
             right: parent.right
             top: parent.top
-            leftMargin: 18
-            rightMargin: 18
-            topMargin: 18
+            leftMargin: 16
+            rightMargin: 16
+            topMargin: 16
         }
         height: root.badgeSize
 
         Rectangle {
             id: artBadge
-
             width: root.badgeSize
             height: root.badgeSize
-            radius: 13
-            color: "#2c2c2e"
+            radius: 12
+            color: root.artFallbackFill
             clip: true
             anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
 
+            // Only load while this expanded scene is visible (hidden outputs stay cold).
             Image {
+                id: artImage
                 anchors.fill: parent
-                source: root.artUrl
+                source: (root.visible && root.showArt) ? root.safeArtUrl : ""
                 fillMode: Image.PreserveAspectCrop
-                visible: root.showArt
-                sourceSize: Qt.size(112, 112)
+                visible: root.showArt && status === Image.Ready
+                sourceSize: Qt.size(128, 128)
                 asynchronous: true
             }
 
@@ -84,8 +101,8 @@ Item {
                 anchors.centerIn: parent
                 name: "\ue405" // music_note
                 color: root.textSecondary
-                size: 26
-                visible: !root.showArt
+                size: 28
+                visible: !artImage.visible
             }
         }
 
@@ -93,8 +110,7 @@ Item {
             anchors {
                 left: artBadge.right
                 leftMargin: 14
-                right: visualizerBox.left
-                rightMargin: 12
+                right: parent.right
                 verticalCenter: parent.verticalCenter
             }
             spacing: 4
@@ -103,8 +119,9 @@ Item {
                 width: parent.width
                 text: root.trackTitle.length > 0 ? root.trackTitle : "正在播放"
                 color: root.textPrimary
-                font.pixelSize: 15
+                font.pixelSize: 16
                 font.weight: Font.DemiBold
+                font.letterSpacing: 0
                 elide: Text.ElideRight
                 maximumLineCount: 1
             }
@@ -114,61 +131,82 @@ Item {
                 text: root.trackArtist
                 color: root.textSecondary
                 font.pixelSize: 12
+                font.letterSpacing: 0
                 elide: Text.ElideRight
                 maximumLineCount: 1
                 visible: text.length > 0
             }
         }
+    }
 
-        Item {
-            id: visualizerBox
-            width: 36
-            height: 22
+    Item {
+        id: timeline
+        anchors {
+            left: parent.left
+            right: parent.right
+            top: topRow.bottom
+            topMargin: 12
+            leftMargin: 16
+            rightMargin: 16
+        }
+        height: 22
+        opacity: root.showTimeline ? 1 : 0.45
+
+        Rectangle {
+            id: progressTrack
             anchors {
+                left: parent.left
                 right: parent.right
-                verticalCenter: parent.verticalCenter
+                top: parent.top
             }
+            height: 4
+            radius: 2
+            color: root.trackColor
 
-            Row {
-                anchors.centerIn: parent
+            Rectangle {
+                width: parent.width * root.safeProgress
                 height: parent.height
-                spacing: 3
+                radius: parent.radius
+                color: root.accentColor
 
-                Repeater {
-                    model: 5
-
-                    delegate: Rectangle {
-                        required property int index
-                        width: 3
-                        // Reduced motion: static paused silhouette even while playing.
-                        height: (root.isPlaying && !root.reducedMotion)
-                            ? 4 + (parent.height - 4) * root.visualizerLevel(index)
-                            : 4 + (parent.height - 4) * root.pausedLevel(index)
-                        radius: 1.5
-                        color: (root.isPlaying && !root.reducedMotion) ? root.accent : "#5f4b72"
-                        anchors.verticalCenter: parent.verticalCenter
-
-                        Behavior on height {
-                            NumberAnimation {
-                                // Match visualizerTimer so playing bars settle before retarget.
-                                // Reduced motion: zero duration (instant, no continuous work).
-                                duration: root.reducedMotion
-                                    ? 0
-                                    : (root.isPlaying
-                                        ? IslandMotion.visualizerPlayingDuration
-                                        : IslandMotion.visualizerPausedDuration)
-                                easing.type: IslandMotion.overlayColorEasing
-                            }
-                        }
+                Behavior on width {
+                    NumberAnimation {
+                        duration: root.progressDurationMs
+                        easing.type: IslandMotion.overlayProgressEasing
                     }
                 }
             }
+        }
+
+        Text {
+            anchors {
+                left: parent.left
+                bottom: parent.bottom
+            }
+            text: root.formatTime(root.positionSupported ? root.position : 0)
+            color: root.textSecondary
+            font.pixelSize: 10
+            font.letterSpacing: 0
+            horizontalAlignment: Text.AlignLeft
+        }
+
+        Text {
+            anchors {
+                right: parent.right
+                bottom: parent.bottom
+            }
+            text: root.durationSupported || root.duration > 0
+                  ? root.formatTime(root.duration)
+                  : "--:--"
+            color: root.textSecondary
+            font.pixelSize: 10
+            font.letterSpacing: 0
+            horizontalAlignment: Text.AlignRight
         }
     }
 
     Item {
         id: controlRow
-
         anchors {
             left: parent.left
             right: parent.right
@@ -179,14 +217,16 @@ Item {
 
         Row {
             anchors.centerIn: parent
-            spacing: 40
+            spacing: 18
 
             MediaControlButton {
-                size: root.controlSize
+                size: root.skipSize
                 hit: root.controlHit
                 controlEnabled: root.canPrev
-                glyph: "prev"
+                role: "prev"
                 primaryColor: root.textPrimary
+                accentColor: root.accentColor
+                filled: false
                 onPressed: {
                     root.controlPressed();
                     if (root.canPrev)
@@ -197,11 +237,13 @@ Item {
             }
 
             MediaControlButton {
-                size: root.controlSize
+                size: root.playSize
                 hit: root.controlHit
                 controlEnabled: root.canPlayPause
-                glyph: root.isPlaying ? "pause" : "play"
-                primaryColor: root.textPrimary
+                role: root.isPlaying ? "pause" : "play"
+                primaryColor: "#ffffff"
+                accentColor: root.accentColor
+                filled: true
                 onPressed: {
                     root.controlPressed();
                     if (root.canPlayPause)
@@ -212,11 +254,13 @@ Item {
             }
 
             MediaControlButton {
-                size: root.controlSize
+                size: root.skipSize
                 hit: root.controlHit
                 controlEnabled: root.canNext
-                glyph: "next"
+                role: "next"
                 primaryColor: root.textPrimary
+                accentColor: root.accentColor
+                filled: false
                 onPressed: {
                     root.controlPressed();
                     if (root.canNext)
@@ -228,98 +272,6 @@ Item {
         }
     }
 
-    Item {
-        id: timeline
-
-        anchors {
-            left: parent.left
-            right: parent.right
-            top: topRow.bottom
-            topMargin: 8
-            leftMargin: 22
-            rightMargin: 22
-        }
-        height: 26
-        opacity: root.showTimeline ? 1 : 0.45
-
-        Row {
-            id: timeRow
-            anchors {
-                left: parent.left
-                right: parent.right
-                top: parent.top
-            }
-            height: 12
-
-            Text {
-                width: parent.width / 2
-                text: root.formatTime(root.positionSupported ? root.position : 0)
-                color: root.textSecondary
-                font.pixelSize: 10
-                horizontalAlignment: Text.AlignLeft
-                verticalAlignment: Text.AlignVCenter
-            }
-
-            Text {
-                width: parent.width / 2
-                text: root.durationSupported || root.duration > 0 ? root.formatTime(root.duration) : "--:--"
-                color: root.textSecondary
-                font.pixelSize: 10
-                horizontalAlignment: Text.AlignRight
-                verticalAlignment: Text.AlignVCenter
-            }
-        }
-
-        Rectangle {
-            anchors {
-                left: parent.left
-                right: parent.right
-                bottom: parent.bottom
-                bottomMargin: 2
-            }
-            height: 3
-            radius: 2
-            color: "#2fffffff"
-
-            Rectangle {
-                width: parent.width * root.safeProgress
-                height: parent.height
-                radius: parent.radius
-                color: root.textPrimary
-
-                Behavior on width {
-                    NumberAnimation { duration: IslandMotion.overlayProgressDuration; easing.type: IslandMotion.overlayProgressEasing }
-                }
-            }
-        }
-    }
-
-    // Single phase owner. Update interval equals playing bar animation duration
-    // so each height Behavior can settle before the next target (Task 21).
-    // Stops when paused, hidden, reduced motion, or not the active screen's
-    // expanded media instance (Task 08 multi-screen gate via parent visible).
-    Timer {
-        id: visualizerTimer
-        interval: IslandMotion.visualizerUpdateMs
-        repeat: true
-        running: root.isPlaying && root.visible && !root.reducedMotion
-        onTriggered: root.visualizerPhase += IslandMotion.visualizerPhaseStep
-    }
-
-    property real visualizerPhase: 0
-
-    function visualizerLevel(index) {
-        var phase = root.visualizerPhase + index * 0.78;
-        var primary = (Math.sin(phase) + 1) * 0.5;
-        var secondary = (Math.sin(phase * 2 + index * 0.95) + 1) * 0.5;
-        return 0.22 + primary * 0.42 + secondary * 0.24;
-    }
-
-    function pausedLevel(index) {
-        var levels = [0.34, 0.58, 0.82, 0.58, 0.34];
-        return levels[index] || 0.4;
-    }
-
     function formatTime(seconds) {
         var total = Math.max(0, Math.floor(Number(seconds) || 0));
         var minutes = Math.floor(total / 60);
@@ -329,13 +281,15 @@ Item {
 
     component MediaControlButton: Item {
         id: btn
-        property int size: 26
+        property int size: 32
         property int hit: 44
         property bool controlEnabled: true
-        property string glyph: "play"
+        // "prev" | "play" | "pause" | "next"
+        property string role: "play"
         property color primaryColor: "#ffffff"
-        property real pressScale: 0.8
-        // Tracks an in-flight pointer grab so release/cancel/destroy stay paired.
+        property color accentColor: "#0a84ff"
+        property bool filled: false
+        property real pressScale: 0.92
         property bool interactionActive: false
         signal pressed()
         signal released()
@@ -345,14 +299,14 @@ Item {
         height: hit
         scale: interactionActive ? pressScale : 1
 
-        // Local exception: press feedback must be shorter than overlay content
-        // fades; the component still reuses the Dynamic Island easing token.
         Behavior on scale {
-            NumberAnimation { duration: 100; easing.type: IslandMotion.overlayColorEasing }
+            NumberAnimation {
+                duration: root.reducedMotion ? 0 : 100
+                easing.type: IslandMotion.overlayColorEasing
+            }
         }
 
         function beginInteraction() {
-            // root.visible is the Content opacity gate; btn.visible is local.
             if (!btn.controlEnabled || !btn.visible || !root.visible || btn.interactionActive)
                 return false;
             btn.interactionActive = true;
@@ -375,9 +329,6 @@ Item {
                 btn.endInteraction(true);
         }
 
-        // Product collapse gates DynamicIslandMediaView via
-        // `visible: opacity > 0.01` in Content — ancestor hide does not flip
-        // the button's own `visible` property, so watch the media view root.
         Connections {
             target: root
             function onVisibleChanged() {
@@ -387,78 +338,49 @@ Item {
         }
 
         Component.onDestruction: {
-            // Destroy while grabbed must clear interacting via canceled.
             btn.endInteraction(true);
         }
 
-        Canvas {
+        Rectangle {
             anchors.centerIn: parent
             width: btn.size
             height: btn.size
-            property string currentGlyph: btn.glyph
-            property bool currentEnabled: btn.controlEnabled
-            property color fillColor: btn.interactionActive ? "#8e8e93" : (btn.controlEnabled ? btn.primaryColor : "#555560")
-            onCurrentGlyphChanged: requestPaint()
-            onCurrentEnabledChanged: requestPaint()
-            onFillColorChanged: requestPaint()
-            onPaint: {
-                var ctx = getContext("2d");
-                ctx.clearRect(0, 0, width, height);
-                ctx.fillStyle = ctx.strokeStyle = fillColor;
-                ctx.lineJoin = "round";
-                ctx.lineWidth = 2;
+            radius: btn.size / 2
+            color: btn.filled
+                   ? (btn.controlEnabled
+                      ? btn.accentColor
+                      : Qt.rgba(btn.accentColor.r, btn.accentColor.g, btn.accentColor.b, 0.35))
+                   : "transparent"
+            opacity: btn.controlEnabled ? 1 : 0.45
 
-                if (btn.glyph === "prev") {
-                    ctx.beginPath();
-                    ctx.rect(2, 4, 3, 18);
-                    ctx.moveTo(13, 4);
-                    ctx.lineTo(5, 13);
-                    ctx.lineTo(13, 22);
-                    ctx.closePath();
-                    ctx.fill();
-                    ctx.stroke();
-                } else if (btn.glyph === "next") {
-                    ctx.beginPath();
-                    ctx.moveTo(4, 4);
-                    ctx.lineTo(12, 13);
-                    ctx.lineTo(4, 22);
-                    ctx.closePath();
-                    ctx.moveTo(13, 4);
-                    ctx.lineTo(21, 13);
-                    ctx.lineTo(13, 22);
-                    ctx.closePath();
-                    ctx.rect(21, 4, 3, 18);
-                    ctx.fill();
-                    ctx.stroke();
-                } else if (btn.glyph === "pause") {
-                    ctx.beginPath();
-                    ctx.rect(6, 4, 5, 18);
-                    ctx.rect(15, 4, 5, 18);
-                    ctx.fill();
-                } else {
-                    ctx.beginPath();
-                    ctx.moveTo(7, 4);
-                    ctx.lineTo(22, 13);
-                    ctx.lineTo(7, 22);
-                    ctx.closePath();
-                    ctx.fill();
-                    ctx.stroke();
+            // Match ControlCenter + compact island media transport glyphs.
+            TahoeSymbol {
+                anchors.centerIn: parent
+                name: {
+                    if (btn.role === "prev")
+                        return "\ue045";
+                    if (btn.role === "next")
+                        return "\ue044";
+                    if (btn.role === "pause")
+                        return "\ue034";
+                    return "\ue037"; // play
                 }
+                color: btn.filled
+                       ? btn.primaryColor
+                       : (btn.controlEnabled ? btn.primaryColor : "#555560")
+                size: btn.filled ? 20 : 18
             }
         }
 
         MouseArea {
             id: mouse
             anchors.fill: parent
-            // Always enabled so the hit rect absorbs presses when the control
-            // is disabled (prevents fall-through to capsule click/swipe).
-            // Actions and interacting still require controlEnabled via begin.
+            // Always enabled so the hit rect absorbs presses when disabled
+            // (prevents fall-through to capsule click/swipe).
             enabled: true
             preventStealing: true
-            cursorShape: Qt.PointingHandCursor
+            cursorShape: btn.controlEnabled ? Qt.PointingHandCursor : Qt.ArrowCursor
             onPressed: function(mouseEvent) {
-                // beginInteraction is a no-op when disabled; always accept so
-                // the event does not fall through to the capsule MouseArea.
                 btn.beginInteraction();
                 mouseEvent.accepted = true;
             }

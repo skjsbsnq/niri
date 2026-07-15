@@ -3,21 +3,17 @@ import QtTest
 import QtQuick.Window
 import "../components" as Components
 
+// T17: expanded media no longer runs a visualizer Timer. Keep a multi-instance
+// gate smoke test so non-owner / collapsed scenes stay free of side effects.
 TestCase {
     id: testCase
-    name: "DynamicIslandVisualizerScreenGate"
+    name: "DynamicIslandExpandedMediaScreenGate"
     when: windowShown
 
-    property int tickMs: 120
-    property int waitTicks: 5
-    property int fadeInMs: 50
-
-    // Real visible windows so QQuickItem effective visibility is true (Timer
-    // bindings use Item.visible which is effective, not local-only).
     Window {
         id: windowA
         width: 400
-        height: 140
+        height: 166
         visible: true
         color: "transparent"
         flags: Qt.FramelessWindowHint
@@ -25,7 +21,7 @@ TestCase {
     Window {
         id: windowB
         width: 400
-        height: 140
+        height: 166
         visible: true
         color: "transparent"
         flags: Qt.FramelessWindowHint
@@ -49,110 +45,61 @@ TestCase {
             "mediaTrackArtist": "Artist",
             "settingsService": null
         });
-        verify(item !== null);
-        item.anchors.fill = win.contentItem;
         return item;
     }
 
     function mediaChild(content) {
-        // T11: expanded media is Loader-hosted; resolve Loader.item when present.
-        for (var i = 0; i < content.children.length; i++) {
-            var child = content.children[i];
-            if (child && child.visualizerPhase !== undefined)
-                return child;
-            if (child && child.item && child.item.visualizerPhase !== undefined)
-                return child.item;
+        // Loader-hosted DynamicIslandMediaView.
+        for (var i = 0; i < content.children.length; ++i) {
+            var c = content.children[i];
+            if (c && c.objectName === "mediaLoader")
+                return c.item;
         }
-        return null;
+        // Walk loaders by active/sourceComponent presence.
+        function walk(item) {
+            if (!item)
+                return null;
+            if (item.artUrl !== undefined && item.playPauseRequested !== undefined)
+                return item;
+            if (item.children) {
+                for (var j = 0; j < item.children.length; ++j) {
+                    var found = walk(item.children[j]);
+                    if (found)
+                        return found;
+                }
+            }
+            // Loader
+            if (item.item)
+                return walk(item.item);
+            return null;
+        }
+        return walk(content);
     }
 
-    function test_only_visible_instance_advances_phase() {
-        var target = makeContent(windowA, true, true);
-        var hidden = makeContent(windowB, true, false);
-        wait(fadeInMs);
-
-        var tMedia = mediaChild(target);
-        var hMedia = mediaChild(hidden);
-        verify(tMedia !== null);
-        // T11 Loader: non-expanded surfaces do not instantiate MediaView at all.
-        verify(hMedia === null, "non-target must not instantiate expanded media");
-        verify(tMedia.visible === true, "target MediaView must be effectively visible");
-
-        var phaseTarget0 = tMedia.visualizerPhase;
-        wait(tickMs * waitTicks + 40);
-
-        verify(tMedia.visualizerPhase > phaseTarget0, "target screen phase must advance");
-        // Hidden side remains uninstantiated for the whole wait window.
-        compare(mediaChild(hidden), null, "hidden multi-screen instance must stay unloaded");
-
-        target.destroy();
-        hidden.destroy();
+    function test_collapsed_has_no_media_view() {
+        var a = makeContent(windowA, true, false);
+        wait(30);
+        compare(mediaChild(a), null);
+        a.destroy();
     }
 
-    function test_target_switch_transfers_ownership() {
+    function test_expanded_loads_media_without_timer() {
+        var a = makeContent(windowA, true, true);
+        wait(50);
+        var media = mediaChild(a);
+        verify(media !== null);
+        // No visualizerTimer property on T17 MediaView.
+        compare(media.visualizerPhase === undefined, true);
+        a.destroy();
+    }
+
+    function test_two_instances_only_expanded_has_hits_target() {
         var a = makeContent(windowA, true, true);
         var b = makeContent(windowB, true, false);
-        wait(fadeInMs);
-        var aMedia = mediaChild(a);
-        verify(aMedia !== null);
-        verify(mediaChild(b) === null, "inactive surface starts without media Loader");
-        wait(tickMs * waitTicks + 40);
-        verify(aMedia.visualizerPhase > 0, "initial target must tick");
-        var aPhase = aMedia.visualizerPhase;
-
-        a.mediaExpandedContentVisible = false;
-        a.islandState = "resting_time";
-        b.islandState = "expanded_media";
-        b.mediaExpandedContentVisible = true;
-        wait(fadeInMs);
-        wait(tickMs * waitTicks + 40);
-
-        var bMedia = mediaChild(b);
-        verify(bMedia !== null, "new target must load MediaView");
-        verify(bMedia.visualizerPhase > 0, "new target must start after switch");
-        // After unload hold, old target must not keep a ticking MediaView.
-        wait(200);
-        var aAfter = mediaChild(a);
-        if (aAfter !== null) {
-            verify(aAfter.visible === false, "outgoing media must be hidden during hold");
-            compare(aAfter.visualizerPhase, aPhase, "outgoing media must not tick while hidden");
-        }
-        verify(bMedia.visible === true);
-
+        wait(50);
+        verify(mediaChild(a) !== null);
+        compare(mediaChild(b), null);
         a.destroy();
         b.destroy();
-    }
-
-    function test_paused_and_hidden_zero_ticks() {
-        var paused = makeContent(windowA, false, true);
-        var hidden = makeContent(windowB, true, false);
-        wait(fadeInMs);
-        var pMedia = mediaChild(paused);
-        verify(pMedia !== null);
-        verify(mediaChild(hidden) === null, "hidden surface must not instantiate media");
-        var p0 = pMedia.visualizerPhase;
-        wait(tickMs * waitTicks + 40);
-        compare(pMedia.visualizerPhase, p0);
-        compare(mediaChild(hidden), null);
-        paused.destroy();
-        hidden.destroy();
-    }
-
-    function test_overlay_active_for_screen_gates_media_property() {
-        var overlayLogic = Qt.createQmlObject(
-            'import QtQuick; QtObject {' +
-            '  property string contentState: "expanded_media";' +
-            '  property bool activeForScreen: true;' +
-            '  readonly property bool mediaContentVisible: contentState === "expanded_media" && activeForScreen;' +
-            '}',
-            testCase
-        );
-        verify(overlayLogic.mediaContentVisible === true);
-        overlayLogic.activeForScreen = false;
-        verify(overlayLogic.mediaContentVisible === false);
-        overlayLogic.activeForScreen = true;
-        overlayLogic.contentState = "resting_time";
-        verify(overlayLogic.mediaContentVisible === false);
-        overlayLogic.destroy();
     }
 }

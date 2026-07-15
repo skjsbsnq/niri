@@ -536,11 +536,10 @@ Item {
             settingsService: root.settingsService
             textPrimary: root.textPrimary
             textSecondary: root.textSecondary
-            // Intentional hard-cut on collapse (not opacity>0.01 fade): MediaView's
-            // visualizerTimer is gated on Item.visible. A mid-fade visible:true would
-            // keep the timer ticking after mediaExpandedContentVisible is false.
-            // Enter still fades opacity 0→1 while visible is already true.
-            // Summary uses opacity-gated visible because it has no running Timer.
+            accentColor: root.accentColor
+            trackColor: root.progressTrackColor
+            // T17: no visualizer Timer. Hard-cut on collapse still avoids mid-fade
+            // hit targets; enter fades opacity 0→1 while visible is already true.
             opacity: root.mediaExpandedContentVisible ? 1 : 0
             visible: root.mediaExpandedContentVisible
             onPreviousRequested: root.mediaPreviousRequested()
@@ -552,7 +551,9 @@ Item {
             Behavior on opacity {
                 enabled: root.mediaExpandedContentVisible
                 NumberAnimation {
-                    duration: IslandMotion.overlayExpandedEnterFadeMs
+                    duration: Motion.reducedMotion(root.settingsService)
+                        ? IslandMotion.v2ReducedContentMs
+                        : IslandMotion.overlayExpandedEnterFadeMs
                     easing.type: IslandMotion.overlayColorEasing
                 }
             }

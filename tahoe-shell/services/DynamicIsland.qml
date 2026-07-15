@@ -3,9 +3,12 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import "../components/DynamicIslandMotion.js" as IslandMotion
+import "DynamicIslandReducer.js" as IslandReducer
 
 // Dynamic Island state owner. The service owns transient arbitration so the
 // overlay can stay a pure renderer for chip/notification/OSD states.
+// Presentation base decisions (clock/media/expand) go through IslandReducer;
+// this Item remains the sole production orchestrator and effect runner.
 Item {
     id: root
     visible: false
@@ -144,29 +147,123 @@ Item {
         return Math.max(250, 60000 - (root.now.getSeconds() * 1000 + root.now.getMilliseconds()));
     }
 
+    function presentationSlice() {
+        return {
+            "forcedState": root.forcedState,
+            "preferMediaWhenAvailable": root.preferMediaWhenAvailable,
+            "hoverExpanded": root.hoverExpanded
+        };
+    }
+
+    function presentationContext() {
+        return IslandReducer.createContext({
+            "islandEnabled": root.islandEnabled,
+            "hasMedia": root.hasMedia,
+            "autoExpandMedia": root.dynamicIslandAutoExpandMedia,
+            "userInteracting": root.userInteracting
+        });
+    }
+
+    function runReducerEffect(item) {
+        if (!item)
+            return;
+
+        switch (String(item.type || "")) {
+        case "stopTransientTimer":
+            transientTimer.stop();
+            break;
+        case "clearTransientFields":
+            root.clearTransientFields();
+            break;
+        case "clearPendingNotifications":
+            root.clearPendingNotificationIds();
+            break;
+        case "clearDisplayingNotification":
+            root.displayingNotificationId = -1;
+            break;
+        case "clearPendingOsd":
+            root.pendingOsd = null;
+            break;
+        case "clearUserInteracting":
+            root.userInteracting = false;
+            break;
+        case "clearSwipe":
+            swipeSettleTimer.stop();
+            root.swipeDragging = false;
+            root.swipeSettling = false;
+            root.swipeMoved = false;
+            root.swipeProgress = 0;
+            root.swipeStartProgress = 0;
+            break;
+        case "maybeShowPendingNotification":
+            root.maybeShowPendingNotification();
+            break;
+        case "maybeShowPendingOsd":
+            root.maybeShowPendingOsd();
+            break;
+        }
+    }
+
+    function applyReducerResult(outcome) {
+        if (!outcome || !outcome.state)
+            return outcome;
+
+        // Historical show*/collapse paths stopped timers and cleared transient
+        // fields BEFORE assigning forcedState. Commit cleanup effects first so
+        // onStateChanged drain cannot start a transient that later effects
+        // immediately kill (stuck transient_notification with no hide timer).
+        var effects = outcome.effects || [];
+        var cleanupTypes = {
+            "stopTransientTimer": true,
+            "clearTransientFields": true,
+            "clearPendingNotifications": true,
+            "clearDisplayingNotification": true,
+            "clearPendingOsd": true,
+            "clearUserInteracting": true,
+            "clearSwipe": true
+        };
+        for (var i = 0; i < effects.length; i++) {
+            if (effects[i] && cleanupTypes[String(effects[i].type || "")])
+                root.runReducerEffect(effects[i]);
+        }
+
+        var next = outcome.state;
+        root.forcedState = String(next.forcedState || "");
+        root.preferMediaWhenAvailable = next.preferMediaWhenAvailable !== false;
+        root.hoverExpanded = !!next.hoverExpanded;
+
+        for (var j = 0; j < effects.length; j++) {
+            if (effects[j] && !cleanupTypes[String(effects[j].type || "")])
+                root.runReducerEffect(effects[j]);
+        }
+
+        return outcome;
+    }
+
+    function dispatchPresentation(kind, payload) {
+        return root.applyReducerResult(IslandReducer.reduce(
+            root.presentationSlice(),
+            IslandReducer.createEvent(kind, payload),
+            root.presentationContext()
+        ));
+    }
+
     function isValidState(nextState) {
-        return root.validStates.indexOf(String(nextState || "")) >= 0;
+        return IslandReducer.isValidState(nextState);
     }
 
     function restingState() {
-        if (!root.islandEnabled)
-            return "resting_time";
-
-        return root.preferMediaWhenAvailable && root.hasMedia ? "resting_media" : "resting_time";
+        return IslandReducer.restingState(root.presentationSlice(), root.presentationContext());
     }
 
     function normalizedState(nextState) {
-        if (!root.islandEnabled)
-            return "resting_time";
-
-        var candidate = String(nextState || "");
-        if (!isValidState(candidate))
-            return restingState();
-
-        if ((candidate === "resting_media" || candidate === "expanded_media") && !root.hasMedia)
-            return "resting_time";
-
-        return candidate;
+        // state binding: normalizedState(root.forcedState) — candidate is the
+        // forced override, not the whole presentation slice.
+        return IslandReducer.presentationState({
+            "forcedState": nextState,
+            "preferMediaWhenAvailable": root.preferMediaWhenAvailable,
+            "hoverExpanded": root.hoverExpanded
+        }, root.presentationContext());
     }
 
     function timeText() {
@@ -314,104 +411,39 @@ Item {
         }
 
         // While disabled, keep baselines aligned with controls without showing.
+        // Notification identity contract requires clearPendingNotificationIds to
+        // remain source-visible on this path; reducer effects are idempotent.
         captureOsdBaselines();
-        transientTimer.stop();
-        swipeSettleTimer.stop();
         root.clearPendingNotificationIds();
-        root.displayingNotificationId = -1;
-        root.pendingOsd = null;
-        root.hoverExpanded = false;
-        root.userInteracting = false;
-        root.swipeDragging = false;
-        root.swipeSettling = false;
-        root.swipeMoved = false;
-        root.swipeProgress = 0;
-        root.swipeStartProgress = 0;
-        clearTransientFields();
-        root.forcedState = "";
+        root.dispatchPresentation("ISLAND_DISABLED");
     }
 
     function handleMediaAvailabilityChanged() {
-        if (!root.islandEnabled)
-            return;
-
-        if (!root.hasMedia && root.state === "expanded_media") {
-            root.hoverExpanded = false;
-            root.forcedState = "";
-            return;
-        }
-
-        if (root.dynamicIslandAutoExpandMedia && root.hasMedia && !root.expanded && !root.userInteracting)
-            showExpandedMedia();
+        root.dispatchPresentation("MEDIA_AVAILABILITY_CHANGED");
     }
 
     function reset() {
-        transientTimer.stop();
-        root.clearPendingNotificationIds();
-        root.displayingNotificationId = -1;
-        root.pendingOsd = null;
-        root.hoverExpanded = false;
-        root.preferMediaWhenAvailable = true;
-        clearTransientFields();
-        root.forcedState = "";
+        root.dispatchPresentation("RESET");
     }
 
     function showTime() {
-        if (!root.islandEnabled)
-            return;
-
-        transientTimer.stop();
-        root.preferMediaWhenAvailable = false;
-        clearTransientFields();
-        root.forcedState = "";
-        maybeShowPendingNotification();
+        root.dispatchPresentation("SHOW_TIME");
     }
 
     function showMedia() {
-        if (!root.islandEnabled)
-            return;
-
-        transientTimer.stop();
-        root.preferMediaWhenAvailable = true;
-        clearTransientFields();
-        root.forcedState = root.hasMedia ? "resting_media" : "";
-        maybeShowPendingNotification();
+        root.dispatchPresentation("SHOW_MEDIA");
     }
 
     function showExpandedMedia() {
-        if (!root.islandEnabled)
-            return;
-
-        transientTimer.stop();
-        root.preferMediaWhenAvailable = true;
-        clearTransientFields();
-        root.forcedState = root.hasMedia ? "expanded_media" : "expanded_summary";
+        root.dispatchPresentation("SHOW_EXPANDED_MEDIA");
     }
 
     function showExpandedSummary() {
-        if (!root.islandEnabled)
-            return;
-
-        transientTimer.stop();
-        clearTransientFields();
-        root.forcedState = "expanded_summary";
+        root.dispatchPresentation("SHOW_EXPANDED_SUMMARY");
     }
 
     function toggleExpanded() {
-        if (!root.islandEnabled)
-            return;
-
-        root.hoverExpanded = false;
-        if (root.expanded) {
-            root.forcedState = "";
-            maybeShowPendingNotification();
-            return;
-        }
-
-        if (root.hasMedia)
-            showExpandedMedia();
-        else
-            showExpandedSummary();
+        root.dispatchPresentation("TOGGLE_EXPANDED");
     }
 
     function showTransient(nextState, text, secondary, progressValue, icon, hideMs) {
@@ -644,43 +676,32 @@ Item {
         if (!root.islandEnabled || !root.dynamicIslandHoverExpand || root.expanded || root.userInteracting)
             return;
 
-        root.hoverExpanded = true;
-        if (root.hasMedia)
-            showExpandedMedia();
-        else
-            showExpandedSummary();
+        root.dispatchPresentation("HOVER_EXPAND");
     }
 
     function requestHoverCollapse() {
-        if (!root.hoverExpanded)
-            return;
-
-        root.hoverExpanded = false;
-        if (root.expanded) {
-            root.forcedState = "";
-            maybeShowPendingNotification();
-            maybeShowPendingOsd();
-        }
+        // Historical: only acts when hoverExpanded; drains pending on collapse.
+        root.dispatchPresentation("HOVER_COLLAPSE");
     }
 
     function performClickAction(action) {
         if (!root.islandEnabled)
             return;
 
-        root.hoverExpanded = false;
+        root.dispatchPresentation("CLEAR_HOVER_EXPANDED");
         switch (String(action || "toggle_media")) {
         case "summary":
             if (root.state === "expanded_summary")
-                root.forcedState = "";
+                root.dispatchPresentation("COLLAPSE");
             else
                 showExpandedSummary();
             break;
         case "notifications":
-            root.forcedState = "";
+            root.dispatchPresentation("COLLAPSE");
             root.openNotificationCenterRequested();
             break;
         case "control_center":
-            root.forcedState = "";
+            root.dispatchPresentation("COLLAPSE");
             root.openControlCenterRequested();
             break;
         case "none":

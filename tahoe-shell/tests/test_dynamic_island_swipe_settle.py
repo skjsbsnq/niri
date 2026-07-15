@@ -97,23 +97,24 @@ class SwipeSettleTests(unittest.TestCase):
         self.assertEqual(d["swipeProgress"], 1)
         self.assertEqual(d["forcedState"], "expanded_media")
         self.assertTrue(d["entered"])
+        # T11 mid-band: compact media 212, expanded media 418, summary 360.
         width = run_node({
             "op": "width",
             "progress": d["swipeProgress"],
-            "resting": 190,
+            "resting": 212,
             "left": 360,
-            "right": 400,
+            "right": 418,
         })["width"]
-        self.assertAlmostEqual(width, 400.0, places=3)
-        # V1 bug: progress 0 during settle → width == resting (190).
+        self.assertAlmostEqual(width, 418.0, places=3)
+        # V1 bug: progress 0 during settle → width == resting.
         v1 = run_node({
             "op": "width",
             "progress": 0,
-            "resting": 190,
+            "resting": 212,
             "left": 360,
-            "right": 400,
+            "right": 418,
         })["width"]
-        self.assertAlmostEqual(v1, 190.0, places=3)
+        self.assertAlmostEqual(v1, 212.0, places=3)
         self.assertGreater(width, v1)
 
     def test_enter_summary_and_return_center(self) -> None:
@@ -130,9 +131,9 @@ class SwipeSettleTests(unittest.TestCase):
         left_w = run_node({
             "op": "width",
             "progress": left["swipeProgress"],
-            "resting": 140,
+            "resting": 124,
             "left": 360,
-            "right": 400,
+            "right": 418,
         })["width"]
         self.assertAlmostEqual(left_w, 360.0, places=3)
 
@@ -150,9 +151,9 @@ class SwipeSettleTests(unittest.TestCase):
         right_w = run_node({
             "op": "width",
             "progress": right_no_media["swipeProgress"],
-            "resting": 140,
+            "resting": 124,
             "left": 360,
-            "right": 400,
+            "right": 418,
         })["width"]
         self.assertAlmostEqual(right_w, 360.0, places=3)
 

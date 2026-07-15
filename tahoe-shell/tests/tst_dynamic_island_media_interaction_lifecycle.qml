@@ -239,12 +239,16 @@ TestCase {
         content.onMediaControlReleased.connect(function() { testCase.setUserInteracting(false); });
         wait(50);
 
-        // Locate production MediaView child (has controlPressed signal).
+        // T11: MediaView lives under Loader.item (not a direct Content child).
         var mediaChild = null;
         for (var i = 0; i < content.children.length; i++) {
             var ch = content.children[i];
             if (ch && ch.controlPressed !== undefined) {
                 mediaChild = ch;
+                break;
+            }
+            if (ch && ch.item && ch.item.controlPressed !== undefined) {
+                mediaChild = ch.item;
                 break;
             }
         }

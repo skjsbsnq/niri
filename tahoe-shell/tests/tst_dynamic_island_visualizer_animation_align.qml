@@ -55,10 +55,13 @@ TestCase {
     }
 
     function mediaChild(content) {
+        // T11: expanded media is Loader-hosted; resolve Loader.item when present.
         for (var i = 0; i < content.children.length; i++) {
             var child = content.children[i];
             if (child && child.visualizerPhase !== undefined)
                 return child;
+            if (child && child.item && child.item.visualizerPhase !== undefined)
+                return child.item;
         }
         return null;
     }
@@ -71,16 +74,16 @@ TestCase {
         var tMedia = mediaChild(target);
         var hMedia = mediaChild(hidden);
         verify(tMedia !== null);
-        verify(hMedia !== null);
+        // T11 Loader: non-expanded surfaces do not instantiate MediaView at all.
+        verify(hMedia === null, "non-target must not instantiate expanded media");
         verify(tMedia.visible === true, "target MediaView must be effectively visible");
-        verify(hMedia.visible === false, "non-target MediaView must be hidden");
 
         var phaseTarget0 = tMedia.visualizerPhase;
-        var phaseHidden0 = hMedia.visualizerPhase;
         wait(tickMs * waitTicks + 40);
 
         verify(tMedia.visualizerPhase > phaseTarget0, "target screen phase must advance");
-        compare(hMedia.visualizerPhase, phaseHidden0, "hidden multi-screen instance must not tick");
+        // Hidden side remains uninstantiated for the whole wait window.
+        compare(mediaChild(hidden), null, "hidden multi-screen instance must stay unloaded");
 
         target.destroy();
         hidden.destroy();
@@ -91,12 +94,11 @@ TestCase {
         var b = makeContent(windowB, true, false);
         wait(fadeInMs);
         var aMedia = mediaChild(a);
-        var bMedia = mediaChild(b);
-        verify(aMedia !== null && bMedia !== null);
+        verify(aMedia !== null);
+        verify(mediaChild(b) === null, "inactive surface starts without media Loader");
         wait(tickMs * waitTicks + 40);
         verify(aMedia.visualizerPhase > 0, "initial target must tick");
         var aPhase = aMedia.visualizerPhase;
-        var bPhase = bMedia.visualizerPhase;
 
         a.mediaExpandedContentVisible = false;
         a.islandState = "resting_time";
@@ -105,9 +107,16 @@ TestCase {
         wait(fadeInMs);
         wait(tickMs * waitTicks + 40);
 
-        compare(aMedia.visualizerPhase, aPhase, "old target must stop after switch");
-        verify(bMedia.visualizerPhase > bPhase, "new target must start after switch");
-        verify(aMedia.visible === false);
+        var bMedia = mediaChild(b);
+        verify(bMedia !== null, "new target must load MediaView");
+        verify(bMedia.visualizerPhase > 0, "new target must start after switch");
+        // After unload hold, old target must not keep a ticking MediaView.
+        wait(200);
+        var aAfter = mediaChild(a);
+        if (aAfter !== null) {
+            verify(aAfter.visible === false, "outgoing media must be hidden during hold");
+            compare(aAfter.visualizerPhase, aPhase, "outgoing media must not tick while hidden");
+        }
         verify(bMedia.visible === true);
 
         a.destroy();
@@ -119,13 +128,12 @@ TestCase {
         var hidden = makeContent(windowB, true, false);
         wait(fadeInMs);
         var pMedia = mediaChild(paused);
-        var hMedia = mediaChild(hidden);
-        verify(pMedia !== null && hMedia !== null);
+        verify(pMedia !== null);
+        verify(mediaChild(hidden) === null, "hidden surface must not instantiate media");
         var p0 = pMedia.visualizerPhase;
-        var h0 = hMedia.visualizerPhase;
         wait(tickMs * waitTicks + 40);
         compare(pMedia.visualizerPhase, p0);
-        compare(hMedia.visualizerPhase, h0);
+        compare(mediaChild(hidden), null);
         paused.destroy();
         hidden.destroy();
     }

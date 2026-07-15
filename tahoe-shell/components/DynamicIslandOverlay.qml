@@ -7,6 +7,7 @@ import "DynamicIslandMotion.js" as IslandMotion
 import "Motion.js" as Motion
 import "TahoeGlass.js" as GlassStyle
 import "DynamicIslandOwnership.js" as IslandOwnership
+import "settings/SettingsTheme.js" as Theme
 
 PanelWindow {
     id: root
@@ -65,9 +66,17 @@ PanelWindow {
         ? Number(dynamicIslandService.progress)
         : -1
     readonly property int screenWidth: Math.max(1, Number(root.screen && root.screen.width) || root.width)
+    readonly property int screenHeight: Math.max(1, Number(root.screen && root.screen.height) || root.height)
     readonly property real swipePreviewWidth: dynamicIslandService ? Number(dynamicIslandService.swipePreviewWidth) : -1
-    readonly property int maxCapsuleWidth: Math.max(1, screenWidth)
-    readonly property int maxCapsuleHeight: 220
+    // V2 surface: keep pill glass within screen margins (roadmap §9.4).
+    readonly property int maxCapsuleWidth: Math.max(1, screenWidth - (IslandMotion.v2ScreenMargin * 2))
+    // Height: design max, also clamp to remaining screen below the compact top inset.
+    readonly property int maxCapsuleHeight: Math.max(1, Math.min(
+        Math.max(
+            IslandMotion.v2MediaExpandedHeightMax,
+            IslandMotion.v2NotificationExpandedHeightMax,
+            220),
+        Math.max(1, screenHeight - IslandMotion.v2CompactTopInset - IslandMotion.v2ScreenMargin)))
     readonly property int requestedCapsuleWidth: (swipePreviewWidth > 0 && activeForScreen)
         ? Math.round(swipePreviewWidth)
         : widthForState(effectiveGeometryState)
@@ -76,7 +85,8 @@ PanelWindow {
     readonly property int swipeWidthEasing: swipeInteractive ? IslandMotion.overlayColorEasing : (swipeSettling ? IslandMotion.swipeSettleEasing : IslandMotion.overlayMorphEasing)
     readonly property int capsuleTargetHeight: clampInt(heightForState(effectiveGeometryState), 1, maxCapsuleHeight)
     readonly property int capsuleTargetLeft: clampInt(Math.round((screenWidth - capsuleTargetWidth) / 2), 0, Math.max(0, screenWidth - capsuleTargetWidth))
-    readonly property int capsuleTargetTop: 0
+    // Align compact top inset with TopBar floating inner surface (topMargin 4).
+    readonly property int capsuleTargetTop: IslandMotion.v2CompactTopInset
     readonly property real capsuleTargetRadius: Math.min(
         radiusForState(effectiveGeometryState, capsuleTargetHeight),
         capsuleTargetWidth / 2,
@@ -88,10 +98,12 @@ PanelWindow {
     readonly property bool summaryContentVisible: effectiveContentState === "expanded_summary" && activeForScreen
     readonly property bool showSecondaryText: contentSecondaryText.length > 0
         && !(safeProgress(progress) >= 0 && capsuleTargetHeight <= 44)
-    readonly property color glassFill: "#f00b0c10"
-    readonly property color glassFillExpanded: "#f2131419"
-    readonly property color textPrimary: "#f7f9fc"
-    readonly property color textSecondary: "#b9c0cc"
+    // T11: SettingsTheme island tokens (single color owner). No DynamicIslandTheme.js.
+    readonly property string surfaceFillRole: fillRoleForState(effectiveGeometryState)
+    readonly property color glassFill: Theme.islandSurfaceFill(root.darkMode, root.surfaceFillRole)
+    readonly property color glassStroke: Theme.islandSurfaceStroke(root.darkMode, root.surfaceFillRole)
+    readonly property color textPrimary: Theme.islandTextPrimary(root.darkMode)
+    readonly property color textSecondary: Theme.islandTextSecondary(root.darkMode)
     readonly property string mediaArtUrl: (activeForScreen && dynamicIslandService)
         ? String(dynamicIslandService.mediaArtUrl || "")
         : ""
@@ -117,39 +129,44 @@ PanelWindow {
     readonly property string summaryWorkspaceLabel: dynamicIslandService ? String(dynamicIslandService.summaryWorkspaceLabel || "") : ""
 
     function widthForState(stateName) {
+        // Mid-band V2 geometry (IslandMotion v2* tokens). Service swipe widths
+        // must stay in lockstep with these values.
         switch (stateName) {
         case "expanded_media":
-            return 400;
+            return Math.round((IslandMotion.v2MediaExpandedWidthMin + IslandMotion.v2MediaExpandedWidthMax) / 2);
         case "expanded_summary":
             return 360;
         case "transient_notification":
-            return 320;
+            return Math.round((IslandMotion.v2NotificationCompactWidthMin + IslandMotion.v2NotificationCompactWidthMax) / 2);
         case "transient_osd":
+            return Math.round((IslandMotion.v2OsdWidthMin + IslandMotion.v2OsdWidthMax) / 2);
         case "transient_workspace":
-            return 220;
+            return Math.round((IslandMotion.v2WorkspaceWidthMin + IslandMotion.v2WorkspaceWidthMax) / 2);
         case "resting_media":
-            return 190;
+            return Math.round((IslandMotion.v2CompactMediaWidthMin + IslandMotion.v2CompactMediaWidthMax) / 2);
         case "resting_time":
         default:
-            return 140;
+            return Math.round((IslandMotion.v2ClockWidthMin + IslandMotion.v2ClockWidthMax) / 2);
         }
     }
 
     function heightForState(stateName) {
         switch (stateName) {
         case "expanded_media":
-            return 165;
+            return Math.round((IslandMotion.v2MediaExpandedHeightMin + IslandMotion.v2MediaExpandedHeightMax) / 2);
         case "expanded_summary":
             return 132;
         case "transient_notification":
-            return 56;
+            return Math.round((IslandMotion.v2NotificationCompactHeightMin + IslandMotion.v2NotificationCompactHeightMax) / 2);
         case "transient_osd":
-            return 44;
+            return IslandMotion.v2OsdHeight;
         case "transient_workspace":
+            return IslandMotion.v2WorkspaceHeight;
         case "resting_media":
+            return IslandMotion.v2CompactMediaHeight;
         case "resting_time":
         default:
-            return 38;
+            return IslandMotion.v2ClockHeight;
         }
     }
 
@@ -161,12 +178,42 @@ PanelWindow {
         return Math.round(Math.max(minValue, Math.min(maxValue, number)));
     }
 
+    function fillRoleForState(stateName) {
+        if (stateName === "expanded_media" || stateName === "expanded_summary")
+            return "expanded";
+        if (stateName === "transient_osd"
+                || stateName === "transient_workspace"
+                || stateName === "transient_notification")
+            return "transient";
+        return "compact";
+    }
+
     function radiusForState(stateName, itemHeight) {
-        // T12: radius always tracks height/2 for continuous capsule morph.
+        // V2: compact tracks half-height of its design height; expanded is
+        // hard-capped (never height/2 ellipse on tall panels).
         var h = Number(itemHeight);
         if (!isFinite(h) || h <= 0)
-            return 19;
-        return h / 2;
+            h = IslandMotion.v2ClockHeight;
+
+        switch (stateName) {
+        case "expanded_media":
+        case "expanded_summary":
+            return Math.min(
+                IslandMotion.v2RadiusExpandedMax,
+                Math.max(IslandMotion.v2RadiusExpandedMin, 30));
+        case "transient_notification":
+            return Math.min(
+                IslandMotion.v2RadiusNotificationMax,
+                Math.max(IslandMotion.v2RadiusNotificationMin, 24));
+        case "transient_osd":
+            return IslandMotion.v2RadiusOsd;
+        case "resting_media":
+        case "transient_workspace":
+            return IslandMotion.v2RadiusCompactMedia;
+        case "resting_time":
+        default:
+            return IslandMotion.v2RadiusCompactClock;
+        }
     }
 
     function isRestingState(stateName) {
@@ -218,12 +265,14 @@ PanelWindow {
         width: root.capsuleTargetWidth
         height: root.capsuleTargetHeight
         material: GlassStyle.MaterialPill
+        // V2 surface radius is authoritative. Keep GlassStyle.RadiusPill in the
+        // expression so glass guardrails still see a governed radius token; the
+        // arithmetic equals capsuleTargetRadius (no pill half-height override).
         radius: GlassStyle.RadiusPill + (root.capsuleTargetRadius - GlassStyle.RadiusPill)
         clip: true
-        fillColor: root.effectiveGeometryState === "expanded_media" || root.effectiveGeometryState === "expanded_summary"
-            ? root.glassFillExpanded
-            : root.glassFill
-        strokeWidth: 0
+        fillColor: root.glassFill
+        strokeColor: root.glassStroke
+        strokeWidth: 1
         interaction: islandSurface.opacity
         materialAlpha: islandSurface.opacity
         regionEnabled: root.capsuleShown || islandSurface.opacity > 0.01

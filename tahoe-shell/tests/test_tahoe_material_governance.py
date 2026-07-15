@@ -38,6 +38,7 @@ SURFACE_RECIPES = [
     "Spotlight",
     "MenuPopup",
     "SettingsPanel",
+    "DynamicIsland",
 ]
 
 
@@ -187,6 +188,16 @@ class TahoeMaterialGovernanceTests(unittest.TestCase):
         self.assertIn("不做 GPU/渲染能力自适应", text)
         self.assertIn("PointHandler", text)
         self.assertIn("max(baseline, 1)", text)
+
+        # T11: Dynamic Island is an explicit 1-region pill recipe, not an
+        # implied Spotlight-style dual region.
+        self.assertIn("DynamicIsland", text)
+        self.assertRegex(
+            text,
+            r"DynamicIsland\s*\|\s*1\s*\|\s*`pill`",
+        )
+        self.assertIn("禁止 Spring", text)
+        self.assertIn("SettingsTheme island tokens", text)
 
 
 if __name__ == "__main__":

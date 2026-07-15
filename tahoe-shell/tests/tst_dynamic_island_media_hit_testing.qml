@@ -183,15 +183,19 @@ TestCase {
     }
 
     function mediaPoint(which) {
-        // Capsule: expanded_media is 400×165, centered in 800-wide window.
-        // Media controls: bottomMargin 10, controlHit 44 → center ≈ height-32.
-        var left = Math.round((800 - 400) / 2);
-        var y = 165 - 32; // ~133
+        // Capsule: expanded_media mid-band 418×166 (T11 V2), top inset 4,
+        // centered in 800-wide window. Controls: bottomMargin 10, hit 44 →
+        // button center ≈ surface.y + height - 32.
+        var mediaW = 418;
+        var mediaH = 166;
+        var topInset = 4;
+        var left = Math.round((800 - mediaW) / 2);
+        var y = topInset + mediaH - 32;
         if (which === "prev")
-            return Qt.point(left + 116, y);
+            return Qt.point(left + Math.round(mediaW * 0.29), y);
         if (which === "next")
-            return Qt.point(left + 284, y);
-        return Qt.point(left + 200, y);
+            return Qt.point(left + Math.round(mediaW * 0.71), y);
+        return Qt.point(left + Math.round(mediaW * 0.5), y);
     }
 
     function clickAt(pt) {
@@ -224,9 +228,9 @@ TestCase {
 
     function test_blank_area_capsule_click_no_media_action() {
         resetCounts();
-        var left = Math.round((800 - 400) / 2);
-        // Top-left of capsule: not on control row.
-        clickAt(Qt.point(left + 20, 30));
+        var left = Math.round((800 - 418) / 2);
+        // Top-left of capsule: not on control row (y includes top inset 4).
+        clickAt(Qt.point(left + 20, 4 + 30));
         compare(previousRequests, 0);
         compare(playPauseRequests, 0);
         compare(nextRequests, 0);
@@ -238,14 +242,15 @@ TestCase {
         resetCounts();
         islandService.swipeBegins = 0;
         islandService.swipeAdvances = 0;
-        var left = Math.round((800 - 400) / 2);
+        var left = Math.round((800 - 418) / 2);
+        var blankY = 4 + 30;
         var target = overlay.contentItem || overlay;
         // Horizontal drag across blank capsule area (above controls).
-        mousePress(target, left + 40, 30, Qt.LeftButton);
+        mousePress(target, left + 40, blankY, Qt.LeftButton);
         wait(0);
-        mouseMove(target, left + 120, 30, -1, Qt.LeftButton);
+        mouseMove(target, left + 120, blankY, -1, Qt.LeftButton);
         wait(0);
-        mouseRelease(target, left + 120, 30, Qt.LeftButton);
+        mouseRelease(target, left + 120, blankY, Qt.LeftButton);
         wait(0);
         compare(previousRequests, 0);
         compare(playPauseRequests, 0);
@@ -253,7 +258,7 @@ TestCase {
         // Capsule gesture path must own the blank area: either swipe session
         // started/advanced, or a composed click still lands on handleChipClick.
         if (islandService.swipeBegins + islandService.swipeAdvances === 0) {
-            clickAt(Qt.point(left + 40, 30));
+            clickAt(Qt.point(left + 40, blankY));
             compare(capsuleClicks, 1);
         } else {
             verify(islandService.swipeBegins + islandService.swipeAdvances > 0);

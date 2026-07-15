@@ -3,6 +3,11 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import "DynamicIslandMotion.js" as IslandMotion
 
+// Scene host for the Dynamic Island capsule.
+// Compact/transient chrome stays lightweight and always present.
+// Expanded media/summary use Loader so hidden outputs and non-expanded
+// states do not keep heavy scenes (and their Timers) instantiated.
+// Transition may hold current + outgoing for the exit fade only.
 Item {
     id: root
     clip: true
@@ -16,9 +21,9 @@ Item {
     property bool compactContentVisible: compactResting
     property bool mediaExpandedContentVisible: mediaExpanded
     property bool summaryExpandedContentVisible: summaryExpanded
-   property bool showSecondaryText: false
-   property color textPrimary: "#f7f9fc"
-   property color textSecondary: "#b9c0cc"
+    property bool showSecondaryText: false
+    property color textPrimary: "#f7f8fa"
+    property color textSecondary: "#aeb6c2"
     property string mediaArtUrl: ""
     property string mediaTrackTitle: ""
     property string mediaTrackArtist: ""
@@ -30,7 +35,7 @@ Item {
     property bool mediaLengthSupported: false
     property bool canPlayPause: false
     property bool canPrev: false
-   property bool canNext: false
+    property bool canNext: false
     property var settingsService
     signal mediaPreviousRequested()
     signal mediaPlayPauseRequested()
@@ -44,15 +49,22 @@ Item {
     property real summaryBrightness: 0
     property bool summaryBrightnessAvailable: false
     property string summaryWorkspaceLabel: ""
-   readonly property bool mediaExpanded: islandState === "expanded_media"
+    readonly property bool mediaExpanded: islandState === "expanded_media"
     readonly property bool summaryExpanded: islandState === "expanded_summary"
 
-   readonly property bool notificationActive: islandState === "transient_notification"
+    readonly property bool notificationActive: islandState === "transient_notification"
     readonly property bool standardDetailActive: !compactResting && !notificationActive && !osdActive && !mediaExpanded && !summaryExpanded
-   readonly property bool osdActive: islandState === "transient_osd"
+    readonly property bool osdActive: islandState === "transient_osd"
     readonly property bool showOsRing: osdActive && safeProgress(progress) >= 0
-   readonly property int notificationFadeInDuration: 280
-   readonly property int notificationFadeOutDuration: 140
+    readonly property int notificationFadeInDuration: 280
+    readonly property int notificationFadeOutDuration: 140
+    // Hold outgoing expanded loaders through exit fade, then destroy.
+    readonly property int expandedUnloadHoldMs: IslandMotion.overlayExpandedExitFadeMs + 40
+
+    // Loader active flags: true while showing or exit-hold. Never both heavy
+    // scenes need to stay loaded forever on resting/hidden outputs.
+    property bool mediaLoaderActive: false
+    property bool summaryLoaderActive: false
 
     function safeProgress(value) {
         var number = Number(value);
@@ -60,6 +72,44 @@ Item {
             return -1;
 
         return Math.max(0, Math.min(1, number));
+    }
+
+    onMediaExpandedContentVisibleChanged: {
+        if (root.mediaExpandedContentVisible) {
+            mediaUnloadHold.stop();
+            root.mediaLoaderActive = true;
+        } else {
+            mediaUnloadHold.restart();
+        }
+    }
+
+    onSummaryExpandedContentVisibleChanged: {
+        if (root.summaryExpandedContentVisible) {
+            summaryUnloadHold.stop();
+            root.summaryLoaderActive = true;
+        } else {
+            summaryUnloadHold.restart();
+        }
+    }
+
+    Timer {
+        id: mediaUnloadHold
+        interval: root.expandedUnloadHoldMs
+        repeat: false
+        onTriggered: {
+            if (!root.mediaExpandedContentVisible)
+                root.mediaLoaderActive = false;
+        }
+    }
+
+    Timer {
+        id: summaryUnloadHold
+        interval: root.expandedUnloadHoldMs
+        repeat: false
+        onTriggered: {
+            if (!root.summaryExpandedContentVisible)
+                root.summaryLoaderActive = false;
+        }
     }
 
     Text {
@@ -207,10 +257,10 @@ Item {
                 font.pixelSize: 11
                 elide: Text.ElideRight
                 maximumLineCount: 1
-               visible: text.length > 0
-           }
-       }
-   }
+                visible: text.length > 0
+            }
+        }
+    }
 
     Row {
         id: osdRow
@@ -304,74 +354,94 @@ Item {
                         ctx.arc(center, center, Math.max(1, radius), startAngle, endAngle, false);
                         ctx.stroke();
                     }
-               }
-           }
-       }
-   }
-
-    DynamicIslandMediaView {
-        id: mediaView
-
-        anchors.fill: parent
-        artUrl: root.mediaArtUrl
-        trackTitle: root.mediaTrackTitle
-        trackArtist: root.mediaTrackArtist
-        isPlaying: root.mediaPlaying
-        position: root.mediaPosition
-        duration: root.mediaLength
-        progress: root.mediaProgress
-        positionSupported: root.mediaPositionSupported
-        durationSupported: root.mediaLengthSupported
-        canPlayPause: root.canPlayPause
-        canPrev: root.canPrev
-        canNext: root.canNext
-        settingsService: root.settingsService
-        textPrimary: root.textPrimary
-        textSecondary: root.textSecondary
-        // Visibility is the multi-screen / expanded gate (Overlay activeForScreen →
-        // mediaContentVisible → mediaExpandedContentVisible). Keep visible tied to
-        // that flag so visualizerTimer cannot run on hidden outputs while opacity
-        // still fades out (opacity>0.01 alone can leave Timer running mid-fade).
-        opacity: root.mediaExpandedContentVisible ? 1 : 0
-        visible: root.mediaExpandedContentVisible
-        onPreviousRequested: root.mediaPreviousRequested()
-        onPlayPauseRequested: root.mediaPlayPauseRequested()
-        onNextRequested: root.mediaNextRequested()
-        onControlPressed: root.mediaControlPressed()
-        onControlReleased: root.mediaControlReleased()
-
-        Behavior on opacity {
-            NumberAnimation {
-                duration: root.mediaExpandedContentVisible
-                    ? IslandMotion.overlayExpandedEnterFadeMs
-                    : IslandMotion.overlayExpandedExitFadeMs
-                easing.type: IslandMotion.overlayColorEasing
+                }
             }
         }
     }
 
-    DynamicIslandSummaryView {
-        id: summaryView
-
+    // Expanded media: Loader only while visible or exit-hold (no hidden Timer).
+    Loader {
+        id: mediaLoader
         anchors.fill: parent
-        batteryPercent: root.summaryBatteryPercent
-        batteryCharging: root.summaryBatteryCharging
-        volume: root.summaryVolume
-        muted: root.summaryMuted
-        brightness: root.summaryBrightness
-        brightnessAvailable: root.summaryBrightnessAvailable
-        workspaceLabel: root.summaryWorkspaceLabel
-        textPrimary: root.textPrimary
-        textSecondary: root.textSecondary
-        opacity: root.summaryExpandedContentVisible ? 1 : 0
-        visible: opacity > 0.01
+        active: root.mediaLoaderActive
+        asynchronous: false
+        sourceComponent: mediaSceneComponent
+    }
 
-        Behavior on opacity {
-            NumberAnimation {
-                duration: root.summaryExpandedContentVisible
-                    ? IslandMotion.overlayExpandedEnterFadeMs
-                    : IslandMotion.overlayExpandedExitFadeMs
-                easing.type: IslandMotion.overlayColorEasing
+    Component {
+        id: mediaSceneComponent
+        DynamicIslandMediaView {
+            anchors.fill: parent
+            artUrl: root.mediaArtUrl
+            trackTitle: root.mediaTrackTitle
+            trackArtist: root.mediaTrackArtist
+            isPlaying: root.mediaPlaying
+            position: root.mediaPosition
+            duration: root.mediaLength
+            progress: root.mediaProgress
+            positionSupported: root.mediaPositionSupported
+            durationSupported: root.mediaLengthSupported
+            canPlayPause: root.canPlayPause
+            canPrev: root.canPrev
+            canNext: root.canNext
+            settingsService: root.settingsService
+            textPrimary: root.textPrimary
+            textSecondary: root.textSecondary
+            // Intentional hard-cut on collapse (not opacity>0.01 fade): MediaView's
+            // visualizerTimer is gated on Item.visible. A mid-fade visible:true would
+            // keep the timer ticking after mediaExpandedContentVisible is false.
+            // Enter still fades opacity 0→1 while visible is already true.
+            // Summary uses opacity-gated visible because it has no running Timer.
+            opacity: root.mediaExpandedContentVisible ? 1 : 0
+            visible: root.mediaExpandedContentVisible
+            onPreviousRequested: root.mediaPreviousRequested()
+            onPlayPauseRequested: root.mediaPlayPauseRequested()
+            onNextRequested: root.mediaNextRequested()
+            onControlPressed: root.mediaControlPressed()
+            onControlReleased: root.mediaControlReleased()
+
+            Behavior on opacity {
+                enabled: root.mediaExpandedContentVisible
+                NumberAnimation {
+                    duration: IslandMotion.overlayExpandedEnterFadeMs
+                    easing.type: IslandMotion.overlayColorEasing
+                }
+            }
+        }
+    }
+
+    // Expanded summary: same Loader/unload policy as media.
+    Loader {
+        id: summaryLoader
+        anchors.fill: parent
+        active: root.summaryLoaderActive
+        asynchronous: false
+        sourceComponent: summarySceneComponent
+    }
+
+    Component {
+        id: summarySceneComponent
+        DynamicIslandSummaryView {
+            anchors.fill: parent
+            batteryPercent: root.summaryBatteryPercent
+            batteryCharging: root.summaryBatteryCharging
+            volume: root.summaryVolume
+            muted: root.summaryMuted
+            brightness: root.summaryBrightness
+            brightnessAvailable: root.summaryBrightnessAvailable
+            workspaceLabel: root.summaryWorkspaceLabel
+            textPrimary: root.textPrimary
+            textSecondary: root.textSecondary
+            opacity: root.summaryExpandedContentVisible ? 1 : 0
+            visible: opacity > 0.01
+
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: root.summaryExpandedContentVisible
+                        ? IslandMotion.overlayExpandedEnterFadeMs
+                        : IslandMotion.overlayExpandedExitFadeMs
+                    easing.type: IslandMotion.overlayColorEasing
+                }
             }
         }
     }
@@ -389,9 +459,9 @@ Item {
         }
         height: 3
         radius: 2
-       color: "#28ffffff"
+        color: "#28ffffff"
         opacity: (root.safeProgress(root.progress) >= 0 && !root.showOsRing) ? 1 : 0
-       visible: opacity > 0.01
+        visible: opacity > 0.01
 
         Rectangle {
             width: parent.width * Math.max(0, root.safeProgress(root.progress))
@@ -407,5 +477,12 @@ Item {
         Behavior on opacity {
             NumberAnimation { duration: IslandMotion.overlayContentDuration; easing.type: IslandMotion.overlayColorEasing }
         }
+    }
+
+    Component.onCompleted: {
+        if (root.mediaExpandedContentVisible)
+            root.mediaLoaderActive = true;
+        if (root.summaryExpandedContentVisible)
+            root.summaryLoaderActive = true;
     }
 }

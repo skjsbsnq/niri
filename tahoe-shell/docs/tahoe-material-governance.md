@@ -46,6 +46,7 @@
 | Spotlight | 2 | `pill`, `panel` | 输入 pill 和结果面板分开，避免整块大 region |
 | MenuPopup | 1 | `menu` | 小面积 menu；清晰度优先 |
 | SettingsPanel | 1 | `panel` | 大面板；region 绑定 panel surface safe area |
+| DynamicIsland | 1 | `pill` | 每输出一个 Overlay PanelWindow；单一 `islandSurface` GlassPanel region；`exclusiveZone: 0`；fill/stroke 由 SettingsTheme island tokens 提供，不新增第八 material；region geometry 仅 NumberAnimation（禁止 Spring）；scene host 用 Loader，隐藏输出不实例化 expanded media/summary |
 
 `GlassPanel` 保留每个 surface 提供的 baseline `interaction`，并用被动
 `PointHandler` 把面板内左键按压合成为 `max(baseline, 1)`。该反馈只改变材质

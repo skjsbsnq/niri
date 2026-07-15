@@ -25,8 +25,10 @@ Item {
     property bool swipeDragging: false
     property bool swipeSettling: false
     property bool swipeMoved: false
+    // Keep in lockstep with DynamicIslandOverlay.widthForState (T11 V2 mid-band).
     readonly property int swipeLeftWidth: 360
-    readonly property int swipeRightWidth: 400
+    readonly property int swipeRightWidth: Math.round(
+        (IslandMotion.v2MediaExpandedWidthMin + IslandMotion.v2MediaExpandedWidthMax) / 2)
     readonly property int swipeRestingWidth: restingWidthForState(restingState())
     readonly property real swipePreviewWidth: swipeDragging || swipeSettling
         ? IslandOwnership.swipePreviewWidthFor(
@@ -699,21 +701,27 @@ Item {
 
 
     function restingWidthForState(currentState) {
+        // T11: same mid-band geometry as Overlay.widthForState.
         switch (currentState) {
         case "resting_media":
-            return 190;
+            return Math.round(
+                (IslandMotion.v2CompactMediaWidthMin + IslandMotion.v2CompactMediaWidthMax) / 2);
         case "expanded_media":
-            return 400;
+            return Math.round(
+                (IslandMotion.v2MediaExpandedWidthMin + IslandMotion.v2MediaExpandedWidthMax) / 2);
         case "expanded_summary":
             return 360;
         case "transient_notification":
-            return 320;
+            return Math.round(
+                (IslandMotion.v2NotificationCompactWidthMin + IslandMotion.v2NotificationCompactWidthMax) / 2);
         case "transient_osd":
+            return Math.round((IslandMotion.v2OsdWidthMin + IslandMotion.v2OsdWidthMax) / 2);
         case "transient_workspace":
-            return 220;
+            return Math.round(
+                (IslandMotion.v2WorkspaceWidthMin + IslandMotion.v2WorkspaceWidthMax) / 2);
         case "resting_time":
         default:
-            return 140;
+            return Math.round((IslandMotion.v2ClockWidthMin + IslandMotion.v2ClockWidthMax) / 2);
         }
     }
 

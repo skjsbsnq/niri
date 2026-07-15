@@ -252,8 +252,11 @@ class MotionTokenConvergenceTests(unittest.TestCase):
         self.assertIn("var chipScaleDuration = 200", motion)
         self.assertIn("var chipContentDuration = 160", motion)
 
-        # Overlay: radius always height/2; glass geometry Behaviors are NumberAnimation.
-        self.assertIn("return h / 2", overlay)
+        # T11: V2 radius caps expanded (never height/2 ellipse); glass geometry
+        # Behaviors remain NumberAnimation only.
+        self.assertIn("v2RadiusExpandedMax", overlay)
+        self.assertIn("v2RadiusCompactClock", overlay)
+        self.assertNotIn("return h / 2", overlay)
         self.assertIn("property bool useSpring", overlay)
         self.assertIn("contentScaleSpring", overlay)
         self.assertIn("IslandMotion.overlayContentSpring", overlay)
@@ -272,6 +275,11 @@ class MotionTokenConvergenceTests(unittest.TestCase):
         # Explicit comment guard for glass region.
         self.assertIn("Geometry → TahoeGlassRegion", overlay)
         self.assertIn("eased NumberAnimation only", overlay)
+        # V2 surface fill/stroke from SettingsTheme; single pill region.
+        self.assertIn("Theme.islandSurfaceFill", overlay)
+        self.assertIn("strokeWidth: 1", overlay)
+        self.assertIn("v2CompactTopInset", overlay)
+        self.assertIn("v2ScreenMargin", overlay)
 
         # shell forwards useSpring + settingsService.
         self.assertIn("DynamicIslandOverlay", shell)

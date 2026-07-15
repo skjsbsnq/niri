@@ -260,10 +260,11 @@ class MotionTokenConvergenceTests(unittest.TestCase):
         self.assertIn("v2RadiusCompactClock", overlay)
         self.assertNotIn("return h / 2", overlay)
         self.assertIn("property bool useSpring", overlay)
-        self.assertIn("contentScaleSpring", overlay)
-        self.assertIn("IslandMotion.overlayContentSpring", overlay)
-        self.assertIn("IslandMotion.overlayContentEnterScale", overlay)
-        self.assertIn("root.useSpring", overlay)
+        # V2: whole-scene contentScale 0.9→1 removed (sinking text on collapse).
+        # Tokens remain in DynamicIslandMotion.js for other call sites / history.
+        self.assertNotIn("contentScaleSpring", overlay)
+        self.assertIn("scale: 1.0", overlay)
+        self.assertEqual(overlay.count("SpringAnimation {"), 0)
         # Swipe IPC path still wired (debug + settle).
         self.assertIn("beginSwipe", overlay)
         self.assertIn("advanceSwipe", overlay)
@@ -271,9 +272,6 @@ class MotionTokenConvergenceTests(unittest.TestCase):
         self.assertIn("cancelSwipe", overlay)
 
         # Glass geometry: no SpringAnimation on islandSurface width/height/x/radius.
-        # Only contentScaleSpring may be a SpringAnimation element.
-        self.assertEqual(overlay.count("SpringAnimation {"), 1)
-        self.assertIn('property: "contentScale"', overlay)
         # Explicit comment guard for glass region.
         self.assertIn("Geometry → TahoeGlassRegion", overlay)
         self.assertIn("eased NumberAnimation only", overlay)

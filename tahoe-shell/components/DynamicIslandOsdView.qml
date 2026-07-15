@@ -20,13 +20,23 @@ Item {
     property color accentColor: Theme.accent(darkMode, "blue")
     property color trackColor: "#30ffffff"
 
-    readonly property real clampedProgress: {
-        var number = Number(root.progress);
+    function clampedProgressOf(value) {
+        var number = Number(value);
         if (!isFinite(number))
             return 0;
         return Math.max(0, Math.min(1, number));
     }
+
+    // Direct bindings so continuous progress ticks paint the bar and value.
+    readonly property real clampedProgress: root.clampedProgressOf(root.progress)
     readonly property real barProgress: root.muted ? 0 : root.clampedProgress
+    readonly property string resolvedValueText: {
+        if (root.muted)
+            return root.valueText.length > 0 ? root.valueText : "静音";
+        if (root.valueText.length > 0)
+            return root.valueText;
+        return String(Math.round(root.clampedProgress * 100)) + "%";
+    }
 
     Row {
         id: osdRow
@@ -63,7 +73,8 @@ Item {
 
                 Rectangle {
                     id: fill
-                    width: parent.width * root.barProgress
+                    // Bind width from progress each tick; short Behavior so ramps stay live.
+                    width: Math.max(0, track.width * root.barProgress)
                     height: parent.height
                     radius: parent.radius
                     // Neutral accent for volume/brightness; muted stays neutral (not danger red).
@@ -71,7 +82,8 @@ Item {
 
                     Behavior on width {
                         NumberAnimation {
-                            duration: IslandMotion.overlayProgressDuration
+                            // Keep shorter than typical key-repeat so the bar tracks live input.
+                            duration: Math.min(120, IslandMotion.overlayProgressDuration)
                             easing.type: IslandMotion.overlayProgressEasing
                         }
                     }
@@ -85,11 +97,7 @@ Item {
             height: parent.height
             verticalAlignment: Text.AlignVCenter
             horizontalAlignment: Text.AlignRight
-            text: root.muted
-                  ? (root.valueText.length > 0 ? root.valueText : "静音")
-                  : (root.valueText.length > 0
-                     ? root.valueText
-                     : String(Math.round(root.clampedProgress * 100)))
+            text: root.resolvedValueText
             color: root.textPrimary
             font.pixelSize: 14
             font.weight: Font.DemiBold

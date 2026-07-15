@@ -101,6 +101,12 @@ class DynamicIslandOsdSceneTests(unittest.TestCase):
         self.assertIn("isFinite", show)
         self.assertIn("valueText", show)
 
+    def test_progress_binding_depends_on_transient_fields(self) -> None:
+        # Continuous OSD updates must rebind while state stays transient_osd.
+        self.assertIn("readonly property real progress: root.state === \"transient_osd\"", self.island)
+        self.assertIn("root.transientProgress", self.island)
+        self.assertIn("root.transientSecondaryText", self.island)
+
     def test_brightness_zero_path_still_present(self) -> None:
         body = _function_body(self.island, "handleBrightnessChange")
         self.assertIn("Math.max(0, Math.min(1, brightnessSample))", body)

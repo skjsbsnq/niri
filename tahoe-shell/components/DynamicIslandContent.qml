@@ -297,17 +297,16 @@ Item {
         height: Math.min(parent.height, 44)
         iconCode: root.iconCode
         valueText: root.secondaryText
-        progress: {
-            var p = root.safeProgress(root.progress);
-            return p >= 0 ? p : 0;
-        }
+        // Bind progress directly so continuous OSD ticks update the bar/value.
+        progress: root.progress
         muted: root.osdMuted
         darkMode: root.darkMode
         textPrimary: root.textPrimary
         textSecondary: root.textSecondary
         accentColor: root.accentColor
         opacity: root.osdSceneVisible ? 1 : 0
-        visible: opacity > 0.01
+        // Stay in the tree while OSD is active so progress rebinds without recreate.
+        visible: root.osdActive || opacity > 0.01
 
         Behavior on opacity {
             NumberAnimation {

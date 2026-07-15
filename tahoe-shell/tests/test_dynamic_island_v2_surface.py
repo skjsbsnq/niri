@@ -235,9 +235,11 @@ class DynamicIslandV2SurfaceTests(unittest.TestCase):
         self.assertIn("y: Math.round(islandSurface.y)", self.overlay)
 
     def test_glass_geometry_no_spring(self) -> None:
-        # Only contentScale may spring; region geometry is NumberAnimation.
-        self.assertEqual(self.overlay.count("SpringAnimation {"), 1)
-        self.assertIn('property: "contentScale"', self.overlay)
+        # V2: no whole-scene contentScale spring (collapse looked like sinking text).
+        # Glass region geometry stays NumberAnimation only.
+        self.assertEqual(self.overlay.count("SpringAnimation {"), 0)
+        self.assertNotIn("contentScaleSpring", self.overlay)
+        self.assertIn("scale: 1.0", self.overlay)
         self.assertIn("Geometry → TahoeGlassRegion", self.overlay)
         self.assertIn("eased NumberAnimation only", self.overlay)
         # Behaviors on islandSurface geometry channels.

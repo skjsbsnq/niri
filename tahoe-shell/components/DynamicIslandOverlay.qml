@@ -381,53 +381,19 @@ PanelWindow {
             NumberAnimation { duration: IslandMotion.overlayContentDuration; easing.type: IslandMotion.overlayColorEasing }
         }
 
-        // Content layer: scale 0.9→1 on state switch (springBouncy when allowed).
-        // Content opacity fade remains inside DynamicIslandContent views.
+        // Content layer: V2 does not whole-scene scale 0.9→1 on state switch
+        // (roadmap §11.2). That scale + height morph made clock/date text look
+        // like it was sinking on click collapse. Scene opacity lives in Content.
         // Stack above the capsule MouseArea so media controls receive hits;
         // blank capsule regions still fall through to the fill MouseArea below.
         Item {
             id: contentHost
             anchors.fill: parent
             z: 1
-            property string contentKey: root.effectiveContentState
-            property real contentScale: 1.0
-            scale: contentScale
+            // Keep scale fixed at 1. useSpring remains on Overlay for API/tests
+            // but must not drive glass-adjacent content scale enter.
+            scale: 1.0
             transformOrigin: Item.Center
-
-            onContentKeyChanged: {
-                contentScaleSpring.stop();
-                contentScaleEase.stop();
-                if (Motion.reducedMotion(root.settingsService)) {
-                    contentHost.contentScale = 1.0;
-                    return;
-                }
-                contentHost.contentScale = IslandMotion.overlayContentEnterScale;
-                if (root.useSpring) {
-                    contentScaleSpring.to = 1.0;
-                    contentScaleSpring.restart();
-                } else {
-                    contentScaleEase.from = IslandMotion.overlayContentEnterScale;
-                    contentScaleEase.to = 1.0;
-                    contentScaleEase.start();
-                }
-            }
-
-            SpringAnimation {
-                id: contentScaleSpring
-                target: contentHost
-                property: "contentScale"
-                spring: IslandMotion.overlayContentSpring.spring
-                damping: IslandMotion.overlayContentSpring.damping
-                epsilon: IslandMotion.overlayContentSpring.epsilon
-            }
-
-            NumberAnimation {
-                id: contentScaleEase
-                target: contentHost
-                property: "contentScale"
-                duration: IslandMotion.overlayContentScaleDuration
-                easing.type: IslandMotion.overlayContentScaleEasing
-            }
 
             DynamicIslandContent {
                 id: islandContent

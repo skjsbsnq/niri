@@ -130,10 +130,28 @@ Item {
         if (root.controlsService)
             root.controlsService.previous();
     }
-    readonly property string displayText: displayTextForState(state)
-    readonly property string secondaryText: secondaryTextForState(state)
-    readonly property real progress: progressForState(state)
-    readonly property string iconCode: iconCodeForState(state)
+    // Presentation fields for the Overlay. For continuous OSD ramps, bind
+    // transient* fields directly so each volume/brightness tick updates
+    // bar/value while state remains "transient_osd".
+    readonly property string displayText: (root.state === "transient_osd"
+            || root.state === "transient_notification"
+            || root.state === "transient_workspace")
+        ? (root.transientDisplayText.length > 0
+            ? root.transientDisplayText
+            : fallbackTransientText(root.state))
+        : displayTextForState(root.state)
+    readonly property string secondaryText: (root.state === "transient_osd"
+            || root.state === "transient_notification"
+            || root.state === "transient_workspace")
+        ? root.transientSecondaryText
+        : secondaryTextForState(root.state)
+    readonly property real progress: root.state === "transient_osd"
+        ? Math.max(0, Math.min(1, Number(root.transientProgress) || 0))
+        : -1
+    readonly property string iconCode: (root.state.indexOf("transient_") === 0
+            && root.transientIconCode.length > 0)
+        ? root.transientIconCode
+        : iconCodeForState(root.state)
     readonly property string targetScreenName: computeTargetScreenName()
     readonly property int smokeTransientHideMs: 1250
     readonly property int notificationHideMs: 4200
@@ -398,7 +416,10 @@ Item {
             return activeWorkspaceText();
         case "resting_time":
         default:
-            return dateText();
+            // V2 clock uses clockWeekdayText + clockTimeText only. Do not expose
+            // yyyy-MM-dd here — it flashed as "sinking" English/digit noise during
+            // collapse morphs when secondary briefly became visible.
+            return "";
         }
     }
 

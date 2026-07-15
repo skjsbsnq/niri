@@ -122,12 +122,16 @@ class DynamicIslandV2SurfaceTests(unittest.TestCase):
             "v2MediaExpandedWidthMin",
             "v2MediaExpandedWidthMax",
             "v2CompactMediaWidthMin",
-            "v2ClockWidthMin",
             "v2OsdWidthMin",
             "v2NotificationCompactWidthMin",
             "v2WorkspaceWidthMin",
         ):
             self.assertIn(token, width_body)
+        # T12: resting_time width is content-driven via restingClockTargetWidth.
+        self.assertIn("restingClockTargetWidth", width_body)
+        clock_width = _function_body(self.overlay, "restingClockTargetWidth")
+        self.assertIn("v2ClockWidthMin", clock_width)
+        self.assertIn("v2ClockWidthMax", clock_width)
         for token in (
             "v2MediaExpandedHeightMin",
             "v2ClockHeight",

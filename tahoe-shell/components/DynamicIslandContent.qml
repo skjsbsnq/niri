@@ -16,6 +16,9 @@ Item {
     property string displayText: ""
     property string secondaryText: ""
     property string iconCode: ""
+    // T12: split resting clock labels (weekday secondary + time primary).
+    property string clockWeekdayText: ""
+    property string clockTimeText: ""
     property real progress: -1
     property bool compactResting: true
     property bool compactContentVisible: compactResting
@@ -24,6 +27,9 @@ Item {
     property bool showSecondaryText: false
     property color textPrimary: "#f7f8fa"
     property color textSecondary: "#aeb6c2"
+    // Measured resting clock content width (no capsule padding). Overlay adds pad + clamp.
+    readonly property int restingClockContentWidth: restingClock.contentWidth
+    readonly property bool restingClockActive: islandState === "resting_time"
     property string mediaArtUrl: ""
     property string mediaTrackTitle: ""
     property string mediaTrackArtist: ""
@@ -112,20 +118,41 @@ Item {
         }
     }
 
+    // V2 resting clock (T12). Media compact still uses compactLabel until T16.
+    DynamicIslandRestingClockView {
+        id: restingClock
+
+        anchors.centerIn: parent
+        width: Math.min(parent.width - 16, Math.max(contentWidth, 1))
+        height: parent.height
+        weekdayText: root.clockWeekdayText
+        // Prefer split time; never fall back to combined displayText (would re-show weekday).
+        timeText: root.clockTimeText
+        textPrimary: root.textPrimary
+        textSecondary: root.textSecondary
+        opacity: root.compactContentVisible && root.restingClockActive ? 1 : 0
+        visible: opacity > 0.01
+
+        Behavior on opacity {
+            NumberAnimation { duration: IslandMotion.overlayContentDuration; easing.type: IslandMotion.overlayColorEasing }
+        }
+    }
+
     Text {
         id: compactLabel
 
         anchors.centerIn: parent
         width: parent.width - 32
-        text: root.compactResting ? root.displayText : ""
+        // Compact media (and any non-clock resting) until T16 redesign.
+        text: (root.compactResting && !root.restingClockActive) ? root.displayText : ""
         color: root.textPrimary
-        font.pixelSize: root.islandState === "resting_time" ? 13 : 12
+        font.pixelSize: 12
         font.weight: Font.DemiBold
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter
         elide: Text.ElideRight
         maximumLineCount: 1
-        opacity: root.compactContentVisible ? 1 : 0
+        opacity: root.compactContentVisible && !root.restingClockActive ? 1 : 0
         visible: opacity > 0.01
 
         Behavior on opacity {

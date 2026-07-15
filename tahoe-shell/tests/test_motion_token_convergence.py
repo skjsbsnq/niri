@@ -239,7 +239,8 @@ class MotionTokenConvergenceTests(unittest.TestCase):
         motion = (COMPONENTS_ROOT / "DynamicIslandMotion.js").read_text(encoding="utf-8")
         overlay = (COMPONENTS_ROOT / "DynamicIslandOverlay.qml").read_text(encoding="utf-8")
         shell = (SHELL_ROOT / "shell.qml").read_text(encoding="utf-8")
-        chip = (COMPONENTS_ROOT / "DynamicIslandChip.qml").read_text(encoding="utf-8")
+        topbar = (COMPONENTS_ROOT / "TopBar.qml").read_text(encoding="utf-8")
+        clock = (COMPONENTS_ROOT / "DynamicIslandRestingClockView.qml").read_text(encoding="utf-8")
 
         # Tokens: springBouncy group for content; geometry morph stays eased.
         self.assertIn("overlayContentSpring", motion)
@@ -247,10 +248,11 @@ class MotionTokenConvergenceTests(unittest.TestCase):
         self.assertIn("overlayContentEnterScale = 0.9", motion)
         self.assertIn("var overlayMorphDuration = 380", motion)
         self.assertIn("OutCubic", motion)
-        # Chip fine-tune (slightly snappier than pre-T12 280/220/180).
+        # Chip motion tokens remain defined for historical timing; T12 deleted the chip UI.
         self.assertIn("var chipColorDuration = 260", motion)
         self.assertIn("var chipScaleDuration = 200", motion)
         self.assertIn("var chipContentDuration = 160", motion)
+        self.assertFalse((COMPONENTS_ROOT / "DynamicIslandChip.qml").is_file())
 
         # T11: V2 radius caps expanded (never height/2 ellipse); glass geometry
         # Behaviors remain NumberAnimation only.
@@ -286,9 +288,15 @@ class MotionTokenConvergenceTests(unittest.TestCase):
         self.assertIn("useSpring: shell.useSpring", shell)
         self.assertIn("settingsService: desktopSettings", shell)
 
-        # Chip still consumes IslandMotion chip tokens.
-        self.assertIn("IslandMotion.chipScaleDuration", chip)
-        self.assertIn("IslandMotion.chipColorDuration", chip)
+        # T12: resting clock + stable TopBar reserve; chip path removed.
+        self.assertIn("weekdayText", clock)
+        self.assertIn("v2ClockHeight", clock)
+        self.assertIn("centerReserveWidth: IslandMotion.v2CompactMediaWidthMax", topbar)
+        self.assertIn("hoverExpandDelayMs", topbar)
+        self.assertIn("restingClockTargetWidth", overlay)
+        self.assertIn("clockWeekdayText", overlay)
+        content = (COMPONENTS_ROOT / "DynamicIslandContent.qml").read_text(encoding="utf-8")
+        self.assertIn("DynamicIslandRestingClockView", content)
 
     def test_control_center_module_morph_expand(self) -> None:
         cc = (COMPONENTS_ROOT / "ControlCenter.qml").read_text(encoding="utf-8")

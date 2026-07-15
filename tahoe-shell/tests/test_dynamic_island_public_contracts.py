@@ -155,7 +155,10 @@ class DynamicIslandPublicContractTests(unittest.TestCase):
             self.topbar,
         )
         self.assertIn("fallbackTimeText", self.island)
-        self.assertIn("displayText: root.dynamicIslandService ? root.dynamicIslandService.fallbackTimeText", self.topbar)
+        # T12: plain Text fallback (not DynamicIslandChip); still binds fallbackTimeText.
+        self.assertIn("fallbackTimeText", self.topbar)
+        self.assertIn("topbarTimeFallback", self.topbar)
+        self.assertNotIn("DynamicIslandChip", self.topbar)
         # Truth table: disabled always shows TopBar time.
         enabled = False
         hide = True

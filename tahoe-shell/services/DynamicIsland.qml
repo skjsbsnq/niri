@@ -96,6 +96,10 @@ Item {
     readonly property bool canPlayPause: controlsService ? !!controlsService.canPlayPause : false
     readonly property bool canNext: controlsService ? !!controlsService.canNext : false
     readonly property bool canPrev: controlsService ? !!controlsService.canPrev : false
+    // T12: split clock presentation (weekday secondary + 24h time primary).
+    // fallbackTimeText remains the single TopBar disabled/legacy plain-text owner.
+    readonly property string clockWeekdayText: formatClockWeekday()
+    readonly property string clockTimeText: formatClockTime()
     readonly property string fallbackTimeText: timeText()
     readonly property int summaryBatteryPercent: batteryService ? Number(batteryService.roundedPercentage) : 0
     readonly property bool summaryBatteryCharging: batteryService ? !!batteryService.charging : false
@@ -304,8 +308,23 @@ Item {
         }, root.presentationContext());
     }
 
+    function formatClockWeekday() {
+        // Locale-aware short weekday (e.g. 周二 / Tue). Single now owner.
+        return Qt.formatDateTime(root.now, "ddd");
+    }
+
+    function formatClockTime() {
+        // Always 24-hour HH:mm for the island primary time.
+        return Qt.formatDateTime(root.now, "HH:mm");
+    }
+
     function timeText() {
-        return Qt.formatDateTime(root.now, "ddd HH:mm");
+        // Combined plain-text clock for TopBar fallback and IPC displayText.
+        var weekday = formatClockWeekday();
+        var time = formatClockTime();
+        if (weekday.length > 0 && time.length > 0)
+            return weekday + " " + time;
+        return time.length > 0 ? time : weekday;
     }
 
     function dateText() {

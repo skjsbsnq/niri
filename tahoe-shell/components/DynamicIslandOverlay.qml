@@ -62,6 +62,15 @@ PanelWindow {
     readonly property string contentIconCode: (!!screenRole && screenRole.showActivity)
         ? iconCode
         : "\ue8b5"
+    // T12: split clock labels for RestingClockView. Non-owner / base always uses service clock.
+    readonly property string contentClockWeekday: dynamicIslandService
+        ? String(dynamicIslandService.clockWeekdayText || "")
+        : ""
+    readonly property string contentClockTime: dynamicIslandService
+        ? String(dynamicIslandService.clockTimeText || "")
+        : ""
+    // Horizontal padding around measured clock row (matches content host margins).
+    readonly property int restingClockHorizontalPad: 28
     readonly property real progress: (!!screenRole && screenRole.showActivity && dynamicIslandService)
         ? Number(dynamicIslandService.progress)
         : -1
@@ -146,8 +155,18 @@ PanelWindow {
             return Math.round((IslandMotion.v2CompactMediaWidthMin + IslandMotion.v2CompactMediaWidthMax) / 2);
         case "resting_time":
         default:
-            return Math.round((IslandMotion.v2ClockWidthMin + IslandMotion.v2ClockWidthMax) / 2);
+            // Content-driven clock width (T12). Fall back to mid-band before measure.
+            return restingClockTargetWidth();
         }
+    }
+
+    function restingClockTargetWidth() {
+        var measured = 0;
+        if (islandContent && islandContent.restingClockContentWidth > 0)
+            measured = Math.round(islandContent.restingClockContentWidth) + root.restingClockHorizontalPad;
+        if (measured <= 0)
+            measured = Math.round((IslandMotion.v2ClockWidthMin + IslandMotion.v2ClockWidthMax) / 2);
+        return clampInt(measured, IslandMotion.v2ClockWidthMin, IslandMotion.v2ClockWidthMax);
     }
 
     function heightForState(stateName) {
@@ -356,11 +375,14 @@ PanelWindow {
             }
 
             DynamicIslandContent {
+                id: islandContent
                 anchors.fill: parent
                 islandState: root.effectiveContentState
                 displayText: root.contentDisplayText
                 secondaryText: root.contentSecondaryText
                 iconCode: root.contentIconCode
+                clockWeekdayText: root.contentClockWeekday
+                clockTimeText: root.contentClockTime
                 progress: root.progress
                 compactResting: root.compactResting
                 compactContentVisible: root.compactContentVisible

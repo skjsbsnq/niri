@@ -166,7 +166,9 @@ PanelWindow {
             // of the ends would clip under the arc.
             anchors.leftMargin: 14
             anchors.rightMargin: 14
-            readonly property int centerReserveWidth: root.width < 1500 ? 168 : 184
+            // T12: stable reserve covers max compact media so clock↔media does not
+            // shove left/right clusters. Not tied to current island state width.
+            readonly property int centerReserveWidth: IslandMotion.v2CompactMediaWidthMax
 
             Item {
                 id: islandReserve
@@ -801,28 +803,50 @@ PanelWindow {
             }
             }
 
-            DynamicIslandChip {
-                id: islandChip
+            // T12: ordinary readable time when island is disabled or Overlay does
+            // not own resting (hideTopbarTime=false). No faux island chip.
+            Text {
+                id: topbarTimeFallback
 
                 anchors.centerIn: islandReserve
-                width: implicitWidth
-                height: implicitHeight
-                visible: root.showTopbarTimeFallback
-                displayText: root.dynamicIslandService ? root.dynamicIslandService.fallbackTimeText : ""
-                darkMode: root.darkMode
-                interactive: root.chipInteractive
                 z: 2
-                onClicked: function(button) {
-                    if (root.dynamicIslandService)
-                        root.dynamicIslandService.handleChipClick(button, root.screen ? String(root.screen.name || "") : "");
-                }
-                onHoverEntered: {
-                    if (!root.dynamicIslandHoverExpand || !root.dynamicIslandService)
-                        return;
-                    topbarIslandHoverExpand.restart();
-                }
-                onHoverExited: {
-                    topbarIslandHoverExpand.stop();
+                visible: root.showTopbarTimeFallback
+                text: root.dynamicIslandService
+                      ? String(root.dynamicIslandService.fallbackTimeText || "")
+                      : ""
+                color: root.topText
+                font.pixelSize: 13
+                font.weight: Font.DemiBold
+                font.letterSpacing: 0
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+                elide: Text.ElideRight
+                maximumLineCount: 1
+                width: Math.min(islandReserve.width, Math.max(implicitWidth, 1))
+
+                MouseArea {
+                    anchors.fill: parent
+                    enabled: root.chipInteractive && topbarTimeFallback.visible
+                    hoverEnabled: root.chipInteractive
+                    acceptedButtons: Qt.LeftButton | Qt.RightButton
+                    cursorShape: root.chipInteractive ? Qt.PointingHandCursor : Qt.ArrowCursor
+                    onClicked: function(mouse) {
+                        if (root.dynamicIslandService)
+                            root.dynamicIslandService.handleChipClick(
+                                mouse.button,
+                                root.screen ? String(root.screen.name || "") : "");
+                    }
+                    onEntered: {
+                        if (!root.dynamicIslandHoverExpand || !root.dynamicIslandService)
+                            return;
+                        topbarIslandHoverCollapse.stop();
+                        topbarIslandHoverExpand.restart();
+                    }
+                    onExited: {
+                        topbarIslandHoverExpand.stop();
+                        if (root.dynamicIslandHoverExpand && root.dynamicIslandService)
+                            topbarIslandHoverCollapse.restart();
+                    }
                 }
 
                 Timer {
@@ -831,10 +855,20 @@ PanelWindow {
                     repeat: false
                     onTriggered: {
                         if (root.dynamicIslandService)
-                            root.dynamicIslandService.requestHoverExpand(root.screen ? String(root.screen.name || "") : "");
+                            root.dynamicIslandService.requestHoverExpand(
+                                root.screen ? String(root.screen.name || "") : "");
                     }
                 }
 
+                Timer {
+                    id: topbarIslandHoverCollapse
+                    interval: IslandMotion.hoverCollapseDelayMs
+                    repeat: false
+                    onTriggered: {
+                        if (root.dynamicIslandService)
+                            root.dynamicIslandService.requestHoverCollapse();
+                    }
+                }
             }
         }
     }

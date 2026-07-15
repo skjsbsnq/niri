@@ -5,7 +5,6 @@ Item {
     property var model: ({})
     property color textPrimary: "#f7f8fa"
     property color textSecondary: "#aeb6c2"
-    property color accentColor: "#0a84ff"
     property color trackColor: "#30ffffff"
 
     readonly property real value: Math.max(0, Math.min(1, Number(model && model.value) || 0))
@@ -50,7 +49,7 @@ Item {
                     width: parent.width * (root.muted ? 0 : root.value)
                     height: parent.height
                     radius: 3
-                    color: root.accentColor
+                    color: root.muted ? "#70ffffff" : root.textPrimary
                 }
             }
         }

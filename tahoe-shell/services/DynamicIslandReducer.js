@@ -17,11 +17,13 @@ var VALID_STATES = [
 
 // Presentation priority table (roadmap 14.5). Higher wins.
 var PRIORITY = {
+    // Direct hardware feedback must win immediately, including while another
+    // scene is expanded or a notification lease is active.
+    "osd": 110,
     "interaction": 100,
     "critical_notification": 90,
     "notification": 80,
     "timer_completion": 70,
-    "osd": 50,
     "workspace": 40,
     "media_preview": 30,
     "clock": 0
@@ -59,6 +61,10 @@ function blocksCandidate(currentPriority, candidatePriority) {
 }
 
 function blocksOsd(presentation, flags) {
+    // Same-kind updates coalesce in place. Treating equal OSD priority as a
+    // blocker queued every drag/key-repeat sample until the hide timer fired.
+    if (String(presentation || "") === "transient_osd")
+        return false;
     return blocksCandidate(presentationPriority(presentation, flags), PRIORITY.osd);
 }
 
@@ -70,6 +76,10 @@ function blocksNotification(presentation, flags) {
     var f = flags || {};
     // One notification at a time; expanded/interaction always block.
     if (f.userInteracting || f.expanded)
+        return true;
+    // Direct hardware feedback keeps its short lease until the retained exit
+    // finishes; notifications drain immediately afterwards.
+    if (String(presentation || "") === "transient_osd")
         return true;
     if (String(presentation || "") === "transient_notification")
         return true;

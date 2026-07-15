@@ -22,6 +22,8 @@ Item {
     property real progress: -1
     // T13: explicit muted flag from service (avoid locale string probes).
     property bool osdMuted: false
+    // Keep the OSD snapshot mounted while its retained exit animation runs.
+    property bool osdExiting: false
     // T14: compact notification presentation (from service lease fields).
     property string notificationAppName: ""
     property string notificationIconUrl: ""
@@ -42,7 +44,6 @@ Item {
     property bool showSecondaryText: false
     property color textPrimary: "#f7f8fa"
     property color textSecondary: "#aeb6c2"
-    property color accentColor: "#0a84ff"
     property bool darkMode: true
     // Measured resting clock content width (no capsule padding). Overlay adds pad + clamp.
     readonly property int restingClockContentWidth: restingClock.contentWidth
@@ -79,7 +80,9 @@ Item {
     readonly property bool standardDetailActive: !compactResting && !notificationActive && !osdActive && !mediaExpanded && !summaryExpanded
     readonly property bool osdActive: islandState === "transient_osd"
     // T13: horizontal bar OSD; ring removed. Scene visible whenever OSD active.
-    readonly property bool osdSceneVisible: osdActive
+    readonly property bool osdSceneVisible: osdActive && !osdExiting
+    property real osdLayerOpacity: 0
+    property real osdLayerOffset: 0
     readonly property int notificationFadeInDuration: 280
     readonly property int notificationFadeOutDuration: 140
     // Hold outgoing expanded loaders through exit fade, then destroy.
@@ -96,6 +99,45 @@ Item {
             return -1;
 
         return Math.max(0, Math.min(1, number));
+    }
+
+    function syncOsdLayerImmediately() {
+        osdExitOpacity.stop();
+        osdExitTravel.stop();
+        root.osdLayerOpacity = root.osdActive && !root.osdExiting ? 1 : 0;
+        root.osdLayerOffset = 0;
+    }
+
+    onOsdActiveChanged: {
+        if (!root.osdExiting)
+            root.syncOsdLayerImmediately();
+    }
+
+    onOsdExitingChanged: {
+        if (root.osdExiting && root.osdActive) {
+            osdExitOpacity.restart();
+            osdExitTravel.restart();
+        } else {
+            root.syncOsdLayerImmediately();
+        }
+    }
+
+    NumberAnimation {
+        id: osdExitOpacity
+        target: root
+        property: "osdLayerOpacity"
+        to: 0
+        duration: IslandMotion.v2OsdExitMs
+        easing.type: IslandMotion.v2ContentEasing
+    }
+
+    NumberAnimation {
+        id: osdExitTravel
+        target: root
+        property: "osdLayerOffset"
+        to: -IslandMotion.v2ContentMaxTravelPx
+        duration: IslandMotion.v2OsdExitMs
+        easing.type: IslandMotion.v2ContentEasing
     }
 
     onMediaExpandedContentVisibleChanged: {
@@ -152,6 +194,15 @@ Item {
             root.compactLayerOpacity = 1;
             root.compactLayerY = 0;
         } else if (root.compactLayerShown || root.compactLayerOpacity > 0.01) {
+            if (root.osdActive) {
+                // Hardware feedback owns the first frame; do not cross-fade the
+                // old clock/media label over the live bar and number.
+                compactExitHold.stop();
+                root.compactLayerHeld = false;
+                root.compactLayerOpacity = 0;
+                root.compactLayerY = 0;
+                return;
+            }
             // Exit: fade out and travel up (negative y), then unload.
             root.compactLayerHeld = true;
             root.compactLayerOpacity = 0;
@@ -191,13 +242,13 @@ Item {
 
         Behavior on opacity {
             NumberAnimation {
-                duration: IslandMotion.v2ContentExitMs
+                duration: root.osdActive ? IslandMotion.v2OsdEnterMs : IslandMotion.v2ContentExitMs
                 easing.type: IslandMotion.v2ContentEasing
             }
         }
         Behavior on anchors.topMargin {
             NumberAnimation {
-                duration: IslandMotion.v2ContentExitMs
+                duration: root.osdActive ? IslandMotion.v2OsdEnterMs : IslandMotion.v2ContentExitMs
                 easing.type: IslandMotion.v2ContentEasing
             }
         }
@@ -229,13 +280,13 @@ Item {
 
         Behavior on opacity {
             NumberAnimation {
-                duration: IslandMotion.v2ContentExitMs
+                duration: root.osdActive ? IslandMotion.v2OsdEnterMs : IslandMotion.v2ContentExitMs
                 easing.type: IslandMotion.v2ContentEasing
             }
         }
         Behavior on anchors.topMargin {
             NumberAnimation {
-                duration: IslandMotion.v2ContentExitMs
+                duration: root.osdActive ? IslandMotion.v2OsdEnterMs : IslandMotion.v2ContentExitMs
                 easing.type: IslandMotion.v2ContentEasing
             }
         }
@@ -357,6 +408,7 @@ Item {
             top: parent.top
             leftMargin: 0
             rightMargin: 0
+            topMargin: root.osdLayerOffset
         }
         height: IslandMotion.v2OsdHeight
         iconCode: root.iconCode
@@ -367,17 +419,9 @@ Item {
         darkMode: root.darkMode
         textPrimary: root.textPrimary
         textSecondary: root.textSecondary
-        accentColor: root.accentColor
-        opacity: root.osdSceneVisible ? 1 : 0
+        opacity: root.osdLayerOpacity
         // Stay in the tree while OSD is active so progress rebinds without recreate.
-        visible: root.osdActive || opacity > 0.01
-
-        Behavior on opacity {
-            NumberAnimation {
-                duration: IslandMotion.overlayContentDuration
-                easing.type: IslandMotion.overlayColorEasing
-            }
-        }
+        visible: root.osdActive || root.osdLayerOpacity > 0.01
     }
 
     // Expanded media: Loader only while visible or exit-hold (no hidden Timer).
@@ -502,6 +546,7 @@ Item {
     }
 
     Component.onCompleted: {
+        root.syncOsdLayerImmediately();
         if (root.compactLayerWanted) {
             root.compactLayerOpacity = 1;
             root.compactLayerY = 0;

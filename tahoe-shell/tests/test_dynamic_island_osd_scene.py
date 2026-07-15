@@ -13,6 +13,7 @@ OSD = SHELL_ROOT / "components" / "DynamicIslandOsdView.qml"
 CONTENT = SHELL_ROOT / "components" / "DynamicIslandContent.qml"
 ISLAND = SHELL_ROOT / "services" / "DynamicIsland.qml"
 OVERLAY = SHELL_ROOT / "components" / "DynamicIslandOverlay.qml"
+MOTION = SHELL_ROOT / "components" / "DynamicIslandMotion.js"
 
 
 def _read(path: Path) -> str:
@@ -42,6 +43,7 @@ class DynamicIslandOsdSceneTests(unittest.TestCase):
         cls.content = _read(CONTENT)
         cls.island = _read(ISLAND)
         cls.overlay = _read(OVERLAY)
+        cls.motion = _read(MOTION)
 
     def test_osd_view_layout_contract(self) -> None:
         self.assertIn("TahoeSymbol", self.osd)
@@ -71,8 +73,10 @@ class DynamicIslandOsdSceneTests(unittest.TestCase):
         self.assertNotIn("osdRing", self.content)
         # Canvas may exist elsewhere later; OSD path must not paint a ring.
         self.assertNotIn("id: osdRing", self.content)
-        # Progress opacity is scene-level only (not progress-driven re-enter).
-        self.assertIn("opacity: root.osdSceneVisible ? 1 : 0", self.content)
+        # Entry/cancel is immediate; only retained exit animates opacity.
+        self.assertIn("opacity: root.osdLayerOpacity", self.content)
+        self.assertIn("syncOsdLayerImmediately", self.content)
+        self.assertIn("id: osdExitOpacity", self.content)
         # No locale string probe for muted.
         self.assertNotIn('displayText === "静音"', self.content)
 
@@ -139,10 +143,21 @@ class DynamicIslandOsdSceneTests(unittest.TestCase):
         sync = _function_body(self.island, "syncVolumeOsdFromControls")
         self.assertIn('"progress": muted ? 0 : volume', sync)
 
-    def test_overlay_forwards_accent(self) -> None:
-        self.assertIn("accentColor", self.overlay)
-        self.assertIn("Theme.accent", self.overlay)
-        self.assertIn("darkMode: root.darkMode", self.overlay)
+    def test_osd_bar_is_monochrome_not_accent_colored(self) -> None:
+        self.assertNotIn("accentColor", self.osd)
+        self.assertNotIn("Theme.accent", self.osd)
+        self.assertIn(": root.textPrimary", self.osd)
+        self.assertIn('"#70000000"', self.osd)
+
+    def test_osd_entry_is_immediate_and_exit_is_retained(self) -> None:
+        self.assertIn("var v2OsdEnterMs = 0", self.motion)
+        self.assertIn("var v2OsdExitMs = 110", self.motion)
+        self.assertIn("osdImmediateGeometry", self.overlay)
+        self.assertIn("transientOsdImmediate", self.island)
+        self.assertIn("transientOsdExiting", self.overlay)
+        self.assertIn("osdExiting", self.content)
+        self.assertIn("beginOsdExit", self.island)
+        self.assertIn("finishOsdExit", self.island)
 
     def test_no_pipewire_or_backlight_in_osd_view(self) -> None:
         for needle in ("PipeWire", "brightnessctl", "backlight", "pw-cli"):

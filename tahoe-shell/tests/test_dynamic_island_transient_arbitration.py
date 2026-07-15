@@ -85,19 +85,19 @@ class TransientArbitrationTests(unittest.TestCase):
         cls.expected = EXPECTED.read_text(encoding="utf-8")
 
     def test_priority_table(self) -> None:
+        self.assertEqual(run_node({"op": "priority", "kind": "osd"})["value"], 110)
         self.assertEqual(run_node({"op": "priority", "kind": "interaction"})["value"], 100)
         self.assertEqual(run_node({"op": "priority", "kind": "notification"})["value"], 80)
-        self.assertEqual(run_node({"op": "priority", "kind": "osd"})["value"], 50)
         self.assertEqual(run_node({"op": "priority", "kind": "workspace"})["value"], 40)
 
-    def test_notification_blocks_osd_and_workspace(self) -> None:
+    def test_osd_preempts_notification_while_workspace_waits(self) -> None:
         flags = {"displayingNotification": True}
         out = run_node({
             "op": "blocks",
             "presentation": "transient_notification",
             "flags": flags,
         })
-        self.assertTrue(out["osd"])
+        self.assertFalse(out["osd"])
         self.assertTrue(out["workspace"])
         self.assertTrue(out["notification"])
 
@@ -107,13 +107,23 @@ class TransientArbitrationTests(unittest.TestCase):
         self.assertFalse(out["workspace"])
         self.assertFalse(out["notification"])
 
-    def test_expanded_blocks_lower_events(self) -> None:
+    def test_expanded_still_allows_direct_osd_feedback(self) -> None:
         out = run_node({
             "op": "blocks",
             "presentation": "expanded_media",
             "flags": {"expanded": True},
         })
-        self.assertTrue(out["osd"])
+        self.assertFalse(out["osd"])
+        self.assertTrue(out["workspace"])
+        self.assertTrue(out["notification"])
+
+    def test_repeated_osd_coalesces_in_place(self) -> None:
+        out = run_node({
+            "op": "blocks",
+            "presentation": "transient_osd",
+            "flags": {},
+        })
+        self.assertFalse(out["osd"])
         self.assertTrue(out["workspace"])
         self.assertTrue(out["notification"])
 
@@ -195,7 +205,7 @@ class TransientArbitrationTests(unittest.TestCase):
         self.assertNotIn('reason="target T07:', self.expected)
         self.assertNotIn("reason=\"target T07:", self.expected)
         # Anchors updated or production predicates true via green tests.
-        self.assertIn("test_desired_osd_yields_to_active_notification", self.expected)
+        self.assertIn("test_desired_osd_preempts_active_notification", self.expected)
         # xfail marks for T07 should be gone
         self.assertNotRegex(
             self.expected,

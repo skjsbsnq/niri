@@ -1,8 +1,6 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
-import "DynamicIslandMotion.js" as IslandMotion
-import "settings/SettingsTheme.js" as Theme
 
 // V2 OSD scene (T13): icon + horizontal progress + exact value.
 // Volume, muted, and brightness share this layout. Continuous progress
@@ -17,8 +15,7 @@ Item {
     property bool darkMode: true
     property color textPrimary: "#f7f8fa"
     property color textSecondary: "#aeb6c2"
-    property color accentColor: Theme.accent(darkMode, "blue")
-    property color trackColor: "#30ffffff"
+    property color trackColor: darkMode ? "#30ffffff" : "#30000000"
 
     function clampedProgressOf(value) {
         var number = Number(value);
@@ -78,8 +75,11 @@ Item {
                     width: Math.max(0, track.width * root.barProgress)
                     height: parent.height
                     radius: parent.radius
-                    // Neutral accent for volume/brightness; muted stays neutral (not danger red).
-                    color: root.muted ? "#70ffffff" : root.accentColor
+                    // OSD feedback is monochrome by design, independent of the
+                    // user accent color. Muted remains neutral, never danger red.
+                    color: root.muted
+                        ? (root.darkMode ? "#70ffffff" : "#70000000")
+                        : root.textPrimary
                 }
             }
         }

@@ -61,9 +61,26 @@ class BrightnessZeroTests(unittest.TestCase):
         compact = _compact(body)
         self.assertNotIn("Math.max(0.05", body)
         self.assertIn("Math.max(0,Math.min(1,sample))", compact)
-        self.assertIn('brightnessctl","set",pct+"%"', compact)
+        start = _compact(_function_body(self.controls, "startBrightnessWrite"))
+        self.assertIn('"brightnessctl","set"', start)
+        self.assertIn('Math.round(root.activeBrightnessWrite*100)', start)
         # Non-finite becomes 0 after clamp path.
         self.assertIn("if(!isFinite(sample))sample=0", compact)
+
+    def test_brightness_drag_uses_latest_wins_queue(self) -> None:
+        setter = _function_body(self.controls, "setBrightness")
+        finish = _function_body(self.controls, "finishBrightnessWrite")
+        self.assertIn("pendingBrightnessWrite", setter)
+        self.assertIn("setBrightnessValue(v)", setter)
+        self.assertIn("pendingBrightnessWrite", finish)
+        self.assertIn("startBrightnessWrite", finish)
+        self.assertIn("brightnessUpdating = false", finish)
+
+    def test_brightness_monitor_is_event_driven(self) -> None:
+        self.assertIn('"udevadm", "monitor"', self.controls)
+        self.assertIn('"ACTION=change"', self.controls)
+        self.assertNotIn("brightnessMonitorScript", self.controls)
+        self.assertNotIn("sleep 0.2", self.controls)
 
     def test_set_brightness_value_accepts_zero(self) -> None:
         body = _function_body(self.controls, "setBrightnessValue")

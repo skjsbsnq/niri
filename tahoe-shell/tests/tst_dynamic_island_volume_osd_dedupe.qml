@@ -239,4 +239,57 @@ TestCase {
         compare(island.transientDisplayText, textAfter);
         compare(island.lastVolume, 0.55);
     }
+
+    function test_rapid_volume_updates_patch_active_osd_in_place() {
+        clearOsdPresentation();
+        island.captureOsdBaselines();
+
+        controls.volume = 0.5;
+        wait(0);
+        compare(island.presentation, "transient_osd");
+        compare(island.transientProgress, 0.5);
+        compare(island.pendingOsd, null);
+
+        controls.volume = 0.73;
+        wait(0);
+        compare(island.presentation, "transient_osd");
+        compare(island.transientProgress, 0.73);
+        compare(island.transientSecondaryText, "73%");
+        compare(island.pendingOsd, null);
+    }
+
+    function test_osd_preempts_expanded_and_restores_after_exit() {
+        island.showExpandedSummary();
+        wait(0);
+        compare(island.presentation, "expanded_summary");
+
+        controls.volume = 0.61;
+        wait(0);
+        compare(island.presentation, "transient_osd");
+        compare(island.transientOsdReturnState, "expanded_summary");
+
+        island.beginOsdExit("", "");
+        compare(island.transientOsdExiting, true);
+        compare(island.transientSecondaryText, "61%");
+        wait(140);
+        compare(island.presentation, "expanded_summary");
+        compare(island.transientOsdExiting, false);
+    }
+
+    function test_osd_click_defers_action_until_retained_exit_finishes() {
+        clearOsdPresentation();
+        island.captureOsdBaselines();
+        controls.volume = 0.42;
+        wait(0);
+        compare(island.presentation, "transient_osd");
+
+        island.handleChipClick(Qt.LeftButton, "");
+        compare(island.presentation, "transient_osd");
+        compare(island.transientOsdExiting, true);
+        compare(island.transientSecondaryText, "42%");
+
+        wait(140);
+        compare(island.presentation, "expanded_summary");
+        compare(island.transientOsdExiting, false);
+    }
 }

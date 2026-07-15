@@ -246,8 +246,9 @@ class DynamicIslandV2SurfaceTests(unittest.TestCase):
         for prop in ("x", "y", "width", "height", "radius"):
             self.assertRegex(
                 self.overlay,
-                rf"Behavior on {prop}\s*\{{\s*\n\s*NumberAnimation",
+                rf"Behavior on {prop}\s*\{{(?:\s*\n\s*enabled:[^\n]+)?\s*\n\s*NumberAnimation",
             )
+        self.assertIn("enabled: !root.osdImmediateGeometry", self.overlay)
 
     def test_content_loader_scene_host(self) -> None:
         self.assertIn("id: mediaLoader", self.content)

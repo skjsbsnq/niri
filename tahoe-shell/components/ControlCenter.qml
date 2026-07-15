@@ -1309,9 +1309,12 @@ PanelWindow {
         property string label: ""
         property real value: 0
         property bool enabled: true
+        property bool userDragging: false
+        property real userValue: 0
         signal userSet(real value)
 
-        readonly property real clampedValue: Math.max(0, Math.min(1, gs.value))
+        readonly property real sourceValue: Math.max(0, Math.min(1, Number(gs.value) || 0))
+        readonly property real clampedValue: gs.userDragging ? gs.userValue : gs.sourceValue
         readonly property real knobSize: 22
         readonly property real trackHeight: 26
 
@@ -1426,14 +1429,25 @@ PanelWindow {
                             if (w <= 0)
                                 return;
                             var v = Math.max(0, Math.min(1, mouseX / w));
+                            // Paint from pointer position before any backend
+                            // round-trip. Controls still receives every sample.
+                            gs.userValue = v;
                             gs.userSet(v);
                         }
 
-                        onPressed: function(mouse) { dragArea.applyValue(mouse.x); }
+                        onPressed: function(mouse) {
+                            gs.userDragging = true;
+                            dragArea.applyValue(mouse.x);
+                        }
                         onPositionChanged: function(mouse) {
                             if (pressed)
                                 dragArea.applyValue(mouse.x);
                         }
+                        onReleased: function(mouse) {
+                            dragArea.applyValue(mouse.x);
+                            gs.userDragging = false;
+                        }
+                        onCanceled: gs.userDragging = false
                     }
                 }
             }

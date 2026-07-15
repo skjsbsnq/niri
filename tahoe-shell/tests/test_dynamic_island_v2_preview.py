@@ -317,6 +317,8 @@ class DynamicIslandV2PreviewTests(unittest.TestCase):
         self.assertNotIn("Canvas", osd)
         self.assertNotIn("arc", osd.lower())
         self.assertIn("mutedLabel", osd)
+        self.assertNotIn("accentColor", osd)
+        self.assertIn("root.textPrimary", osd)
 
     def test_clock_has_no_negative_letter_spacing(self) -> None:
         for path in (PREVIEW_ROOT / "scenes").glob("*.qml"):

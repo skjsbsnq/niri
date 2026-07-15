@@ -75,6 +75,10 @@ var visualizerPausedDuration = 260;
 var v2CompactToTransientMs = 240;
 var v2CompactToExpandedMs = 280;
 var v2ExpandedToCompactMs = 240;
+// OSD is direct manipulation feedback. Its first frame must not wait for the
+// decorative capsule/content enter animations used by other transient scenes.
+var v2OsdEnterMs = 0;
+var v2OsdExitMs = 110;
 var v2ContentExitMs = 110;
 var v2ContentEnterMs = 170;
 var v2ContentMaxTravelPx = 6;

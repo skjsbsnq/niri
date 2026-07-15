@@ -49,6 +49,13 @@ Item {
     property string transientIconCode: ""
     // T13: explicit OSD muted flag for the view (not locale-dependent).
     property bool transientOsdMuted: false
+    // OSD keeps its last value mounted during exit so text/bar never vanish
+    // before the upward fade completes.
+    property bool transientOsdExiting: false
+    property bool transientOsdImmediate: false
+    property string transientOsdReturnState: ""
+    property string transientOsdExitAction: ""
+    property string transientOsdExitScreenName: ""
     // T14: compact notification presentation fields (not a second model).
     property string transientNotificationAppName: ""
     property string transientNotificationIconUrl: ""
@@ -593,7 +600,17 @@ Item {
     }
 
 
+    function resetOsdExitState() {
+        osdExitTimer.stop();
+        root.transientOsdExiting = false;
+        root.transientOsdImmediate = false;
+        root.transientOsdReturnState = "";
+        root.transientOsdExitAction = "";
+        root.transientOsdExitScreenName = "";
+    }
+
     function clearTransientFields() {
+        root.resetOsdExitState();
         root.transientDisplayText = "";
         root.transientSecondaryText = "";
         root.transientProgress = -1;
@@ -673,6 +690,102 @@ Item {
             root.clearSessionOwnerOutput();
     }
 
+    function prepareImmediateOsdPresentation() {
+        if (root.presentation === "transient_osd")
+            return;
+
+        var current = String(root.presentation || "");
+        // Arm zero-duration geometry before forcedState changes so QML Behavior
+        // samples the direct-feedback policy rather than the previous scene.
+        root.transientOsdImmediate = true;
+        root.transientOsdReturnState = root.expanded ? current : "";
+        transientTimer.stop();
+        osdExitTimer.stop();
+
+        // OSD is direct hardware feedback and may interrupt any scene. End a
+        // notification presentation lease cleanly; the notification itself
+        // remains owned by Notifications.qml / Notification Center.
+        root.applyingPresentationReducer = true;
+        if (current === "transient_notification") {
+            if (root.displayingNotificationId >= 0)
+                root.markNotificationPresentationCompleted(root.displayingNotificationId);
+            root.displayingNotificationId = -1;
+            root.transientNotificationExpanded = false;
+        }
+        root.userInteracting = false;
+
+        // A hardware event also owns any in-flight island gesture. Keeping the
+        // preview width alive would delay or clip the OSD's first frame.
+        swipeSettleTimer.stop();
+        root.swipeDragging = false;
+        root.swipeSettling = false;
+        root.swipeMoved = false;
+        root.swipeProgress = 0;
+        root.swipeStartProgress = 0;
+        root.swipeStartForcedState = "";
+        root.applyingPresentationReducer = false;
+    }
+
+    function cancelOsdExitForUpdate() {
+        if (!root.transientOsdExiting)
+            return;
+        osdExitTimer.stop();
+        root.transientOsdExiting = false;
+        root.transientOsdExitAction = "";
+        root.transientOsdExitScreenName = "";
+    }
+
+    function beginOsdExit(action, screenName) {
+        if (root.presentation !== "transient_osd") {
+            if (String(action || "").length > 0 && String(action) !== "none")
+                root.performClickAction(action);
+            return;
+        }
+
+        transientTimer.stop();
+        root.transientOsdExitAction = String(action || "");
+        root.transientOsdExitScreenName = String(screenName || "");
+        if (root.transientOsdExiting)
+            return;
+
+        root.transientOsdExiting = true;
+        osdExitTimer.restart();
+    }
+
+    function finishOsdExit() {
+        if (root.presentation !== "transient_osd") {
+            root.resetOsdExitState();
+            return;
+        }
+
+        var returnState = String(root.transientOsdReturnState || "");
+        var action = String(root.transientOsdExitAction || "");
+        var screenName = String(root.transientOsdExitScreenName || "");
+        if (returnState !== "expanded_media" && returnState !== "expanded_summary")
+            returnState = "";
+        if (returnState === "expanded_media" && !root.hasMedia)
+            returnState = "";
+
+        // Commit the post-OSD state only after the retained content exit. The
+        // reducer drain is suppressed until all snapshot fields are cleared.
+        root.applyingPresentationReducer = true;
+        root.clearTransientFields();
+        root.forcedState = returnState;
+        root.recomputePresentation();
+        root.clearEventOwnerOutput();
+        if (returnState.length === 0)
+            root.clearSessionOwnerOutput();
+        root.applyingPresentationReducer = false;
+
+        if (action.length > 0 && action !== "none") {
+            if (screenName.length > 0)
+                root.claimSessionOwnerForScreen(screenName);
+            root.performClickAction(action);
+            return;
+        }
+        root.restoreAfterTransient();
+    }
+
     function showTransient(nextState, text, secondary, progressValue, icon, hideMs, osdMuted) {
         if (!root.islandEnabled)
             return;
@@ -718,6 +831,7 @@ Item {
         // Already on OSD: only patch live fields. Do NOT re-enter forcedState /
         // recomputePresentation (that restarts morph and feels multi-second lag).
         if (root.presentation === "transient_osd" && root.forcedState === "transient_osd") {
+            root.cancelOsdExitForUpdate();
             root.transientDisplayText = String(text || "");
             root.transientSecondaryText = secondary;
             root.transientProgress = progress;
@@ -728,6 +842,7 @@ Item {
             return;
         }
 
+        root.prepareImmediateOsdPresentation();
         showTransient("transient_osd", text, secondary, progress,
             iconCode, root.osdHideMs, muted);
    }
@@ -990,13 +1105,27 @@ Item {
     }
 
     function handleChipClick(button, screenName) {
-        // Optional screenName pins the session owner for multi-output clicks.
-        if (screenName !== undefined && screenName !== null && String(screenName).length > 0)
-            root.claimSessionOwnerForScreen(screenName);
+        var owner = screenName !== undefined && screenName !== null
+            ? String(screenName)
+            : "";
+        var action = "";
         if (button === Qt.LeftButton)
-            performClickAction(root.leftClickAction);
+            action = root.leftClickAction;
         else if (button === Qt.RightButton)
-            performClickAction(root.rightClickAction);
+            action = root.rightClickAction;
+
+        // Do not clear OSD data on click. Retain the exact value/bar through
+        // exit, then run the configured click command.
+        if (root.presentation === "transient_osd") {
+            root.beginOsdExit(action, owner);
+            return;
+        }
+
+        // Optional screenName pins the session owner for multi-output clicks.
+        if (owner.length > 0)
+            root.claimSessionOwnerForScreen(owner);
+        if (action.length > 0)
+            root.performClickAction(action);
     }
 
     function setUserInteracting(active) {
@@ -1493,13 +1622,14 @@ Item {
    }
 
     function blocksTransientOsd() {
-        // Yield to an active notification lease (T07 priority).
+        // Reducer treats OSD as direct feedback: same-kind updates coalesce in
+        // place and hardware feedback may preempt lower presentation scenes.
         return IslandReducer.blocksOsd(root.presentation, root.arbitrationFlags());
     }
 
     // Single restore/drain entry after any presentation change (T07).
-    // Priority: notification lease first, then coalesced OSD. Workspace is
-    // latest-only and never queued as a pending presenter.
+    // Pending notifications drain after the current transient. OSD normally
+    // presents immediately; pendingOsd remains only as a defensive fallback.
     function restoreAfterTransient() {
         if (!root.islandEnabled)
             return;
@@ -1832,6 +1962,10 @@ Item {
             "secondaryText=" + root.secondaryText,
             "progress=" + root.progress,
             "iconCode=" + root.iconCode,
+            "osdExiting=" + root.transientOsdExiting,
+            "osdImmediate=" + root.transientOsdImmediate,
+            "osdReturnState=" + root.transientOsdReturnState,
+            "pendingOsd=" + (root.pendingOsd ? String(root.pendingOsd.kind || "yes") : "none"),
             "targetScreenName=" + root.targetScreenName,
             "eventOwnerOutput=" + root.eventOwnerOutput,
             "sessionOwnerOutput=" + root.sessionOwnerOutput,
@@ -1910,6 +2044,10 @@ Item {
         interval: root.smokeTransientHideMs
         repeat: false
         onTriggered: {
+            if (root.presentation === "transient_osd") {
+                root.beginOsdExit("", "");
+                return;
+            }
             if (root.presentation === "transient_notification") {
                 if (root.displayingNotificationId >= 0)
                     root.markNotificationPresentationCompleted(root.displayingNotificationId);
@@ -1923,6 +2061,13 @@ Item {
                 root.clearSessionOwnerOutput();
             root.restoreAfterTransient();
         }
+    }
+
+    Timer {
+        id: osdExitTimer
+        interval: IslandMotion.v2OsdExitMs
+        repeat: false
+        onTriggered: root.finishOsdExit()
     }
 
     Timer {

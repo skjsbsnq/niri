@@ -77,6 +77,12 @@ PanelWindow {
     readonly property bool contentOsdMuted: (!!screenRole && screenRole.showActivity && dynamicIslandService)
         ? !!dynamicIslandService.transientOsdMuted
         : false
+    readonly property bool contentOsdExiting: (!!screenRole && screenRole.showActivity && dynamicIslandService)
+        ? !!dynamicIslandService.transientOsdExiting
+        : false
+    readonly property bool osdImmediateGeometry: dynamicIslandService
+        ? !!dynamicIslandService.transientOsdImmediate
+        : false
     readonly property string contentNotificationAppName: (!!screenRole && screenRole.showActivity && dynamicIslandService)
         ? String(dynamicIslandService.transientNotificationAppName || "")
         : ""
@@ -111,7 +117,13 @@ PanelWindow {
         ? Math.round(swipePreviewWidth)
         : widthForState(effectiveGeometryState)
     readonly property int capsuleTargetWidth: clampInt(requestedCapsuleWidth, 1, maxCapsuleWidth)
-    readonly property int swipeWidthDuration: swipeInteractive ? 0 : (swipeSettling ? IslandMotion.swipeSettleDuration : IslandMotion.overlayMorphDuration)
+    readonly property int swipeWidthDuration: swipeInteractive
+        ? 0
+        : (swipeSettling
+            ? IslandMotion.swipeSettleDuration
+            : (osdImmediateGeometry
+                ? IslandMotion.v2OsdEnterMs
+                : IslandMotion.overlayMorphDuration))
     readonly property int swipeWidthEasing: swipeInteractive ? IslandMotion.overlayColorEasing : (swipeSettling ? IslandMotion.swipeSettleEasing : IslandMotion.overlayMorphEasing)
     readonly property int capsuleTargetHeight: clampInt(heightForState(effectiveGeometryState), 1, maxCapsuleHeight)
     readonly property int capsuleTargetLeft: clampInt(Math.round((screenWidth - capsuleTargetWidth) / 2), 0, Math.max(0, screenWidth - capsuleTargetWidth))
@@ -134,8 +146,6 @@ PanelWindow {
     readonly property color glassStroke: Theme.islandSurfaceStroke(root.darkMode, root.surfaceFillRole)
     readonly property color textPrimary: Theme.islandTextPrimary(root.darkMode)
     readonly property color textSecondary: Theme.islandTextSecondary(root.darkMode)
-    readonly property string accentId: settingsService ? String(settingsService.accentColor || "blue") : "blue"
-    readonly property color accentColor: Theme.accent(root.darkMode, root.accentId)
     readonly property string mediaArtUrl: (activeForScreen && dynamicIslandService)
         ? String(dynamicIslandService.mediaArtUrl || "")
         : ""
@@ -356,6 +366,8 @@ PanelWindow {
         // Use V2 compact↔expanded timings (shorter than legacy 380ms) so content
         // does not feel like it is sliding/sinking during click expand/collapse.
         readonly property int geometryMorphMs: {
+            if (root.osdImmediateGeometry)
+                return IslandMotion.v2OsdEnterMs;
             var fromExpanded = root.effectiveGeometryState.indexOf("expanded_") === 0;
             // Target-based: expanded states use expanded morph budget.
             if (fromExpanded || root.geometryState.indexOf("expanded_") === 0)
@@ -366,14 +378,17 @@ PanelWindow {
         }
 
         Behavior on x {
+            enabled: !root.osdImmediateGeometry
             NumberAnimation { duration: root.swipeWidthDuration; easing.type: root.swipeWidthEasing }
         }
 
         Behavior on y {
+            enabled: !root.osdImmediateGeometry
             NumberAnimation { duration: islandSurface.geometryMorphMs; easing.type: IslandMotion.v2GeometryEasing }
         }
 
         Behavior on width {
+            enabled: !root.osdImmediateGeometry
             NumberAnimation {
                 duration: root.swipeInteractive ? 0 : (root.swipeSettling ? IslandMotion.swipeSettleDuration : islandSurface.geometryMorphMs)
                 easing.type: root.swipeInteractive ? IslandMotion.overlayColorEasing : (root.swipeSettling ? IslandMotion.swipeSettleEasing : IslandMotion.v2GeometryEasing)
@@ -381,10 +396,12 @@ PanelWindow {
         }
 
         Behavior on height {
+            enabled: !root.osdImmediateGeometry
             NumberAnimation { duration: islandSurface.geometryMorphMs; easing.type: IslandMotion.v2GeometryEasing }
         }
 
         Behavior on radius {
+            enabled: !root.osdImmediateGeometry
             NumberAnimation { duration: islandSurface.geometryMorphMs; easing.type: IslandMotion.v2GeometryEasing }
         }
 
@@ -421,6 +438,7 @@ PanelWindow {
                 clockTimeText: root.contentClockTime
                 progress: root.progress
                 osdMuted: root.contentOsdMuted
+                osdExiting: root.contentOsdExiting
                 notificationAppName: root.contentNotificationAppName
                 notificationIconUrl: root.contentNotificationIconUrl
                 notificationUrgency: root.contentNotificationUrgency
@@ -434,7 +452,6 @@ PanelWindow {
                 showSecondaryText: root.showSecondaryText
                 textPrimary: root.textPrimary
                 textSecondary: root.textSecondary
-                accentColor: root.accentColor
                 darkMode: root.darkMode
                 mediaArtUrl: root.mediaArtUrl
                 mediaTrackTitle: root.mediaTrackTitle

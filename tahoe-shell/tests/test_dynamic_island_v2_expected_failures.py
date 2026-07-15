@@ -30,6 +30,7 @@ SHELL_ROOT = Path(__file__).resolve().parents[1]
 ISLAND = SHELL_ROOT / "services" / "DynamicIsland.qml"
 OVERLAY = SHELL_ROOT / "components" / "DynamicIslandOverlay.qml"
 TOPBAR = SHELL_ROOT / "components" / "TopBar.qml"
+REDUCER = SHELL_ROOT / "services" / "DynamicIslandReducer.js"
 
 
 def _read(path: Path) -> str:
@@ -61,15 +62,12 @@ def _compact(text: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def osd_yields_to_active_notification(src: str) -> bool:
-    body = _function_body(src, "blocksTransientOsd")
-    flags = _function_body(src, "arbitrationFlags")
-    if "transient_notification" in body or "displayingNotificationId" in body:
-        return True
-    # T07: blocks via reducer + arbitration flags that surface the notification lease.
+def osd_preempts_active_notification(island_src: str, reducer_src: str) -> bool:
+    body = _function_body(island_src, "blocksTransientOsd")
     return (
         ("blocksOsd" in body or "IslandReducer.blocksOsd" in body)
-        and ("displayingNotification" in flags or "transient_notification" in flags)
+        and re.search(r'"osd"\s*:\s*110', reducer_src) is not None
+        and '=== "transient_osd"' in reducer_src
     )
 
 
@@ -246,11 +244,13 @@ class DynamicIslandV2ExpectedFailureTests(unittest.TestCase):
         cls.island_src = _read(ISLAND)
         cls.overlay_src = _read(OVERLAY)
         cls.topbar_src = _read(TOPBAR)
+        cls.reducer_src = _read(REDUCER)
 
     # ----- V1 anchors (must stay failing until the fix task updates them) -----
 
     def test_v1_osd_sim_documents_old_bug(self) -> None:
-        # Historical V1 sim still overwrites notifications; production is fixed in T07.
+        # V1 overwrote notifications without lease cleanup. Production now uses
+        # deliberate OSD preemption and ends the presentation lease explicitly.
         sim = IslandSimV1(state="transient_notification", displaying_notification_id=7)
         sim.present_osd()
         self.assertEqual(sim.state, "transient_osd")
@@ -301,9 +301,9 @@ class DynamicIslandV2ExpectedFailureTests(unittest.TestCase):
 
     # ----- Desired V2 strict xfails (XPASS when production gains the structure) -----
 
-    def test_desired_osd_yields_to_active_notification(self) -> None:
-        # T07: expected-failure removed; production yields to active notification.
-        self.assertTrue(osd_yields_to_active_notification(self.island_src))
+    def test_desired_osd_preempts_active_notification(self) -> None:
+        # Direct hardware feedback supersedes the earlier T07 queueing policy.
+        self.assertTrue(osd_preempts_active_notification(self.island_src, self.reducer_src))
 
     def test_desired_workspace_yields_to_active_notification(self) -> None:
         # T07: expected-failure removed; production yields to active notification.

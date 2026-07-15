@@ -98,6 +98,10 @@ Item {
     // echo may lag by tens–hundreds of ms; we still mirror it when it arrives.
     property real volume: 0
     property bool muted: false
+    property bool volumeWritePending: false
+    property bool muteWritePending: false
+    property real requestedVolume: 0
+    property bool requestedMuted: false
 
     function syncVolumeFromPipewire() {
         if (!root.audioReady || !root.audioSink || !root.audioSink.audio)
@@ -107,10 +111,24 @@ Item {
             v = 0;
         v = Math.max(0, Math.min(1, v));
         var m = !!root.audioSink.audio.muted;
-        if (Math.abs(root.volume - v) > 0.0001)
+
+        // Ignore an older backend echo while a direct manipulation write is
+        // still settling. Matching values acknowledge the optimistic sample.
+        if (root.volumeWritePending) {
+            if (Math.abs(v - root.requestedVolume) <= 0.0005)
+                root.volumeWritePending = false;
+        } else if (Math.abs(root.volume - v) > 0.0001) {
             root.volume = v;
-        if (root.muted !== m)
+        }
+        if (root.muteWritePending) {
+            if (m === root.requestedMuted)
+                root.muteWritePending = false;
+        } else if (root.muted !== m) {
             root.muted = m;
+        }
+
+        if (!root.volumeWritePending && !root.muteWritePending)
+            audioWriteGuard.stop();
     }
 
     function setVolume(value) {
@@ -118,10 +136,16 @@ Item {
             return;
         var v = Math.max(0, Math.min(1, Number(value) || 0));
         // Optimistic: fire volumeChanged for island/CC before PipeWire settles.
+        root.requestedVolume = v;
+        root.volumeWritePending = true;
         if (Math.abs(root.volume - v) > 0.0001)
             root.volume = v;
-        if (v > 0 && root.muted)
+        if (v > 0 && (root.muted || audioSink.audio.muted)) {
+            root.requestedMuted = false;
+            root.muteWritePending = true;
             root.muted = false;
+        }
+        audioWriteGuard.restart();
         audioSink.audio.volume = v;
         if (v > 0 && audioSink.audio.muted)
             audioSink.audio.muted = false;
@@ -130,9 +154,23 @@ Item {
     function toggleMute() {
         if (!audioReady || !audioSink.audio)
             return;
-        var next = !audioSink.audio.muted;
+        var next = !root.muted;
+        root.requestedMuted = next;
+        root.muteWritePending = true;
         root.muted = next;
+        audioWriteGuard.restart();
         audioSink.audio.muted = next;
+    }
+
+    Timer {
+        id: audioWriteGuard
+        interval: 120
+        repeat: false
+        onTriggered: {
+            root.volumeWritePending = false;
+            root.muteWritePending = false;
+            root.syncVolumeFromPipewire();
+        }
     }
 
     Connections {
@@ -158,25 +196,9 @@ Item {
     property real brightness: 1.0
     property bool brightnessAvailable: false
     property bool brightnessUpdating: false
-    readonly property string brightnessMonitorScript: [
-        "last='__unset__'",
-        "while :; do",
-        "  line=''",
-        "  for d in /sys/class/backlight/*; do",
-        "    [ -r \"$d/brightness\" ] && [ -r \"$d/max_brightness\" ] || continue",
-        "    name=${d##*/}",
-        "    cur=$(cat \"$d/brightness\" 2>/dev/null) || continue",
-        "    max=$(cat \"$d/max_brightness\" 2>/dev/null) || continue",
-        "    line=\"$name,$cur,$max\"",
-        "    break",
-        "  done",
-        "  if [ \"$line\" != \"$last\" ]; then",
-        "    printf '%s\\n' \"$line\"",
-        "    last=\"$line\"",
-        "  fi",
-        "  sleep 0.2",
-        "done"
-    ].join("\n")
+    property bool brightnessRefreshQueued: false
+    property real pendingBrightnessWrite: -1
+    property real activeBrightnessWrite: -1
 
     function setBrightnessValue(value) {
         // 0 is legal; only non-finite input falls back to 0 after clamp.
@@ -200,33 +222,53 @@ Item {
             root.setBrightnessAvailable(false);
             return;
         }
+        if (brightnessProbe.running) {
+            root.brightnessRefreshQueued = true;
+            return;
+        }
+        root.brightnessRefreshQueued = false;
         brightnessProbe.running = true;
     }
 
-    function parseBrightnessMonitorLine(line) {
-        var text = String(line || "").trim();
+    function applyBrightnessHardwareSample(current, max) {
+        var currentValue = Number(current);
+        var maxValue = Number(max);
+        if (!isFinite(currentValue) || !isFinite(maxValue) || maxValue <= 0) {
+            root.setBrightnessAvailable(false);
+            return;
+        }
+        root.setBrightnessAvailable(true);
+        // A udev echo for an earlier command must not pull a live drag back.
+        if (!root.brightnessUpdating)
+            root.setBrightnessValue(currentValue / maxValue);
+    }
+
+    function parseBrightnessInfo(textValue) {
+        var text = String(textValue || "").trim();
         if (text.length === 0) {
             root.setBrightnessAvailable(false);
             return;
         }
 
-        var parts = text.split(",");
-        if (parts.length < 3)
-            return;
-
-        var current = parseFloat(parts[1]);
-        var max = parseFloat(parts[2]);
-        if (!isFinite(current) || !isFinite(max) || max <= 0)
-            return;
-
-        if (root.commandRunner && root.commandRunner.revision > 0 && !root.commandRunner.commandAvailable("brightnessctl")) {
-            root.brightnessErrorText = "缺少 brightnessctl";
-            root.setBrightnessAvailable(false);
-            return;
+        // brightnessctl -m info: device,class,current,percent,max
+        var csv = text.split(",");
+        var current = csv.length >= 5 ? parseFloat(csv[2]) : NaN;
+        var max = csv.length >= 5 ? parseFloat(csv[4]) : NaN;
+        if (!isFinite(current) || !isFinite(max)) {
+            var parts = text.split(/[,;\s]+/).filter(function (s) { return s.length > 0; });
+            var numbers = [];
+            for (var i = 0; i < parts.length; i++) {
+                var token = parts[i].replace(/%$/, "");
+                var value = parseFloat(token);
+                if (isFinite(value))
+                    numbers.push(value);
+            }
+            if (numbers.length >= 2) {
+                current = numbers[numbers.length - 2];
+                max = numbers[numbers.length - 1];
+            }
         }
-
-        root.setBrightnessValue(current / max);
-        root.setBrightnessAvailable(true);
+        root.applyBrightnessHardwareSample(current, max);
     }
 
     function setBrightness(value) {
@@ -242,12 +284,47 @@ Item {
         var sample = Number(value);
         if (!isFinite(sample))
             sample = 0;
-        var v = Math.max(0, Math.min(1, sample));
-        brightnessUpdating = true;
+        var pct = Math.round(Math.max(0, Math.min(1, sample)) * 100);
+        var v = pct / 100;
+        root.brightnessUpdating = true;
+        root.pendingBrightnessWrite = v;
         root.setBrightnessValue(v);
-        var pct = Math.round(v * 100).toString();
-        brightnessSetter.command = ["brightnessctl", "set", pct + "%"];
+        root.startBrightnessWrite();
+    }
+
+    function startBrightnessWrite() {
+        if (brightnessSetter.running || root.pendingBrightnessWrite < 0)
+            return;
+        root.activeBrightnessWrite = root.pendingBrightnessWrite;
+        root.pendingBrightnessWrite = -1;
+        brightnessSetter.command = [
+            "brightnessctl",
+            "set",
+            Math.round(root.activeBrightnessWrite * 100).toString() + "%"
+        ];
         brightnessSetter.running = true;
+    }
+
+    function finishBrightnessWrite(code) {
+        if (code !== 0) {
+            root.pendingBrightnessWrite = -1;
+            root.activeBrightnessWrite = -1;
+            root.brightnessUpdating = false;
+            Qt.callLater(function() { root.refreshBrightness(); });
+            return;
+        }
+
+        var next = root.pendingBrightnessWrite;
+        var active = root.activeBrightnessWrite;
+        root.activeBrightnessWrite = -1;
+        if (next >= 0 && Math.abs(next - active) > 0.0005) {
+            Qt.callLater(function() { root.startBrightnessWrite(); });
+            return;
+        }
+
+        root.pendingBrightnessWrite = -1;
+        root.brightnessUpdating = false;
+        Qt.callLater(function() { root.refreshBrightness(); });
     }
 
     Process {
@@ -256,78 +333,55 @@ Item {
         command: ["brightnessctl", "-m", "info"]
         stdout: StdioCollector {
             id: brightnessOut
-            onStreamFinished: {
-                var text = String(brightnessOut.text || "").trim();
-                var parts = text.split(/[,;\s]+/).filter(function (s) { return s.length > 0; });
-                var numbers = [];
-                for (var i = 0; i < parts.length; i++) {
-                    var token = parts[i].replace(/%$/, "");
-                    var value = parseFloat(token);
-                    if (isFinite(value))
-                        numbers.push(value);
-                }
-
-                var current = NaN;
-                var max = NaN;
-                if (numbers.length >= 2) {
-                    current = numbers[numbers.length - 2];
-                    max = numbers[numbers.length - 1];
-                }
-
-                if (isFinite(current) && isFinite(max) && max > 0) {
-                    root.setBrightnessValue(current / max);
-                    root.setBrightnessAvailable(true);
-                    return;
-                }
-                root.setBrightnessAvailable(false);
-            }
+            onStreamFinished: root.parseBrightnessInfo(brightnessOut.text)
         }
         onExited: function (code, exitStatus) {
             if (code !== 0)
                 root.setBrightnessAvailable(false);
+            if (root.brightnessRefreshQueued)
+                Qt.callLater(function() { root.refreshBrightness(); });
         }
     }
 
     Process {
         id: brightnessSetter
         running: false
-        onExited: function (code, exitStatus) {
-            root.brightnessUpdating = false;
-            if (code !== 0)
-                root.refreshBrightness();
-        }
+        onExited: function (code, exitStatus) { root.finishBrightnessWrite(code); }
     }
 
+    // Backlight drivers emit a kernel uevent for each real brightness change.
+    // Listening directly removes the old 200ms shell polling latency and avoids
+    // orphaned long-running shell loops after Quickshell reloads.
     Process {
-        id: brightnessMonitor
+        id: brightnessUdevMonitor
         running: true
-        command: ["sh", "-lc", root.brightnessMonitorScript]
+        command: ["udevadm", "monitor", "--kernel", "--property", "--subsystem-match=backlight"]
         stdout: SplitParser {
             splitMarker: "\n"
             onRead: function(line) {
-                root.parseBrightnessMonitorLine(line);
+                if (String(line || "").trim() === "ACTION=change")
+                    root.refreshBrightness();
             }
         }
         onRunningChanged: {
             if (!running)
-                brightnessMonitorRestart.restart();
+                brightnessUdevRestart.restart();
         }
     }
 
     Timer {
-        id: brightnessMonitorRestart
+        id: brightnessUdevRestart
         interval: 1000
         repeat: false
         onTriggered: {
-            if (!brightnessMonitor.running)
-                brightnessMonitor.running = true;
+            if (!brightnessUdevMonitor.running)
+                brightnessUdevMonitor.running = true;
         }
     }
 
-    // Poll brightness every 4s so external changes (Fn keys, other tools)
-    // are reflected even if sysfs monitoring is unavailable.
+    // Slow fallback for systems where udevadm/backlight uevents are unavailable.
     Timer {
-        interval: 4000
+        interval: 2000
         running: true
         repeat: true
         onTriggered: {

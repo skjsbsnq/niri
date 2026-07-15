@@ -713,8 +713,23 @@ Item {
         var secondary = (valueText !== undefined && valueText !== null && String(valueText).length > 0)
             ? String(valueText)
             : (muted ? "静音" : (Math.round(progress * 100) + "%"));
+        var iconCode = String(icon || "\ue050");
+
+        // Already on OSD: only patch live fields. Do NOT re-enter forcedState /
+        // recomputePresentation (that restarts morph and feels multi-second lag).
+        if (root.presentation === "transient_osd" && root.forcedState === "transient_osd") {
+            root.transientDisplayText = String(text || "");
+            root.transientSecondaryText = secondary;
+            root.transientProgress = progress;
+            root.transientIconCode = iconCode;
+            root.transientOsdMuted = muted;
+            transientTimer.interval = Math.max(250, root.osdHideMs);
+            transientTimer.restart();
+            return;
+        }
+
         showTransient("transient_osd", text, secondary, progress,
-            String(icon || "\ue050"), root.osdHideMs, muted);
+            iconCode, root.osdHideMs, muted);
    }
 
    function showTransientNotification(summary, body, appName) {
@@ -1646,7 +1661,8 @@ Item {
             root.brightnessTrackingReady = true;
             return;
         }
-        if (Math.abs(brightness - root.lastBrightness) < 0.005)
+        // Fine slider steps must present (was 0.005 ≈ 0.5% and skipped micro-drags).
+        if (Math.abs(brightness - root.lastBrightness) < 0.0005)
             return;
         root.lastBrightness = brightness;
 

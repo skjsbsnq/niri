@@ -93,13 +93,35 @@ Item {
         objects: root.audioSink ? [root.audioSink] : []
     }
 
-    readonly property real volume: audioReady && audioSink.audio ? audioSink.audio.volume : 0
-    readonly property bool muted: audioReady && audioSink.audio ? audioSink.audio.muted : false
+    // Optimistic UI volume/mute: setVolume/toggleMute write these immediately so
+    // Dynamic Island / Control Center track input in the same frame. PipeWire
+    // echo may lag by tens–hundreds of ms; we still mirror it when it arrives.
+    property real volume: 0
+    property bool muted: false
+
+    function syncVolumeFromPipewire() {
+        if (!root.audioReady || !root.audioSink || !root.audioSink.audio)
+            return;
+        var v = Number(root.audioSink.audio.volume);
+        if (!isFinite(v))
+            v = 0;
+        v = Math.max(0, Math.min(1, v));
+        var m = !!root.audioSink.audio.muted;
+        if (Math.abs(root.volume - v) > 0.0001)
+            root.volume = v;
+        if (root.muted !== m)
+            root.muted = m;
+    }
 
     function setVolume(value) {
         if (!audioReady || !audioSink.audio)
             return;
         var v = Math.max(0, Math.min(1, Number(value) || 0));
+        // Optimistic: fire volumeChanged for island/CC before PipeWire settles.
+        if (Math.abs(root.volume - v) > 0.0001)
+            root.volume = v;
+        if (v > 0 && root.muted)
+            root.muted = false;
         audioSink.audio.volume = v;
         if (v > 0 && audioSink.audio.muted)
             audioSink.audio.muted = false;
@@ -108,8 +130,21 @@ Item {
     function toggleMute() {
         if (!audioReady || !audioSink.audio)
             return;
-        audioSink.audio.muted = !audioSink.audio.muted;
+        var next = !audioSink.audio.muted;
+        root.muted = next;
+        audioSink.audio.muted = next;
     }
+
+    Connections {
+        target: root.audioSink && root.audioSink.audio ? root.audioSink.audio : null
+        ignoreUnknownSignals: true
+        function onVolumeChanged() { root.syncVolumeFromPipewire(); }
+        function onMutedChanged() { root.syncVolumeFromPipewire(); }
+    }
+
+    onAudioReadyChanged: root.syncVolumeFromPipewire()
+    onAudioSinkChanged: root.syncVolumeFromPipewire()
+    Component.onCompleted: root.syncVolumeFromPipewire()
 
     // ------------------------------------------------------------------
     // Brightness (brightnessctl via Process — no Quickshell module exists)

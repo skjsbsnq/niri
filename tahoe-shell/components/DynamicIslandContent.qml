@@ -136,26 +136,70 @@ Item {
         }
     }
 
-    // V2 resting clock (T12). Media compact still uses compactLabel until T16.
-    // Top-anchored (not centerIn): capsule height morph must not drag text downward.
+    // Compact chrome (clock / media label): real exit animation — fade + move UP
+    // (never sink). Hold the layer for exit duration after state leaves resting.
+    property bool compactLayerWanted: root.compactContentVisible
+        && (root.restingClockActive || (!root.restingClockActive && root.compactResting))
+    property bool compactLayerHeld: false
+    readonly property bool compactLayerShown: compactLayerWanted || compactLayerHeld
+    property real compactLayerOpacity: 0
+    property real compactLayerY: 0
+
+    onCompactLayerWantedChanged: {
+        if (root.compactLayerWanted) {
+            compactExitHold.stop();
+            root.compactLayerHeld = false;
+            root.compactLayerOpacity = 1;
+            root.compactLayerY = 0;
+        } else if (root.compactLayerShown || root.compactLayerOpacity > 0.01) {
+            // Exit: fade out and travel up (negative y), then unload.
+            root.compactLayerHeld = true;
+            root.compactLayerOpacity = 0;
+            root.compactLayerY = -IslandMotion.v2ContentMaxTravelPx;
+            compactExitHold.restart();
+        }
+    }
+
+    Timer {
+        id: compactExitHold
+        interval: IslandMotion.v2ContentExitMs + 20
+        repeat: false
+        onTriggered: {
+            root.compactLayerHeld = false;
+            root.compactLayerY = 0;
+        }
+    }
+
+    // V2 resting clock (T12). Top-stable; exit via compactLayerOpacity/Y.
     DynamicIslandRestingClockView {
         id: restingClock
 
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: parent.top
-        anchors.topMargin: 0
+        anchors.topMargin: root.compactLayerY
         width: Math.min(parent.width - 16, Math.max(contentWidth, 1))
         height: IslandMotion.v2ClockHeight
         weekdayText: root.clockWeekdayText
-        // Prefer split time; never fall back to combined displayText (would re-show weekday).
         timeText: root.clockTimeText
         textPrimary: root.textPrimary
         textSecondary: root.textSecondary
-        opacity: root.compactContentVisible && root.restingClockActive ? 1 : 0
+        // Show while resting_time, or during exit hold that started from clock.
+        opacity: root.restingClockActive
+                 ? root.compactLayerOpacity
+                 : (root.compactLayerHeld && root.clockTimeText.length > 0 ? root.compactLayerOpacity : 0)
         visible: opacity > 0.01
 
         Behavior on opacity {
-            NumberAnimation { duration: IslandMotion.v2ContentExitMs; easing.type: IslandMotion.overlayColorEasing }
+            NumberAnimation {
+                duration: IslandMotion.v2ContentExitMs
+                easing.type: IslandMotion.v2ContentEasing
+            }
+        }
+        Behavior on anchors.topMargin {
+            NumberAnimation {
+                duration: IslandMotion.v2ContentExitMs
+                easing.type: IslandMotion.v2ContentEasing
+            }
         }
     }
 
@@ -164,11 +208,13 @@ Item {
 
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: parent.top
-        anchors.topMargin: 0
+        anchors.topMargin: root.compactLayerY
         width: parent.width - 32
         height: IslandMotion.v2CompactMediaHeight
         // Compact media (and any non-clock resting) until T16 redesign.
-        text: (root.compactResting && !root.restingClockActive) ? root.displayText : ""
+        text: (!root.restingClockActive && (root.compactResting || root.compactLayerHeld))
+              ? root.displayText
+              : ""
         color: root.textPrimary
         font.pixelSize: 12
         font.weight: Font.DemiBold
@@ -176,11 +222,22 @@ Item {
         verticalAlignment: Text.AlignVCenter
         elide: Text.ElideRight
         maximumLineCount: 1
-        opacity: root.compactContentVisible && !root.restingClockActive ? 1 : 0
-        visible: opacity > 0.01
+        opacity: (!root.restingClockActive && root.compactLayerShown)
+                 ? root.compactLayerOpacity
+                 : 0
+        visible: opacity > 0.01 && text.length > 0
 
         Behavior on opacity {
-            NumberAnimation { duration: IslandMotion.v2ContentExitMs; easing.type: IslandMotion.overlayColorEasing }
+            NumberAnimation {
+                duration: IslandMotion.v2ContentExitMs
+                easing.type: IslandMotion.v2ContentEasing
+            }
+        }
+        Behavior on anchors.topMargin {
+            NumberAnimation {
+                duration: IslandMotion.v2ContentExitMs
+                easing.type: IslandMotion.v2ContentEasing
+            }
         }
     }
 
@@ -445,6 +502,10 @@ Item {
     }
 
     Component.onCompleted: {
+        if (root.compactLayerWanted) {
+            root.compactLayerOpacity = 1;
+            root.compactLayerY = 0;
+        }
         if (root.mediaExpandedContentVisible)
             root.mediaLoaderActive = true;
         if (root.summaryExpandedContentVisible)

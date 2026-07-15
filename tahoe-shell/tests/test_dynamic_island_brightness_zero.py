@@ -83,7 +83,8 @@ class BrightnessZeroTests(unittest.TestCase):
 
     def test_repeated_same_value_deduped(self) -> None:
         body = _function_body(self.island, "handleBrightnessChange")
-        self.assertIn("Math.abs(brightness - root.lastBrightness) < 0.005", body)
+        # Fine slider steps must present; threshold is sub-percent (0.0005).
+        self.assertIn("Math.abs(brightness - root.lastBrightness) < 0.0005", body)
 
     def test_no_parallel_brightness_service(self) -> None:
         self.assertNotIn("BrightnessService", self.island)

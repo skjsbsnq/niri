@@ -110,6 +110,22 @@ class DynamicIslandOsdSceneTests(unittest.TestCase):
         self.assertNotRegex(self.island, r"(?m)^\s*state:\s*normalizedState")
         self.assertIn("property string presentation:", self.island)
 
+    def test_osd_live_update_skips_state_reentry(self) -> None:
+        # Already on OSD: only patch transient fields + restart timer.
+        show = _function_body(self.island, "showTransientOsdWithIcon")
+        self.assertIn('root.presentation === "transient_osd"', show)
+        self.assertIn("root.transientProgress = progress", show)
+        self.assertIn("return;", show)
+
+    def test_controls_volume_is_optimistic(self) -> None:
+        controls = (SHELL_ROOT / "services" / "Controls.qml").read_text(encoding="utf-8")
+        # Writable optimistic properties (not pure PipeWire readonly mirror).
+        self.assertIn("property real volume: 0", controls)
+        self.assertIn("property bool muted: false", controls)
+        set_vol = _function_body(controls, "setVolume")
+        self.assertIn("root.volume = v", set_vol)
+        self.assertIn("audioSink.audio.volume = v", set_vol)
+
     def test_brightness_zero_path_still_present(self) -> None:
         body = _function_body(self.island, "handleBrightnessChange")
         self.assertIn("Math.max(0, Math.min(1, brightnessSample))", body)

@@ -11,7 +11,7 @@ function textOrEmpty(value) {
 
 function isExpandedStateName(name) {
     var s = String(name || "");
-    return s === "expanded_media" || s === "expanded_summary";
+    return s === "expanded_media";
 }
 
 function isTransientStateName(name) {
@@ -140,8 +140,7 @@ function resolveSwipeSettle(progress, startProgress, hasMedia, enterThreshold, r
         ret = 0.44;
 
     if (p >= enter) {
-        // Right enter: media when available; otherwise summary still uses the
-        // summary/left geometry (360), not the media/right width (400).
+        // Right enter: media only when available. T18: no summary fallback.
         if (hasMedia) {
             return {
                 "swipeProgress": 1,
@@ -151,18 +150,19 @@ function resolveSwipeSettle(progress, startProgress, hasMedia, enterThreshold, r
             };
         }
         return {
-            "swipeProgress": -1,
-            "forcedState": "expanded_summary",
-            "entered": true,
-            "collapsed": false
+            "swipeProgress": 0,
+            "forcedState": "",
+            "entered": false,
+            "collapsed": true
         };
     }
     if (p <= -enter) {
+        // Left swipe no longer opens a duplicated summary page (T18).
         return {
-            "swipeProgress": -1,
-            "forcedState": "expanded_summary",
-            "entered": true,
-            "collapsed": false
+            "swipeProgress": 0,
+            "forcedState": "",
+            "entered": false,
+            "collapsed": true
         };
     }
     if (start >= 0.5 && p <= ret) {

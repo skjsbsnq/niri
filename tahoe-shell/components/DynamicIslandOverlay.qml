@@ -142,7 +142,7 @@ PanelWindow {
     readonly property bool compactContentVisible: compactResting && capsuleShown
     // Expanded media (and its visualizer Timer) only on the owner screen.
     readonly property bool mediaContentVisible: effectiveContentState === "expanded_media" && activeForScreen
-    readonly property bool summaryContentVisible: effectiveContentState === "expanded_summary" && activeForScreen
+    readonly property bool summaryContentVisible: false
     readonly property bool showSecondaryText: contentSecondaryText.length > 0
         && !(safeProgress(progress) >= 0 && capsuleTargetHeight <= 44)
     // T11: SettingsTheme island tokens (single color owner). No DynamicIslandTheme.js.
@@ -178,6 +178,13 @@ PanelWindow {
     readonly property real summaryBrightness: dynamicIslandService ? Number(dynamicIslandService.summaryBrightness) : 0
     readonly property bool summaryBrightnessAvailable: dynamicIslandService ? !!dynamicIslandService.summaryBrightnessAvailable : false
     readonly property string summaryWorkspaceLabel: dynamicIslandService ? String(dynamicIslandService.summaryWorkspaceLabel || "") : ""
+    readonly property int workspaceDirection: (activeForScreen && dynamicIslandService)
+        ? Number(dynamicIslandService.transientWorkspaceDirection) || 0
+        : 0
+    readonly property string workspaceLabel: contentDisplayText
+    readonly property int workspaceCount: dynamicIslandService
+        ? Number(dynamicIslandService.workspaceCount) || 0
+        : 0
 
     function widthForState(stateName) {
         // Mid-band V2 geometry (IslandMotion v2* tokens). Service swipe widths
@@ -185,8 +192,6 @@ PanelWindow {
         switch (stateName) {
         case "expanded_media":
             return Math.round((IslandMotion.v2MediaExpandedWidthMin + IslandMotion.v2MediaExpandedWidthMax) / 2);
-        case "expanded_summary":
-            return 360;
         case "transient_notification":
             return notificationCompactTargetWidth();
         case "transient_osd":
@@ -258,8 +263,6 @@ PanelWindow {
         switch (stateName) {
         case "expanded_media":
             return Math.round((IslandMotion.v2MediaExpandedHeightMin + IslandMotion.v2MediaExpandedHeightMax) / 2);
-        case "expanded_summary":
-            return 132;
         case "transient_notification":
             return notificationCompactTargetHeight();
         case "transient_osd":
@@ -283,7 +286,7 @@ PanelWindow {
     }
 
     function fillRoleForState(stateName) {
-        if (stateName === "expanded_media" || stateName === "expanded_summary")
+        if (stateName === "expanded_media")
             return "expanded";
         if (stateName === "transient_osd"
                 || stateName === "transient_workspace"
@@ -301,7 +304,6 @@ PanelWindow {
 
         switch (stateName) {
         case "expanded_media":
-        case "expanded_summary":
             return Math.min(
                 IslandMotion.v2RadiusExpandedMax,
                 Math.max(IslandMotion.v2RadiusExpandedMin, 30));
@@ -495,6 +497,9 @@ PanelWindow {
                 summaryBrightness: root.summaryBrightness
                 summaryBrightnessAvailable: root.summaryBrightnessAvailable
                 summaryWorkspaceLabel: root.summaryWorkspaceLabel
+                workspaceDirection: root.workspaceDirection
+                workspaceLabel: root.workspaceLabel
+                workspaceCount: root.workspaceCount
                 onMediaPreviousRequested: if (root.dynamicIslandService) root.dynamicIslandService.mediaPrevious()
                 onMediaPlayPauseRequested: if (root.dynamicIslandService) root.dynamicIslandService.mediaTogglePlayPause()
                 onMediaNextRequested: if (root.dynamicIslandService) root.dynamicIslandService.mediaNext()

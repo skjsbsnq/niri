@@ -19,14 +19,15 @@ Item {
     property var windowsService
     property var batteryService
     property var settingsService
-    property real swipeProgress: 0 // -1 = summary (left), +1 = media (right)
+    property real swipeProgress: 0 // +1 = media (right); left no longer opens summary (T18)
     property real swipeStartProgress: 0
     property string swipeStartForcedState: ""
     property bool swipeDragging: false
     property bool swipeSettling: false
     property bool swipeMoved: false
     // Keep in lockstep with DynamicIslandOverlay.widthForState (T11 V2 mid-band).
-    readonly property int swipeLeftWidth: 360
+    readonly property int swipeLeftWidth: Math.round(
+        (IslandMotion.v2WorkspaceWidthMin + IslandMotion.v2WorkspaceWidthMax) / 2)
     readonly property int swipeRightWidth: Math.round(
         (IslandMotion.v2MediaExpandedWidthMin + IslandMotion.v2MediaExpandedWidthMax) / 2)
     // Compute from preferMedia/hasMedia only — avoid binding through presentation.
@@ -47,6 +48,8 @@ Item {
     property string transientSecondaryText: ""
     property real transientProgress: -1
     property string transientIconCode: ""
+    // T18: workspace activation direction for scene slide (-1/0/+1).
+    property int transientWorkspaceDirection: 0
     // T13: explicit OSD muted flag for the view (not locale-dependent).
     property bool transientOsdMuted: false
     // OSD keeps its last value mounted during exit so text/bar never vanish
@@ -104,7 +107,7 @@ Item {
     readonly property bool dynamicIslandAutoExpandMedia: settingsService ? !!settingsService.dynamicIslandAutoExpandMedia : false
     readonly property bool dynamicIslandHoverExpand: settingsService ? !!settingsService.dynamicIslandHoverExpand : false
     readonly property bool hasMedia: controlsService ? controlsService.hasMedia : false
-    readonly property bool expanded: presentation === "expanded_media" || presentation === "expanded_summary"
+    readonly property bool expanded: presentation === "expanded_media"
     readonly property string mediaArtUrl: controlsService ? String(controlsService.trackArtUrl || "") : ""
     // Stable track title from Controls only — never displayText / clock fallback.
     // Compact and expanded media both consume this so exit morphs cannot flash time.
@@ -134,6 +137,15 @@ Item {
     readonly property real summaryBrightness: controlsService ? Number(controlsService.brightness) : 0
     readonly property bool summaryBrightnessAvailable: controlsService ? !!controlsService.brightnessAvailable : false
     readonly property string summaryWorkspaceLabel: activeWorkspaceText()
+    readonly property int workspaceCount: {
+        if (!root.windowsService || !root.windowsService.workspaceList)
+            return 0;
+        try {
+            return Number(root.windowsService.workspaceList.length) || 0;
+        } catch (e) {
+            return 0;
+        }
+    }
     function mediaTogglePlayPause() {
         if (root.controlsService)
             root.controlsService.togglePlayPause();
@@ -179,8 +191,7 @@ Item {
         "transient_osd",
         "transient_notification",
         "transient_workspace",
-        "expanded_media",
-        "expanded_summary"
+        "expanded_media"
     ]
 
     // Named presentation string — never use Item.state (Qt reserved; binding loops).
@@ -255,6 +266,10 @@ Item {
             return;
 
         switch (String(item.type || "")) {
+        case "openControlCenter":
+            // Effect-only path for SHOW_EXPANDED_SUMMARY alias (T18).
+            root.openControlCenterRequested();
+            break;
         case "stopTransientTimer":
             transientTimer.stop();
             break;
@@ -433,8 +448,6 @@ Item {
         case "transient_notification":
         case "transient_workspace":
             return root.transientDisplayText.length > 0 ? root.transientDisplayText : fallbackTransientText(currentState);
-        case "expanded_summary":
-            return "摘要";
         case "resting_time":
         default:
             return timeText();
@@ -450,8 +463,6 @@ Item {
         case "transient_notification":
         case "transient_workspace":
             return root.transientSecondaryText;
-        case "expanded_summary":
-            return activeWorkspaceText();
         case "resting_time":
         default:
             // V2 clock uses clockWeekdayText + clockTimeText only. Do not expose
@@ -482,8 +493,6 @@ Item {
             return "\ue1b1";
         case "transient_osd":
             return "\ue050";
-        case "expanded_summary":
-            return "\ue8b8";
         case "resting_time":
         default:
             return "\ue8b5";
@@ -682,8 +691,7 @@ Item {
     }
 
     function showExpandedSummary() {
-        if (!root.sessionOwnerOutput.length)
-            root.claimSessionOwnerForScreen(root.liveFocusedOutputName());
+        // T18 deprecated alias: open ControlCenter via reducer effect, never expanded_summary.
         root.dispatchPresentation("SHOW_EXPANDED_SUMMARY");
     }
 
@@ -768,7 +776,7 @@ Item {
         var returnState = String(root.transientOsdReturnState || "");
         var action = String(root.transientOsdExitAction || "");
         var screenName = String(root.transientOsdExitScreenName || "");
-        if (returnState !== "expanded_media" && returnState !== "expanded_summary")
+        if (returnState !== "expanded_media")
             returnState = "";
         if (returnState === "expanded_media" && !root.hasMedia)
             returnState = "";
@@ -906,6 +914,8 @@ Item {
 
     function showTransientWorkspace(label) {
         var text = String(label || "").trim();
+        // IPC / debug always allowed (bypasses top-bar suppress).
+        root.transientWorkspaceDirection = 0;
         showTransient("transient_workspace", text.length > 0 ? text : activeWorkspaceText(), "", -1, "\ue1b1", root.smokeTransientHideMs);
     }
     function captureWorkspaceBaseline() {
@@ -949,12 +959,38 @@ Item {
         if (label === root.lastWorkspaceName)
             return;
 
+        var previous = root.lastWorkspaceName;
         root.lastWorkspaceName = label;
+        // T18: default suppress when top-bar owns workspace chrome.
+        if (!root.shouldShowWorkspaceTransient())
+            return;
         if (root.blocksTransientWorkspace())
             return;
 
         var display = activeWorkspaceText();
+        root.transientWorkspaceDirection = root.workspaceDirectionHint(previous, label);
         showTransient("transient_workspace", display, "", -1, "\ue1b1", root.smokeTransientHideMs);
+    }
+
+    function shouldShowWorkspaceTransient() {
+        // TopBar always renders the workspace strip; island feedback is opt-in.
+        if (!root.settingsService)
+            return false;
+        return !!root.settingsService.dynamicIslandWorkspaceFeedback;
+    }
+
+    function workspaceDirectionHint(previousLabel, nextLabel) {
+        var prev = String(previousLabel || "");
+        var next = String(nextLabel || "");
+        var prevN = prev.match(/(\d+)/);
+        var nextN = next.match(/(\d+)/);
+        if (!prevN || !nextN)
+            return 0;
+        var a = Number(prevN[1]);
+        var b = Number(nextN[1]);
+        if (!isFinite(a) || !isFinite(b) || a === b)
+            return 0;
+        return b > a ? 1 : -1;
     }
 
 
@@ -967,8 +1003,6 @@ Item {
         case "expanded_media":
             return Math.round(
                 (IslandMotion.v2MediaExpandedWidthMin + IslandMotion.v2MediaExpandedWidthMax) / 2);
-        case "expanded_summary":
-            return 360;
         case "transient_notification":
             return Math.round(
                 (IslandMotion.v2NotificationCompactWidthMin + IslandMotion.v2NotificationCompactWidthMax) / 2);
@@ -994,8 +1028,7 @@ Item {
         var s = root.presentation;
         return s === "resting_time"
             || s === "resting_media"
-            || s === "expanded_media"
-            || s === "expanded_summary";
+            || s === "expanded_media";
     }
 
     function beginSwipe() {
@@ -1009,8 +1042,6 @@ Item {
         root.swipeStartForcedState = root.forcedState;
         if (root.presentation === "expanded_media")
             root.swipeStartProgress = 1;
-        else if (root.presentation === "expanded_summary")
-            root.swipeStartProgress = -1;
         else
             root.swipeStartProgress = 0;
         root.swipeProgress = root.swipeStartProgress;
@@ -1112,12 +1143,10 @@ Item {
         root.dispatchPresentation("CLEAR_HOVER_EXPANDED");
         switch (String(action || "toggle_media")) {
         case "summary":
-            if (root.presentation === "expanded_summary") {
-                root.dispatchPresentation("COLLAPSE");
-                root.clearSessionOwnerOutput();
-            } else {
-                showExpandedSummary();
-            }
+            // T18: legacy "summary" migrates to control_center.
+            root.dispatchPresentation("COLLAPSE");
+            root.clearSessionOwnerOutput();
+            root.openControlCenterRequested();
             break;
         case "notifications":
             root.dispatchPresentation("COLLAPSE");

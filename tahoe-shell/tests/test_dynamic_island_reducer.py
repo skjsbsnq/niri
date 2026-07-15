@@ -178,13 +178,14 @@ class DynamicIslandReducerTests(unittest.TestCase):
             "SHOW_EXPANDED_MEDIA",
             context={"islandEnabled": True, "hasMedia": False},
         )
-        self.assertEqual(fallback["state"]["forcedState"], "expanded_summary")
+        self.assertEqual(fallback["state"]["forcedState"], "")
 
         summary = reduce_ev(
             "SHOW_EXPANDED_SUMMARY",
             context={"islandEnabled": True, "hasMedia": True},
         )
-        self.assertEqual(summary["state"]["forcedState"], "expanded_summary")
+        self.assertEqual(summary["state"]["forcedState"], "")
+        self.assertIn("openControlCenter", summary["effects"])
 
         collapsed = reduce_ev(
             "TOGGLE_EXPANDED",
@@ -206,12 +207,12 @@ class DynamicIslandReducerTests(unittest.TestCase):
             state={"forcedState": ""},
             context={"islandEnabled": True, "hasMedia": False},
         )
-        self.assertEqual(open_summary["state"]["forcedState"], "expanded_summary")
+        self.assertEqual(open_summary["state"]["forcedState"], "")
 
         # Collapse ends any notification lease; orchestrator drains once after apply.
         click_collapse = reduce_ev(
             "COLLAPSE",
-            state={"forcedState": "expanded_summary", "hoverExpanded": True},
+            state={"forcedState": "expanded_media", "hoverExpanded": True},
             context={"islandEnabled": True, "hasMedia": True},
         )
         self.assertEqual(click_collapse["state"]["forcedState"], "")
@@ -280,7 +281,7 @@ class DynamicIslandReducerTests(unittest.TestCase):
 
         reset = reduce_ev(
             "RESET",
-            state={"forcedState": "expanded_summary", "preferMediaWhenAvailable": False, "hoverExpanded": True},
+            state={"forcedState": "expanded_media", "preferMediaWhenAvailable": False, "hoverExpanded": True},
             context={"islandEnabled": True, "hasMedia": True},
         )
         self.assertEqual(reset["state"]["forcedState"], "")

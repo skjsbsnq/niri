@@ -257,38 +257,30 @@ class DynamicIslandV2SurfaceTests(unittest.TestCase):
 
     def test_content_loader_scene_host(self) -> None:
         self.assertIn("id: mediaLoader", self.content)
-        self.assertIn("id: summaryLoader", self.content)
         self.assertIn("active: root.mediaLoaderActive", self.content)
-        self.assertIn("active: root.summaryLoaderActive", self.content)
         self.assertIn("mediaUnloadHold", self.content)
-        self.assertIn("summaryUnloadHold", self.content)
         self.assertIn("sourceComponent: mediaSceneComponent", self.content)
-        self.assertIn("sourceComponent: summarySceneComponent", self.content)
-        # No always-on expanded media/summary instances outside Loader.
+        # T18: summary Loader retired; workspace is a dedicated lightweight scene.
+        self.assertNotIn("id: summaryLoader", self.content)
+        self.assertNotIn("summaryLoaderActive", self.content)
+        self.assertIn("DynamicIslandWorkspaceView", self.content)
+        # No always-on expanded media instances outside Loader.
         self.assertNotRegex(
             self.content,
             r"DynamicIslandMediaView\s*\{\s*\n\s*id:\s*mediaView",
         )
-        self.assertNotRegex(
-            self.content,
-            r"DynamicIslandSummaryView\s*\{\s*\n\s*id:\s*summaryView",
-        )
+        self.assertNotIn("DynamicIslandSummaryView", self.content)
         # Loader activates only when content becomes visible / exit hold.
         self.assertIn("mediaLoaderActive = true", self.content)
         self.assertIn("mediaLoaderActive = false", self.content)
-        self.assertIn("summaryLoaderActive = true", self.content)
-        self.assertIn("summaryLoaderActive = false", self.content)
         self.assertIn("property bool mediaLoaderActive: false", self.content)
-        self.assertIn("property bool summaryLoaderActive: false", self.content)
 
     def test_no_dual_render_of_expanded_scenes(self) -> None:
-        # Expanded scenes appear only as Component source for Loader.
+        # Expanded media appears only as Component source for Loader.
         media_hits = len(re.findall(r"DynamicIslandMediaView\s*\{", self.content))
-        summary_hits = len(re.findall(r"DynamicIslandSummaryView\s*\{", self.content))
         self.assertEqual(media_hits, 1)
-        self.assertEqual(summary_hits, 1)
+        self.assertEqual(self.content.count("DynamicIslandSummaryView"), 0)
         self.assertIn("id: mediaSceneComponent", self.content)
-        self.assertIn("id: summarySceneComponent", self.content)
 
     def test_governance_documents_island_recipe(self) -> None:
         self.assertIn("DynamicIsland", self.gov)

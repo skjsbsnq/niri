@@ -117,68 +117,33 @@ class SwipeSettleTests(unittest.TestCase):
         self.assertAlmostEqual(v1, 212.0, places=3)
         self.assertGreater(width, v1)
 
-    def test_enter_summary_and_return_center(self) -> None:
-        left = run_node({
+    def test_left_swipe_no_longer_opens_summary(self) -> None:
+        d = run_node({
             "op": "settle",
-            "progress": -0.9,
-            "start": 0,
-            "hasMedia": False,
-            "enter": 0.56,
-            "ret": 0.44,
-        })
-        self.assertEqual(left["swipeProgress"], -1)
-        self.assertEqual(left["forcedState"], "expanded_summary")
-        left_w = run_node({
-            "op": "width",
-            "progress": left["swipeProgress"],
-            "resting": 124,
-            "left": 360,
-            "right": 418,
-        })["width"]
-        self.assertAlmostEqual(left_w, 360.0, places=3)
-
-        # Right enter without media still opens summary at summary width (360).
-        right_no_media = run_node({
-            "op": "settle",
-            "progress": 0.9,
-            "start": 0,
-            "hasMedia": False,
-            "enter": 0.56,
-            "ret": 0.44,
-        })
-        self.assertEqual(right_no_media["forcedState"], "expanded_summary")
-        self.assertEqual(right_no_media["swipeProgress"], -1)
-        right_w = run_node({
-            "op": "width",
-            "progress": right_no_media["swipeProgress"],
-            "resting": 124,
-            "left": 360,
-            "right": 418,
-        })["width"]
-        self.assertAlmostEqual(right_w, 360.0, places=3)
-
-        ret = run_node({
-            "op": "settle",
-            "progress": 0.2,
-            "start": 1,
-            "hasMedia": True,
-            "enter": 0.56,
-            "ret": 0.44,
-        })
-        self.assertEqual(ret["forcedState"], "")
-        self.assertTrue(ret["collapsed"])
-        self.assertEqual(ret["swipeProgress"], 0)
-
-        snap = run_node({
-            "op": "settle",
-            "progress": 0.3,
+            "progress": -0.85,
             "start": 0,
             "hasMedia": True,
             "enter": 0.56,
             "ret": 0.44,
         })
-        self.assertEqual(snap["swipeProgress"], 0)
-        self.assertIsNone(snap["forcedState"])
+        self.assertEqual(d["swipeProgress"], 0)
+        self.assertEqual(d["forcedState"], "")
+        self.assertFalse(d["entered"])
+        self.assertTrue(d["collapsed"])
+
+    def test_right_swipe_without_media_collapses(self) -> None:
+        d = run_node({
+            "op": "settle",
+            "progress": 0.85,
+            "start": 0,
+            "hasMedia": False,
+            "enter": 0.56,
+            "ret": 0.44,
+        })
+        self.assertEqual(d["swipeProgress"], 0)
+        self.assertEqual(d["forcedState"], "")
+        self.assertFalse(d["entered"])
+
 
     def test_production_resolve_does_not_zero_progress(self) -> None:
         body = _function_body(self.island, "resolveSwipe")

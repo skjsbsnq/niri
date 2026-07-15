@@ -76,8 +76,11 @@ Item {
     property real summaryBrightness: 0
     property bool summaryBrightnessAvailable: false
     property string summaryWorkspaceLabel: ""
+    property int workspaceDirection: 0
+    property string workspaceLabel: ""
+    property int workspaceCount: 0
     readonly property bool mediaExpanded: islandState === "expanded_media"
-    readonly property bool summaryExpanded: islandState === "expanded_summary"
+    readonly property bool summaryExpanded: false
     readonly property bool compactMediaActive: islandState === "resting_media"
     // Measured compact media content width (no capsule padding). Overlay clamps.
     // While compact media is exiting, freeze measured width on the latch so the
@@ -104,8 +107,9 @@ Item {
         : (root.osdActive ? IslandMotion.v2OsdEnterMs : IslandMotion.v2ContentExitMs)
 
     readonly property bool notificationActive: islandState === "transient_notification"
-    readonly property bool standardDetailActive: !compactResting && !notificationActive && !osdActive && !mediaExpanded && !summaryExpanded
+    readonly property bool standardDetailActive: !compactResting && !notificationActive && !osdActive && !mediaExpanded && !summaryExpanded && !workspaceActive
     readonly property bool osdActive: islandState === "transient_osd"
+    readonly property bool workspaceActive: islandState === "transient_workspace"
     // T13: horizontal bar OSD; ring removed. Scene visible whenever OSD active.
     readonly property bool osdSceneVisible: osdActive && !osdExiting
     property real osdLayerOpacity: 0
@@ -118,7 +122,6 @@ Item {
     // Loader active flags: true while showing or exit-hold. Never both heavy
     // scenes need to stay loaded forever on resting/hidden outputs.
     property bool mediaLoaderActive: false
-    property bool summaryLoaderActive: false
 
     function safeProgress(value) {
         var number = Number(value);
@@ -176,14 +179,6 @@ Item {
         }
     }
 
-    onSummaryExpandedContentVisibleChanged: {
-        if (root.summaryExpandedContentVisible) {
-            summaryUnloadHold.stop();
-            root.summaryLoaderActive = true;
-        } else {
-            summaryUnloadHold.restart();
-        }
-    }
 
     Timer {
         id: mediaUnloadHold
@@ -195,15 +190,6 @@ Item {
         }
     }
 
-    Timer {
-        id: summaryUnloadHold
-        interval: root.expandedUnloadHoldMs
-        repeat: false
-        onTriggered: {
-            if (!root.summaryExpandedContentVisible)
-                root.summaryLoaderActive = false;
-        }
-    }
 
     // Compact chrome (clock / media label): real exit animation — fade + move UP
     // (never sink). Hold the layer for exit duration after state leaves resting.
@@ -508,6 +494,44 @@ Item {
         visible: root.osdActive || root.osdLayerOpacity > 0.01
     }
 
+
+    // T18: dedicated workspace transient scene (not generic detailRow).
+    DynamicIslandWorkspaceView {
+        id: workspaceView
+        anchors.fill: parent
+        workspaceLabel: root.workspaceLabel.length > 0 ? root.workspaceLabel : root.displayText
+        workspaceIndex: {
+            var m = String(root.workspaceLabel || root.displayText || "").match(/(\d+)/);
+            return m ? Number(m[1]) : 0;
+        }
+        workspaceCount: root.workspaceCount
+        direction: root.workspaceDirection
+        textPrimary: root.textPrimary
+        textSecondary: root.textSecondary
+        accentColor: root.accentColor
+        opacity: root.workspaceActive ? 1 : 0
+        visible: opacity > 0.01
+        // Directional enter: slide from activation side, capped travel.
+        x: root.workspaceActive
+           ? 0
+           : (root.workspaceDirection > 0
+              ? IslandMotion.v2ContentMaxTravelPx
+              : (root.workspaceDirection < 0 ? -IslandMotion.v2ContentMaxTravelPx : 0))
+
+        Behavior on opacity {
+            NumberAnimation {
+                duration: root.compactContentMotionMs
+                easing.type: IslandMotion.v2ContentEasing
+            }
+        }
+        Behavior on x {
+            NumberAnimation {
+                duration: root.compactContentMotionMs
+                easing.type: IslandMotion.v2ContentEasing
+            }
+        }
+    }
+
     // Expanded media: Loader only while visible or exit-hold (no hidden Timer).
     Loader {
         id: mediaLoader
@@ -560,41 +584,6 @@ Item {
         }
     }
 
-    // Expanded summary: same Loader/unload policy as media.
-    Loader {
-        id: summaryLoader
-        anchors.fill: parent
-        active: root.summaryLoaderActive
-        asynchronous: false
-        sourceComponent: summarySceneComponent
-    }
-
-    Component {
-        id: summarySceneComponent
-        DynamicIslandSummaryView {
-            anchors.fill: parent
-            batteryPercent: root.summaryBatteryPercent
-            batteryCharging: root.summaryBatteryCharging
-            volume: root.summaryVolume
-            muted: root.summaryMuted
-            brightness: root.summaryBrightness
-            brightnessAvailable: root.summaryBrightnessAvailable
-            workspaceLabel: root.summaryWorkspaceLabel
-            textPrimary: root.textPrimary
-            textSecondary: root.textSecondary
-            opacity: root.summaryExpandedContentVisible ? 1 : 0
-            visible: opacity > 0.01
-
-            Behavior on opacity {
-                NumberAnimation {
-                    duration: root.summaryExpandedContentVisible
-                        ? IslandMotion.overlayExpandedEnterFadeMs
-                        : IslandMotion.overlayExpandedExitFadeMs
-                    easing.type: IslandMotion.overlayColorEasing
-                }
-            }
-        }
-    }
 
     Rectangle {
         id: progressTrack
@@ -638,7 +627,5 @@ Item {
         }
         if (root.mediaExpandedContentVisible)
             root.mediaLoaderActive = true;
-        if (root.summaryExpandedContentVisible)
-            root.summaryLoaderActive = true;
     }
 }

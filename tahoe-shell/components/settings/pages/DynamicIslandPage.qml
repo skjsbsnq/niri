@@ -81,6 +81,22 @@ Flickable {
                 }
             }
 
+
+            Controls.TahoeListRow {
+                theme: page.theme
+                label: "工作区反馈"
+                detail: page.svc && page.svc.dynamicIslandWorkspaceFeedback
+                    ? "切换工作区时在灵动岛显示短暂反馈"
+                    : "顶栏工作区已可见，默认不在岛上重复"
+                iconCode: "\ue1b1"
+                checkable: true
+                checked: page.svc && page.svc.dynamicIslandWorkspaceFeedback
+                enabled: page.ready && page.svc && page.svc.dynamicIslandEnabled
+                onToggled: function(checked) {
+                    if (page.svc)
+                        page.svc.setDynamicIslandWorkspaceFeedback(checked);
+                }
+            }
             Controls.TahoeListRow {
                 theme: page.theme
                 label: "悬停展开"
@@ -116,8 +132,7 @@ Flickable {
                     value: page.svc ? page.svc.dynamicIslandLeftClickAction : "toggle_media"
                     model: [
                         { value: "toggle_media", label: "媒体" },
-                        { value: "summary", label: "摘要" },
-                        { value: "notifications", label: "通知" },
+                                                { value: "notifications", label: "通知" },
                         { value: "control_center", label: "控制" },
                         { value: "none", label: "无" }
                     ]
@@ -142,8 +157,7 @@ Flickable {
                     model: [
                         { value: "control_center", label: "控制" },
                         { value: "notifications", label: "通知" },
-                        { value: "summary", label: "摘要" },
-                        { value: "toggle_media", label: "媒体" },
+                                                { value: "toggle_media", label: "媒体" },
                         { value: "none", label: "无" }
                     ]
                     onSelected: function(value) {

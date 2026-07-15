@@ -261,20 +261,22 @@ TestCase {
     }
 
     function test_osd_preempts_expanded_and_restores_after_exit() {
-        island.showExpandedSummary();
+        // T18: expanded_summary removed; use expanded_media as the preempt target.
+        controls.hasMedia = true;
+        island.showExpandedMedia();
         wait(0);
-        compare(island.presentation, "expanded_summary");
+        compare(island.presentation, "expanded_media");
 
         controls.volume = 0.61;
         wait(0);
         compare(island.presentation, "transient_osd");
-        compare(island.transientOsdReturnState, "expanded_summary");
+        compare(island.transientOsdReturnState, "expanded_media");
 
         island.beginOsdExit("", "");
         compare(island.transientOsdExiting, true);
         compare(island.transientSecondaryText, "61%");
         wait(140);
-        compare(island.presentation, "expanded_summary");
+        compare(island.presentation, "expanded_media");
         compare(island.transientOsdExiting, false);
     }
 
@@ -301,6 +303,7 @@ TestCase {
 
     function test_osd_click_defers_action_until_retained_exit_finishes() {
         clearOsdPresentation();
+        controls.hasMedia = true;
         island.captureOsdBaselines();
         controls.volume = 0.42;
         wait(0);
@@ -312,7 +315,8 @@ TestCase {
         compare(island.transientSecondaryText, "42%");
 
         wait(140);
-        compare(island.presentation, "expanded_summary");
+        // Left click default toggle_media expands when media is available.
+        compare(island.presentation, "expanded_media");
         compare(island.transientOsdExiting, false);
     }
 }

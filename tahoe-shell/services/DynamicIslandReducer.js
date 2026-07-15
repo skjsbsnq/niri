@@ -10,8 +10,7 @@ var VALID_STATES = [
     "transient_osd",
     "transient_notification",
     "transient_workspace",
-    "expanded_media",
-    "expanded_summary"
+    "expanded_media"
 ];
 
 
@@ -49,8 +48,6 @@ function presentationPriority(presentation, flags) {
         return PRIORITY.workspace;
     if (p === "resting_media" || p === "expanded_media")
         return p === "expanded_media" ? PRIORITY.interaction : PRIORITY.media_preview;
-    if (p === "expanded_summary")
-        return PRIORITY.interaction;
     return PRIORITY.clock;
 }
 
@@ -155,7 +152,7 @@ function presentationState(state, context) {
 }
 
 function isExpandedPresentation(presentation) {
-    return presentation === "expanded_media" || presentation === "expanded_summary";
+    return presentation === "expanded_media";
 }
 
 function effect(type, payload) {
@@ -254,7 +251,8 @@ function reduce(state, event, context) {
 
     case "SHOW_EXPANDED_MEDIA":
         slice.preferMediaWhenAvailable = true;
-        slice.forcedState = ctx.hasMedia ? "expanded_media" : "expanded_summary";
+        // T18: no expanded_summary fallback — without media stay resting.
+        slice.forcedState = ctx.hasMedia ? "expanded_media" : "";
         return result(slice, [
             effect("stopTransientTimer"),
             effect("clearEventOwner"),
@@ -263,12 +261,14 @@ function reduce(state, event, context) {
         ]);
 
     case "SHOW_EXPANDED_SUMMARY":
-        slice.forcedState = "expanded_summary";
+        // T18 deprecated: never force expanded_summary. Orchestrator opens ControlCenter.
+        slice.forcedState = "";
         return result(slice, [
             effect("stopTransientTimer"),
             effect("clearEventOwner"),
             effect("endNotificationLease"),
-            effect("clearTransientFields")
+            effect("clearTransientFields"),
+            effect("openControlCenter")
         ]);
 
     case "COLLAPSE": {
@@ -293,12 +293,13 @@ function reduce(state, event, context) {
             slice.forcedState = "expanded_media";
             return result(slice, [
                 effect("stopTransientTimer"),
-            effect("clearEventOwner"),
+                effect("clearEventOwner"),
                 effect("endNotificationLease"),
                 effect("clearTransientFields")
             ]);
         }
-        slice.forcedState = "expanded_summary";
+        // T18: no summary page — return to resting base.
+        slice.forcedState = "";
         return result(slice, [
             effect("stopTransientTimer"),
             effect("clearEventOwner"),
@@ -345,7 +346,9 @@ function reduce(state, event, context) {
             slice.preferMediaWhenAvailable = true;
             slice.forcedState = "expanded_media";
         } else {
-            slice.forcedState = "expanded_summary";
+            // T18: hover without media does not invent a summary panel.
+            slice.hoverExpanded = false;
+            slice.forcedState = "";
         }
         return result(slice, [
             effect("stopTransientTimer"),

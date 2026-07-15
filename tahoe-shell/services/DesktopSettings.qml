@@ -48,6 +48,7 @@ Item {
     readonly property string dynamicIslandRightClickAction: settingsAdapter.dynamicIslandRightClickAction
     readonly property bool dynamicIslandAutoExpandMedia: settingsAdapter.dynamicIslandAutoExpandMedia
     readonly property bool dynamicIslandHoverExpand: settingsAdapter.dynamicIslandHoverExpand
+    readonly property bool dynamicIslandWorkspaceFeedback: settingsAdapter.dynamicIslandWorkspaceFeedback
     readonly property string iconThemeMode: settingsAdapter.iconThemeMode
     readonly property string customIconTheme: settingsAdapter.customIconTheme
     readonly property string effectiveIconTheme: iconThemeName(iconThemeMode, customIconTheme)
@@ -108,11 +109,19 @@ Item {
     }
 
     function validDynamicIslandClickAction(value) {
+        // T18: "summary" accepted only as legacy input; normalize to control_center.
         return value === "toggle_media"
             || value === "summary"
             || value === "notifications"
             || value === "control_center"
             || value === "none";
+    }
+
+    function normalizeDynamicIslandClickAction(value) {
+        var v = String(value || "");
+        if (v === "summary")
+            return "control_center";
+        return validDynamicIslandClickAction(v) ? v : "toggle_media";
     }
 
     function normalizedWeatherTempUnit(value) {
@@ -253,15 +262,14 @@ Item {
     }
 
     function dynamicIslandClickActionLabel(action) {
-        if (action === "summary")
-            return "摘要页";
-        if (action === "notifications")
+        var normalized = normalizeDynamicIslandClickAction(action);
+        if (normalized === "notifications")
             return "通知中心";
-        if (action === "control_center")
+        if (normalized === "control_center")
             return "控制中心";
-        if (action === "none")
+        if (normalized === "none")
             return "无动作";
-        return "媒体/摘要";
+        return "媒体";
     }
 
     function setDockWindowTitleMode(mode) {
@@ -485,7 +493,7 @@ Item {
     }
 
     function setDynamicIslandLeftClickAction(action) {
-        var next = validDynamicIslandClickAction(action) ? action : "toggle_media";
+        var next = normalizeDynamicIslandClickAction(action);
         if (settingsAdapter.dynamicIslandLeftClickAction === next)
             return;
 
@@ -494,7 +502,10 @@ Item {
     }
 
     function setDynamicIslandRightClickAction(action) {
-        var next = validDynamicIslandClickAction(action) ? action : "control_center";
+        var raw = String(action || "").trim();
+        var next = raw.length === 0
+            ? "control_center"
+            : normalizeDynamicIslandClickAction(raw);
         if (settingsAdapter.dynamicIslandRightClickAction === next)
             return;
 
@@ -519,6 +530,16 @@ Item {
         settingsAdapter.dynamicIslandHoverExpand = next;
         settingsFile.writeAdapter();
     }
+
+    function setDynamicIslandWorkspaceFeedback(enabled) {
+        var next = !!enabled;
+        if (settingsAdapter.dynamicIslandWorkspaceFeedback === next)
+            return;
+
+        settingsAdapter.dynamicIslandWorkspaceFeedback = next;
+        settingsFile.writeAdapter();
+    }
+
 
     function setIconThemeMode(mode) {
         var next = validIconThemeMode(mode) ? mode : "system";
@@ -750,6 +771,15 @@ Item {
             changed = true;
         }
 
+        // T18: migrate legacy "summary" click actions to control_center.
+        if (settingsAdapter.dynamicIslandLeftClickAction === "summary") {
+            settingsAdapter.dynamicIslandLeftClickAction = "control_center";
+            changed = true;
+        }
+        if (settingsAdapter.dynamicIslandRightClickAction === "summary") {
+            settingsAdapter.dynamicIslandRightClickAction = "control_center";
+            changed = true;
+        }
         if (!validDynamicIslandClickAction(settingsAdapter.dynamicIslandLeftClickAction)) {
             settingsAdapter.dynamicIslandLeftClickAction = "toggle_media";
             changed = true;
@@ -868,6 +898,7 @@ Item {
             property bool dynamicIslandEnabled: true
             property bool dynamicIslandHideTopbarTime: true
             property string dynamicIslandLeftClickAction: "toggle_media"
+            property bool dynamicIslandWorkspaceFeedback: false
             property string dynamicIslandRightClickAction: "control_center"
             property bool dynamicIslandAutoExpandMedia: false
             property bool dynamicIslandHoverExpand: false

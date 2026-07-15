@@ -133,8 +133,7 @@ ShellRoot {
 
     function dynamicIslandAnchorRect(screen) {
         var width = Math.max(1, Number(screen && screen.width) || 1);
-        var islandWidth = dynamicIsland && dynamicIsland.presentation === "expanded_summary" ? 360
-            : dynamicIsland && dynamicIsland.presentation === "expanded_media" ? 400
+        var islandWidth = dynamicIsland && dynamicIsland.presentation === "expanded_media" ? 400
             : 140;
         return {
             "x": Math.round(Math.max(0, (width - islandWidth) / 2)),

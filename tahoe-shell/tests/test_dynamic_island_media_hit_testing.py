@@ -286,7 +286,7 @@ class DynamicIslandMediaHitTestingTests(unittest.TestCase):
         # Capsule swipe still uses existing service APIs without new magic deltas.
         self.assertIn("beginSwipe()", self.capsule)
         self.assertIn("advanceSwipe(", self.capsule)
-        self.assertIn("resolveSwipe()", self.capsule)
+        self.assertIn("resolveSwipe(", self.capsule)
         self.assertIn("cancelSwipe()", self.capsule)
         self.assertIn("handleChipClick(", self.capsule)
         # No new inline pixel thresholds added for button exclusion zones.

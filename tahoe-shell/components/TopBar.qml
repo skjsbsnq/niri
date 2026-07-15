@@ -46,8 +46,12 @@ PanelWindow {
     readonly property bool dynamicIslandEnabled: settingsService ? !!settingsService.dynamicIslandEnabled : true
     readonly property bool dynamicIslandHideTopbarTime: settingsService ? !!settingsService.dynamicIslandHideTopbarTime : true
     readonly property bool dynamicIslandHoverExpand: settingsService ? !!settingsService.dynamicIslandHoverExpand : false
+    // T08: TopBar resting clock is not blanked on non-owner outputs.
+    // hideTopbarTime=true → Overlay shows base clock on every screen (including
+    // non-owner); TopBar hides its time text. hideTopbarTime=false → TopBar
+    // always shows ordinary time; Overlay only appears for owner activity.
     readonly property bool dynamicIslandOverlayHandlesResting: dynamicIslandEnabled && dynamicIslandHideTopbarTime
-    readonly property bool showTopbarTimeFallback: !dynamicIslandOverlayHandlesResting
+    readonly property bool showTopbarTimeFallback: !dynamicIslandEnabled || !dynamicIslandHideTopbarTime
     readonly property bool chipInteractive: dynamicIslandEnabled && !dynamicIslandOverlayHandlesResting
     readonly property bool batteryAvailable: batteryService && batteryService.available
     // Single InputMethod owner language glyph (中/EN/あ/한/Aa/--).
@@ -810,7 +814,7 @@ PanelWindow {
                 z: 2
                 onClicked: function(button) {
                     if (root.dynamicIslandService)
-                        root.dynamicIslandService.handleChipClick(button);
+                        root.dynamicIslandService.handleChipClick(button, root.screen ? String(root.screen.name || "") : "");
                 }
                 onHoverEntered: {
                     if (!root.dynamicIslandHoverExpand || !root.dynamicIslandService)
@@ -827,7 +831,7 @@ PanelWindow {
                     repeat: false
                     onTriggered: {
                         if (root.dynamicIslandService)
-                            root.dynamicIslandService.requestHoverExpand();
+                            root.dynamicIslandService.requestHoverExpand(root.screen ? String(root.screen.name || "") : "");
                     }
                 }
 

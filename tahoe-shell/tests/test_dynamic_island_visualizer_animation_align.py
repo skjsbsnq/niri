@@ -192,9 +192,11 @@ def extract_contract(
         phase_angular_velocity_near_legacy=omega_ok,
         media_content_gated_by_active_for_screen=bool(
             overlay_src
-            and re.search(
-                r"mediaContentVisible\s*:\s*contentState\s*===\s*[\"']expanded_media[\"']\s*&&\s*activeForScreen",
-                overlay_src,
+            and (
+                re.search(
+                    r"mediaContentVisible\s*:\s*(?:contentState|effectiveContentState)\s*===\s*[\"']expanded_media[\"']\s*&&\s*activeForScreen",
+                    overlay_src,
+                )
             )
         ),
         no_second_media_visibility_state=bool(
@@ -339,9 +341,10 @@ class DynamicIslandVisualizerAlignTests(unittest.TestCase):
 
     def test_overlay_media_content_requires_active_for_screen(self) -> None:
         src = OVERLAY.read_text(encoding="utf-8")
+        # T08: effectiveContentState is resting on non-owner; still AND activeForScreen.
         self.assertRegex(
             src,
-            r"mediaContentVisible\s*:\s*contentState\s*===\s*[\"']expanded_media[\"']\s*&&\s*activeForScreen",
+            r"mediaContentVisible\s*:\s*(?:contentState|effectiveContentState)\s*===\s*[\"']expanded_media[\"']\s*&&\s*activeForScreen",
         )
         # Must not leave expanded_media visible on every output.
         self.assertNotRegex(

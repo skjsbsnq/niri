@@ -12,7 +12,7 @@ Design (review round 2):
 - Anchor tests (non-xfail) assert the V1 bug still exists; when production is
   fixed those anchors fail and must be updated in the same task.
 
-Target tasks: T08 output owner, T09 swipe (T05 brightness and T07 priority fixed).
+Target tasks: T09 swipe (T05/T07/T08 fixed).
 """
 
 from __future__ import annotations
@@ -127,15 +127,15 @@ def brightness_zero_is_legal(src: str) -> bool:
 
 def non_owner_keeps_base_clock(overlay: str, topbar: str) -> bool:
     """Desired: hideTopbarTime must not blank non-owner clocks."""
-    # V1 signature: global overlayHandlesResting = enabled && hideTopbarTime,
-    # fallback = !overlayHandlesResting (no per-screen term).
-    v1_global = (
-        "dynamicIslandOverlayHandlesResting: dynamicIslandEnabled && dynamicIslandHideTopbarTime"
-        in topbar
-        and "showTopbarTimeFallback: !dynamicIslandOverlayHandlesResting" in topbar
-        and "activeForScreen" in overlay
+    # T08: TopBar time fallback is independent of owner; Overlay uses per-screen role.
+    topbar_ok = (
+        "showTopbarTimeFallback: !dynamicIslandEnabled || !dynamicIslandHideTopbarTime" in topbar
+        or "screenPresentationRole" in overlay
     )
-    return not v1_global
+    overlay_ok = "screenPresentationRole" in overlay or "effectiveGeometryState" in overlay
+    # Old V1 global blanking pattern must be gone.
+    v1_global = "showTopbarTimeFallback: !dynamicIslandOverlayHandlesResting" in topbar
+    return topbar_ok and overlay_ok and not v1_global
 
 
 # ---------------------------------------------------------------------------
@@ -270,19 +270,16 @@ class DynamicIslandV2ExpectedFailureTests(unittest.TestCase):
         self.assertEqual(final, 400.0)
         self.assertGreater(drag, resting)
 
-    def test_v1_target_screen_is_live_focus(self) -> None:
-        self.assertFalse(target_screen_supports_event_owner_pin(self.island_src))
-        body = _function_body(self.island_src, "computeTargetScreenName")
-        self.assertIn("focusedWindow", body)
+    def test_v1_target_screen_sim_documents_old_bug(self) -> None:
+        # Historical V1 sim never pins; production is fixed in T08.
         sim = IslandSimV1(focused_output="eDP-2")
         sim.present_notification(1)
-        # V1 never pins — owner follows focus.
         self.assertIsNone(sim.event_owner_output)
         sim.focused_output = "HDMI-A-1"
         self.assertEqual(sim.presentation_owner(), "HDMI-A-1")
 
-    def test_v1_non_owner_loses_clock_with_hide_topbar_time(self) -> None:
-        self.assertFalse(non_owner_keeps_base_clock(self.overlay_src, self.topbar_src))
+    def test_v1_non_owner_clock_sim_documents_old_bug(self) -> None:
+        # Historical V1 global blanking sim.
         hide = True
         enabled = True
         overlay_handles = enabled and hide
@@ -328,18 +325,12 @@ class DynamicIslandV2ExpectedFailureTests(unittest.TestCase):
             settle = sim.swipe_preview_width()
             self.assertGreaterEqual(settle, 360.0)
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="target T08: computeTargetScreenName must honor a pinned event owner output",
-    )
     def test_desired_event_owner_pin_in_target_screen(self) -> None:
+        # T08: expected-failure removed; production pins event/session owners.
         self.assertTrue(target_screen_supports_event_owner_pin(self.island_src))
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="target T08: non-owner output must keep base clock under hideTopbarTime",
-    )
     def test_desired_non_owner_keeps_base_clock(self) -> None:
+        # T08: expected-failure removed; non-owner keeps base clock.
         self.assertTrue(non_owner_keeps_base_clock(self.overlay_src, self.topbar_src))
 
 if __name__ == "__main__":

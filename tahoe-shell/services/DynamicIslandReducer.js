@@ -179,6 +179,7 @@ function reduce(state, event, context) {
             slice.hoverExpanded = false;
             return result(slice, [
                 effect("stopTransientTimer"),
+            effect("clearEventOwner"),
                 effect("clearTransientFields"),
                 effect("clearPendingNotifications"),
                 effect("clearDisplayingNotification"),
@@ -193,6 +194,7 @@ function reduce(state, event, context) {
             slice.hoverExpanded = false;
             return result(slice, [
                 effect("stopTransientTimer"),
+            effect("clearEventOwner"),
                 effect("clearTransientFields"),
                 effect("clearPendingNotifications"),
                 effect("clearDisplayingNotification"),
@@ -210,6 +212,7 @@ function reduce(state, event, context) {
         slice.hoverExpanded = false;
         return result(slice, [
             effect("stopTransientTimer"),
+            effect("clearEventOwner"),
             effect("clearTransientFields"),
             effect("clearPendingNotifications"),
             effect("clearDisplayingNotification"),
@@ -223,6 +226,7 @@ function reduce(state, event, context) {
         slice.forcedState = "";
         return result(slice, [
             effect("stopTransientTimer"),
+            effect("clearEventOwner"),
             effect("endNotificationLease"),
             effect("clearTransientFields")
             // Drain happens once via onStateChanged after forcedState commit.
@@ -233,6 +237,7 @@ function reduce(state, event, context) {
         slice.forcedState = ctx.hasMedia ? "resting_media" : "";
         return result(slice, [
             effect("stopTransientTimer"),
+            effect("clearEventOwner"),
             effect("endNotificationLease"),
             effect("clearTransientFields")
         ]);
@@ -242,6 +247,7 @@ function reduce(state, event, context) {
         slice.forcedState = ctx.hasMedia ? "expanded_media" : "expanded_summary";
         return result(slice, [
             effect("stopTransientTimer"),
+            effect("clearEventOwner"),
             effect("endNotificationLease"),
             effect("clearTransientFields")
         ]);
@@ -250,6 +256,7 @@ function reduce(state, event, context) {
         slice.forcedState = "expanded_summary";
         return result(slice, [
             effect("stopTransientTimer"),
+            effect("clearEventOwner"),
             effect("endNotificationLease"),
             effect("clearTransientFields")
         ]);
@@ -276,6 +283,7 @@ function reduce(state, event, context) {
             slice.forcedState = "expanded_media";
             return result(slice, [
                 effect("stopTransientTimer"),
+            effect("clearEventOwner"),
                 effect("endNotificationLease"),
                 effect("clearTransientFields")
             ]);
@@ -283,6 +291,7 @@ function reduce(state, event, context) {
         slice.forcedState = "expanded_summary";
         return result(slice, [
             effect("stopTransientTimer"),
+            effect("clearEventOwner"),
             effect("endNotificationLease"),
             effect("clearTransientFields")
         ]);
@@ -306,6 +315,7 @@ function reduce(state, event, context) {
             slice.forcedState = "expanded_media";
             return result(slice, [
                 effect("stopTransientTimer"),
+            effect("clearEventOwner"),
                 effect("endNotificationLease"),
                 effect("clearTransientFields")
             ]);
@@ -329,6 +339,7 @@ function reduce(state, event, context) {
         }
         return result(slice, [
             effect("stopTransientTimer"),
+            effect("clearEventOwner"),
             effect("endNotificationLease"),
             effect("clearTransientFields")
         ]);

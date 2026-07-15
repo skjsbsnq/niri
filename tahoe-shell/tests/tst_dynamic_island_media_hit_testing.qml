@@ -283,9 +283,10 @@ TestCase {
         compare(overlay.mediaContentVisible, false);
         clickAt(mediaPoint("play"));
         compare(playPauseRequests, 0);
-        // Restore active screen.
+        // Restore active screen. Geometry morphs resting→expanded; wait for
+        // capsule layout before hit-testing media controls (T08 ownership).
         islandService.targetScreenName = "eDP-1";
-        wait(50);
+        wait(400);
         compare(overlay.activeForScreen, true);
         compare(overlay.mediaContentVisible, true);
         clickAt(mediaPoint("play"));

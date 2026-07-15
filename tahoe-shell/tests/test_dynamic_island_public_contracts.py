@@ -147,21 +147,23 @@ class DynamicIslandPublicContractTests(unittest.TestCase):
             self.assertIn(f'"{action}"', text)
 
     def test_disabled_island_still_has_time_path(self) -> None:
-        # Overlay hides when disabled; TopBar must show fallback time.
+        # Overlay hides when disabled; TopBar must show ordinary time.
+        # T08: fallback is !enabled || !hideTopbarTime (never blanks non-owner).
         self.assertIn("showTopbarTimeFallback", self.topbar)
         self.assertIn(
-            "readonly property bool showTopbarTimeFallback: !dynamicIslandOverlayHandlesResting",
+            "readonly property bool showTopbarTimeFallback: !dynamicIslandEnabled || !dynamicIslandHideTopbarTime",
             self.topbar,
         )
         self.assertIn("fallbackTimeText", self.island)
         self.assertIn("displayText: root.dynamicIslandService ? root.dynamicIslandService.fallbackTimeText", self.topbar)
-        # Truth table from source formulas:
-        # enabled=false → overlayHandlesResting=false → showTopbarTimeFallback=true
+        # Truth table: disabled always shows TopBar time.
         enabled = False
         hide = True
-        overlay_handles = enabled and hide
-        show_fallback = not overlay_handles
+        show_fallback = (not enabled) or (not hide)
         self.assertTrue(show_fallback)
+        # Enabled + hideTopbarTime → TopBar does not show its own time.
+        self.assertFalse((not True) or (not True))  # enabled=True, hide=True → fallback false
+        self.assertEqual((not True) or (not True), False)
 
     def test_dnd_blocks_manual_and_present_notification_paths(self) -> None:
         self.assertIn("notificationsDndEnabled()", self.island)

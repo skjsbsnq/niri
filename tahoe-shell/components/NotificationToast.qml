@@ -26,6 +26,8 @@ PanelWindow {
     property var dynamicIslandService
     property var current: notificationsService ? notificationsService.current : null
     property bool hasCurrent: !!current
+    // T08: when the island is enabled, toast is globally suppressed (notification
+    // transient only on the event owner output). Island disabled restores toast.
     readonly property bool suppressedByDynamicIsland: root.dynamicIslandService
         ? !!root.dynamicIslandService.islandEnabled
         : (!!root.settingsService && !!root.settingsService.dynamicIslandEnabled)

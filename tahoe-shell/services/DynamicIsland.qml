@@ -4,6 +4,7 @@ import QtQuick
 import Quickshell
 import "../components/DynamicIslandMotion.js" as IslandMotion
 import "DynamicIslandReducer.js" as IslandReducer
+import "../components/DynamicIslandOwnership.js" as IslandOwnership
 
 // Dynamic Island state owner. The service owns transient arbitration so the
 // overlay can stay a pure renderer for chip/notification/OSD states.
@@ -64,6 +65,11 @@ Item {
     // Suppress onStateChanged restore while applyReducerResult runs so a single
     // presentation commit drains pending work exactly once (T07 H1).
     property bool applyingPresentationReducer: false
+    // T08: pin event/session owners so transients do not jump with focus.
+    // eventOwnerOutput: set when a transient is created; cleared on hide.
+    // sessionOwnerOutput: set when user opens expanded on a screen; cleared on collapse.
+    property string eventOwnerOutput: ""
+    property string sessionOwnerOutput: ""
 
     readonly property bool islandEnabled: settingsService ? !!settingsService.dynamicIslandEnabled : true
     readonly property bool dynamicIslandHideTopbarTime: settingsService ? !!settingsService.dynamicIslandHideTopbarTime : true
@@ -177,6 +183,9 @@ Item {
         case "stopTransientTimer":
             transientTimer.stop();
             break;
+        case "clearEventOwner":
+            root.clearEventOwnerOutput();
+            break;
         case "clearTransientFields":
             root.clearTransientFields();
             break;
@@ -230,6 +239,7 @@ Item {
         var effects = outcome.effects || [];
         var cleanupTypes = {
             "stopTransientTimer": true,
+            "clearEventOwner": true,
             "clearTransientFields": true,
             "clearPendingNotifications": true,
             "clearDisplayingNotification": true,
@@ -397,7 +407,12 @@ Item {
         }
     }
 
-    function computeTargetScreenName() {
+    function liveFocusedOutputName() {
+        if (root.windowsService && root.windowsService.focusedOutputName) {
+            var named = String(root.windowsService.focusedOutputName || "").trim();
+            if (named.length > 0)
+                return named;
+        }
         var focused = root.windowsService ? root.windowsService.focusedWindow : null;
         var output = focused ? String(focused.output || "").trim() : "";
         if (output.length > 0)
@@ -407,10 +422,94 @@ Item {
         output = workspace ? String(workspace.output || "").trim() : "";
         if (output.length > 0)
             return output;
-
-        var screens = [...Quickshell.screens];
-        return screens.length > 0 ? String(screens[0].name || "") : "";
+        return "";
     }
+
+    function firstAvailableOutputName() {
+        var screens = [...Quickshell.screens];
+        for (var i = 0; i < screens.length; i++) {
+            var name = String(screens[i].name || "").trim();
+            if (name.length > 0)
+                return name;
+        }
+        return "";
+    }
+
+    function availableOutputNames() {
+        var screens = [...Quickshell.screens];
+        var names = [];
+        for (var i = 0; i < screens.length; i++) {
+            var name = String(screens[i].name || "").trim();
+            if (name.length > 0)
+                names.push(name);
+        }
+        return names;
+    }
+
+    function captureEventOwnerOutput(preferred) {
+        // Only pin when starting a new event lease. In-lease refreshes
+        // (rapid OSD steps) must not re-capture focus and jump screens.
+        var existing = String(root.eventOwnerOutput || "").trim();
+        if (existing.length > 0)
+            return existing;
+
+        var preferredName = String(preferred || "").trim();
+        if (preferredName.length > 0) {
+            root.eventOwnerOutput = preferredName;
+            return preferredName;
+        }
+        var live = root.liveFocusedOutputName();
+        if (live.length > 0) {
+            root.eventOwnerOutput = live;
+            return live;
+        }
+        var first = root.firstAvailableOutputName();
+        root.eventOwnerOutput = first;
+        return first;
+    }
+
+    function clearEventOwnerOutput() {
+        root.eventOwnerOutput = "";
+    }
+
+    function setSessionOwnerOutput(screenName) {
+        var name = String(screenName || "").trim();
+        if (name.length === 0)
+            name = root.liveFocusedOutputName() || root.firstAvailableOutputName();
+        root.sessionOwnerOutput = name;
+        return name;
+    }
+
+    function clearSessionOwnerOutput() {
+        root.sessionOwnerOutput = "";
+    }
+
+    function sanitizeOwnerOutputs() {
+        var next = IslandOwnership.sanitizeOwnerPins({
+            "eventOwnerOutput": root.eventOwnerOutput,
+            "sessionOwnerOutput": root.sessionOwnerOutput
+        }, root.availableOutputNames());
+        root.eventOwnerOutput = String(next.eventOwnerOutput || "");
+        root.sessionOwnerOutput = String(next.sessionOwnerOutput || "");
+    }
+
+    function computeTargetScreenName() {
+        // Honor pinned event/session owners for the lifetime of the activity.
+        root.sanitizeOwnerOutputs();
+        return IslandOwnership.resolvePresentationOwner({
+            "eventOwnerOutput": root.eventOwnerOutput,
+            "sessionOwnerOutput": root.sessionOwnerOutput
+        }, {
+            "focusedOutput": root.liveFocusedOutputName(),
+            "firstOutput": root.firstAvailableOutputName()
+        });
+    }
+
+    function claimSessionOwnerForScreen(screenName) {
+        // User click / hover expand on a specific output locks session owner.
+        root.setSessionOwnerOutput(screenName);
+    }
+
 
     function clearTransientFields() {
         root.transientDisplayText = "";
@@ -434,15 +533,25 @@ Item {
         // remain source-visible on this path; reducer effects are idempotent.
         captureOsdBaselines();
         root.clearPendingNotificationIds();
+        root.clearEventOwnerOutput();
+        root.clearSessionOwnerOutput();
         root.dispatchPresentation("ISLAND_DISABLED");
     }
 
     function handleMediaAvailabilityChanged() {
+        var wasExpanded = root.expanded;
         root.dispatchPresentation("MEDIA_AVAILABILITY_CHANGED");
+        // Auto-expand claims session so expanded media does not follow focus.
+        if (!wasExpanded && root.expanded && !root.sessionOwnerOutput.length)
+            root.claimSessionOwnerForScreen(root.liveFocusedOutputName());
+        if (wasExpanded && !root.expanded)
+            root.clearSessionOwnerOutput();
     }
 
     function reset() {
         root.dispatchPresentation("RESET");
+        root.clearEventOwnerOutput();
+        root.clearSessionOwnerOutput();
     }
 
     function showTime() {
@@ -454,15 +563,25 @@ Item {
     }
 
     function showExpandedMedia() {
+        if (!root.sessionOwnerOutput.length)
+            root.claimSessionOwnerForScreen(root.liveFocusedOutputName());
         root.dispatchPresentation("SHOW_EXPANDED_MEDIA");
     }
 
     function showExpandedSummary() {
+        if (!root.sessionOwnerOutput.length)
+            root.claimSessionOwnerForScreen(root.liveFocusedOutputName());
         root.dispatchPresentation("SHOW_EXPANDED_SUMMARY");
     }
 
     function toggleExpanded() {
+        // Expanding claims session; collapsing releases session owner.
+        var wasExpanded = root.expanded;
+        if (!wasExpanded && !root.sessionOwnerOutput.length)
+            root.claimSessionOwnerForScreen(root.liveFocusedOutputName());
         root.dispatchPresentation("TOGGLE_EXPANDED");
+        if (wasExpanded)
+            root.clearSessionOwnerOutput();
     }
 
     function showTransient(nextState, text, secondary, progressValue, icon, hideMs) {
@@ -475,6 +594,8 @@ Item {
                 && candidate !== "transient_workspace")
             return;
 
+        // Capture owner at event create so focus changes cannot jump the island.
+        root.captureEventOwnerOutput();
         root.transientDisplayText = String(text || "");
         root.transientSecondaryText = String(secondary || "");
         root.transientProgress = Number(progressValue);
@@ -642,7 +763,7 @@ Item {
         root.swipeProgress = next;
     }
 
-    function resolveSwipe() {
+    function resolveSwipe(screenName) {
         if (!root.swipeDragging)
             return;
 
@@ -677,8 +798,14 @@ Item {
 
         swipeSettleTimer.restart();
         root.swipeMoved = false;
-        if (entered)
+        if (entered) {
+            if (!root.sessionOwnerOutput.length)
+                root.claimSessionOwnerForScreen(screenName || root.liveFocusedOutputName());
             root.restoreAfterTransient();
+        } else if (!root.expanded) {
+            // Swipe return-to-compact releases session owner (T08 collapse rule).
+            root.clearSessionOwnerOutput();
+        }
     }
 
     function cancelSwipe() {
@@ -700,16 +827,19 @@ Item {
     }
 
 
-    function requestHoverExpand() {
+    function requestHoverExpand(screenName) {
         if (!root.islandEnabled || !root.dynamicIslandHoverExpand || root.expanded || root.userInteracting)
             return;
 
+        root.claimSessionOwnerForScreen(screenName);
         root.dispatchPresentation("HOVER_EXPAND");
     }
 
     function requestHoverCollapse() {
         // Historical: only acts when hoverExpanded; drains pending on collapse.
         root.dispatchPresentation("HOVER_COLLAPSE");
+        if (!root.expanded)
+            root.clearSessionOwnerOutput();
     }
 
     function performClickAction(action) {
@@ -719,17 +849,21 @@ Item {
         root.dispatchPresentation("CLEAR_HOVER_EXPANDED");
         switch (String(action || "toggle_media")) {
         case "summary":
-            if (root.state === "expanded_summary")
+            if (root.state === "expanded_summary") {
                 root.dispatchPresentation("COLLAPSE");
-            else
+                root.clearSessionOwnerOutput();
+            } else {
                 showExpandedSummary();
+            }
             break;
         case "notifications":
             root.dispatchPresentation("COLLAPSE");
+            root.clearSessionOwnerOutput();
             root.openNotificationCenterRequested();
             break;
         case "control_center":
             root.dispatchPresentation("COLLAPSE");
+            root.clearSessionOwnerOutput();
             root.openControlCenterRequested();
             break;
         case "none":
@@ -741,7 +875,10 @@ Item {
         }
     }
 
-    function handleChipClick(button) {
+    function handleChipClick(button, screenName) {
+        // Optional screenName pins the session owner for multi-output clicks.
+        if (screenName !== undefined && screenName !== null && String(screenName).length > 0)
+            root.claimSessionOwnerForScreen(screenName);
         if (button === Qt.LeftButton)
             performClickAction(root.leftClickAction);
         else if (button === Qt.RightButton)
@@ -1285,6 +1422,7 @@ Item {
             root.displayingNotificationId = -1;
             root.forcedState = "";
             clearTransientFields();
+            root.clearEventOwnerOutput();
         }
     }
 
@@ -1363,6 +1501,8 @@ Item {
             "progress=" + root.progress,
             "iconCode=" + root.iconCode,
             "targetScreenName=" + root.targetScreenName,
+            "eventOwnerOutput=" + root.eventOwnerOutput,
+            "sessionOwnerOutput=" + root.sessionOwnerOutput,
             "expanded=" + root.expanded,
             "pendingNotificationIds=" + (root.pendingNotificationIds ? root.pendingNotificationIds.length : 0),
             "displayingNotificationId=" + root.displayingNotificationId,
@@ -1445,6 +1585,10 @@ Item {
             }
             root.clearTransientFields();
             root.forcedState = "";
+            root.clearEventOwnerOutput();
+            // Keep session owner only while expanded; transient end drops event pin.
+            if (!root.expanded)
+                root.clearSessionOwnerOutput();
             root.restoreAfterTransient();
         }
     }

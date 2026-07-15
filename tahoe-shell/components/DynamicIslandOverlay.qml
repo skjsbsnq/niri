@@ -6,6 +6,7 @@ import Quickshell.Wayland
 import "DynamicIslandMotion.js" as IslandMotion
 import "Motion.js" as Motion
 import "TahoeGlass.js" as GlassStyle
+import "DynamicIslandOwnership.js" as IslandOwnership
 
 PanelWindow {
     id: root
@@ -22,56 +23,83 @@ PanelWindow {
     readonly property string displayText: dynamicIslandService ? String(dynamicIslandService.displayText || "") : ""
     readonly property string secondaryText: dynamicIslandService ? String(dynamicIslandService.secondaryText || "") : ""
     readonly property string iconCode: dynamicIslandService ? String(dynamicIslandService.iconCode || "") : ""
-    readonly property string contentDisplayText: displayText
-    readonly property string contentSecondaryText: secondaryText
-    readonly property string contentIconCode: iconCode
-    readonly property real progress: dynamicIslandService ? Number(dynamicIslandService.progress) : -1
     readonly property string ownScreenName: root.screen ? String(root.screen.name || "") : ""
     readonly property string targetScreenName: dynamicIslandService ? String(dynamicIslandService.targetScreenName || "") : ""
     readonly property bool islandEnabled: dynamicIslandService ? !!dynamicIslandService.islandEnabled : true
     readonly property bool dynamicIslandHideTopbarTime: dynamicIslandService ? !!dynamicIslandService.dynamicIslandHideTopbarTime : true
     readonly property bool hoverExpandEnabled: dynamicIslandService ? !!dynamicIslandService.dynamicIslandHoverExpand : false
-    readonly property bool activeForScreen: !!dynamicIslandService
-        && (targetScreenName.length === 0 || ownScreenName.length === 0 || targetScreenName === ownScreenName)
-    readonly property bool capsuleShown: activeForScreen
-        && islandEnabled
-        && (dynamicIslandHideTopbarTime
-            || !isRestingState(geometryState)
-            || swipeInteractive
-            || swipeSettling)
-    readonly property int screenWidth: Math.max(1, Number(root.screen && root.screen.width) || root.width)
     readonly property bool swipeInteractive: dynamicIslandService ? !!dynamicIslandService.swipeDragging : false
     readonly property bool swipeSettling: dynamicIslandService ? !!dynamicIslandService.swipeSettling : false
+    // T08: pure per-screen role — resting clocks on every screen; activity only on owner.
+    readonly property var screenRole: IslandOwnership.screenPresentationRole(
+        ownScreenName,
+        targetScreenName,
+        geometryState,
+        {
+            "islandEnabled": islandEnabled,
+            "hideTopbarTime": dynamicIslandHideTopbarTime,
+            "swipeInteractive": swipeInteractive,
+            "swipeSettling": swipeSettling
+        })
+    readonly property bool activeForScreen: !!dynamicIslandService && !!screenRole && !!screenRole.isOwner
+    readonly property bool capsuleShown: !!dynamicIslandService && !!screenRole && !!screenRole.showIslandCapsule
+    // Non-owner surfaces always present resting_time geometry/content while owner
+    // may show activity. Effective presentation for this screen only.
+    readonly property string effectiveGeometryState: (!!screenRole && screenRole.showActivity)
+        ? geometryState
+        : "resting_time"
+    readonly property string effectiveContentState: (!!screenRole && screenRole.showActivity)
+        ? contentState
+        : "resting_time"
+    // Non-owner screens always render the resting clock, never owner activity text.
+    readonly property string contentDisplayText: (!!screenRole && screenRole.showActivity)
+        ? displayText
+        : (dynamicIslandService ? String(dynamicIslandService.fallbackTimeText || displayText) : displayText)
+    readonly property string contentSecondaryText: (!!screenRole && screenRole.showActivity)
+        ? secondaryText
+        : ""
+    readonly property string contentIconCode: (!!screenRole && screenRole.showActivity)
+        ? iconCode
+        : "\ue8b5"
+    readonly property real progress: (!!screenRole && screenRole.showActivity && dynamicIslandService)
+        ? Number(dynamicIslandService.progress)
+        : -1
+    readonly property int screenWidth: Math.max(1, Number(root.screen && root.screen.width) || root.width)
     readonly property real swipePreviewWidth: dynamicIslandService ? Number(dynamicIslandService.swipePreviewWidth) : -1
     readonly property int maxCapsuleWidth: Math.max(1, screenWidth)
     readonly property int maxCapsuleHeight: 220
-    readonly property int requestedCapsuleWidth: swipePreviewWidth > 0 ? Math.round(swipePreviewWidth) : widthForState(geometryState)
+    readonly property int requestedCapsuleWidth: (swipePreviewWidth > 0 && activeForScreen)
+        ? Math.round(swipePreviewWidth)
+        : widthForState(effectiveGeometryState)
     readonly property int capsuleTargetWidth: clampInt(requestedCapsuleWidth, 1, maxCapsuleWidth)
     readonly property int swipeWidthDuration: swipeInteractive ? 0 : (swipeSettling ? IslandMotion.swipeSettleDuration : IslandMotion.overlayMorphDuration)
     readonly property int swipeWidthEasing: swipeInteractive ? IslandMotion.overlayColorEasing : (swipeSettling ? IslandMotion.swipeSettleEasing : IslandMotion.overlayMorphEasing)
-    readonly property int capsuleTargetHeight: clampInt(heightForState(geometryState), 1, maxCapsuleHeight)
+    readonly property int capsuleTargetHeight: clampInt(heightForState(effectiveGeometryState), 1, maxCapsuleHeight)
     readonly property int capsuleTargetLeft: clampInt(Math.round((screenWidth - capsuleTargetWidth) / 2), 0, Math.max(0, screenWidth - capsuleTargetWidth))
     readonly property int capsuleTargetTop: 0
     readonly property real capsuleTargetRadius: Math.min(
-        radiusForState(geometryState, capsuleTargetHeight),
+        radiusForState(effectiveGeometryState, capsuleTargetHeight),
         capsuleTargetWidth / 2,
         capsuleTargetHeight / 2)
-    readonly property bool compactResting: contentState === "resting_time" || contentState === "resting_media"
-    readonly property bool compactContentVisible: compactResting && activeForScreen
-    // Expanded media (and its visualizer Timer) only on the target screen.
-    // Reuses activeForScreen / capsuleShown ownership — not a second visibility model.
-    readonly property bool mediaContentVisible: contentState === "expanded_media" && activeForScreen
-    readonly property bool summaryContentVisible: contentState === "expanded_summary" && activeForScreen
+    readonly property bool compactResting: effectiveContentState === "resting_time" || effectiveContentState === "resting_media"
+    readonly property bool compactContentVisible: compactResting && capsuleShown
+    // Expanded media (and its visualizer Timer) only on the owner screen.
+    readonly property bool mediaContentVisible: effectiveContentState === "expanded_media" && activeForScreen
+    readonly property bool summaryContentVisible: effectiveContentState === "expanded_summary" && activeForScreen
     readonly property bool showSecondaryText: contentSecondaryText.length > 0
         && !(safeProgress(progress) >= 0 && capsuleTargetHeight <= 44)
     readonly property color glassFill: "#f00b0c10"
     readonly property color glassFillExpanded: "#f2131419"
     readonly property color textPrimary: "#f7f9fc"
     readonly property color textSecondary: "#b9c0cc"
-    readonly property string mediaArtUrl: dynamicIslandService ? String(dynamicIslandService.mediaArtUrl || "") : ""
+    readonly property string mediaArtUrl: (activeForScreen && dynamicIslandService)
+        ? String(dynamicIslandService.mediaArtUrl || "")
+        : ""
     readonly property string mediaTrackTitle: contentDisplayText
     readonly property string mediaTrackArtist: contentSecondaryText
-    readonly property bool mediaPlaying: dynamicIslandService ? !!dynamicIslandService.mediaPlaying : false
+    readonly property bool mediaPlaying: activeForScreen && dynamicIslandService
+        ? !!dynamicIslandService.mediaPlaying
+        : false
     readonly property real mediaPosition: dynamicIslandService ? Number(dynamicIslandService.mediaPosition) : 0
     readonly property real mediaLength: dynamicIslandService ? Number(dynamicIslandService.mediaLength) : 0
     readonly property real mediaProgress: dynamicIslandService ? Number(dynamicIslandService.mediaProgress) : 0
@@ -192,7 +220,7 @@ PanelWindow {
         material: GlassStyle.MaterialPill
         radius: GlassStyle.RadiusPill + (root.capsuleTargetRadius - GlassStyle.RadiusPill)
         clip: true
-        fillColor: root.geometryState === "expanded_media" || root.geometryState === "expanded_summary"
+        fillColor: root.effectiveGeometryState === "expanded_media" || root.effectiveGeometryState === "expanded_summary"
             ? root.glassFillExpanded
             : root.glassFill
         strokeWidth: 0
@@ -238,7 +266,7 @@ PanelWindow {
             id: contentHost
             anchors.fill: parent
             z: 1
-            property string contentKey: root.contentState
+            property string contentKey: root.effectiveContentState
             property real contentScale: 1.0
             scale: contentScale
             transformOrigin: Item.Center
@@ -280,7 +308,7 @@ PanelWindow {
 
             DynamicIslandContent {
                 anchors.fill: parent
-                islandState: root.contentState
+                islandState: root.effectiveContentState
                 displayText: root.contentDisplayText
                 secondaryText: root.contentSecondaryText
                 iconCode: root.contentIconCode
@@ -370,7 +398,7 @@ PanelWindow {
                 repeat: false
                 onTriggered: {
                     if (root.dynamicIslandService)
-                        root.dynamicIslandService.requestHoverExpand();
+                        root.dynamicIslandService.requestHoverExpand(root.ownScreenName);
                 }
             }
 
@@ -475,7 +503,7 @@ PanelWindow {
                    if (root.dynamicIslandService.swipeDragging) {
                        // Any committed swipe session owns the press; never click.
                        root.dynamicIslandService.consumeSwipeMoved();
-                       root.dynamicIslandService.resolveSwipe();
+                       root.dynamicIslandService.resolveSwipe(root.ownScreenName);
                        suppressClickTemporarily();
                    } else if (gestureRejected) {
                        suppressClickTemporarily();
@@ -497,7 +525,7 @@ PanelWindow {
                if (clickSuppressedForCurrentSession())
                    return;
                if (root.dynamicIslandService)
-                   root.dynamicIslandService.handleChipClick(mouse.button);
+                   root.dynamicIslandService.handleChipClick(mouse.button, root.ownScreenName);
            }
            onWheel: function(wheel) {
                // Ignore wheel while a pointer gesture is active (mutual exclusion).
@@ -524,7 +552,7 @@ PanelWindow {
                repeat: false
                onTriggered: {
                    if (root.dynamicIslandService && root.dynamicIslandService.swipeDragging)
-                       root.dynamicIslandService.resolveSwipe();
+                       root.dynamicIslandService.resolveSwipe(root.ownScreenName);
                }
            }
        }

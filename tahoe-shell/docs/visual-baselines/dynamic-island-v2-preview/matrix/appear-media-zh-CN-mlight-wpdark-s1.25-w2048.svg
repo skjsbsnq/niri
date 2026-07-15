@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="305" height="113" viewBox="0 0 305 113">
+  <rect width="100%" height="100%" fill="#1a1c20"/>
+  <rect x="12" y="26" width="281" height="12" rx="6.0" fill="#ebf5f6f8" stroke="#30ffffff" stroke-width="1"/>
+  <text x="12" y="14" font-family="Noto Sans CJK SC, sans-serif" font-size="10" fill="#7f8996">appear-media-zh-CN-mlight-wpdark-s1.25-w2048</text>
+  <rect x="20" y="44" width="265" height="45" rx="22" ry="22" fill="#cc10141a" stroke="#24ffffff" stroke-width="1"/>
+  <text x="152.5" y="61.5" text-anchor="middle" font-family="Noto Sans CJK SC, sans-serif" font-size="16.2" font-weight="600" fill="#f7f8fa">午夜驰骋</text>
+  <text x="152.5" y="80.25" text-anchor="middle" font-family="Noto Sans CJK SC, sans-serif" font-size="13.8" fill="#aeb6c2">▶</text>
+  <text x="12" y="107" font-family="monospace" font-size="9" fill="#5f6870">212x36 r18 @s1.25 vp2048 light/dark</text>
+</svg>

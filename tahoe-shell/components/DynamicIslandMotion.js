@@ -67,3 +67,60 @@ var visualizerUpdateMs = 120;
 var visualizerPhaseStep = 0.34;
 var visualizerPlayingDuration = 120;
 var visualizerPausedDuration = 260;
+
+// --- V2 motion tokens (T10 baseline; production migrates in T19) ------------
+// Geometry stays eased NumberAnimation only (glass region, no Spring).
+// Content enter no longer defaults to whole-scene scale 0.9 → 1.
+
+var v2CompactToTransientMs = 240;
+var v2CompactToExpandedMs = 280;
+var v2ExpandedToCompactMs = 240;
+var v2ContentExitMs = 110;
+var v2ContentEnterMs = 170;
+var v2ContentMaxTravelPx = 6;
+var v2GeometryEasing = QtQuick.Easing.OutCubic;
+var v2ContentEasing = QtQuick.Easing.OutCubic;
+var v2ReducedGeometryMs = 80;
+var v2ReducedContentMs = 80;
+
+// V2 radius caps (roadmap §9.3). Compact still tracks half-height; expanded
+// must not use height/2 ellipse morph.
+var v2RadiusCompactClock = 16;     // 32px height
+var v2RadiusCompactMedia = 18;     // 36px height
+var v2RadiusOsd = 22;              // 44px height
+var v2RadiusNotificationMin = 22;
+var v2RadiusNotificationMax = 26;
+var v2RadiusExpandedMin = 28;
+var v2RadiusExpandedMax = 32;
+
+// V2 geometry baselines (logical px, roadmap §9.4). Production clamps later.
+var v2ClockHeight = 32;
+var v2ClockWidthMin = 112;
+var v2ClockWidthMax = 136;
+var v2CompactMediaHeight = 36;
+var v2CompactMediaWidthMin = 200;
+var v2CompactMediaWidthMax = 224;
+var v2OsdHeight = 44;
+var v2OsdWidthMin = 220;
+var v2OsdWidthMax = 240;
+var v2WorkspaceHeight = 36;
+var v2WorkspaceWidthMin = 140;
+var v2WorkspaceWidthMax = 168;
+var v2NotificationCompactHeightMin = 60;
+var v2NotificationCompactHeightMax = 80;
+var v2NotificationCompactWidthMin = 300;
+var v2NotificationCompactWidthMax = 420;
+var v2MediaExpandedWidthMin = 404;
+var v2MediaExpandedWidthMax = 432;
+var v2MediaExpandedHeightMin = 160;
+var v2MediaExpandedHeightMax = 172;
+var v2NotificationExpandedWidthMin = 380;
+var v2NotificationExpandedWidthMax = 440;
+var v2NotificationExpandedHeightMin = 96;
+var v2NotificationExpandedHeightMax = 176;
+var v2TimerExpandedWidthMin = 340;
+var v2TimerExpandedWidthMax = 380;
+var v2TimerExpandedHeightMin = 136;
+var v2TimerExpandedHeightMax = 152;
+var v2CompactTopInset = 4;
+var v2ScreenMargin = 16;

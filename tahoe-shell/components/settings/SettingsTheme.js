@@ -437,3 +437,58 @@ function categoryColor(key, darkMode, accentId) {
         return accent(darkMode, accentId);
     }
 }
+
+// --- Dynamic Island V2 surface tokens (T10) --------------------------------
+// Single theme owner for island semantic colors. Do not create
+// DynamicIslandTheme.js. Values match roadmap §9 "dark focus glass".
+//
+// Island surfaces intentionally use a neutral deep fill in both shell light
+// and dark modes so the resting capsule remains a stable focus element over
+// wallpaper; text contrast is calibrated for that surface.
+
+function islandTextPrimary(darkMode) {
+    return "#f7f8fa";
+}
+
+function islandTextSecondary(darkMode) {
+    return "#aeb6c2";
+}
+
+function islandTextMuted(darkMode) {
+    return "#7f8996";
+}
+
+// fillRole: "compact" | "transient" | "expanded"
+function islandSurfaceFill(darkMode, fillRole) {
+    var role = String(fillRole || "compact");
+    if (role === "expanded")
+        return "#df10141a"; // ~87% deep neutral
+    if (role === "transient")
+        return "#d610141a"; // ~84%
+    return "#cc10141a";     // ~80% compact
+}
+
+function islandSurfaceStroke(darkMode, fillRole) {
+    var role = String(fillRole || "compact");
+    if (role === "expanded")
+        return "#30ffffff";
+    if (role === "transient")
+        return "#28ffffff";
+    return "#24ffffff";
+}
+
+function islandProgressTrack(darkMode) {
+    return "#30ffffff";
+}
+
+function islandControlFill(darkMode) {
+    return "#20ffffff";
+}
+
+function islandRecording(darkMode) {
+    return darkMode ? "#ff453a" : "#ff3b30";
+}
+
+function islandCriticalEdge(darkMode) {
+    return statusAttention(darkMode);
+}

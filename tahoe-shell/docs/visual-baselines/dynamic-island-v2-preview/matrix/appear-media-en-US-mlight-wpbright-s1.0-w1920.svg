@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="252" height="102" viewBox="0 0 252 102">
+  <rect width="100%" height="100%" fill="#d8e2ec"/>
+  <rect x="12" y="26" width="228" height="10" rx="5.0" fill="#ebf5f6f8" stroke="#30ffffff" stroke-width="1"/>
+  <text x="12" y="14" font-family="Noto Sans CJK SC, sans-serif" font-size="10" fill="#7f8996">appear-media-en-US-mlight-wpbright-s1.0-w1920</text>
+  <rect x="20" y="42" width="212" height="36" rx="18" ry="18" fill="#cc10141a" stroke="#24ffffff" stroke-width="1"/>
+  <text x="126.0" y="56.0" text-anchor="middle" font-family="Noto Sans CJK SC, sans-serif" font-size="13.0" font-weight="600" fill="#f7f8fa">Midnight Drive</text>
+  <text x="126.0" y="71.0" text-anchor="middle" font-family="Noto Sans CJK SC, sans-serif" font-size="11.0" fill="#aeb6c2">▶</text>
+  <text x="12" y="96" font-family="monospace" font-size="9" fill="#5f6870">212x36 r18 @s1.0 vp1920 light/bright</text>
+</svg>

@@ -979,9 +979,11 @@ Item {
         root.lastMuted = !!root.controlsService.muted;
         // audioReady is optional; only explicit false means sink not live.
         root.volumeOsdTrackingReady = root.controlsService.audioReady !== false;
-        root.lastBrightness = Number(root.controlsService.brightness);
-        if (!(root.lastBrightness > 0))
-            root.lastBrightness = 1.0;
+        // Brightness 0 is legal. Only non-finite samples are ignored; never
+        // rewrite a real 0% reading into a synthetic 1.0 baseline.
+        var brightnessSample = Number(root.controlsService.brightness);
+        if (isFinite(brightnessSample))
+            root.lastBrightness = Math.max(0, Math.min(1, brightnessSample));
         root.brightnessTrackingReady = !!root.controlsService.brightnessAvailable;
     }
 
@@ -1089,21 +1091,26 @@ Item {
         root.volumeOsdTrackingReady = false;
     }
 
+    // Brightness OSD path mirrors volume: unavailable / first sample only
+    // advance the baseline. Finite 0% is a real user value and may present.
+    // NaN is unavailable and must not be treated as 0. Disabled island still
+    // tracks the baseline so re-enable does not false-present.
     function handleBrightnessChange() {
-        if (!root.islandEnabled)
-            return;
-
         if (!root.controlsService)
             return;
-        var brightness = Number(root.controlsService.brightness);
-        if (!(brightness > 0))
+
+        var brightnessSample = Number(root.controlsService.brightness);
+        if (!isFinite(brightnessSample))
             return;
+        var brightness = Math.max(0, Math.min(1, brightnessSample));
+
         if (!root.controlsService.brightnessAvailable) {
             root.lastBrightness = brightness;
             root.brightnessTrackingReady = false;
             return;
         }
         if (!root.brightnessTrackingReady) {
+            // First valid sample after connect/reconnect: baseline only.
             root.lastBrightness = brightness;
             root.brightnessTrackingReady = true;
             return;
@@ -1111,6 +1118,10 @@ Item {
         if (Math.abs(brightness - root.lastBrightness) < 0.005)
             return;
         root.lastBrightness = brightness;
+
+        if (!root.islandEnabled)
+            return;
+
         presentOsdEntry({
             "kind": "brightness",
             "progress": brightness,

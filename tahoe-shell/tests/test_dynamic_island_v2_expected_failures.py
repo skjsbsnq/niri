@@ -97,12 +97,19 @@ def target_screen_supports_event_owner_pin(src: str) -> bool:
 def brightness_zero_is_legal(src: str) -> bool:
     handle = _compact(_function_body(src, "handleBrightnessChange"))
     capture = _compact(_function_body(src, "captureOsdBaselines"))
+    # V1 rejected non-positive samples outright. V2 (T05) accepts finite 0%.
     handle_rejects_nonpositive = "if(!(brightness>0))return" in handle
-    # Also match multi-line form already compacted.
     if "brightness>0" in handle and "return" in handle and "if(!(" in handle:
-        handle_rejects_nonpositive = True
-    capture_rewrites = "lastBrightness=1.0" in capture and "lastBrightness>0" in capture
-    return not handle_rejects_nonpositive and not capture_rewrites
+        # Only treat as reject when the guard exits before any baseline write
+        # for non-positive values (old early-return pattern).
+        if "if(!(brightness>0))return" in handle:
+            handle_rejects_nonpositive = True
+        else:
+            handle_rejects_nonpositive = False
+    # Capture must not force lastBrightness to 1.0 when sample is 0.
+    capture_rewrites = "lastBrightness=1.0" in capture
+    uses_finite = "isFinite(brightnessSample)" in handle and "isFinite(brightnessSample)" in capture
+    return (not handle_rejects_nonpositive) and (not capture_rewrites) and uses_finite
 
 
 def non_owner_keeps_base_clock(overlay: str, topbar: str) -> bool:
@@ -182,6 +189,8 @@ class IslandSimV1:
         return self.event_owner_output or self.live_target_screen()
 
     def handle_brightness(self, value: float) -> bool:
+        # Historical V1 sim: non-positive rejected. Kept for documentation of
+        # the pre-T05 bug; production assertions use brightness_zero_is_legal.
         if not (value > 0):
             return False
         self.last_brightness = value
@@ -270,11 +279,16 @@ class DynamicIslandV2ExpectedFailureTests(unittest.TestCase):
         capsule = active_for_screen and enabled and hide
         self.assertFalse(capsule or topbar_fallback)
 
-    def test_v1_brightness_zero_ignored(self) -> None:
-        self.assertFalse(brightness_zero_is_legal(self.island_src))
+    def test_v1_brightness_zero_sim_documents_old_bug(self) -> None:
+        # Pure V1 sim still models the historical reject; production is fixed
+        # in T05 and asserted green by test_brightness_zero_legal_in_production.
         sim = IslandSimV1(last_brightness=0.4)
         self.assertFalse(sim.handle_brightness(0.0))
         self.assertEqual(sim.capture_baseline(0.0), 1.0)
+
+    def test_brightness_zero_legal_in_production(self) -> None:
+        # T05: expected-failure removed; production must accept 0%.
+        self.assertTrue(brightness_zero_is_legal(self.island_src))
 
     # ----- Desired V2 strict xfails (XPASS when production gains the structure) -----
 
@@ -321,14 +335,6 @@ class DynamicIslandV2ExpectedFailureTests(unittest.TestCase):
     )
     def test_desired_non_owner_keeps_base_clock(self) -> None:
         self.assertTrue(non_owner_keeps_base_clock(self.overlay_src, self.topbar_src))
-
-    @pytest.mark.xfail(
-        strict=True,
-        reason="target T05: brightness 0 must be legal for OSD and baseline",
-    )
-    def test_desired_brightness_zero_legal(self) -> None:
-        self.assertTrue(brightness_zero_is_legal(self.island_src))
-
 
 if __name__ == "__main__":
     raise SystemExit(unittest.main())

@@ -145,7 +145,11 @@ Item {
     ].join("\n")
 
     function setBrightnessValue(value) {
-        var clamped = Math.max(0, Math.min(1, Number(value) || 0));
+        // 0 is legal; only non-finite input falls back to 0 after clamp.
+        var sample = Number(value);
+        if (!isFinite(sample))
+            sample = 0;
+        var clamped = Math.max(0, Math.min(1, sample));
         if (Math.abs(root.brightness - clamped) > 0.0005)
             root.brightness = clamped;
     }
@@ -199,7 +203,12 @@ Item {
             root.setBrightnessAvailable(false);
             return;
         }
-        var v = Math.max(0.05, Math.min(1, Number(value) || 0));
+        // Real 0% must reach brightnessctl. Only non-finite input becomes 0
+        // after clamp; negative and >1 are clamped to the [0, 1] range.
+        var sample = Number(value);
+        if (!isFinite(sample))
+            sample = 0;
+        var v = Math.max(0, Math.min(1, sample));
         brightnessUpdating = true;
         root.setBrightnessValue(v);
         var pct = Math.round(v * 100).toString();

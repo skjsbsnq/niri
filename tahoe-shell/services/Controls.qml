@@ -7,6 +7,7 @@ import Quickshell.Services.Pipewire
 import Quickshell.Networking
 import Quickshell.Bluetooth
 import Quickshell.Services.Mpris
+import "controls/MediaPlayerSelection.js" as MediaPlayerSelection
 
 // Control Center backing service.
 //
@@ -1200,37 +1201,32 @@ Item {
     // ------------------------------------------------------------------
     // Now Playing (MPRIS)
     // ------------------------------------------------------------------
-    // Pick the first player. Mpris.players.values is an ObjectModel so we
-    // guard its length defensively.
+    // Sticky active player selection: remember lastActivePlayerDbusName so
+    // D-Bus ObjectModel reorder does not flip the island / ControlCenter card.
+    // Playing players may preempt a remembered paused player. Multiple
+    // playing players use a stable dbusName order (remembered wins if playing).
+
+    property string lastActivePlayerDbusName: ""
 
     readonly property var activePlayer: {
         try {
             var players = Mpris.players;
-            if (!players || !players.values || players.values.length === 0)
-                return null;
-
-            var first = null;
-            var pausedWithTrack = null;
-            for (var i = 0; i < players.values.length; i++) {
-                var p = players.values[i];
-                if (!p)
-                    continue;
-
-                if (!first)
-                    first = p;
-
-                if (p.playbackState === MprisPlaybackState.Playing)
-                    return p;
-
-                if (!pausedWithTrack
-                        && p.playbackState === MprisPlaybackState.Paused
-                        && String(p.trackTitle || "").trim().length > 0)
-                    pausedWithTrack = p;
-            }
-
-            return pausedWithTrack || first;
+            var values = players && players.values ? players.values : [];
+            return MediaPlayerSelection.selectActivePlayer(
+                values,
+                root.lastActivePlayerDbusName,
+                MprisPlaybackState.Playing
+            );
         } catch (e) {}
         return null;
+    }
+
+    onActivePlayerChanged: {
+        var name = MediaPlayerSelection.playerDbusName(root.activePlayer);
+        if (name.length === 0)
+            return;
+        if (root.lastActivePlayerDbusName !== name)
+            root.lastActivePlayerDbusName = name;
     }
 
     readonly property bool hasMedia: !!activePlayer

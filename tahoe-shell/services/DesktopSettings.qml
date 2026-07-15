@@ -112,6 +112,7 @@ Item {
         // T18: "summary" accepted only as legacy input; normalize to control_center.
         return value === "toggle_media"
             || value === "summary"
+            || value === "timer"
             || value === "notifications"
             || value === "control_center"
             || value === "none";
@@ -263,6 +264,8 @@ Item {
 
     function dynamicIslandClickActionLabel(action) {
         var normalized = normalizeDynamicIslandClickAction(action);
+        if (normalized === "timer")
+            return "计时器";
         if (normalized === "notifications")
             return "通知中心";
         if (normalized === "control_center")

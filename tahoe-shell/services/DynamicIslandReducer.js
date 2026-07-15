@@ -7,10 +7,13 @@
 var VALID_STATES = [
     "resting_time",
     "resting_media",
+    "resting_timer",
     "transient_osd",
     "transient_notification",
     "transient_workspace",
-    "expanded_media"
+    "transient_timer_complete",
+    "expanded_media",
+    "expanded_timer"
 ];
 
 
@@ -46,6 +49,10 @@ function presentationPriority(presentation, flags) {
         return PRIORITY.osd;
     if (p === "transient_workspace")
         return PRIORITY.workspace;
+    if (p === "transient_timer_complete")
+        return PRIORITY.timer_completion;
+    if (p === "resting_timer" || p === "expanded_timer")
+        return p === "expanded_timer" ? PRIORITY.interaction : PRIORITY.media_preview;
     if (p === "resting_media" || p === "expanded_media")
         return p === "expanded_media" ? PRIORITY.interaction : PRIORITY.media_preview;
     return PRIORITY.clock;
@@ -152,7 +159,7 @@ function presentationState(state, context) {
 }
 
 function isExpandedPresentation(presentation) {
-    return presentation === "expanded_media";
+    return presentation === "expanded_media" || presentation === "expanded_timer";
 }
 
 function effect(type, payload) {
@@ -213,6 +220,50 @@ function reduce(state, event, context) {
     }
 
     switch (kind) {
+    
+    case "SHOW_TIMER_COMPLETION": {
+        // timer_completion (70) yields to interaction/critical/notification/OSD.
+        var curP = presentationPriority(presentationState(slice, ctx), {
+            "userInteracting": ctx.userInteracting,
+            "expanded": isExpandedPresentation(presentationState(slice, ctx)),
+            "displayingNotification": !!(ev.payload && ev.payload.displayingNotification),
+            "critical": !!(ev.payload && ev.payload.criticalNotification)
+        });
+        if (blocksCandidate(curP, PRIORITY.timer_completion))
+            return result(slice, [effect("queueTimerCompletion")]);
+        slice.forcedState = "transient_timer_complete";
+        return result(slice, [
+            effect("stopTransientTimer"),
+            effect("clearEventOwner"),
+            effect("clearTransientFields")
+        ]);
+    }
+
+    case "SHOW_TIMER_COMPACT":
+        slice.forcedState = "resting_timer";
+        return result(slice, [
+            effect("stopTransientTimer"),
+            effect("clearEventOwner"),
+            effect("endNotificationLease"),
+            effect("clearTransientFields")
+        ]);
+
+    case "SHOW_TIMER_EXPANDED":
+        slice.forcedState = "expanded_timer";
+        return result(slice, [
+            effect("stopTransientTimer"),
+            effect("clearEventOwner"),
+            effect("endNotificationLease"),
+            effect("clearTransientFields")
+        ]);
+
+    case "CLEAR_TIMER_PRESENTATION":
+        if (slice.forcedState === "resting_timer"
+                || slice.forcedState === "expanded_timer"
+                || slice.forcedState === "transient_timer_complete")
+            slice.forcedState = "";
+        return result(slice, []);
+
     case "RESET":
         slice.forcedState = "";
         slice.preferMediaWhenAvailable = true;

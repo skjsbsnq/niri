@@ -595,6 +595,22 @@ ShellRoot {
         function dynamicIslandSwipeAdvance(deltaX: real, deltaY: real): string { dynamicIsland.advanceSwipe(deltaX, deltaY); return dynamicIsland.debugSummary(); }
         function dynamicIslandSwipeResolve(): string { dynamicIsland.resolveSwipe(); return dynamicIsland.debugSummary(); }
         function dynamicIslandSwipeCancel(): string { dynamicIsland.cancelSwipe(); return dynamicIsland.debugSummary(); }
+        function dynamicIslandTimerStart(seconds: real): string {
+            var ok = dynamicIsland.timerStart(seconds);
+            return ok ? dynamicIsland.presentation : "error:invalid_duration";
+        }
+        function dynamicIslandTimerPause(): string {
+            dynamicIsland.timerPause();
+            return dynamicIsland.presentation;
+        }
+        function dynamicIslandTimerResume(): string {
+            dynamicIsland.timerResume();
+            return dynamicIsland.presentation;
+        }
+        function dynamicIslandTimerCancel(): string {
+            dynamicIsland.timerCancel();
+            return dynamicIsland.presentation;
+        }
     }
 
     AppMenu {
@@ -721,6 +737,12 @@ ShellRoot {
         soundService: sound
     }
 
+    // Single shared countdown owner (T20). Not restored across shell reload.
+    // Named IslandTimer to avoid clashing with QtQuick.Timer.
+    IslandTimer {
+        id: islandTimer
+    }
+
     DynamicIsland {
         id: dynamicIsland
         controlsService: controls
@@ -728,6 +750,7 @@ ShellRoot {
         windowsService: niri
         batteryService: battery
         settingsService: desktopSettings
+        timerService: islandTimer
         onOpenControlCenterRequested: shell.openDynamicIslandControlCenter()
         onOpenNotificationCenterRequested: shell.openDynamicIslandNotificationCenter()
     }

@@ -11,7 +11,7 @@ function textOrEmpty(value) {
 
 function isExpandedStateName(name) {
     var s = String(name || "");
-    return s === "expanded_media";
+    return s === "expanded_media" || s === "expanded_timer";
 }
 
 function isTransientStateName(name) {
@@ -21,7 +21,7 @@ function isTransientStateName(name) {
 
 function isRestingStateName(name) {
     var s = String(name || "");
-    return s === "resting_time" || s === "resting_media" || s === "";
+    return s === "resting_time" || s === "resting_media" || s === "resting_timer" || s === "";
 }
 
 function resolvePresentationOwner(pins, live) {
@@ -75,7 +75,7 @@ function screenPresentationRole(screenName, ownerName, presentation, flags) {
     var expanded = isExpandedStateName(state);
     // Compact media is owner activity (replaces base clock on the owner only).
     // Pure resting_time is the base clock scene, not activity.
-    var compactMedia = state === "resting_media";
+    var compactMedia = state === "resting_media" || state === "resting_timer";
     var activity = transient || expanded || compactMedia
         || !!f.swipeInteractive || !!f.swipeSettling;
     var baseClockOnly = state === "resting_time" || state === "";

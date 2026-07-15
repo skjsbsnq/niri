@@ -79,6 +79,16 @@ Item {
     property int workspaceDirection: 0
     property string workspaceLabel: ""
     property int workspaceCount: 0
+    property string timerRemainingLabel: ""
+    property real timerProgress: 0
+    property bool timerRunning: false
+    property bool timerPaused: false
+    property bool timerFinished: false
+    property bool timerContentVisible: false
+    signal timerPauseResumeRequested()
+    signal timerCancelRequested()
+    signal timerControlPressed()
+    signal timerControlReleased()
     readonly property bool mediaExpanded: islandState === "expanded_media"
     readonly property bool summaryExpanded: false
     readonly property bool compactMediaActive: islandState === "resting_media"
@@ -107,9 +117,14 @@ Item {
         : IslandMotion.contentExitMs(root.settingsService)
 
     readonly property bool notificationActive: islandState === "transient_notification"
-    readonly property bool standardDetailActive: !compactResting && !notificationActive && !osdActive && !mediaExpanded && !summaryExpanded && !workspaceActive
+    readonly property bool standardDetailActive: !compactResting && !notificationActive && !osdActive && !mediaExpanded && !summaryExpanded && !workspaceActive && !timerActiveScene
     readonly property bool osdActive: islandState === "transient_osd"
     readonly property bool workspaceActive: islandState === "transient_workspace"
+    readonly property bool timerActiveScene: islandState === "resting_timer"
+        || islandState === "expanded_timer"
+        || islandState === "transient_timer_complete"
+    readonly property bool timerExpanded: islandState === "expanded_timer"
+
     // T13: horizontal bar OSD; ring removed. Scene visible whenever OSD active.
     readonly property bool osdSceneVisible: osdActive && !osdExiting
     property real osdLayerOpacity: 0
@@ -538,10 +553,41 @@ Item {
         }
     }
 
+
+    DynamicIslandTimerView {
+        id: timerView
+        anchors.fill: parent
+        z: 1
+        remainingLabel: root.timerRemainingLabel
+        progress: root.timerProgress
+        running: root.timerRunning
+        paused: root.timerPaused
+        finished: root.timerFinished
+        expanded: root.timerExpanded
+        textPrimary: root.textPrimary
+        textSecondary: root.textSecondary
+        accentColor: root.accentColor
+        trackColor: root.progressTrackColor
+        opacity: root.timerActiveScene ? 1 : 0
+        visible: opacity > 0.01
+        onPauseResumeRequested: root.timerPauseResumeRequested()
+        onCancelRequested: root.timerCancelRequested()
+        onTimerInteractionPressed: root.timerControlPressed()
+        onTimerInteractionReleased: root.timerControlReleased()
+
+        Behavior on opacity {
+            NumberAnimation {
+                duration: IslandMotion.contentEnterMs(root.settingsService)
+                easing.type: IslandMotion.v2ContentEasing
+            }
+        }
+    }
+
     // Expanded media: Loader only while visible or exit-hold (no hidden Timer).
     Loader {
         id: mediaLoader
         anchors.fill: parent
+        z: 2
         active: root.mediaLoaderActive
         asynchronous: false
         sourceComponent: mediaSceneComponent

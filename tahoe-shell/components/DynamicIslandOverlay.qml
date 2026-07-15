@@ -153,7 +153,7 @@ PanelWindow {
         radiusForState(effectiveGeometryState, capsuleTargetHeight),
         capsuleTargetWidth / 2,
         capsuleTargetHeight / 2)
-    readonly property bool compactResting: effectiveContentState === "resting_time" || effectiveContentState === "resting_media"
+    readonly property bool compactResting: effectiveContentState === "resting_time" || effectiveContentState === "resting_media" || effectiveContentState === "resting_timer"
     readonly property bool compactContentVisible: compactResting && capsuleShown
     // Expanded media only on the owner screen.
     readonly property bool mediaContentVisible: effectiveContentState === "expanded_media" && activeForScreen
@@ -197,6 +197,24 @@ PanelWindow {
         ? Number(dynamicIslandService.transientWorkspaceDirection) || 0
         : 0
     readonly property string workspaceLabel: contentDisplayText
+    readonly property string timerRemainingLabel: (activeForScreen && dynamicIslandService)
+        ? String(dynamicIslandService.timerRemainingLabel || "")
+        : ""
+    readonly property real timerProgress: (activeForScreen && dynamicIslandService)
+        ? Number(dynamicIslandService.timerProgress) || 0
+        : 0
+    readonly property bool timerRunning: activeForScreen && dynamicIslandService
+        ? !!dynamicIslandService.timerRunning
+        : false
+    readonly property bool timerPaused: activeForScreen && dynamicIslandService
+        ? !!dynamicIslandService.timerPaused
+        : false
+    readonly property bool timerFinished: activeForScreen && dynamicIslandService
+        ? !!dynamicIslandService.timerFinished
+        : false
+    readonly property bool timerContentVisible: (effectiveContentState === "resting_timer"
+            || effectiveContentState === "expanded_timer"
+            || effectiveContentState === "transient_timer_complete") && activeForScreen
     readonly property int workspaceCount: dynamicIslandService
         ? Number(dynamicIslandService.workspaceCount) || 0
         : 0
@@ -217,6 +235,11 @@ PanelWindow {
             // Content-driven compact media width (T16).
             // Band: IslandMotion.v2CompactMediaWidthMin .. v2CompactMediaWidthMax.
             return compactMediaTargetWidth();
+        case "resting_timer":
+        case "transient_timer_complete":
+            return Math.round((IslandMotion.v2WorkspaceWidthMin + IslandMotion.v2WorkspaceWidthMax) / 2);
+        case "expanded_timer":
+            return Math.round((IslandMotion.v2TimerExpandedWidthMin + IslandMotion.v2TimerExpandedWidthMax) / 2);
         case "resting_time":
         default:
             // Content-driven clock width (T12). Fall back to mid-band before measure.
@@ -286,6 +309,11 @@ PanelWindow {
             return IslandMotion.v2WorkspaceHeight;
         case "resting_media":
             return IslandMotion.v2CompactMediaHeight;
+        case "resting_timer":
+        case "transient_timer_complete":
+            return IslandMotion.v2WorkspaceHeight;
+        case "expanded_timer":
+            return Math.round((IslandMotion.v2TimerExpandedHeightMin + IslandMotion.v2TimerExpandedHeightMax) / 2);
         case "resting_time":
         default:
             return IslandMotion.v2ClockHeight;
@@ -301,11 +329,12 @@ PanelWindow {
     }
 
     function fillRoleForState(stateName) {
-        if (stateName === "expanded_media")
+        if (stateName === "expanded_media" || stateName === "expanded_timer")
             return "expanded";
         if (stateName === "transient_osd"
                 || stateName === "transient_workspace"
-                || stateName === "transient_notification")
+                || stateName === "transient_notification"
+                || stateName === "transient_timer_complete")
             return "transient";
         return "compact";
     }
@@ -319,6 +348,7 @@ PanelWindow {
 
         switch (stateName) {
         case "expanded_media":
+        case "expanded_timer":
             return Math.min(
                 IslandMotion.v2RadiusExpandedMax,
                 Math.max(IslandMotion.v2RadiusExpandedMin, 30));
@@ -338,7 +368,7 @@ PanelWindow {
     }
 
     function isRestingState(stateName) {
-        return stateName === "resting_time" || stateName === "resting_media";
+        return stateName === "resting_time" || stateName === "resting_media" || stateName === "resting_timer";
     }
 
     function safeProgress(value) {
@@ -505,11 +535,30 @@ PanelWindow {
                 workspaceDirection: root.workspaceDirection
                 workspaceLabel: root.workspaceLabel
                 workspaceCount: root.workspaceCount
+                timerRemainingLabel: root.timerRemainingLabel
+                timerProgress: root.timerProgress
+                timerRunning: root.timerRunning
+                timerPaused: root.timerPaused
+                timerFinished: root.timerFinished
+                timerContentVisible: root.timerContentVisible
                 onMediaPreviousRequested: if (root.dynamicIslandService) root.dynamicIslandService.mediaPrevious()
                 onMediaPlayPauseRequested: if (root.dynamicIslandService) root.dynamicIslandService.mediaTogglePlayPause()
                 onMediaNextRequested: if (root.dynamicIslandService) root.dynamicIslandService.mediaNext()
                 onMediaControlPressed: if (root.dynamicIslandService) root.dynamicIslandService.setUserInteracting(true)
                 onMediaControlReleased: if (root.dynamicIslandService) root.dynamicIslandService.setUserInteracting(false)
+                onTimerPauseResumeRequested: {
+                    if (!root.dynamicIslandService) return;
+                    if (root.dynamicIslandService.timerPaused || !root.dynamicIslandService.timerRunning)
+                        root.dynamicIslandService.timerResume();
+                    else
+                        root.dynamicIslandService.timerPause();
+                }
+                onTimerCancelRequested: {
+                    if (root.dynamicIslandService)
+                        root.dynamicIslandService.timerCancel();
+                }
+                onTimerControlPressed: if (root.dynamicIslandService) root.dynamicIslandService.setUserInteracting(true)
+                onTimerControlReleased: if (root.dynamicIslandService) root.dynamicIslandService.setUserInteracting(false)
                 onNotificationBodyClicked: {
                     if (root.dynamicIslandService)
                         root.dynamicIslandService.invokeNotificationDefaultAction();

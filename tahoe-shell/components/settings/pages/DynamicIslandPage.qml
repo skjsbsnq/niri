@@ -132,6 +132,7 @@ Flickable {
                     value: page.svc ? page.svc.dynamicIslandLeftClickAction : "toggle_media"
                     model: [
                         { value: "toggle_media", label: "媒体" },
+                        { value: "timer", label: "计时" },
                                                 { value: "notifications", label: "通知" },
                         { value: "control_center", label: "控制" },
                         { value: "none", label: "无" }
@@ -158,6 +159,7 @@ Flickable {
                         { value: "control_center", label: "控制" },
                         { value: "notifications", label: "通知" },
                                                 { value: "toggle_media", label: "媒体" },
+                        { value: "timer", label: "计时" },
                         { value: "none", label: "无" }
                     ]
                     onSelected: function(value) {

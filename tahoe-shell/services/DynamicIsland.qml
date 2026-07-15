@@ -19,6 +19,7 @@ Item {
     property var windowsService
     property var batteryService
     property var settingsService
+    property var timerService
     property real swipeProgress: 0 // +1 = media (right); left no longer opens summary (T18)
     property real swipeStartProgress: 0
     property string swipeStartForcedState: ""
@@ -107,7 +108,7 @@ Item {
     readonly property bool dynamicIslandAutoExpandMedia: settingsService ? !!settingsService.dynamicIslandAutoExpandMedia : false
     readonly property bool dynamicIslandHoverExpand: settingsService ? !!settingsService.dynamicIslandHoverExpand : false
     readonly property bool hasMedia: controlsService ? controlsService.hasMedia : false
-    readonly property bool expanded: presentation === "expanded_media"
+    readonly property bool expanded: presentation === "expanded_media" || presentation === "expanded_timer"
     readonly property string mediaArtUrl: controlsService ? String(controlsService.trackArtUrl || "") : ""
     // Stable track title from Controls only — never displayText / clock fallback.
     // Compact and expanded media both consume this so exit morphs cannot flash time.
@@ -137,6 +138,12 @@ Item {
     readonly property real summaryBrightness: controlsService ? Number(controlsService.brightness) : 0
     readonly property bool summaryBrightnessAvailable: controlsService ? !!controlsService.brightnessAvailable : false
     readonly property string summaryWorkspaceLabel: activeWorkspaceText()
+    readonly property string timerRemainingLabel: timerService ? String(timerService.remainingLabel || "") : ""
+    readonly property real timerProgress: timerService ? Number(timerService.progress) || 0 : 0
+    readonly property bool timerRunning: timerService ? !!timerService.running : false
+    readonly property bool timerPaused: timerService ? !!timerService.paused : false
+    readonly property bool timerFinished: timerService ? !!timerService.finished : false
+    readonly property bool timerActive: timerService ? !!timerService.active : false
     readonly property int workspaceCount: {
         if (!root.windowsService || !root.windowsService.workspaceList)
             return 0;
@@ -188,10 +195,13 @@ Item {
     readonly property var validStates: [
         "resting_time",
         "resting_media",
+        "resting_timer",
         "transient_osd",
         "transient_notification",
         "transient_workspace",
-        "expanded_media"
+        "transient_timer_complete",
+        "expanded_media",
+        "expanded_timer"
     ]
 
     // Named presentation string — never use Item.state (Qt reserved; binding loops).
@@ -201,6 +211,26 @@ Item {
 
     signal openControlCenterRequested()
     signal openNotificationCenterRequested()
+
+    Connections {
+        id: timerServiceConnections
+        target: root.timerService
+        function onCompleted() {
+            root.handleTimerCompleted();
+        }
+        function onCancelled() {
+            root.dispatchPresentation("CLEAR_TIMER_PRESENTATION");
+        }
+        function onStarted(seconds) {
+            // Compact timer presentation after start (unless expanded already).
+            if (root.presentation !== "expanded_timer")
+                root.dispatchPresentation("SHOW_TIMER_COMPACT");
+        }
+        function onTick() {
+            // remaining updates via property bindings; no presentation change.
+        }
+    }
+
 
     onPresentationChanged: {
         if (!root.applyingPresentationReducer)
@@ -269,6 +299,9 @@ Item {
         case "openControlCenter":
             // Effect-only path for SHOW_EXPANDED_SUMMARY alias (T18).
             root.openControlCenterRequested();
+            break;
+        case "queueTimerCompletion":
+            root.pendingTimerCompletion = true;
             break;
         case "stopTransientTimer":
             transientTimer.stop();
@@ -444,6 +477,10 @@ Item {
         case "resting_media":
         case "expanded_media":
             return mediaTitle();
+        case "resting_timer":
+        case "expanded_timer":
+        case "transient_timer_complete":
+            return root.timerRemainingLabel.length > 0 ? root.timerRemainingLabel : "0:00";
         case "transient_osd":
         case "transient_notification":
         case "transient_workspace":
@@ -776,7 +813,9 @@ Item {
         var returnState = String(root.transientOsdReturnState || "");
         var action = String(root.transientOsdExitAction || "");
         var screenName = String(root.transientOsdExitScreenName || "");
-        if (returnState !== "expanded_media")
+        if (returnState !== "expanded_media" && returnState !== "expanded_timer")
+            returnState = "";
+        if (returnState === "expanded_timer" && (!root.timerService || !root.timerService.active))
             returnState = "";
         if (returnState === "expanded_media" && !root.hasMedia)
             returnState = "";
@@ -1028,7 +1067,9 @@ Item {
         var s = root.presentation;
         return s === "resting_time"
             || s === "resting_media"
-            || s === "expanded_media";
+            || s === "resting_timer"
+            || s === "expanded_media"
+            || s === "expanded_timer";
     }
 
     function beginSwipe() {
@@ -1136,6 +1177,64 @@ Item {
             root.clearSessionOwnerOutput();
     }
 
+
+    function handleTimerCompleted() {
+        if (!root.islandEnabled)
+            return;
+        // timer_completion yields to higher-priority presentation (notifications, OSD, interaction).
+        var outcome = root.dispatchPresentation("SHOW_TIMER_COMPLETION", {
+            "displayingNotification": Number(root.displayingNotificationId) >= 0
+                || root.presentation === "transient_notification",
+            "criticalNotification": false
+        });
+        if (root.presentation === "transient_timer_complete") {
+            transientTimer.interval = Math.max(250, root.smokeTransientHideMs);
+            transientTimer.restart();
+        }
+    }
+
+    property bool pendingTimerCompletion: false
+
+
+    function timerStart(seconds) {
+        if (!root.timerService)
+            return false;
+        return root.timerService.start(seconds);
+    }
+
+    function timerPause() {
+        if (!root.timerService)
+            return false;
+        return root.timerService.pause();
+    }
+
+    function timerResume() {
+        if (!root.timerService)
+            return false;
+        return root.timerService.resume();
+    }
+
+    function timerCancel() {
+        if (!root.timerService)
+            return false;
+        var ok = root.timerService.cancel();
+        root.dispatchPresentation("CLEAR_TIMER_PRESENTATION");
+        return ok;
+    }
+
+    function showTimerExpanded() {
+        if (!root.timerService || !root.timerService.active)
+            return;
+        if (!root.sessionOwnerOutput.length)
+            root.claimSessionOwnerForScreen(root.liveFocusedOutputName());
+        root.dispatchPresentation("SHOW_TIMER_EXPANDED");
+    }
+
+    function showTimerSetupDefault() {
+        // Default setup: start a 5-minute timer when no active timer (click-action path).
+        root.timerStart(5 * 60);
+    }
+
     function performClickAction(action) {
         if (!root.islandEnabled)
             return;
@@ -1159,6 +1258,18 @@ Item {
             root.openControlCenterRequested();
             break;
         case "none":
+            break;
+        case "timer":
+            if (root.timerService && root.timerService.active) {
+                if (root.presentation === "expanded_timer") {
+                    root.dispatchPresentation("COLLAPSE");
+                    root.clearSessionOwnerOutput();
+                } else {
+                    root.showTimerExpanded();
+                }
+            } else {
+                root.showTimerSetupDefault();
+            }
             break;
         case "toggle_media":
         default:
@@ -1698,6 +1809,39 @@ Item {
             return;
         root.maybeShowPendingNotification();
         root.maybeShowPendingOsd();
+        root.maybeShowPendingTimerCompletion();
+        root.maybeRestoreTimerPresentation();
+    }
+
+    function maybeShowPendingTimerCompletion() {
+        if (!root.pendingTimerCompletion || !root.timerService)
+            return;
+        if (!root.timerService.finished) {
+            root.pendingTimerCompletion = false;
+            return;
+        }
+        // Still blocked by a higher-priority scene? Keep pending and do NOT
+        // re-dispatch here — applyReducerResult always drains restoreAfterTransient,
+        // so calling handleTimerCompleted() while blocked would infinite-recurse.
+        var flags = root.arbitrationFlags();
+        var curP = IslandReducer.presentationPriority(root.presentation, flags);
+        if (IslandReducer.blocksCandidate(curP, IslandReducer.PRIORITY.timer_completion))
+            return;
+        root.pendingTimerCompletion = false;
+        root.handleTimerCompleted();
+    }
+
+    function maybeRestoreTimerPresentation() {
+        if (!root.timerService || !root.timerService.active || root.timerService.finished)
+            return;
+        if (root.presentation.indexOf("transient_") === 0)
+            return;
+        if (root.presentation === "expanded_timer" || root.presentation === "resting_timer")
+            return;
+        if (root.presentation === "expanded_media")
+            return;
+        // Prefer active timer compact over clock/media after preempt ends.
+        root.dispatchPresentation("SHOW_TIMER_COMPACT");
     }
 
     function captureOsdBaselines() {
@@ -2116,6 +2260,8 @@ Item {
                     root.markNotificationPresentationCompleted(root.displayingNotificationId);
                 root.displayingNotificationId = -1;
             }
+            if (root.presentation === "transient_timer_complete" && root.timerService)
+                root.timerService.clearFinished();
             root.clearTransientFields();
             root.forcedState = "";
             root.clearEventOwnerOutput();

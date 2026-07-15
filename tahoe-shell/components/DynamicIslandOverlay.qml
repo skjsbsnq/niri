@@ -122,14 +122,29 @@ PanelWindow {
         ? Math.round(swipePreviewWidth)
         : widthForState(effectiveGeometryState)
     readonly property int capsuleTargetWidth: clampInt(requestedCapsuleWidth, 1, maxCapsuleWidth)
+    // Geometry duration uses V2 morph tokens (T19); swipe settle keeps own token.
+    // Non-swipe x/width share the same duration owner as y/height/radius (geometryMorphMs).
+    readonly property string geometryMorphKind: {
+        if (root.effectiveGeometryState.indexOf("expanded_") === 0
+                || root.geometryState.indexOf("expanded_") === 0)
+            return "expanded";
+        if (root.effectiveGeometryState.indexOf("transient_") === 0)
+            return "transient";
+        return "collapse";
+    }
+    readonly property int geometryMorphMsRoot: {
+        if (root.osdImmediateGeometry)
+            return IslandMotion.v2OsdEnterMs;
+        return IslandMotion.geometryDurationMs(root.settingsService, root.geometryMorphKind);
+    }
     readonly property int swipeWidthDuration: swipeInteractive
         ? 0
         : (swipeSettling
             ? IslandMotion.swipeSettleDuration
-            : (osdImmediateGeometry
-                ? IslandMotion.v2OsdEnterMs
-                : IslandMotion.overlayMorphDuration))
-    readonly property int swipeWidthEasing: swipeInteractive ? IslandMotion.overlayColorEasing : (swipeSettling ? IslandMotion.swipeSettleEasing : IslandMotion.overlayMorphEasing)
+            : root.geometryMorphMsRoot)
+    readonly property int swipeWidthEasing: swipeInteractive
+        ? IslandMotion.overlayColorEasing
+        : (swipeSettling ? IslandMotion.swipeSettleEasing : IslandMotion.v2GeometryEasing)
     readonly property int capsuleTargetHeight: clampInt(heightForState(effectiveGeometryState), 1, maxCapsuleHeight)
     readonly property int capsuleTargetLeft: clampInt(Math.round((screenWidth - capsuleTargetWidth) / 2), 0, Math.max(0, screenWidth - capsuleTargetWidth))
     // Align compact top inset with TopBar floating inner surface (topMargin 4).
@@ -140,7 +155,7 @@ PanelWindow {
         capsuleTargetHeight / 2)
     readonly property bool compactResting: effectiveContentState === "resting_time" || effectiveContentState === "resting_media"
     readonly property bool compactContentVisible: compactResting && capsuleShown
-    // Expanded media (and its visualizer Timer) only on the owner screen.
+    // Expanded media only on the owner screen.
     readonly property bool mediaContentVisible: effectiveContentState === "expanded_media" && activeForScreen
     readonly property bool summaryContentVisible: false
     readonly property bool showSecondaryText: contentSecondaryText.length > 0
@@ -387,17 +402,7 @@ PanelWindow {
         // Geometry → TahoeGlassRegion: eased NumberAnimation only (no Spring).
         // Use V2 compact↔expanded timings (shorter than legacy 380ms) so content
         // does not feel like it is sliding/sinking during click expand/collapse.
-        readonly property int geometryMorphMs: {
-            if (root.osdImmediateGeometry)
-                return IslandMotion.v2OsdEnterMs;
-            var fromExpanded = root.effectiveGeometryState.indexOf("expanded_") === 0;
-            // Target-based: expanded states use expanded morph budget.
-            if (fromExpanded || root.geometryState.indexOf("expanded_") === 0)
-                return IslandMotion.v2CompactToExpandedMs;
-            if (root.effectiveGeometryState.indexOf("transient_") === 0)
-                return IslandMotion.v2CompactToTransientMs;
-            return IslandMotion.v2ExpandedToCompactMs;
-        }
+        readonly property int geometryMorphMs: root.geometryMorphMsRoot
 
         Behavior on x {
             enabled: !root.osdImmediateGeometry
@@ -432,7 +437,7 @@ PanelWindow {
         }
 
         Behavior on opacity {
-            NumberAnimation { duration: IslandMotion.overlayContentDuration; easing.type: IslandMotion.overlayColorEasing }
+            NumberAnimation { duration: IslandMotion.v2ContentEnterMs; easing.type: IslandMotion.v2ContentEasing }
         }
 
         // Content layer: V2 does not whole-scene scale 0.9→1 on state switch

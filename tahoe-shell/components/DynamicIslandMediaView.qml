@@ -301,8 +301,9 @@ Item {
 
         Behavior on scale {
             NumberAnimation {
-                duration: root.reducedMotion ? 0 : 100
-                easing.type: IslandMotion.overlayColorEasing
+                // Press feedback: shorter than content enter; still tokenized.
+                duration: root.reducedMotion ? 0 : IslandMotion.v2ReducedContentMs
+                easing.type: IslandMotion.v2ContentEasing
             }
         }
 

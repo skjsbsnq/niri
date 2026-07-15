@@ -242,11 +242,12 @@ class MotionTokenConvergenceTests(unittest.TestCase):
         topbar = (COMPONENTS_ROOT / "TopBar.qml").read_text(encoding="utf-8")
         clock = (COMPONENTS_ROOT / "DynamicIslandRestingClockView.qml").read_text(encoding="utf-8")
 
-        # Tokens: springBouncy group for content; geometry morph stays eased.
-        self.assertIn("overlayContentSpring", motion)
-        self.assertIn("Motion.springBouncy", motion)
-        self.assertIn("overlayContentEnterScale = 0.9", motion)
-        self.assertIn("var overlayMorphDuration = 380", motion)
+        # T19: V2 geometry/content tokens; no whole-scene scale spring.
+        self.assertNotIn("overlayContentSpring", motion)
+        self.assertNotIn("overlayContentEnterScale", motion)
+        self.assertIn("var v2CompactToExpandedMs = 280", motion)
+        self.assertIn("var v2ContentEnterMs = 170", motion)
+        self.assertIn("function contentEnterMs", motion)
         self.assertIn("OutCubic", motion)
         # Chip motion tokens remain defined for historical timing; T12 deleted the chip UI.
         self.assertIn("var chipColorDuration = 260", motion)
@@ -261,9 +262,9 @@ class MotionTokenConvergenceTests(unittest.TestCase):
         self.assertNotIn("return h / 2", overlay)
         self.assertIn("property bool useSpring", overlay)
         # V2: whole-scene contentScale 0.9→1 removed (sinking text on collapse).
-        # Tokens remain in DynamicIslandMotion.js for other call sites / history.
         self.assertNotIn("contentScaleSpring", overlay)
         self.assertIn("scale: 1.0", overlay)
+        # No SpringAnimation instances on island geometry/content (comment may mention ban).
         self.assertEqual(overlay.count("SpringAnimation {"), 0)
         # Swipe IPC path still wired (debug + settle).
         self.assertIn("beginSwipe", overlay)

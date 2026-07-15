@@ -141,8 +141,9 @@ class DynamicIslandCompactMediaTests(unittest.TestCase):
         self.assertIn("latchedCompactMediaWidth", self.content)
 
     def test_reduced_motion_uses_token(self) -> None:
-        self.assertIn("Motion.reducedMotion", self.content)
-        self.assertIn("v2ReducedContentMs", self.content)
+        # T19: content helpers encapsulate reduced motion (v2ReducedContentMs).
+        self.assertIn("contentExitMs", self.content)
+        self.assertIn("contentTravelPx", self.content)
         self.assertIn("compactContentMotionMs", self.content)
 
     def test_overlay_content_driven_width_and_reserve(self) -> None:
@@ -196,7 +197,7 @@ class DynamicIslandCompactMediaTests(unittest.TestCase):
         # shared so media→clock is not a hard cut black frame.
         self.assertIn("compactLayerWanted", self.content)
         self.assertIn("compactLayerHeld", self.content)
-        self.assertIn("v2ContentExitMs", self.content)
+        self.assertIn("contentExitMs", self.content)
         # Reducer drops media presentation when hasMedia is false (existing).
         self.assertIn("resting_media", self.island)
 

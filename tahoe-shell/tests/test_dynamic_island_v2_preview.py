@@ -230,7 +230,7 @@ class DynamicIslandV2PreviewTests(unittest.TestCase):
         self.assertIn("var v2ContentMaxTravelPx = 6;", text)
         self.assertIn("var v2RadiusExpandedMin = 28;", text)
         self.assertIn("var v2RadiusExpandedMax = 32;", text)
-        self.assertIn("var overlayMorphDuration = 380;", text)
+        self.assertIn("var v2CompactToExpandedMs = 280;", text)
 
     def test_mock_geometry_within_v2_bands(self) -> None:
         motion = MOTION.read_text(encoding="utf-8")

@@ -6,7 +6,7 @@ import "Motion.js" as Motion
 
 // Scene host for the Dynamic Island capsule.
 // Compact/transient chrome stays lightweight and always present.
-// Expanded media/summary use Loader so hidden outputs and non-expanded
+// Expanded media uses Loader so hidden outputs and non-expanded
 // states do not keep heavy scenes (and their Timers) instantiated.
 // Transition may hold current + outgoing for the exit fade only.
 Item {
@@ -102,9 +102,9 @@ Item {
         // compactLayerHeld, when both stay in the compact resting layer).
         return root.latchedCompactMediaTitle;
     }
-    readonly property int compactContentMotionMs: Motion.reducedMotion(root.settingsService)
-        ? IslandMotion.v2ReducedContentMs
-        : (root.osdActive ? IslandMotion.v2OsdEnterMs : IslandMotion.v2ContentExitMs)
+    readonly property int compactContentMotionMs: root.osdActive
+        ? IslandMotion.v2OsdEnterMs
+        : IslandMotion.contentExitMs(root.settingsService)
 
     readonly property bool notificationActive: islandState === "transient_notification"
     readonly property bool standardDetailActive: !compactResting && !notificationActive && !osdActive && !mediaExpanded && !summaryExpanded && !workspaceActive
@@ -114,10 +114,11 @@ Item {
     readonly property bool osdSceneVisible: osdActive && !osdExiting
     property real osdLayerOpacity: 0
     property real osdLayerOffset: 0
-    readonly property int notificationFadeInDuration: 280
-    readonly property int notificationFadeOutDuration: 140
+    // T19: notification enter/exit use V2 content helpers (reduced-aware).
+    readonly property int notificationFadeInDuration: IslandMotion.contentEnterMs(root.settingsService)
+    readonly property int notificationFadeOutDuration: IslandMotion.contentExitMs(root.settingsService)
     // Hold outgoing expanded loaders through exit fade, then destroy.
-    readonly property int expandedUnloadHoldMs: IslandMotion.overlayExpandedExitFadeMs + 40
+    readonly property int expandedUnloadHoldMs: IslandMotion.contentExitMs(root.settingsService) + 40
 
     // Loader active flags: true while showing or exit-hold. Never both heavy
     // scenes need to stay loaded forever on resting/hidden outputs.
@@ -157,7 +158,7 @@ Item {
         target: root
         property: "osdLayerOpacity"
         to: 0
-        duration: IslandMotion.v2OsdExitMs
+        duration: IslandMotion.contentExitMs(root.settingsService)
         easing.type: IslandMotion.v2ContentEasing
     }
 
@@ -165,8 +166,8 @@ Item {
         id: osdExitTravel
         target: root
         property: "osdLayerOffset"
-        to: -IslandMotion.v2ContentMaxTravelPx
-        duration: IslandMotion.v2OsdExitMs
+        to: -IslandMotion.contentTravelPx(root.settingsService)
+        duration: IslandMotion.contentExitMs(root.settingsService)
         easing.type: IslandMotion.v2ContentEasing
     }
 
@@ -219,7 +220,7 @@ Item {
             // Exit: fade out and travel up (negative y), then unload.
             root.compactLayerHeld = true;
             root.compactLayerOpacity = 0;
-            root.compactLayerY = -IslandMotion.v2ContentMaxTravelPx;
+            root.compactLayerY = -IslandMotion.contentTravelPx(root.settingsService);
             compactExitHold.restart();
         }
     }
@@ -379,7 +380,7 @@ Item {
         visible: opacity > 0.01
 
         Behavior on opacity {
-            NumberAnimation { duration: IslandMotion.overlayContentDuration; easing.type: IslandMotion.overlayColorEasing }
+            NumberAnimation { duration: IslandMotion.contentEnterMs(root.settingsService); easing.type: IslandMotion.v2ContentEasing }
         }
 
         TahoeSymbol {
@@ -512,11 +513,16 @@ Item {
         opacity: root.workspaceActive ? 1 : 0
         visible: opacity > 0.01
         // Directional enter: slide from activation side, capped travel.
-        x: root.workspaceActive
-           ? 0
-           : (root.workspaceDirection > 0
-              ? IslandMotion.v2ContentMaxTravelPx
-              : (root.workspaceDirection < 0 ? -IslandMotion.v2ContentMaxTravelPx : 0))
+        x: {
+            var travel = IslandMotion.contentTravelPx(root.settingsService);
+            if (root.workspaceActive || travel <= 0)
+                return 0;
+            if (root.workspaceDirection > 0)
+                return travel;
+            if (root.workspaceDirection < 0)
+                return -travel;
+            return 0;
+        }
 
         Behavior on opacity {
             NumberAnimation {
@@ -575,10 +581,8 @@ Item {
             Behavior on opacity {
                 enabled: root.mediaExpandedContentVisible
                 NumberAnimation {
-                    duration: Motion.reducedMotion(root.settingsService)
-                        ? IslandMotion.v2ReducedContentMs
-                        : IslandMotion.overlayExpandedEnterFadeMs
-                    easing.type: IslandMotion.overlayColorEasing
+                    duration: IslandMotion.contentEnterMs(root.settingsService)
+                    easing.type: IslandMotion.v2ContentEasing
                 }
             }
         }
@@ -615,7 +619,7 @@ Item {
         }
 
         Behavior on opacity {
-            NumberAnimation { duration: IslandMotion.overlayContentDuration; easing.type: IslandMotion.overlayColorEasing }
+            NumberAnimation { duration: IslandMotion.contentEnterMs(root.settingsService); easing.type: IslandMotion.v2ContentEasing }
         }
     }
 

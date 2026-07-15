@@ -2,102 +2,104 @@
 .import QtQuick as QtQuick
 .import "Motion.js" as Motion
 
-// Dynamic Island motion tokens. Keep Tide-derived timings here instead of
-// scattering durations through chip/overlay components.
-//
-// T12: overlay morph targets springBouncy for non-glass content transforms.
-// islandSurface is a GlassPanel with TahoeGlass.regions — width/height/x/radius
-// drive region geometry, so those channels stay eased (no Spring/overshoot).
-// Content enter scale uses springBouncy behind useSpring.
+// Dynamic Island motion tokens (T19 V2 convergence).
+// Geometry: eased NumberAnimation only (glass region, no Spring).
+// Content: opacity + <=6px travel; no whole-scene scale 0.9->1.
+// All scene/callsite durations and easings must read these tokens
+// (or Motion.js helpers). No inline Easing.OutCubic in QML scenes.
 
+// Chip (legacy DynamicIslandChip paths if still referenced).
 var chipColorDuration = 260;
 var chipScaleDuration = 200;
 var chipContentDuration = 160;
-
 var chipColorEasing = QtQuick.Easing.InOutQuad;
 var chipSettleEasing = QtQuick.Easing.OutCubic;
 
-// Geometry morph: eased only (glass region). Duration approximates springBouncy
-// settle without overshoot (emphasized-decel family).
-var overlayMorphDuration = 380;
+// Color / progress (shared).
 var overlayColorDuration = 260;
-var overlayContentDuration = 180;
 var overlayProgressDuration = 180;
-var overlayExpandedExitHoldMs = 130;
-var overlayExpandedExitFadeMs = 110;
-var overlayExpandedEnterFadeMs = 220;
-
-var overlayMorphEasing = QtQuick.Easing.OutCubic;
 var overlayColorEasing = QtQuick.Easing.InOutQuad;
 var overlayProgressEasing = QtQuick.Easing.OutCubic;
 
-// Content switch enter: scale 0.9 → 1 (springBouncy when useSpring).
-var overlayContentEnterScale = 0.9;
-var overlayContentSpring = {
-    spring: Motion.springBouncy.spring,
-    damping: Motion.springBouncy.damping,
-    epsilon: 0.001
-};
-// Eased fallback when useSpring is false or reduced motion.
-var overlayContentScaleDuration = 220;
-var overlayContentScaleEasing = QtQuick.Easing.OutCubic;
+// Content fade aliases (map to V2 content tokens below for one source of truth).
+// Prefer v2ContentExitMs / v2ContentEnterMs at call sites.
+var overlayContentDuration = 170;          // == v2ContentEnterMs mid-band
+var overlayExpandedExitFadeMs = 110;       // == v2ContentExitMs
+var overlayExpandedEnterFadeMs = 170;      // == v2ContentEnterMs
 
-// Side-swipe (T07). Thresholds and timing mirror Tide's side-swipe feel.
+// Side-swipe.
 var swipeSettleDuration = 220;
 var swipeSettleEasing = QtQuick.Easing.OutCubic;
 var swipeEnterThreshold = 0.56;
 var swipeReturnThreshold = 0.44;
 var swipeVerticalTolerance = 24;
-// Gesture arming (Task 11): press stays click-eligible until horizontal
-// displacement crosses the arm threshold. Dominant vertical motion rejects
-// click without starting a meaningless settle path.
 var swipeArmThresholdPx = 10;
 var swipeVerticalRejectPx = 20;
 var swipeSettleIdleMs = 150;
 var swipeSuppressClickMs = 180;
 
-// Hover expand (T09). Matches the Tide-derived hover timing guardrails.
+// Hover expand (settings-gated; default off for product).
 var hoverExpandDelayMs = 350;
 var hoverCollapseDelayMs = 250;
 
-// Media visualizer (Task 21): one phase owner, update period matched to bar
-// height settle so 5× NumberAnimation are not continuously redirected.
-// Old path: 64ms phase tick into 120ms height Behaviors → perpetual retarget.
-var visualizerUpdateMs = 120;
-var visualizerPhaseStep = 0.34;
-var visualizerPlayingDuration = 120;
-var visualizerPausedDuration = 260;
-
-// --- V2 motion tokens (T10 baseline; production migrates in T19) ------------
-// Geometry stays eased NumberAnimation only (glass region, no Spring).
-// Content enter no longer defaults to whole-scene scale 0.9 → 1.
-
+// --- V2 motion (authoritative geometry + content) ----------------------------
+// compact->transient 220-260, compact->expanded 260-300, expanded->compact 220-260
 var v2CompactToTransientMs = 240;
 var v2CompactToExpandedMs = 280;
 var v2ExpandedToCompactMs = 240;
-// OSD is direct manipulation feedback. Its first frame must not wait for the
-// decorative capsule/content enter animations used by other transient scenes.
+// Legacy name kept as alias so residual references resolve to V2 expanded morph.
+var overlayMorphDuration = v2CompactToExpandedMs;
+var overlayMorphEasing = QtQuick.Easing.OutCubic;
+
+// OSD: first frame immediate; exit soft.
 var v2OsdEnterMs = 0;
 var v2OsdExitMs = 110;
+
+// Content exit 100-120, enter 160-180, travel <= 6px.
 var v2ContentExitMs = 110;
 var v2ContentEnterMs = 170;
 var v2ContentMaxTravelPx = 6;
 var v2GeometryEasing = QtQuick.Easing.OutCubic;
 var v2ContentEasing = QtQuick.Easing.OutCubic;
+
+// reduced motion: geometry 0-100, content opacity only (no spatial travel).
 var v2ReducedGeometryMs = 80;
 var v2ReducedContentMs = 80;
 
-// V2 radius caps (roadmap §9.3). Compact still tracks half-height; expanded
-// must not use height/2 ellipse morph.
-var v2RadiusCompactClock = 16;     // 32px height
-var v2RadiusCompactMedia = 18;     // 36px height
-var v2RadiusOsd = 22;              // 44px height
+// Helpers (pure; settingsService optional).
+function geometryDurationMs(settingsService, kind) {
+    if (Motion.reducedMotion(settingsService))
+        return v2ReducedGeometryMs;
+    var k = String(kind || "expanded");
+    if (k === "transient")
+        return v2CompactToTransientMs;
+    if (k === "collapse")
+        return v2ExpandedToCompactMs;
+    return v2CompactToExpandedMs;
+}
+
+function contentExitMs(settingsService) {
+    return Motion.reducedMotion(settingsService) ? v2ReducedContentMs : v2ContentExitMs;
+}
+
+function contentEnterMs(settingsService) {
+    return Motion.reducedMotion(settingsService) ? v2ReducedContentMs : v2ContentEnterMs;
+}
+
+function contentTravelPx(settingsService) {
+    return Motion.reducedMotion(settingsService) ? 0 : v2ContentMaxTravelPx;
+}
+
+// V2 radius caps (roadmap §9.3).
+var v2RadiusCompactClock = 16;
+var v2RadiusCompactMedia = 18;
+var v2RadiusOsd = 22;
 var v2RadiusNotificationMin = 22;
 var v2RadiusNotificationMax = 26;
 var v2RadiusExpandedMin = 28;
 var v2RadiusExpandedMax = 32;
 
-// V2 geometry baselines (logical px, roadmap §9.4). Production clamps later.
+// V2 geometry baselines (logical px, roadmap §9.4).
 var v2ClockHeight = 32;
 var v2ClockWidthMin = 112;
 var v2ClockWidthMax = 136;

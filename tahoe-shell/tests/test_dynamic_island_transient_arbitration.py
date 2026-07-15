@@ -142,9 +142,9 @@ class TransientArbitrationTests(unittest.TestCase):
         restore = _function_body(self.island, "restoreAfterTransient")
         self.assertIn("maybeShowPendingNotification", restore)
         self.assertIn("maybeShowPendingOsd", restore)
-        # onStateChanged must not call both presenters directly.
+        # onPresentationChanged must not call both presenters directly.
         m = re.search(
-            r"onStateChanged:\s*\{([^}]*)\}",
+            r"onPresentationChanged:\s*\{([^}]*)\}",
             self.island,
         )
         self.assertIsNotNone(m)

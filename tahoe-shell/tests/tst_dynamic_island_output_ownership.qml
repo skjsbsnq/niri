@@ -101,7 +101,7 @@ TestCase {
         compare(island.eventOwnerOutput, "eDP-2");
 
         island.showTransientNotification("Hello", "body");
-        compare(island.state, "transient_notification");
+        compare(island.presentation, "transient_notification");
         // Focus jumps — target must stay pinned.
         compare(island.targetScreenName, "eDP-2");
 
@@ -126,7 +126,7 @@ TestCase {
         island.handleChipClick(Qt.LeftButton, "HDMI-A-1");
         // toggle_media with hasMedia → expanded_media and session pin.
         compare(island.sessionOwnerOutput, "HDMI-A-1");
-        compare(island.state, "expanded_media");
+        compare(island.presentation, "expanded_media");
 
         // Focus change must not move session owner.
         focusedWindow.output = "eDP-2";
@@ -157,14 +157,14 @@ TestCase {
         controls.hasMedia = true;
         island.handleMediaAvailabilityChanged();
         // Prefer media expand path may set expanded_media when autoExpand on.
-        if (island.state === "expanded_media")
+        if (island.presentation === "expanded_media")
             compare(island.sessionOwnerOutput.length > 0, true);
     }
 
     function test_osd_captures_event_owner() {
         island.eventOwnerOutput = "";
         island.showTransientOsd("音量", 0.5);
-        compare(island.state, "transient_osd");
+        compare(island.presentation, "transient_osd");
         // captureEventOwnerOutput runs; with empty Quickshell.screens may be "".
         // Explicit pin path still works via capture preferred.
         island.captureEventOwnerOutput("eDP-2");

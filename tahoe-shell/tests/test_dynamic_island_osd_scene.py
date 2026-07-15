@@ -103,9 +103,12 @@ class DynamicIslandOsdSceneTests(unittest.TestCase):
 
     def test_progress_binding_depends_on_transient_fields(self) -> None:
         # Continuous OSD updates must rebind while state stays transient_osd.
-        self.assertIn("readonly property real progress: root.state === \"transient_osd\"", self.island)
+        self.assertIn("readonly property real progress: root.presentation === \"transient_osd\"", self.island)
         self.assertIn("root.transientProgress", self.island)
         self.assertIn("root.transientSecondaryText", self.island)
+        # Must not bind Qt Item.state (causes binding loops and frozen OSD updates).
+        self.assertNotRegex(self.island, r"(?m)^\s*state:\s*normalizedState")
+        self.assertIn("property string presentation:", self.island)
 
     def test_brightness_zero_path_still_present(self) -> None:
         body = _function_body(self.island, "handleBrightnessChange")

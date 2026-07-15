@@ -18,7 +18,7 @@ PanelWindow {
     // (islandSurface x/width/height/radius) must never use SpringAnimation.
     property bool useSpring: false
     property bool darkMode: false
-    readonly property string islandState: dynamicIslandService ? String(dynamicIslandService.state || "resting_time") : "resting_time"
+    readonly property string islandState: dynamicIslandService ? String(dynamicIslandService.presentation || "resting_time") : "resting_time"
     readonly property string geometryState: islandState
     readonly property string contentState: islandState
     readonly property string displayText: dynamicIslandService ? String(dynamicIslandService.displayText || "") : ""

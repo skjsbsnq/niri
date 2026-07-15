@@ -22,7 +22,7 @@ TestCase {
 
     QtObject {
         id: islandService
-        property string state: "expanded_media"
+        property string presentation: "expanded_media"
         property string displayText: "Song"
         property string secondaryText: "Artist"
         property string iconCode: ""
@@ -90,7 +90,7 @@ TestCase {
         islandService.canPlayPause = true;
         islandService.canPrev = true;
         islandService.canNext = true;
-        islandService.state = "expanded_media";
+        islandService.presentation = "expanded_media";
         islandService.userInteracting = false;
         islandService.islandEnabled = true;
         islandService.targetScreenName = "";
@@ -268,11 +268,11 @@ TestCase {
     function test_non_media_state_hides_controls() {
         // mediaContentVisible requires expanded_media + activeForScreen.
         resetCounts();
-        islandService.state = "resting_time";
+        islandService.presentation = "resting_time";
         wait(50);
         clickAt(mediaPoint("play"));
         compare(playPauseRequests, 0);
-        islandService.state = "expanded_media";
+        islandService.presentation = "expanded_media";
         wait(50);
     }
 

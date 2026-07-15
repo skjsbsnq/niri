@@ -133,8 +133,8 @@ ShellRoot {
 
     function dynamicIslandAnchorRect(screen) {
         var width = Math.max(1, Number(screen && screen.width) || 1);
-        var islandWidth = dynamicIsland && dynamicIsland.state === "expanded_summary" ? 360
-            : dynamicIsland && dynamicIsland.state === "expanded_media" ? 400
+        var islandWidth = dynamicIsland && dynamicIsland.presentation === "expanded_summary" ? 360
+            : dynamicIsland && dynamicIsland.presentation === "expanded_media" ? 400
             : 140;
         return {
             "x": Math.round(Math.max(0, (width - islandWidth) / 2)),
@@ -563,7 +563,7 @@ ShellRoot {
             shell.closeLaunchpadAndSpotlight();
         }
         function closeLeftSidebar(): void { shell.closeLeftSidebar(); }
-        function dynamicIslandGetState(): string { return dynamicIsland.state; }
+        function dynamicIslandGetState(): string { return dynamicIsland.presentation; }
         function dynamicIslandGetDebugSummary(): string { return dynamicIsland.debugSummary(); }
         function dynamicIslandGetSettingsSummary(): string {
             return [
@@ -581,17 +581,17 @@ ShellRoot {
         function dynamicIslandSetRightClickAction(action: string): string { desktopSettings.setDynamicIslandRightClickAction(action); return dynamicIslandGetSettingsSummary(); }
         function dynamicIslandSetAutoExpandMedia(enabled: bool): string { desktopSettings.setDynamicIslandAutoExpandMedia(enabled); return dynamicIslandGetSettingsSummary(); }
         function dynamicIslandSetHoverExpand(enabled: bool): string { desktopSettings.setDynamicIslandHoverExpand(enabled); return dynamicIslandGetSettingsSummary(); }
-        function dynamicIslandReset(): string { dynamicIsland.reset(); return dynamicIsland.state; }
-        function dynamicIslandShowTime(): string { dynamicIsland.showTime(); return dynamicIsland.state; }
-        function dynamicIslandShowMedia(): string { dynamicIsland.showMedia(); return dynamicIsland.state; }
-        function dynamicIslandShowExpandedMedia(): string { dynamicIsland.showExpandedMedia(); return dynamicIsland.state; }
-        function dynamicIslandShowExpandedSummary(): string { dynamicIsland.showExpandedSummary(); return dynamicIsland.state; }
-        function dynamicIslandShowOsd(text: string, progress: real): string { dynamicIsland.showTransientOsd(text, progress); return dynamicIsland.state; }
-        function dynamicIslandShowNotification(summary: string, body: string): string { dynamicIsland.showTransientNotification(summary, body); return dynamicIsland.state; }
-        function dynamicIslandShowWorkspace(label: string): string { dynamicIsland.showTransientWorkspace(label); return dynamicIsland.state; }
-        function dynamicIslandMediaNext(): string { dynamicIsland.mediaNext(); return dynamicIsland.state; }
-        function dynamicIslandMediaPrevious(): string { dynamicIsland.mediaPrevious(); return dynamicIsland.state; }
-        function dynamicIslandMediaToggle(): string { dynamicIsland.mediaTogglePlayPause(); return dynamicIsland.state; }
+        function dynamicIslandReset(): string { dynamicIsland.reset(); return dynamicIsland.presentation; }
+        function dynamicIslandShowTime(): string { dynamicIsland.showTime(); return dynamicIsland.presentation; }
+        function dynamicIslandShowMedia(): string { dynamicIsland.showMedia(); return dynamicIsland.presentation; }
+        function dynamicIslandShowExpandedMedia(): string { dynamicIsland.showExpandedMedia(); return dynamicIsland.presentation; }
+        function dynamicIslandShowExpandedSummary(): string { dynamicIsland.showExpandedSummary(); return dynamicIsland.presentation; }
+        function dynamicIslandShowOsd(text: string, progress: real): string { dynamicIsland.showTransientOsd(text, progress); return dynamicIsland.presentation; }
+        function dynamicIslandShowNotification(summary: string, body: string): string { dynamicIsland.showTransientNotification(summary, body); return dynamicIsland.presentation; }
+        function dynamicIslandShowWorkspace(label: string): string { dynamicIsland.showTransientWorkspace(label); return dynamicIsland.presentation; }
+        function dynamicIslandMediaNext(): string { dynamicIsland.mediaNext(); return dynamicIsland.presentation; }
+        function dynamicIslandMediaPrevious(): string { dynamicIsland.mediaPrevious(); return dynamicIsland.presentation; }
+        function dynamicIslandMediaToggle(): string { dynamicIsland.mediaTogglePlayPause(); return dynamicIsland.presentation; }
         function dynamicIslandSwipeBegin(): string { dynamicIsland.beginSwipe(); return dynamicIsland.debugSummary(); }
         function dynamicIslandSwipeAdvance(deltaX: real, deltaY: real): string { dynamicIsland.advanceSwipe(deltaX, deltaY); return dynamicIsland.debugSummary(); }
         function dynamicIslandSwipeResolve(): string { dynamicIsland.resolveSwipe(); return dynamicIsland.debugSummary(); }

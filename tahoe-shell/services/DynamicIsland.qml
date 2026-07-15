@@ -29,7 +29,9 @@ Item {
     readonly property int swipeLeftWidth: 360
     readonly property int swipeRightWidth: Math.round(
         (IslandMotion.v2MediaExpandedWidthMin + IslandMotion.v2MediaExpandedWidthMax) / 2)
-    readonly property int swipeRestingWidth: restingWidthForState(restingState())
+    // Compute from preferMedia/hasMedia only — avoid binding through presentation.
+    readonly property int swipeRestingWidth: restingWidthForState(
+        (root.preferMediaWhenAvailable && root.hasMedia) ? "resting_media" : "resting_time")
     readonly property real swipePreviewWidth: swipeDragging || swipeSettling
         ? IslandOwnership.swipePreviewWidthFor(
             root.swipeProgress,
@@ -95,7 +97,7 @@ Item {
     readonly property bool dynamicIslandAutoExpandMedia: settingsService ? !!settingsService.dynamicIslandAutoExpandMedia : false
     readonly property bool dynamicIslandHoverExpand: settingsService ? !!settingsService.dynamicIslandHoverExpand : false
     readonly property bool hasMedia: controlsService ? controlsService.hasMedia : false
-    readonly property bool expanded: state === "expanded_media" || state === "expanded_summary"
+    readonly property bool expanded: presentation === "expanded_media" || presentation === "expanded_summary"
     readonly property string mediaArtUrl: controlsService ? String(controlsService.trackArtUrl || "") : ""
     readonly property bool mediaPlaying: controlsService ? !!controlsService.isPlaying : false
     readonly property real mediaPosition: controlsService ? Number(controlsService.trackPosition) : 0
@@ -133,25 +135,25 @@ Item {
     // Presentation fields for the Overlay. For continuous OSD ramps, bind
     // transient* fields directly so each volume/brightness tick updates
     // bar/value while state remains "transient_osd".
-    readonly property string displayText: (root.state === "transient_osd"
-            || root.state === "transient_notification"
-            || root.state === "transient_workspace")
+    readonly property string displayText: (root.presentation === "transient_osd"
+            || root.presentation === "transient_notification"
+            || root.presentation === "transient_workspace")
         ? (root.transientDisplayText.length > 0
             ? root.transientDisplayText
-            : fallbackTransientText(root.state))
-        : displayTextForState(root.state)
-    readonly property string secondaryText: (root.state === "transient_osd"
-            || root.state === "transient_notification"
-            || root.state === "transient_workspace")
+            : fallbackTransientText(root.presentation))
+        : displayTextForState(root.presentation)
+    readonly property string secondaryText: (root.presentation === "transient_osd"
+            || root.presentation === "transient_notification"
+            || root.presentation === "transient_workspace")
         ? root.transientSecondaryText
-        : secondaryTextForState(root.state)
-    readonly property real progress: root.state === "transient_osd"
+        : secondaryTextForState(root.presentation)
+    readonly property real progress: root.presentation === "transient_osd"
         ? Math.max(0, Math.min(1, Number(root.transientProgress) || 0))
         : -1
-    readonly property string iconCode: (root.state.indexOf("transient_") === 0
+    readonly property string iconCode: (root.presentation.indexOf("transient_") === 0
             && root.transientIconCode.length > 0)
         ? root.transientIconCode
-        : iconCodeForState(root.state)
+        : iconCodeForState(root.presentation)
     readonly property string targetScreenName: computeTargetScreenName()
     readonly property int smokeTransientHideMs: 1250
     readonly property int notificationHideMs: 4200
@@ -167,12 +169,15 @@ Item {
         "expanded_summary"
     ]
 
-    state: normalizedState(root.forcedState)
+    // Named presentation string — never use Item.state (Qt reserved; binding loops).
+    // Imperative recompute only: a binding on presentation that reads hasMedia /
+    // preferMedia / hoverExpanded re-entered through restore drains and froze OSD.
+    property string presentation: "resting_time"
 
     signal openControlCenterRequested()
     signal openNotificationCenterRequested()
 
-    onStateChanged: {
+    onPresentationChanged: {
         if (!root.applyingPresentationReducer)
             root.restoreAfterTransient();
     }
@@ -180,17 +185,34 @@ Item {
         if (!root.applyingPresentationReducer)
             root.restoreAfterTransient();
     }
+    onForcedStateChanged: root.recomputePresentation()
+    onPreferMediaWhenAvailableChanged: root.recomputePresentation()
+    onHoverExpandedChanged: root.recomputePresentation()
     onNotificationsServiceChanged: resetNotificationTracking()
     onIslandEnabledChanged: handleIslandEnabledChanged()
-    onHasMediaChanged: handleMediaAvailabilityChanged()
-    onDynamicIslandAutoExpandMediaChanged: if (root.dynamicIslandAutoExpandMedia) handleMediaAvailabilityChanged()
+    onHasMediaChanged: {
+        handleMediaAvailabilityChanged();
+        root.recomputePresentation();
+    }
+    onDynamicIslandAutoExpandMediaChanged: {
+        if (root.dynamicIslandAutoExpandMedia)
+            handleMediaAvailabilityChanged();
+        root.recomputePresentation();
+    }
 
     onControlsServiceChanged: captureOsdBaselines()
 
     Component.onCompleted: {
+        root.recomputePresentation();
         resetNotificationTracking();
         captureOsdBaselines();
         captureWorkspaceBaseline();
+    }
+
+    function recomputePresentation() {
+        var next = normalizedState(root.forcedState);
+        if (String(root.presentation || "") !== String(next || ""))
+            root.presentation = String(next || "resting_time");
     }
 
     function msecsToNextMinute() {
@@ -273,7 +295,7 @@ Item {
 
         // Historical show*/collapse paths stopped timers and cleared transient
         // fields BEFORE assigning forcedState. Commit cleanup effects first so
-        // onStateChanged drain cannot start a transient that later effects
+        // onPresentationChanged drain cannot start a transient that later effects
         // immediately kill (stuck transient_notification with no hide timer).
         root.applyingPresentationReducer = true;
         var effects = outcome.effects || [];
@@ -297,6 +319,8 @@ Item {
         root.forcedState = String(next.forcedState || "");
         root.preferMediaWhenAvailable = next.preferMediaWhenAvailable !== false;
         root.hoverExpanded = !!next.hoverExpanded;
+        // Imperative recompute while applying so onPresentationChanged does not drain early.
+        root.recomputePresentation();
 
         for (var j = 0; j < effects.length; j++) {
             if (effects[j] && !cleanupTypes[String(effects[j].type || "")])
@@ -667,6 +691,7 @@ Item {
         root.transientIconCode = String(icon || "");
         root.transientOsdMuted = candidate === "transient_osd" ? !!osdMuted : false;
         root.forcedState = candidate;
+        root.recomputePresentation();
         transientTimer.interval = Math.max(250, Math.round(Number(hideMs) || root.smokeTransientHideMs));
         transientTimer.restart();
     }
@@ -726,7 +751,7 @@ Item {
     }
 
     function blocksTransientWorkspace() {
-        return IslandReducer.blocksWorkspace(root.state, root.arbitrationFlags());
+        return IslandReducer.blocksWorkspace(root.presentation, root.arbitrationFlags());
     }
 
     function arbitrationFlags() {
@@ -734,7 +759,7 @@ Item {
             "expanded": root.expanded,
             "userInteracting": root.userInteracting,
             "displayingNotification": Number(root.displayingNotificationId) >= 0
-                || root.state === "transient_notification"
+                || root.presentation === "transient_notification"
         };
     }
 
@@ -802,7 +827,7 @@ Item {
         if (!root.islandEnabled)
             return false;
 
-        var s = root.state;
+        var s = root.presentation;
         return s === "resting_time"
             || s === "resting_media"
             || s === "expanded_media"
@@ -818,9 +843,9 @@ Item {
         root.swipeMoved = false;
         // Record start presentation for cancel restore (T09).
         root.swipeStartForcedState = root.forcedState;
-        if (root.state === "expanded_media")
+        if (root.presentation === "expanded_media")
             root.swipeStartProgress = 1;
-        else if (root.state === "expanded_summary")
+        else if (root.presentation === "expanded_summary")
             root.swipeStartProgress = -1;
         else
             root.swipeStartProgress = 0;
@@ -923,7 +948,7 @@ Item {
         root.dispatchPresentation("CLEAR_HOVER_EXPANDED");
         switch (String(action || "toggle_media")) {
         case "summary":
-            if (root.state === "expanded_summary") {
+            if (root.presentation === "expanded_summary") {
                 root.dispatchPresentation("COLLAPSE");
                 root.clearSessionOwnerOutput();
             } else {
@@ -1113,6 +1138,19 @@ Item {
         root.completedNotificationIds = next;
     }
 
+    function clearNotificationPresentationCompleted(id) {
+        var nid = Number(id);
+        if (!isFinite(nid) || nid < 0)
+            return;
+        var completed = root.completedNotificationIds || {};
+        var key = String(nid);
+        if (!completed[key])
+            return;
+        var next = Object.assign({}, completed);
+        delete next[key];
+        root.completedNotificationIds = next;
+    }
+
     function nextPresentableLiveNotification() {
         // Walk Notifications-owned FIFO; skip active lease and completed presentations.
         var list = root.notificationsService ? root.notificationsService.activeModel : [];
@@ -1171,7 +1209,7 @@ Item {
         if (root.displayingNotificationId >= 0
                 && !nextSeen[String(root.displayingNotificationId)]) {
             root.displayingNotificationId = -1;
-            if (root.state === "transient_notification") {
+            if (root.presentation === "transient_notification") {
                 root.transientNotificationExpanded = false;
                 root.setUserInteracting(false);
                 transientTimer.stop();
@@ -1202,7 +1240,7 @@ Item {
 
         // Currently displaying this id → refresh text in place, no re-entry animation/timer.
         if (Number(root.displayingNotificationId) === nid
-                && root.state === "transient_notification") {
+                && root.presentation === "transient_notification") {
             var live = findLiveNotificationById(nid);
             if (!live)
                 return;
@@ -1364,7 +1402,7 @@ Item {
     }
 
     function toggleNotificationExpanded() {
-        if (root.state !== "transient_notification")
+        if (root.presentation !== "transient_notification")
             return;
         if (!root.transientNotificationHasOverflow)
             return;
@@ -1375,7 +1413,7 @@ Item {
             transientTimer.stop();
         } else {
             root.setUserInteracting(false);
-            if (root.state === "transient_notification") {
+            if (root.presentation === "transient_notification") {
                 transientTimer.interval = Math.max(250, root.notificationHideMs);
                 transientTimer.restart();
             }
@@ -1436,12 +1474,12 @@ Item {
     }
 
    function blocksTransientNotification() {
-       return IslandReducer.blocksNotification(root.state, root.arbitrationFlags());
+       return IslandReducer.blocksNotification(root.presentation, root.arbitrationFlags());
    }
 
     function blocksTransientOsd() {
         // Yield to an active notification lease (T07 priority).
-        return IslandReducer.blocksOsd(root.state, root.arbitrationFlags());
+        return IslandReducer.blocksOsd(root.presentation, root.arbitrationFlags());
     }
 
     // Single restore/drain entry after any presentation change (T07).
@@ -1667,6 +1705,9 @@ Item {
 
         var nid = Number(entry.id);
         root.displayingNotificationId = (isFinite(nid) && nid >= 0) ? nid : -1;
+        // Presenting a live id means it is no longer "completed" for FIFO walk.
+        if (isFinite(nid) && nid >= 0)
+            root.clearNotificationPresentationCompleted(nid);
         // Manual IPC entries may omit icon/urgency; keep empty URL + normal.
         if (!entry.iconUrl && entry.id !== undefined && Number(entry.id) >= 0) {
             var live = findLiveNotificationById(Number(entry.id));
@@ -1686,7 +1727,7 @@ Item {
         }
 
         root.clearPendingNotificationIds();
-        if (root.state === "transient_notification") {
+        if (root.presentation === "transient_notification") {
             if (root.displayingNotificationId >= 0)
                 root.markNotificationPresentationCompleted(root.displayingNotificationId);
             transientTimer.stop();
@@ -1762,7 +1803,7 @@ Item {
 
     function debugSummary() {
         return [
-            "state=" + root.state,
+            "state=" + root.presentation,
             "enabled=" + root.islandEnabled,
             "hideTopbarTime=" + root.dynamicIslandHideTopbarTime,
             "leftClickAction=" + root.leftClickAction,
@@ -1851,7 +1892,7 @@ Item {
         interval: root.smokeTransientHideMs
         repeat: false
         onTriggered: {
-            if (root.state === "transient_notification") {
+            if (root.presentation === "transient_notification") {
                 if (root.displayingNotificationId >= 0)
                     root.markNotificationPresentationCompleted(root.displayingNotificationId);
                 root.displayingNotificationId = -1;

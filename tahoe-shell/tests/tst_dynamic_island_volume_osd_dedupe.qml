@@ -93,7 +93,7 @@ TestCase {
     }
 
     function isVolumeOsdVisible() {
-        return island.state === "transient_osd"
+        return island.presentation === "transient_osd"
                 && island.transientDisplayText !== ""
                 && (island.transientDisplayText === "音量"
                     || island.transientDisplayText === "静音");
@@ -166,7 +166,7 @@ TestCase {
                || island.transientProgress === 0.5);
         // Prefer direct OSD presentation when not blocked.
         if (!island.blocksTransientOsd()) {
-            compare(island.state, "transient_osd");
+            compare(island.presentation, "transient_osd");
             compare(island.transientProgress, 0.5);
             compare(island.transientDisplayText, "音量");
         }
@@ -207,7 +207,7 @@ TestCase {
         wait(0);
         wait(0);
         if (!island.blocksTransientOsd()) {
-            compare(island.state, "transient_osd");
+            compare(island.presentation, "transient_osd");
             compare(island.transientProgress, 0.5);
         }
     }
@@ -228,7 +228,7 @@ TestCase {
         compare(island.lastVolume, 0.55);
         compare(island.lastMuted, true);
         if (!island.blocksTransientOsd()) {
-            compare(island.state, "transient_osd");
+            compare(island.presentation, "transient_osd");
             compare(island.transientDisplayText, "静音");
             compare(island.transientProgress, 0);
         }

@@ -106,14 +106,14 @@ TestCase {
     function test_manual_queues_while_busy_and_shows_after() {
         island.userInteracting = true;
         island.showTransientNotification("Manual A", "body A");
-        compare(island.state !== "transient_notification", true);
+        compare(island.presentation !== "transient_notification", true);
         compare(island.pendingNotificationIds.length, 1);
         compare(island.pendingNotificationIds[0].kind, "manual");
         compare(island.pendingNotificationIds[0].summary, "Manual A");
 
         island.userInteracting = false;
         island.maybeShowPendingNotification();
-        compare(island.state, "transient_notification");
+        compare(island.presentation, "transient_notification");
         compare(island.transientDisplayText, "Manual A");
         compare(island.pendingNotificationIds.length, 0);
         compare(island.displayingNotificationId, -1);
@@ -134,17 +134,20 @@ TestCase {
         compare(island.pendingNotificationIds[0].summary, "Manual First");
 
         island.userInteracting = false;
-        if (island.state !== "transient_notification")
+        if (island.presentation !== "transient_notification")
             island.maybeShowPendingNotification();
         compare(island.transientDisplayText, "Manual First");
         compare(island.displayingNotificationId, -1);
         compare(island.pendingNotificationIds.length, 0);
 
         // Hide manual presentation, then live FIFO head (10) should present.
-        island.forcedState = "";
+        // Clear lease fields first, then forcedState so restore drain can present live.
         island.displayingNotificationId = -1;
+        island.forcedState = "";
+        // forcedState change recomputes presentation and drains pending/live FIFO.
         wait(0);
-        island.maybeShowPendingNotification();
+        if (island.presentation !== "transient_notification")
+            island.maybeShowPendingNotification();
         compare(island.transientDisplayText, "Live Ten");
         compare(island.displayingNotificationId, 10);
 

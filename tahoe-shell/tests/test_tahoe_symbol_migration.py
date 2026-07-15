@@ -88,14 +88,15 @@ class TahoeSymbolMigrationTests(unittest.TestCase):
                 offenders.append(str(path.relative_to(ROOT)))
         self.assertEqual(offenders, [])
 
-    def test_dynamic_island_osd_width_accounts_for_both_gaps(self) -> None:
+    def test_dynamic_island_osd_uses_symbol_in_v2_scene(self) -> None:
+        # T13: ring layout removed; OSD lives in DynamicIslandOsdView with TahoeSymbol.
         content = (COMPONENTS / "DynamicIslandContent.qml").read_text(encoding="utf-8")
-        self.assertIn("id: osdIcon", content)
-        self.assertIn("id: osdRing", content)
-        self.assertIn(
-            "parent.width - osdIcon.width - osdRing.width - (osdRow.spacing * 2)",
-            content,
-        )
+        osd = (COMPONENTS / "DynamicIslandOsdView.qml").read_text(encoding="utf-8")
+        self.assertIn("DynamicIslandOsdView", content)
+        self.assertIn("TahoeSymbol", osd)
+        self.assertIn("size: 20", osd)
+        self.assertNotIn("id: osdRing", content)
+        self.assertNotIn("Canvas", osd)
 
     def test_popup_icon_alignment_and_topbar_battery_scale(self) -> None:
         clipboard = (COMPONENTS / "ClipboardPopup.qml").read_text(encoding="utf-8")

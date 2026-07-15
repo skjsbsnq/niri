@@ -74,6 +74,9 @@ PanelWindow {
     readonly property real progress: (!!screenRole && screenRole.showActivity && dynamicIslandService)
         ? Number(dynamicIslandService.progress)
         : -1
+    readonly property bool contentOsdMuted: (!!screenRole && screenRole.showActivity && dynamicIslandService)
+        ? !!dynamicIslandService.transientOsdMuted
+        : false
     readonly property int screenWidth: Math.max(1, Number(root.screen && root.screen.width) || root.width)
     readonly property int screenHeight: Math.max(1, Number(root.screen && root.screen.height) || root.height)
     readonly property real swipePreviewWidth: dynamicIslandService ? Number(dynamicIslandService.swipePreviewWidth) : -1
@@ -113,6 +116,8 @@ PanelWindow {
     readonly property color glassStroke: Theme.islandSurfaceStroke(root.darkMode, root.surfaceFillRole)
     readonly property color textPrimary: Theme.islandTextPrimary(root.darkMode)
     readonly property color textSecondary: Theme.islandTextSecondary(root.darkMode)
+    readonly property string accentId: settingsService ? String(settingsService.accentColor || "blue") : "blue"
+    readonly property color accentColor: Theme.accent(root.darkMode, root.accentId)
     readonly property string mediaArtUrl: (activeForScreen && dynamicIslandService)
         ? String(dynamicIslandService.mediaArtUrl || "")
         : ""
@@ -384,6 +389,7 @@ PanelWindow {
                 clockWeekdayText: root.contentClockWeekday
                 clockTimeText: root.contentClockTime
                 progress: root.progress
+                osdMuted: root.contentOsdMuted
                 compactResting: root.compactResting
                 compactContentVisible: root.compactContentVisible
                 mediaExpandedContentVisible: root.mediaContentVisible
@@ -391,6 +397,8 @@ PanelWindow {
                 showSecondaryText: root.showSecondaryText
                 textPrimary: root.textPrimary
                 textSecondary: root.textSecondary
+                accentColor: root.accentColor
+                darkMode: root.darkMode
                 mediaArtUrl: root.mediaArtUrl
                 mediaTrackTitle: root.mediaTrackTitle
                 mediaTrackArtist: root.mediaTrackArtist

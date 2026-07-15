@@ -45,6 +45,8 @@ Item {
     property string transientSecondaryText: ""
     property real transientProgress: -1
     property string transientIconCode: ""
+    // T13: explicit OSD muted flag for the view (not locale-dependent).
+    property bool transientOsdMuted: false
     property bool userInteracting: false
     // Stable notification identity tracking (T07 lease model).
     // seenNotificationIds: IDs already observed in activeModel (set membership).
@@ -611,7 +613,7 @@ Item {
             root.clearSessionOwnerOutput();
     }
 
-    function showTransient(nextState, text, secondary, progressValue, icon, hideMs) {
+    function showTransient(nextState, text, secondary, progressValue, icon, hideMs, osdMuted) {
         if (!root.islandEnabled)
             return;
 
@@ -627,6 +629,7 @@ Item {
         root.transientSecondaryText = String(secondary || "");
         root.transientProgress = Number(progressValue);
         root.transientIconCode = String(icon || "");
+        root.transientOsdMuted = candidate === "transient_osd" ? !!osdMuted : false;
         root.forcedState = candidate;
         transientTimer.interval = Math.max(250, Math.round(Number(hideMs) || root.smokeTransientHideMs));
         transientTimer.restart();
@@ -636,10 +639,21 @@ Item {
         showTransientOsdWithIcon(text, progressValue, "\ue050");
     }
 
-    function showTransientOsdWithIcon(text, progressValue, icon) {
-        var progress = Math.max(0, Math.min(1, Number(progressValue) || 0));
-        showTransient("transient_osd", text, Math.round(progress * 100) + "%", progress,
-            String(icon || "\ue050"), root.osdHideMs);
+    function showTransientOsdWithIcon(text, progressValue, icon, valueText, osdMuted) {
+        // Clamp progress; treat NaN as 0 so brightness 0 and invalid map cleanly.
+        var sample = Number(progressValue);
+        if (!isFinite(sample))
+            sample = 0;
+        var progress = Math.max(0, Math.min(1, sample));
+        var muted = !!osdMuted;
+        if (muted)
+            progress = 0;
+        // Optional explicit value label (e.g. "静音"); default is "N%".
+        var secondary = (valueText !== undefined && valueText !== null && String(valueText).length > 0)
+            ? String(valueText)
+            : (muted ? "静音" : (Math.round(progress * 100) + "%"));
+        showTransient("transient_osd", text, secondary, progress,
+            String(icon || "\ue050"), root.osdHideMs, muted);
    }
 
    function showTransientNotification(summary, body, appName) {
@@ -1244,14 +1258,23 @@ Item {
            return;
        }
        root.pendingOsd = null;
+       // T13 presentation: primary label is kind; secondary is exact value text;
+       // progress is 0–1 for the horizontal bar (muted forces 0).
        var icon = String(entry.icon || "\ue050");
        if (entry.kind === "volume") {
            var muted = !!entry.muted;
-           var progress = muted ? 0 : Math.max(0, Math.min(1, Number(entry.progress)));
-            showTransientOsdWithIcon(muted ? "静音" : "音量", progress,
-                muted ? "\ue04f" : "\ue050");
+           var volumeProgress = muted ? 0 : Math.max(0, Math.min(1, Number(entry.progress)));
+           if (!isFinite(volumeProgress))
+               volumeProgress = 0;
+           var volumeValue = muted ? "静音" : (Math.round(volumeProgress * 100) + "%");
+           showTransientOsdWithIcon(muted ? "静音" : "音量", volumeProgress,
+               muted ? "\ue04f" : "\ue050", volumeValue, muted);
        } else {
-            showTransientOsdWithIcon("亮度", Number(entry.progress), "\ue518");
+           var brightnessProgress = Math.max(0, Math.min(1, Number(entry.progress)));
+           if (!isFinite(brightnessProgress))
+               brightnessProgress = 0;
+           showTransientOsdWithIcon("亮度", brightnessProgress, "\ue518",
+               Math.round(brightnessProgress * 100) + "%", false);
        }
    }
 

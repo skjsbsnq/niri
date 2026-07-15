@@ -20,6 +20,8 @@ Item {
     property string clockWeekdayText: ""
     property string clockTimeText: ""
     property real progress: -1
+    // T13: explicit muted flag from service (avoid locale string probes).
+    property bool osdMuted: false
     property bool compactResting: true
     property bool compactContentVisible: compactResting
     property bool mediaExpandedContentVisible: mediaExpanded
@@ -27,6 +29,8 @@ Item {
     property bool showSecondaryText: false
     property color textPrimary: "#f7f8fa"
     property color textSecondary: "#aeb6c2"
+    property color accentColor: "#0a84ff"
+    property bool darkMode: true
     // Measured resting clock content width (no capsule padding). Overlay adds pad + clamp.
     readonly property int restingClockContentWidth: restingClock.contentWidth
     readonly property bool restingClockActive: islandState === "resting_time"
@@ -61,7 +65,8 @@ Item {
     readonly property bool notificationActive: islandState === "transient_notification"
     readonly property bool standardDetailActive: !compactResting && !notificationActive && !osdActive && !mediaExpanded && !summaryExpanded
     readonly property bool osdActive: islandState === "transient_osd"
-    readonly property bool showOsRing: osdActive && safeProgress(progress) >= 0
+    // T13: horizontal bar OSD; ring removed. Scene visible whenever OSD active.
+    readonly property bool osdSceneVisible: osdActive
     readonly property int notificationFadeInDuration: 280
     readonly property int notificationFadeOutDuration: 140
     // Hold outgoing expanded loaders through exit fade, then destroy.
@@ -289,99 +294,37 @@ Item {
         }
     }
 
-    Row {
-        id: osdRow
+    // T13: single OSD scene (icon + horizontal bar + value). No Canvas ring.
+    // Opacity binds only to osdActive so rapid progress ticks do not re-enter.
+    DynamicIslandOsdView {
+        id: osdView
 
         anchors {
             left: parent.left
             right: parent.right
             verticalCenter: parent.verticalCenter
-            leftMargin: 18
-            rightMargin: 18
+            leftMargin: 0
+            rightMargin: 0
         }
-        height: Math.min(parent.height - 12, 36)
-        spacing: 12
-        opacity: root.showOsRing ? 1 : 0
+        height: Math.min(parent.height, 44)
+        iconCode: root.iconCode
+        valueText: root.secondaryText
+        progress: {
+            var p = root.safeProgress(root.progress);
+            return p >= 0 ? p : 0;
+        }
+        muted: root.osdMuted
+        darkMode: root.darkMode
+        textPrimary: root.textPrimary
+        textSecondary: root.textSecondary
+        accentColor: root.accentColor
+        opacity: root.osdSceneVisible ? 1 : 0
         visible: opacity > 0.01
 
         Behavior on opacity {
-            NumberAnimation { duration: IslandMotion.overlayContentDuration; easing.type: IslandMotion.overlayColorEasing }
-        }
-
-        TahoeSymbol {
-            id: osdIcon
-            name: root.iconCode.length > 0 ? root.iconCode : "\ue050"
-            color: root.textPrimary
-            size: 20
-        }
-
-        Item {
-            width: Math.max(1, parent.width - osdIcon.width - osdRing.width - (osdRow.spacing * 2))
-            height: parent.height
-
-            Text {
-                anchors.fill: parent
-                text: root.secondaryText.length > 0 ? root.secondaryText : ""
-                color: root.textPrimary
-                font.pixelSize: 20
-                font.weight: Font.DemiBold
-                horizontalAlignment: Text.AlignLeft
-                verticalAlignment: Text.AlignVCenter
-                elide: Text.ElideRight
-                maximumLineCount: 1
-            }
-        }
-
-        Item {
-            id: osdRing
-            width: 30
-            height: 30
-            anchors.verticalCenter: parent.verticalCenter
-
-            Rectangle {
-                anchors.centerIn: parent
-                width: 22
-                height: 22
-                radius: 11
-                color: "#111418"
-                border.color: "#1f1f1f"
-                border.width: 1
-            }
-
-            Canvas {
-                anchors.fill: parent
-                antialiasing: true
-                property real progressValue: root.safeProgress(root.progress)
-
-                onProgressValueChanged: requestPaint()
-                onWidthChanged: requestPaint()
-                onHeightChanged: requestPaint()
-
-                onPaint: {
-                    var ctx = getContext("2d");
-                    var size = Math.min(width, height);
-                    var lineWidth = 3.5;
-                    var center = size / 2;
-                    var radius = (size - lineWidth) / 2 - 0.5;
-                    var startAngle = -Math.PI / 2;
-                    var endAngle = startAngle + (Math.PI * 2 * progressValue);
-
-                    ctx.clearRect(0, 0, width, height);
-                    ctx.lineCap = "round";
-                    ctx.lineWidth = lineWidth;
-
-                    ctx.strokeStyle = "rgba(255, 255, 255, 0.16)";
-                    ctx.beginPath();
-                    ctx.arc(center, center, Math.max(1, radius), 0, Math.PI * 2, false);
-                    ctx.stroke();
-
-                    if (progressValue > 0) {
-                        ctx.strokeStyle = "#ffffff";
-                        ctx.beginPath();
-                        ctx.arc(center, center, Math.max(1, radius), startAngle, endAngle, false);
-                        ctx.stroke();
-                    }
-                }
+            NumberAnimation {
+                duration: IslandMotion.overlayContentDuration
+                easing.type: IslandMotion.overlayColorEasing
             }
         }
     }
@@ -487,7 +430,8 @@ Item {
         height: 3
         radius: 2
         color: "#28ffffff"
-        opacity: (root.safeProgress(root.progress) >= 0 && !root.showOsRing) ? 1 : 0
+        // Bottom track is for non-OSD progress (e.g. media compact later). OSD uses OsdView bar.
+        opacity: (root.safeProgress(root.progress) >= 0 && !root.osdActive) ? 1 : 0
         visible: opacity > 0.01
 
         Rectangle {

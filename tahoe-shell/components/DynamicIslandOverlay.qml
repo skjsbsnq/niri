@@ -163,6 +163,18 @@ PanelWindow {
         radiusForState(effectiveGeometryState, capsuleTargetHeight),
         capsuleTargetWidth / 2,
         capsuleTargetHeight / 2)
+    readonly property bool protocolGeometrySettled: Math.abs(islandSurface.width - capsuleTargetWidth) < 0.01
+        && Math.abs(islandSurface.height - capsuleTargetHeight) < 0.01
+        && Math.abs(islandSurface.radius - capsuleTargetRadius) < 0.01
+    readonly property int protocolCapsuleWidth: protocolGeometrySettled
+        ? Math.round(capsuleTargetWidth)
+        : quantizeProtocolGeometry(islandSurface.width, 8)
+    readonly property int protocolCapsuleHeight: protocolGeometrySettled
+        ? Math.round(capsuleTargetHeight)
+        : quantizeProtocolGeometry(islandSurface.height, 8)
+    readonly property int protocolCapsuleRadius: protocolGeometrySettled
+        ? Math.round(capsuleTargetRadius)
+        : quantizeProtocolGeometry(islandSurface.radius, 4)
     readonly property bool compactResting: contentState === "resting_time" || contentState === "resting_media" || contentState === "resting_timer"
     readonly property bool compactContentVisible: compactResting && capsuleShown
     // Expanded media only on the owner screen.
@@ -251,6 +263,11 @@ PanelWindow {
             // Content-driven clock width (T12). Fall back to mid-band before measure.
             return restingClockTargetWidth();
         }
+    }
+
+    function quantizeProtocolGeometry(value, quantum) {
+        var step = Math.max(1, Math.round(Number(quantum) || 1));
+        return Math.max(0, Math.round(Number(value) / step) * step);
     }
 
     function restingClockTargetWidth() {
@@ -476,11 +493,11 @@ PanelWindow {
 
     mask: Region {
         Region {
-            x: Math.round(islandSurface.x)
-            y: Math.round(islandSurface.y)
-            width: root.capsuleShown ? Math.round(islandSurface.width) : 0
-            height: root.capsuleShown ? Math.round(islandSurface.height) : 0
-            radius: Math.round(islandSurface.radius)
+            x: root.capsuleTargetLeft
+            y: root.capsuleTargetTop
+            width: root.capsuleShown ? root.capsuleTargetWidth : 0
+            height: root.capsuleShown ? root.capsuleTargetHeight : 0
+            radius: Math.round(root.capsuleTargetRadius)
         }
     }
 
@@ -505,6 +522,12 @@ PanelWindow {
         interaction: islandSurface.opacity
         materialAlpha: islandSurface.opacity
         regionEnabled: root.capsuleShown || islandSurface.opacity > 0.01
+        useItemRegion: false
+        regionX: Math.round((root.screenWidth - root.protocolCapsuleWidth) / 2)
+        regionY: root.capsuleTargetTop
+        regionWidth: root.protocolCapsuleWidth
+        regionHeight: root.protocolCapsuleHeight
+        regionRadius: root.protocolCapsuleRadius
         opacity: root.capsuleShown ? 1 : 0
 
         // Geometry → TahoeGlassRegion: eased NumberAnimation only (no Spring).

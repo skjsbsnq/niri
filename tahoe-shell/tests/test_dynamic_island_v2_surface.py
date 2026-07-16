@@ -232,12 +232,40 @@ class DynamicIslandV2SurfaceTests(unittest.TestCase):
         self.assertNotIn("DynamicIslandV2", self.overlay)
         self.assertNotIn("MaterialIsland", self.overlay)
 
-    def test_mask_follows_surface(self) -> None:
+    def test_mask_uses_stable_target_geometry(self) -> None:
         self.assertIn("mask: Region", self.overlay)
-        self.assertIn("width: root.capsuleShown ? Math.round(islandSurface.width) : 0", self.overlay)
-        self.assertIn("height: root.capsuleShown ? Math.round(islandSurface.height) : 0", self.overlay)
-        self.assertIn("x: Math.round(islandSurface.x)", self.overlay)
-        self.assertIn("y: Math.round(islandSurface.y)", self.overlay)
+        self.assertIn("width: root.capsuleShown ? root.capsuleTargetWidth : 0", self.overlay)
+        self.assertIn("height: root.capsuleShown ? root.capsuleTargetHeight : 0", self.overlay)
+        self.assertIn("x: root.capsuleTargetLeft", self.overlay)
+        self.assertIn("y: root.capsuleTargetTop", self.overlay)
+        self.assertIn("useItemRegion: false", self.overlay)
+        self.assertIn("protocolCapsuleWidth", self.overlay)
+        self.assertIn("quantizeProtocolGeometry(islandSurface.width, 8)", self.overlay)
+        self.assertIn("quantizeProtocolGeometry(islandSurface.height, 8)", self.overlay)
+        self.assertIn("quantizeProtocolGeometry(islandSurface.radius, 4)", self.overlay)
+        self.assertIn("protocolGeometrySettled", self.overlay)
+
+    def test_protocol_geometry_quantization_reduces_240hz_commits(self) -> None:
+        samples = 54
+        raw = []
+        quantized = []
+        for index in range(samples):
+            progress = index / (samples - 1)
+            width = 224 + (440 - 224) * progress
+            height = 40 + (220 - 40) * progress
+            radius = 20 + (32 - 20) * progress
+            raw.append((round(width), round(height), round(radius)))
+            if index == samples - 1:
+                quantized.append((440, 220, 32))
+            else:
+                quantized.append(
+                    (round(width / 8) * 8, round(height / 8) * 8, round(radius / 4) * 4)
+                )
+
+        def commit_count(values: list[tuple[int, int, int]]) -> int:
+            return 1 + sum(before != after for before, after in zip(values, values[1:]))
+
+        self.assertLess(commit_count(quantized), commit_count(raw) * 0.8)
 
     def test_glass_geometry_no_spring(self) -> None:
         # V2: no whole-scene contentScale spring (collapse looked like sinking text).

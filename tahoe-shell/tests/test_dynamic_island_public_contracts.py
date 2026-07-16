@@ -191,8 +191,8 @@ class DynamicIslandPublicContractTests(unittest.TestCase):
 
     def test_overlay_mask_follows_capsule_not_full_screen(self) -> None:
         self.assertIn("mask: Region", self.overlay)
-        self.assertIn("width: root.capsuleShown ? Math.round(islandSurface.width) : 0", self.overlay)
-        self.assertIn("height: root.capsuleShown ? Math.round(islandSurface.height) : 0", self.overlay)
+        self.assertIn("width: root.capsuleShown ? root.capsuleTargetWidth : 0", self.overlay)
+        self.assertIn("height: root.capsuleShown ? root.capsuleTargetHeight : 0", self.overlay)
         # Panel is full width for positioning, but input mask must not use screen size.
         self.assertIn("implicitWidth: screenWidth", self.overlay)
         self.assertNotRegex(

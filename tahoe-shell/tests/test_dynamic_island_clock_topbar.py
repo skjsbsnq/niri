@@ -128,7 +128,7 @@ class DynamicIslandClockTopbarTests(unittest.TestCase):
         self.assertNotIn("root.width < 1500 ? 168 : 184", self.topbar)
         self.assertIn("var v2CompactMediaWidthMax = 224", self.motion)
 
-    def test_topbar_input_mask_yields_live_island_span(self) -> None:
+    def test_topbar_input_mask_yields_island_span_to_overlay(self) -> None:
         self.assertIn("mask: Region", self.topbar)
         self.assertIn("dynamicIslandOverlayHandlesResting", self.topbar)
         self.assertIn("islandInputCutoutLeft", self.topbar)
@@ -141,9 +141,10 @@ class DynamicIslandClockTopbarTests(unittest.TestCase):
         # When TopBar owns the fallback clock, its input surface stays whole.
         self.assertIn("if (!root.dynamicIslandOverlayHandlesResting)", width_body)
         self.assertIn("return 0", width_body)
-        self.assertIn("id: islandInputProxy", self.topbar)
-        self.assertIn("root.dynamicIslandService.handleChipClick", self.topbar)
-        self.assertIn("root.dynamicIslandService.setUserInteracting(true)", self.topbar)
+        self.assertNotIn("id: islandInputProxy", self.topbar)
+        mask = self.topbar[self.topbar.index("mask: Region"):self.topbar.index("exclusiveZone:")]
+        self.assertEqual(mask.count("Region {"), 3)
+        self.assertNotIn("x: root.islandInputCutoutLeft", mask)
 
     def test_enabled_hide_topbar_time_truth_table(self) -> None:
         # enabled + hideTopbarTime → Overlay owns resting; TopBar hides time.

@@ -149,9 +149,9 @@ PanelWindow {
         top: true
     }
 
-    // TopBar and DynamicIslandOverlay are sibling Top-layer surfaces. Keep a
-    // center input region aligned with the live island so islandInputProxy can
-    // forward clicks when the compositor stacks TopBar above the overlay.
+    // DynamicIslandOverlay is the sole input owner for the center span. A real
+    // cutout lets its native click/swipe/wheel lifecycle work regardless of
+    // sibling Top-layer stacking order.
     mask: Region {
         Region {
             x: 0
@@ -166,14 +166,6 @@ PanelWindow {
             y: 0
             width: root.dynamicIslandOverlayHandlesResting
                 ? Math.max(0, root.width - root.islandInputCutoutRight)
-                : 0
-            height: root.height
-        }
-        Region {
-            x: root.islandInputCutoutLeft
-            y: 0
-            width: root.dynamicIslandOverlayHandlesResting
-                ? root.islandInputCutoutWidth
                 : 0
             height: root.height
         }
@@ -935,62 +927,4 @@ PanelWindow {
         }
     }
 
-    // Wayland does not guarantee sibling Top-layer stacking order. If TopBar is
-    // above DynamicIslandOverlay, this proxy owns the center input span and
-    // forwards the same click/hover contract instead of silently swallowing it.
-    Item {
-        id: islandInputProxy
-        anchors.top: parent.top
-        anchors.horizontalCenter: parent.horizontalCenter
-        width: root.islandInputCutoutWidth
-        height: root.height
-        z: 100
-        visible: root.dynamicIslandOverlayHandlesResting
-
-        MouseArea {
-            anchors.fill: parent
-            enabled: islandInputProxy.visible && !!root.dynamicIslandService
-            acceptedButtons: Qt.LeftButton | Qt.RightButton
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            onPressed: {
-                proxyHoverExpand.stop();
-                proxyHoverCollapse.stop();
-                root.dynamicIslandService.setUserInteracting(true);
-            }
-            onReleased: root.dynamicIslandService.setUserInteracting(false)
-            onCanceled: root.dynamicIslandService.setUserInteracting(false)
-            onClicked: function(mouse) {
-                root.dynamicIslandService.handleChipClick(
-                    mouse.button,
-                    root.screen ? String(root.screen.name || "") : "");
-            }
-            onEntered: {
-                if (!root.dynamicIslandHoverExpand)
-                    return;
-                proxyHoverCollapse.stop();
-                proxyHoverExpand.restart();
-            }
-            onExited: {
-                proxyHoverExpand.stop();
-                if (root.dynamicIslandHoverExpand)
-                    proxyHoverCollapse.restart();
-            }
-        }
-
-        Timer {
-            id: proxyHoverExpand
-            interval: IslandMotion.hoverExpandDelayMs
-            repeat: false
-            onTriggered: root.dynamicIslandService.requestHoverExpand(
-                root.screen ? String(root.screen.name || "") : "")
-        }
-
-        Timer {
-            id: proxyHoverCollapse
-            interval: IslandMotion.hoverCollapseDelayMs
-            repeat: false
-            onTriggered: root.dynamicIslandService.requestHoverCollapse()
-        }
-    }
 }

@@ -23,6 +23,7 @@ Rectangle {
     property int regionY: Math.round(y)
     property int regionWidth: Math.round(width)
     property int regionHeight: Math.round(height)
+    property int regionRadius: Math.round(radius)
     property color fillColor: GlassStyle.fillForMaterial(material)
     property color strokeColor: GlassStyle.strokeForMaterial(material)
     property int strokeWidth: 1
@@ -53,7 +54,7 @@ Rectangle {
         width: root.regionWidth
         height: root.regionHeight
         material: root.material
-        radius: root.radius
+        radius: root.regionRadius
         blur: root.blur
         shadow: root.shadow
         clip: root.regionClip

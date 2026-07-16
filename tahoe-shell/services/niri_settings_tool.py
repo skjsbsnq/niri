@@ -1536,8 +1536,14 @@ def update_field(text: str, field: str, raw_value: str) -> str:
 
 
 def config_guardrails(text: str) -> None:
-    if re.search(r"(?m)^[ \t]*variable-refresh-rate(?:[ \t]|$)", text):
-        raise KdlEditError("guardrail failed: variable-refresh-rate must stay disabled by default")
+    active_vrr = re.findall(r"(?m)^[ \t]*variable-refresh-rate[^\n]*$", text)
+    if any(
+        re.fullmatch(r"[ \t]*variable-refresh-rate[ \t]*(?://.*)?", line) is None
+        for line in active_vrr
+    ):
+        raise KdlEditError(
+            "guardrail failed: variable-refresh-rate must use the Tahoe always-on policy"
+        )
     if re.search(r'namespace[ \t]*=[ \t]*"\^quickshell"', text):
         raise KdlEditError('guardrail failed: broad namespace="^quickshell" rule is not allowed')
     if not re.search(r'match[ \t]+namespace[ \t]*=[ \t]*"\^tahoe-', text):

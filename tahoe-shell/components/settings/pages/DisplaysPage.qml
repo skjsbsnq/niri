@@ -67,7 +67,7 @@ Flickable {
             Controls.TahoeListRow {
                 theme: page.theme
                 label: "VRR"
-                detail: "为避免破坏 niri guardrails，设置中心不会自动启用 variable-refresh-rate。"
+                detail: "Tahoe niri 配置默认启用；实际支持状态以 niri msg outputs 为准。"
                 iconCode: "\ue8b8"
             }
         }

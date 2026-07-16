@@ -171,16 +171,20 @@ check_tahoe_glass_reference_sources() {
     "51a1d49"
 }
 
-check_niri_vrr_disabled() {
+check_niri_vrr_policy() {
   if [[ ! -f "$NIRI_CONFIG_SRC" ]]; then
     fail "missing niri config: $NIRI_CONFIG_SRC"
     return
   fi
 
-  if grep -nE '^[[:space:]]*variable-refresh-rate([[:space:]]|$)' "$NIRI_CONFIG_SRC"; then
-    fail "niri Tahoe config must not enable variable-refresh-rate by default"
+  local enabled
+  enabled="$(grep -Ec '^[[:space:]]*variable-refresh-rate[[:space:]]*(//.*)?$' "$NIRI_CONFIG_SRC" || true)"
+  if [[ "$enabled" -ne 1 ]]; then
+    fail "niri Tahoe config must contain exactly one always-on variable-refresh-rate policy"
+  elif grep -nE '^[[:space:]]*variable-refresh-rate[[:space:]]+on-demand=' "$NIRI_CONFIG_SRC"; then
+    fail "niri Tahoe config must use the always-on VRR policy, not on-demand"
   else
-    log "niri config keeps variable-refresh-rate disabled"
+    log "niri config enables the always-on VRR policy"
   fi
 }
 
@@ -340,7 +344,7 @@ main() {
   check_tahoe_glass_protocol_invariants
   check_tahoe_glass_region_limit_invariants
   check_tahoe_glass_reference_sources
-  check_niri_vrr_disabled
+  check_niri_vrr_policy
   check_no_broad_quickshell_rule
   check_no_tahoe_background_effect_calls
   check_panel_namespaces

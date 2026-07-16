@@ -66,7 +66,6 @@ XWAYLAND_SATELLITE_COMPAT_CHECK_SCRIPT="${XWAYLAND_SATELLITE_COMPAT_CHECK_SCRIPT
 TAHOE_XWAYLAND_COMPAT_CHECK_TARGET="${TAHOE_XWAYLAND_COMPAT_CHECK_TARGET:-"$TAHOE_CONFIG_DIR/scripts/check-xwayland-satellite-compat.sh"}"
 RUN_TAHOE_GLASS_GUARDRAILS="${RUN_TAHOE_GLASS_GUARDRAILS:-true}"
 TAHOE_GLASS_GUARDRAILS_SCRIPT="${TAHOE_GLASS_GUARDRAILS_SCRIPT:-"$REPO_DIR/scripts/check-tahoe-glass-guardrails.sh"}"
-ALLOW_NIRI_VRR="${ALLOW_NIRI_VRR:-false}"
 # Tahoe shell deploy parity (T01). State files live under TAHOE_STATE_DIR only.
 TAHOE_SHELL_DEPLOY_ROOT_COMMIT_FILE="${TAHOE_SHELL_DEPLOY_ROOT_COMMIT_FILE:-"$TAHOE_STATE_DIR/tahoe-shell-deployed-root-commit"}"
 TAHOE_SHELL_DEPLOY_MANIFEST_HASH_FILE="${TAHOE_SHELL_DEPLOY_MANIFEST_HASH_FILE:-"$TAHOE_STATE_DIR/tahoe-shell-deployed-manifest.sha256"}"
@@ -444,10 +443,14 @@ assert_niri_config_vrr_policy() {
   local config="$1"
 
   [[ -f "$config" ]] || return
-  [[ "$ALLOW_NIRI_VRR" == true ]] && return
 
-  if grep -nE '^[[:space:]]*variable-refresh-rate([[:space:]]|$)' "$config"; then
-    die "niri config enables variable-refresh-rate: $config; keep it commented out or set ALLOW_NIRI_VRR=true to override"
+  local enabled
+  enabled="$(grep -Ec '^[[:space:]]*variable-refresh-rate[[:space:]]*(//.*)?$' "$config" || true)"
+  if [[ "$enabled" -ne 1 ]]; then
+    die "niri config must contain exactly one always-on variable-refresh-rate policy: $config"
+  fi
+  if grep -nE '^[[:space:]]*variable-refresh-rate[[:space:]]+on-demand=' "$config"; then
+    die "niri config must use always-on variable-refresh-rate, not on-demand: $config"
   fi
 }
 

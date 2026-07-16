@@ -206,13 +206,17 @@ class NiriSettingsToolTests(unittest.TestCase):
 
         self.assertIn("expected exactly one top-level output block, found 2", str(raised.exception))
 
-    def test_config_guardrails_block_vrr_and_broad_namespace(self) -> None:
+    def test_config_guardrails_allow_only_always_on_vrr_and_block_broad_namespace(self) -> None:
         base = read_fixture("managed.kdl")
         niri_settings_tool.config_guardrails(base + "\n// variable-refresh-rate\n")
+        niri_settings_tool.config_guardrails(base + "\nvariable-refresh-rate\n")
+        niri_settings_tool.config_guardrails(base + "\nvariable-refresh-rate // Tahoe policy\n")
 
         with self.assertRaises(niri_settings_tool.KdlEditError) as raised:
-            niri_settings_tool.config_guardrails(base + "\nvariable-refresh-rate\n")
-        self.assertIn("variable-refresh-rate must stay disabled", str(raised.exception))
+            niri_settings_tool.config_guardrails(
+                base + "\nvariable-refresh-rate on-demand=true\n"
+            )
+        self.assertIn("Tahoe always-on policy", str(raised.exception))
 
         with self.assertRaises(niri_settings_tool.KdlEditError) as raised:
             niri_settings_tool.config_guardrails(

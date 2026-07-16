@@ -1,0 +1,11 @@
+{
+  "first_round_rss_kib": 735460,
+  "round_10_rss_kib": 734532,
+  "stable_60s_rss_kib": 734008,
+  "stable_growth_kib": -1452,
+  "stable_growth_mib": -1.41796875,
+  "gate_mib": 5.0,
+  "pass": true,
+  "media_runtime_available": false,
+  "media_loader_lifecycle_evidence": "tst_dynamic_island_runtime_hardening.qml"
+}

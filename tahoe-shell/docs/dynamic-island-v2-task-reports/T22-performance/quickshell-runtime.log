@@ -1,0 +1,38 @@
+No running instances for "/home/wwt/.config/quickshell/tahoe/shell.qml"
+Dead instances:
+ - y21ftx8it
+ - hywcf4z8it
+ - zteetuz8it
+ - 6u0fc509it
+ - bcqgyy09it
+  INFO: Launching config: "/home/wwt/.config/quickshell/tahoe/shell.qml"
+  INFO: Shell ID: "tahoe" Path ID "e735531df70a391a9a0fd295d7c0db5a"
+  INFO: Saving logs to "/run/user/1000/quickshell/by-id/n5vgv019it/log.qslog"
+  WARN scene: @shell.qml[472:-1]: TypeError: Cannot assign to read-only property "font"
+  WARN scene: @components/LockScreen.qml[16:-1]: ReferenceError: lockClock is not defined
+  INFO: Configuration Loaded
+  WARN scene: @components/settings/pages/StartupPage.qml[358:-1]: ReferenceError: addCandidateRow is not defined
+  WARN scene: @components/settings/pages/StartupPage.qml[358:-1]: ReferenceError: addCandidateRow is not defined
+  WARN scene: @components/settings/pages/StartupPage.qml[358:-1]: ReferenceError: addCandidateRow is not defined
+  WARN scene: @components/settings/pages/StartupPage.qml[358:-1]: ReferenceError: addCandidateRow is not defined
+  WARN scene: @components/settings/pages/StartupPage.qml[358:-1]: ReferenceError: addCandidateRow is not defined
+  WARN scene: @components/settings/pages/StartupPage.qml[358:-1]: ReferenceError: addCandidateRow is not defined
+  WARN scene: @components/settings/pages/StartupPage.qml[358:-1]: ReferenceError: addCandidateRow is not defined
+  WARN scene: @components/settings/pages/StartupPage.qml[358:-1]: ReferenceError: addCandidateRow is not defined
+  WARN scene: @components/settings/pages/StartupPage.qml[358:-1]: ReferenceError: addCandidateRow is not defined
+  WARN scene: @components/settings/pages/StartupPage.qml[358:-1]: ReferenceError: addCandidateRow is not defined
+  WARN scene: @components/settings/pages/StartupPage.qml[358:-1]: ReferenceError: addCandidateRow is not defined
+  WARN scene: @components/settings/pages/StartupPage.qml[358:-1]: ReferenceError: addCandidateRow is not defined
+  WARN scene: @components/settings/pages/StartupPage.qml[358:-1]: ReferenceError: addCandidateRow is not defined
+  WARN scene: @components/settings/pages/StartupPage.qml[358:-1]: ReferenceError: addCandidateRow is not defined
+  WARN scene: @components/settings/pages/StartupPage.qml[358:-1]: ReferenceError: addCandidateRow is not defined
+  WARN scene: @components/settings/pages/StartupPage.qml[358:-1]: ReferenceError: addCandidateRow is not defined
+  WARN scene: @components/settings/pages/StartupPage.qml[358:-1]: ReferenceError: addCandidateRow is not defined
+  WARN scene: @components/settings/pages/StartupPage.qml[358:-1]: ReferenceError: addCandidateRow is not defined
+  WARN scene: @components/settings/pages/StartupPage.qml[358:-1]: ReferenceError: addCandidateRow is not defined
+  WARN scene: @components/settings/pages/StartupPage.qml[358:-1]: ReferenceError: addCandidateRow is not defined
+  WARN scene: @components/settings/pages/StartupPage.qml[358:-1]: ReferenceError: addCandidateRow is not defined
+  WARN scene: @components/settings/pages/StartupPage.qml[358:-1]: ReferenceError: addCandidateRow is not defined
+  WARN scene: @components/settings/pages/StartupPage.qml[358:-1]: ReferenceError: addCandidateRow is not defined
+  WARN scene: @components/settings/pages/StartupPage.qml[358:-1]: ReferenceError: addCandidateRow is not defined
+  WARN qt.qpa.services: Failed to register with host portal QDBusError("org.freedesktop.portal.Error.Failed", "Could not register app ID: App info not found for 'org.quickshell.tahoe'")

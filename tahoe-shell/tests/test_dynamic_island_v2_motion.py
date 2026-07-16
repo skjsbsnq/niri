@@ -38,6 +38,11 @@ class DynamicIslandV2MotionTests(unittest.TestCase):
         self.assertIn("var v2ReducedContentMs = 80", self.motion)
         # Legacy 380 morph and whole-content scale 0.9 removed.
         self.assertNotIn("var overlayMorphDuration = 380", self.motion)
+        self.assertNotIn("overlayMorphDuration", self.motion)
+        self.assertNotIn("overlayMorphEasing", self.motion)
+        self.assertNotIn("overlayContentDuration", self.motion)
+        self.assertNotIn("overlayExpandedExitFadeMs", self.motion)
+        self.assertNotIn("overlayExpandedEnterFadeMs", self.motion)
         self.assertNotIn("overlayContentEnterScale = 0.9", self.motion)
         self.assertNotIn("overlayExpandedExitHoldMs", self.motion)
         self.assertNotIn("visualizerUpdateMs", self.motion)

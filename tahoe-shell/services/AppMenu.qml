@@ -98,6 +98,14 @@ Item {
             }
         }
 
+        // Window services may replace the focused object without changing the
+        // stable target identity. Keep an already-applied result in that case.
+        if (!demand
+                && !targetChanged
+                && !probe.running
+                && menuOwnerIdentity === targetIdentity)
+            return;
+
         if (probe.running) {
             // Same-identity health/focus probes may coalesce into the in-flight run.
             // Explicit demand (menu open) and target changes must supersede that run so
@@ -321,7 +329,7 @@ Item {
         interval: 300000
         running: true
         repeat: true
-        onTriggered: root.refresh()
+        onTriggered: root.refresh(true)
     }
 
     onFocusedWindowChanged: root.refresh()

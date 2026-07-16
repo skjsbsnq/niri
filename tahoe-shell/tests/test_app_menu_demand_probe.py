@@ -262,6 +262,20 @@ class AppMenuDemandProbeTests(unittest.TestCase):
         assert m is not None
         self.assertGreaterEqual(int(m.group(1)), 60_000)
 
+    def test_health_recovery_is_an_explicit_freshness_demand(self) -> None:
+        src = APP_MENU.read_text(encoding="utf-8")
+        m = re.search(
+            r"Timer\s*\{\s*id:\s*healthRecoveryTimer\b(?P<body>.*?)\n\s*\}",
+            src,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(m, "health recovery timer should exist")
+        assert m is not None
+        self.assertRegex(
+            m.group("body"),
+            r"onTriggered:\s*root\.refresh\s*\(\s*true\s*\)",
+        )
+
     def test_task03_identity_pipeline_still_present(self) -> None:
         src = APP_MENU.read_text(encoding="utf-8")
         for token in (

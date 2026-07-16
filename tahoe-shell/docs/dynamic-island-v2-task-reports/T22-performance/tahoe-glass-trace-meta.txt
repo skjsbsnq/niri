@@ -1,0 +1,17 @@
+pid=780635
+stable_start_utc=2026-07-16T03:42:43Z
+stable_end_utc=2026-07-16T03:43:43Z
+stable_start_line=5170
+stable_end_line=25976
+island_surface=58
+island_region_id=2
+island_region_count=1
+full_trace_island_set_region_count=30
+stable_island_set_region_count=0
+stable_island_remove_region_count=0
+stable_island_clear_regions_count=0
+stable_island_geometry_commits_per_min=0
+full_trace_all_surfaces_set_region_count=156
+stable_all_surfaces_set_region_count=99
+stable_all_surfaces_clear_regions_count=3
+non_island_stable_activity=Dock surface 66 region 7; excluded from Dynamic Island T22 metric

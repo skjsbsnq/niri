@@ -4,7 +4,6 @@ import QtQuick
 import Quickshell
 import Quickshell.Wayland
 import "DynamicIslandMotion.js" as IslandMotion
-import "Motion.js" as Motion
 import "TahoeGlass.js" as GlassStyle
 import "DynamicIslandOwnership.js" as IslandOwnership
 import "settings/SettingsTheme.js" as Theme
@@ -168,9 +167,6 @@ PanelWindow {
     readonly property bool compactContentVisible: compactResting && capsuleShown
     // Expanded media only on the owner screen.
     readonly property bool mediaContentVisible: contentState === "expanded_media" && activeForScreen
-    readonly property bool summaryContentVisible: false
-    readonly property bool showSecondaryText: contentSecondaryText.length > 0
-        && !(safeProgress(progress) >= 0 && capsuleTargetHeight <= 44)
     // T11: SettingsTheme island tokens (single color owner). No DynamicIslandTheme.js.
     readonly property string surfaceFillRole: fillRoleForState(effectiveGeometryState)
     readonly property color glassFill: Theme.islandSurfaceFill(root.darkMode, root.surfaceFillRole)
@@ -197,13 +193,6 @@ PanelWindow {
     readonly property bool canPlayPause: dynamicIslandService ? !!dynamicIslandService.canPlayPause : false
     readonly property bool canPrev: dynamicIslandService ? !!dynamicIslandService.canPrev : false
     readonly property bool canNext: dynamicIslandService ? !!dynamicIslandService.canNext : false
-    readonly property int summaryBatteryPercent: dynamicIslandService ? Number(dynamicIslandService.summaryBatteryPercent) : 0
-    readonly property bool summaryBatteryCharging: dynamicIslandService ? !!dynamicIslandService.summaryBatteryCharging : false
-    readonly property real summaryVolume: dynamicIslandService ? Number(dynamicIslandService.summaryVolume) : 0
-    readonly property bool summaryMuted: dynamicIslandService ? !!dynamicIslandService.summaryMuted : false
-    readonly property real summaryBrightness: dynamicIslandService ? Number(dynamicIslandService.summaryBrightness) : 0
-    readonly property bool summaryBrightnessAvailable: dynamicIslandService ? !!dynamicIslandService.summaryBrightnessAvailable : false
-    readonly property string summaryWorkspaceLabel: dynamicIslandService ? String(dynamicIslandService.summaryWorkspaceLabel || "") : ""
     readonly property int workspaceDirection: (activeForScreen && dynamicIslandService)
         ? Number(dynamicIslandService.transientWorkspaceDirection) || 0
         : 0
@@ -223,9 +212,6 @@ PanelWindow {
     readonly property bool timerFinished: activeForScreen && dynamicIslandService
         ? !!dynamicIslandService.timerFinished
         : false
-    readonly property bool timerContentVisible: (contentState === "resting_timer"
-            || contentState === "expanded_timer"
-            || contentState === "transient_timer_complete") && activeForScreen
     readonly property string bluetoothKind: (activeForScreen && dynamicIslandService)
         ? String(dynamicIslandService.transientBluetoothKind || "") : ""
     readonly property string bluetoothDeviceName: (activeForScreen && dynamicIslandService)
@@ -396,14 +382,6 @@ PanelWindow {
 
     function isRestingState(stateName) {
         return stateName === "resting_time" || stateName === "resting_media" || stateName === "resting_timer";
-    }
-
-    function safeProgress(value) {
-        var number = Number(value);
-        if (!isFinite(number) || number < 0)
-            return -1;
-
-        return Math.max(0, Math.min(1, number));
     }
 
     function syncContentTransition(forceSwap) {
@@ -607,8 +585,6 @@ PanelWindow {
                 compactResting: root.compactResting
                 compactContentVisible: root.compactContentVisible
                 mediaExpandedContentVisible: root.mediaContentVisible
-                summaryExpandedContentVisible: root.summaryContentVisible
-                showSecondaryText: root.showSecondaryText
                 textPrimary: root.textPrimary
                 textSecondary: root.textSecondary
                 darkMode: root.darkMode
@@ -627,13 +603,6 @@ PanelWindow {
                 settingsService: root.settingsService
                 accentColor: root.accentColor
                 progressTrackColor: root.progressTrackColor
-                summaryBatteryPercent: root.summaryBatteryPercent
-                summaryBatteryCharging: root.summaryBatteryCharging
-                summaryVolume: root.summaryVolume
-                summaryMuted: root.summaryMuted
-                summaryBrightness: root.summaryBrightness
-                summaryBrightnessAvailable: root.summaryBrightnessAvailable
-                summaryWorkspaceLabel: root.summaryWorkspaceLabel
                 workspaceDirection: root.workspaceDirection
                 workspaceLabel: root.workspaceLabel
                 workspaceCount: root.workspaceCount
@@ -642,7 +611,6 @@ PanelWindow {
                 timerRunning: root.timerRunning
                 timerPaused: root.timerPaused
                 timerFinished: root.timerFinished
-                timerContentVisible: root.timerContentVisible
                 bluetoothKind: root.bluetoothKind
                 bluetoothDeviceName: root.bluetoothDeviceName
                 bluetoothDeviceIcon: root.bluetoothDeviceIcon

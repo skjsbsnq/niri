@@ -748,7 +748,6 @@ ShellRoot {
         controlsService: controls
         notificationsService: notifications
         windowsService: niri
-        batteryService: battery
         settingsService: desktopSettings
         timerService: islandTimer
         onOpenControlCenterRequested: shell.openDynamicIslandControlCenter()

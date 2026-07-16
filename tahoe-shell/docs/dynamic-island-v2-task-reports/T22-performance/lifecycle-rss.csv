@@ -1,0 +1,12 @@
+round,timestamp_utc,rss_kib,state
+1,2026-07-16T03:40:06Z,735460,resting_time
+2,2026-07-16T03:40:07Z,735160,resting_time
+3,2026-07-16T03:40:08Z,734840,resting_time
+4,2026-07-16T03:40:10Z,734104,resting_time
+5,2026-07-16T03:40:11Z,734100,resting_time
+6,2026-07-16T03:40:12Z,734264,resting_time
+7,2026-07-16T03:40:14Z,734508,resting_time
+8,2026-07-16T03:40:15Z,734688,resting_time
+9,2026-07-16T03:40:16Z,735012,resting_time
+10,2026-07-16T03:40:18Z,734532,resting_time
+stable60,2026-07-16T03:41:18Z,734008,resting_time

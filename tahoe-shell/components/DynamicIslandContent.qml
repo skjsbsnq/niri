@@ -2,7 +2,6 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import "DynamicIslandMotion.js" as IslandMotion
-import "Motion.js" as Motion
 
 // Scene host for the Dynamic Island capsule.
 // Compact/transient chrome stays lightweight and always present.
@@ -41,8 +40,6 @@ Item {
     signal notificationInteractionEnded()
     property bool compactContentVisible: compactResting
     property bool mediaExpandedContentVisible: mediaExpanded
-    property bool summaryExpandedContentVisible: summaryExpanded
-    property bool showSecondaryText: false
     property color textPrimary: "#f7f8fa"
     property color textSecondary: "#aeb6c2"
     property bool darkMode: true
@@ -69,13 +66,6 @@ Item {
     signal mediaNextRequested()
     signal mediaControlPressed()
     signal mediaControlReleased()
-    property int summaryBatteryPercent: 0
-    property bool summaryBatteryCharging: false
-    property real summaryVolume: 0
-    property bool summaryMuted: false
-    property real summaryBrightness: 0
-    property bool summaryBrightnessAvailable: false
-    property string summaryWorkspaceLabel: ""
     property int workspaceDirection: 0
     property string workspaceLabel: ""
     property int workspaceCount: 0
@@ -84,7 +74,6 @@ Item {
     property bool timerRunning: false
     property bool timerPaused: false
     property bool timerFinished: false
-    property bool timerContentVisible: false
     property string bluetoothKind: ""
     property string bluetoothDeviceName: ""
     property string bluetoothDeviceIcon: ""
@@ -97,7 +86,6 @@ Item {
     signal timerControlPressed()
     signal timerControlReleased()
     readonly property bool mediaExpanded: islandState === "expanded_media"
-    readonly property bool summaryExpanded: false
     readonly property bool compactMediaActive: islandState === "resting_media"
     // Measured compact media content width (no capsule padding). Overlay clamps.
     // While compact media is exiting, freeze measured width on the latch so the
@@ -125,7 +113,6 @@ Item {
 
     readonly property bool notificationActive: islandState === "transient_notification"
     readonly property bool bluetoothActive: islandState === "transient_bluetooth"
-    readonly property bool standardDetailActive: !compactResting && !notificationActive && !osdActive && !mediaExpanded && !summaryExpanded && !workspaceActive && !timerActiveScene && !bluetoothActive
     readonly property bool osdActive: islandState === "transient_osd"
     readonly property bool workspaceActive: islandState === "transient_workspace"
     readonly property bool timerActiveScene: islandState === "resting_timer"
@@ -146,14 +133,6 @@ Item {
     // Loader active flags: true while showing or exit-hold. Never both heavy
     // scenes need to stay loaded forever on resting/hidden outputs.
     property bool mediaLoaderActive: false
-
-    function safeProgress(value) {
-        var number = Number(value);
-        if (!isFinite(number) || number < 0)
-            return -1;
-
-        return Math.max(0, Math.min(1, number));
-    }
 
     function syncOsdLayerImmediately() {
         osdExitOpacity.stop();
@@ -410,109 +389,56 @@ Item {
         }
     }
 
-    Row {
-        id: detailRow
-
-        anchors {
-            left: parent.left
-            right: parent.right
-            top: parent.top
-            topMargin: 8
-            leftMargin: root.islandState.indexOf("expanded_") === 0 ? 24 : 16
-            rightMargin: root.islandState.indexOf("expanded_") === 0 ? 24 : 16
-        }
-        height: Math.min(parent.height - 16, 52)
-        spacing: 10
-        opacity: root.standardDetailActive ? 1 : 0
-        visible: opacity > 0.01
-
-        Behavior on opacity {
-            enabled: !root.sceneTransitionExternallyOwned
-            NumberAnimation { duration: IslandMotion.contentEnterMs(root.settingsService); easing.type: IslandMotion.v2ContentEasing }
-        }
-
-        TahoeSymbol {
-            name: root.iconCode
-            color: root.textPrimary
-            size: 20
-        }
-
-        Item {
-            width: Math.max(1, parent.width - 34)
-            height: parent.height
-
-            Text {
-                id: detailPrimary
-
-                anchors {
-                    left: parent.left
-                    right: parent.right
-                    top: parent.top
-                    topMargin: root.showSecondaryText ? 4 : 0
-                }
-                text: root.displayText
-                color: root.textPrimary
-                font.pixelSize: root.islandState.indexOf("expanded_") === 0 ? 17 : 13
-                font.weight: Font.DemiBold
-                elide: Text.ElideRight
-                maximumLineCount: 1
-            }
-
-            Text {
-                anchors {
-                    left: parent.left
-                    right: parent.right
-                    top: detailPrimary.bottom
-                    topMargin: 2
-                }
-                text: root.secondaryText
-                color: root.textSecondary
-                font.pixelSize: 11
-                elide: Text.ElideRight
-                maximumLineCount: 1
-                visible: root.showSecondaryText
-            }
-        }
+    // Notification is the only compact scene with a Flickable and two Images.
+    // Keep it absent outside its active presentation; Overlay holds the outgoing
+    // state until the coordinated exit fade reaches zero.
+    Loader {
+        id: notificationLoader
+        objectName: "notificationLoader"
+        anchors.fill: parent
+        active: root.notificationActive
+        asynchronous: false
+        sourceComponent: notificationSceneComponent
     }
 
-    // T14/T15: notification with app identity, expand chevron, and actions.
-    DynamicIslandNotificationView {
-        id: notificationView
+    Component {
+        id: notificationSceneComponent
 
-        anchors.fill: parent
-        appName: root.notificationAppName
-        summary: root.displayText
-        body: root.secondaryText
-        iconUrl: root.notificationIconUrl
-        urgency: root.notificationUrgency
-        hasOverflow: root.notificationHasOverflow
-        expanded: root.notificationExpanded
-        actions: root.notificationActions
-        textPrimary: root.textPrimary
-        textSecondary: root.textSecondary
-        opacity: root.notificationActive ? 1 : 0
-        visible: opacity > 0.01
-        onBodyClicked: root.notificationBodyClicked()
-        onDismissRequested: root.notificationDismissRequested()
-        onExpandToggleRequested: root.notificationExpandToggleRequested()
-        onActionInvoked: function(actionId) { root.notificationActionInvoked(actionId); }
-        // Expanded hold owns userInteracting; do not clear it on flick/action press end.
-        onInteractionBegan: {
-            if (!root.notificationExpanded)
-                root.notificationInteractionBegan();
-        }
-        onInteractionEnded: {
-            if (!root.notificationExpanded)
-                root.notificationInteractionEnded();
-        }
+        DynamicIslandNotificationView {
+            anchors.fill: parent
+            appName: root.notificationAppName
+            summary: root.displayText
+            body: root.secondaryText
+            iconUrl: root.notificationIconUrl
+            urgency: root.notificationUrgency
+            hasOverflow: root.notificationHasOverflow
+            expanded: root.notificationExpanded
+            actions: root.notificationActions
+            textPrimary: root.textPrimary
+            textSecondary: root.textSecondary
+            onBodyClicked: root.notificationBodyClicked()
+            onDismissRequested: root.notificationDismissRequested()
+            onExpandToggleRequested: root.notificationExpandToggleRequested()
+            onActionInvoked: function(actionId) { root.notificationActionInvoked(actionId); }
+            // Expanded hold owns userInteracting; do not clear it on flick/action press end.
+            onInteractionBegan: {
+                if (!root.notificationExpanded)
+                    root.notificationInteractionBegan();
+            }
+            onInteractionEnded: {
+                if (!root.notificationExpanded)
+                    root.notificationInteractionEnded();
+            }
 
-        Behavior on opacity {
-            enabled: !root.sceneTransitionExternallyOwned
-            NumberAnimation {
-                duration: root.notificationActive
-                    ? root.notificationFadeInDuration
-                    : root.notificationFadeOutDuration
-                easing.type: IslandMotion.overlayColorEasing
+            opacity: root.notificationActive ? 1 : 0
+            Behavior on opacity {
+                enabled: !root.sceneTransitionExternallyOwned
+                NumberAnimation {
+                    duration: root.notificationActive
+                        ? root.notificationFadeInDuration
+                        : root.notificationFadeOutDuration
+                    easing.type: IslandMotion.overlayColorEasing
+                }
             }
         }
     }
@@ -623,6 +549,7 @@ Item {
     // Expanded media: Loader only while visible or exit-hold (no hidden Timer).
     Loader {
         id: mediaLoader
+        objectName: "mediaLoader"
         anchors.fill: parent
         z: 2
         active: root.mediaLoaderActive
@@ -668,42 +595,6 @@ Item {
                     easing.type: IslandMotion.v2ContentEasing
                 }
             }
-        }
-    }
-
-
-    Rectangle {
-        id: progressTrack
-
-        anchors {
-            left: parent.left
-            right: parent.right
-            bottom: parent.bottom
-            leftMargin: 18
-            rightMargin: 18
-            bottomMargin: 8
-        }
-        height: 3
-        radius: 2
-        color: "#28ffffff"
-        // Bottom track is for non-OSD progress (e.g. media compact later). OSD uses OsdView bar.
-        opacity: (root.safeProgress(root.progress) >= 0 && !root.osdActive) ? 1 : 0
-        visible: opacity > 0.01
-
-        Rectangle {
-            width: parent.width * Math.max(0, root.safeProgress(root.progress))
-            height: parent.height
-            radius: parent.radius
-            color: "#f0ffffff"
-
-            Behavior on width {
-                NumberAnimation { duration: IslandMotion.overlayProgressDuration; easing.type: IslandMotion.overlayProgressEasing }
-            }
-        }
-
-        Behavior on opacity {
-            enabled: !root.sceneTransitionExternallyOwned
-            NumberAnimation { duration: IslandMotion.contentEnterMs(root.settingsService); easing.type: IslandMotion.v2ContentEasing }
         }
     }
 

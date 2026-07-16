@@ -1,0 +1,12 @@
+{
+    "instance_count": 1,
+    "instances": [
+        {
+        "config_path": "/home/wwt/.config/quickshell/tahoe/shell.qml",
+        "id": "n5vgv019it",
+        "launch_time": "2026-07-16T11:43:43",
+        "pid": 786875,
+        "shell_id": "tahoe"
+        }
+    ]
+}

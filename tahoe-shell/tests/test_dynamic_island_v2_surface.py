@@ -274,6 +274,12 @@ class DynamicIslandV2SurfaceTests(unittest.TestCase):
         self.assertIn("mediaLoaderActive = true", self.content)
         self.assertIn("mediaLoaderActive = false", self.content)
         self.assertIn("property bool mediaLoaderActive: false", self.content)
+        self.assertIn("id: notificationLoader", self.content)
+        self.assertIn("active: root.notificationActive", self.content)
+        self.assertIn("sourceComponent: notificationSceneComponent", self.content)
+        self.assertNotIn("id: notificationView", self.content)
+        self.assertNotIn("id: detailRow", self.content)
+        self.assertNotIn("id: progressTrack", self.content)
 
     def test_no_dual_render_of_expanded_scenes(self) -> None:
         # Expanded media appears only as Component source for Loader.

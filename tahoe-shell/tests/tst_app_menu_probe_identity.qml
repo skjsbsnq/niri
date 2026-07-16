@@ -18,6 +18,7 @@ TestCase {
     }
 
     QtObject { id: windowA; property string id: "A"; property int pid: 101; property string appId: "app.A"; property string title: "Window A" }
+    QtObject { id: windowAReplacement; property string id: "A"; property int pid: 101; property string appId: "app.A"; property string title: "Window A replacement" }
     QtObject { id: windowB; property string id: "B"; property int pid: 202; property string appId: "app.B"; property string title: "Window B" }
     QtObject { id: windowC; property string id: "C"; property int pid: 303; property string appId: "app.C"; property string title: "Window C" }
 
@@ -227,5 +228,23 @@ TestCase {
         compare(service.probePending, false);
         tryCompare(service, "nativeMenuService", "svc.A", 2000);
         compare(TestIo.TestProcessRegistry.startedIds.join(","), "A");
+    }
+
+    function test_completed_identity_ignores_object_replacement_but_demand_refreshes() {
+        tryCompare(service, "nativeMenuService", "svc.A", 1000);
+        compare(TestIo.TestProcessRegistry.startedIds.join(","), "A");
+
+        // Replacing the wrapper object emits focusedWindowChanged even though
+        // the stable app-menu identity did not change.
+        windows.focusedWindow = windowAReplacement;
+        wait(50);
+        compare(service.probeGeneration, 1);
+        compare(TestIo.TestProcessRegistry.startedIds.join(","), "A");
+        compare(service.nativeMenuService, "svc.A");
+
+        service.refresh(true);
+        tryCompare(TestIo.TestProcessRegistry, "startedIds", ["A", "A"], 1000);
+        tryCompare(service, "probing", false, 1000);
+        compare(service.nativeMenuService, "svc.A");
     }
 }

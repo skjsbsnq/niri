@@ -8,24 +8,11 @@
 // All scene/callsite durations and easings must read these tokens
 // (or Motion.js helpers). No inline Easing.OutCubic in QML scenes.
 
-// Chip (legacy DynamicIslandChip paths if still referenced).
-var chipColorDuration = 260;
-var chipScaleDuration = 200;
-var chipContentDuration = 160;
-var chipColorEasing = QtQuick.Easing.InOutQuad;
-var chipSettleEasing = QtQuick.Easing.OutCubic;
-
 // Color / progress (shared).
 var overlayColorDuration = 260;
 var overlayProgressDuration = 180;
 var overlayColorEasing = QtQuick.Easing.InOutQuad;
 var overlayProgressEasing = QtQuick.Easing.OutCubic;
-
-// Content fade aliases (map to V2 content tokens below for one source of truth).
-// Prefer v2ContentExitMs / v2ContentEnterMs at call sites.
-var overlayContentDuration = 170;          // == v2ContentEnterMs mid-band
-var overlayExpandedExitFadeMs = 110;       // == v2ContentExitMs
-var overlayExpandedEnterFadeMs = 170;      // == v2ContentEnterMs
 
 // Side-swipe.
 var swipeSettleDuration = 220;
@@ -47,10 +34,6 @@ var hoverCollapseDelayMs = 250;
 var v2CompactToTransientMs = 240;
 var v2CompactToExpandedMs = 280;
 var v2ExpandedToCompactMs = 240;
-// Legacy name kept as alias so residual references resolve to V2 expanded morph.
-var overlayMorphDuration = v2CompactToExpandedMs;
-var overlayMorphEasing = QtQuick.Easing.OutCubic;
-
 // OSD: first frame immediate; exit soft.
 var v2OsdEnterMs = 0;
 var v2OsdExitMs = 110;

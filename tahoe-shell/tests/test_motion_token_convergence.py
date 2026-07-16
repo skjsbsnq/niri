@@ -250,9 +250,9 @@ class MotionTokenConvergenceTests(unittest.TestCase):
         self.assertIn("function contentEnterMs", motion)
         self.assertIn("OutCubic", motion)
         # Chip motion tokens remain defined for historical timing; T12 deleted the chip UI.
-        self.assertIn("var chipColorDuration = 260", motion)
-        self.assertIn("var chipScaleDuration = 200", motion)
-        self.assertIn("var chipContentDuration = 160", motion)
+        self.assertNotIn("chipColorDuration", motion)
+        self.assertNotIn("chipScaleDuration", motion)
+        self.assertNotIn("chipContentDuration", motion)
         self.assertFalse((COMPONENTS_ROOT / "DynamicIslandChip.qml").is_file())
 
         # T11: V2 radius caps expanded (never height/2 ellipse); glass geometry

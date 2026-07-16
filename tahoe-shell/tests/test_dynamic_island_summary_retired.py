@@ -74,7 +74,12 @@ class SummaryRetiredTests(unittest.TestCase):
         self.assertTrue(WORKSPACE.is_file())
         self.assertIn("DynamicIslandWorkspaceView", self.content)
         self.assertIn("workspaceActive", self.content)
-        # Not generic detailRow for workspace.
+        self.assertNotIn("id: detailRow", self.content)
+        self.assertNotIn("standardDetailActive", self.content)
+        self.assertNotIn("summaryExpandedContentVisible", self.content)
+        self.assertNotIn("summaryBatteryPercent", self.content)
+        self.assertNotIn("summaryBatteryPercent", self.overlay)
+        self.assertNotIn("summaryBatteryPercent", self.island)
         self.assertIn("shouldShowWorkspaceTransient", self.island)
         self.assertIn("dynamicIslandWorkspaceFeedback", self.settings)
         # Opt-in must be readable on DesktopSettings root (not adapter-only).

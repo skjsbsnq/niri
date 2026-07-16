@@ -1,0 +1,27 @@
+  WARN scene: @shell.qml[472:-1]: TypeError: Cannot assign to read-only property "font"
+  WARN scene: @components/LockScreen.qml[16:-1]: ReferenceError: lockClock is not defined
+  WARN scene: @components/settings/pages/StartupPage.qml[358:-1]: ReferenceError: addCandidateRow is not defined
+  WARN scene: @components/settings/pages/StartupPage.qml[358:-1]: ReferenceError: addCandidateRow is not defined
+  WARN scene: @components/settings/pages/StartupPage.qml[358:-1]: ReferenceError: addCandidateRow is not defined
+  WARN scene: @components/settings/pages/StartupPage.qml[358:-1]: ReferenceError: addCandidateRow is not defined
+  WARN scene: @components/settings/pages/StartupPage.qml[358:-1]: ReferenceError: addCandidateRow is not defined
+  WARN scene: @components/settings/pages/StartupPage.qml[358:-1]: ReferenceError: addCandidateRow is not defined
+  WARN scene: @components/settings/pages/StartupPage.qml[358:-1]: ReferenceError: addCandidateRow is not defined
+  WARN scene: @components/settings/pages/StartupPage.qml[358:-1]: ReferenceError: addCandidateRow is not defined
+  WARN scene: @components/settings/pages/StartupPage.qml[358:-1]: ReferenceError: addCandidateRow is not defined
+  WARN scene: @components/settings/pages/StartupPage.qml[358:-1]: ReferenceError: addCandidateRow is not defined
+  WARN scene: @components/settings/pages/StartupPage.qml[358:-1]: ReferenceError: addCandidateRow is not defined
+  WARN scene: @components/settings/pages/StartupPage.qml[358:-1]: ReferenceError: addCandidateRow is not defined
+  WARN scene: @components/settings/pages/StartupPage.qml[358:-1]: ReferenceError: addCandidateRow is not defined
+  WARN scene: @components/settings/pages/StartupPage.qml[358:-1]: ReferenceError: addCandidateRow is not defined
+  WARN scene: @components/settings/pages/StartupPage.qml[358:-1]: ReferenceError: addCandidateRow is not defined
+  WARN scene: @components/settings/pages/StartupPage.qml[358:-1]: ReferenceError: addCandidateRow is not defined
+  WARN scene: @components/settings/pages/StartupPage.qml[358:-1]: ReferenceError: addCandidateRow is not defined
+  WARN scene: @components/settings/pages/StartupPage.qml[358:-1]: ReferenceError: addCandidateRow is not defined
+  WARN scene: @components/settings/pages/StartupPage.qml[358:-1]: ReferenceError: addCandidateRow is not defined
+  WARN scene: @components/settings/pages/StartupPage.qml[358:-1]: ReferenceError: addCandidateRow is not defined
+  WARN scene: @components/settings/pages/StartupPage.qml[358:-1]: ReferenceError: addCandidateRow is not defined
+  WARN scene: @components/settings/pages/StartupPage.qml[358:-1]: ReferenceError: addCandidateRow is not defined
+  WARN scene: @components/settings/pages/StartupPage.qml[358:-1]: ReferenceError: addCandidateRow is not defined
+  WARN scene: @components/settings/pages/StartupPage.qml[358:-1]: ReferenceError: addCandidateRow is not defined
+  WARN qt.qpa.services: Failed to register with host portal QDBusError("org.freedesktop.portal.Error.Failed", "Could not register app ID: App info not found for 'org.quickshell.tahoe'")

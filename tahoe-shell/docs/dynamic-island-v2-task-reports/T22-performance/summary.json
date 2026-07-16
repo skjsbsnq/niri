@@ -1,0 +1,19 @@
+{
+  "samples": 267,
+  "duration_seconds_nominal": 534,
+  "cpu_median_pct": 1.6,
+  "cpu_p95_pct": 4.4,
+  "cpu_mean_pct": 1.9808988764044944,
+  "cpu_min_pct": 1.2,
+  "cpu_max_pct": 8.9,
+  "rss_median_kib": 723468,
+  "rss_peak_kib": 750860,
+  "rss_min_kib": 709812,
+  "rss_median_mib": 706.51171875,
+  "rss_peak_mib": 733.26171875,
+  "cpu_gate_pct": 2.64,
+  "rss_gate_mib": 760.68,
+  "cpu_pass": true,
+  "rss_pass": true,
+  "acceptance": "user accepted truncated sample at 267/300"
+}

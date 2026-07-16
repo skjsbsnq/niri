@@ -17,7 +17,6 @@ Item {
     property var controlsService
     property var notificationsService
     property var windowsService
-    property var batteryService
     property var settingsService
     property var timerService
     property real swipeProgress: 0 // +1 = media (right); left no longer opens summary (T18)
@@ -138,19 +137,11 @@ Item {
     readonly property string clockWeekdayText: formatClockWeekday()
     readonly property string clockTimeText: formatClockTime()
     readonly property string fallbackTimeText: timeText()
-    readonly property int summaryBatteryPercent: batteryService ? Number(batteryService.roundedPercentage) : 0
-    readonly property bool summaryBatteryCharging: batteryService ? !!batteryService.charging : false
-    readonly property real summaryVolume: controlsService ? Number(controlsService.volume) : 0
-    readonly property bool summaryMuted: controlsService ? !!controlsService.muted : false
-    readonly property real summaryBrightness: controlsService ? Number(controlsService.brightness) : 0
-    readonly property bool summaryBrightnessAvailable: controlsService ? !!controlsService.brightnessAvailable : false
-    readonly property string summaryWorkspaceLabel: activeWorkspaceText()
     readonly property string timerRemainingLabel: timerService ? String(timerService.remainingLabel || "") : ""
     readonly property real timerProgress: timerService ? Number(timerService.progress) || 0 : 0
     readonly property bool timerRunning: timerService ? !!timerService.running : false
     readonly property bool timerPaused: timerService ? !!timerService.paused : false
     readonly property bool timerFinished: timerService ? !!timerService.finished : false
-    readonly property bool timerActive: timerService ? !!timerService.active : false
     readonly property int workspaceCount: {
         if (!root.windowsService || !root.windowsService.workspaceList)
             return 0;
@@ -201,19 +192,6 @@ Item {
     readonly property int notificationHideMs: 4200
     readonly property int smokeNotificationHideMs: notificationHideMs
     readonly property int osdHideMs: 1250
-    readonly property var validStates: [
-        "resting_time",
-        "resting_media",
-        "resting_timer",
-        "transient_osd",
-        "transient_notification",
-        "transient_workspace",
-        "transient_timer_complete",
-        "transient_bluetooth",
-        "expanded_media",
-        "expanded_timer"
-    ]
-
     // Named presentation string — never use Item.state (Qt reserved; binding loops).
     // Imperative recompute only: a binding on presentation that reads hasMedia /
     // preferMedia / hoverExpanded re-entered through restore drains and froze OSD.
@@ -458,10 +436,6 @@ Item {
         return time.length > 0 ? time : weekday;
     }
 
-    function dateText() {
-        return Qt.formatDateTime(root.now, "yyyy-MM-dd");
-    }
-
     function mediaTitle() {
         if (!root.controlsService)
             return "";
@@ -528,13 +502,6 @@ Item {
             // collapse morphs when secondary briefly became visible.
             return "";
         }
-    }
-
-    function progressForState(currentState) {
-        if (currentState === "transient_osd")
-            return Math.max(0, Math.min(1, root.transientProgress));
-
-        return -1;
     }
 
     function iconCodeForState(currentState) {

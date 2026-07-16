@@ -1,0 +1,8 @@
+start_utc=2026-07-16T03:25:13Z
+pid=700926
+cmd=ps -o pcpu=,rss=,etime= -p 700926 every 2s for 300 samples (600s)
+scene=resting_time idle; focused window=Nautilus static title; GNOME Console rendering paused to suppress Codex OSC title churn
+output=eDP-2 scale=1.25 logical=2048x1280 physical=2560x1600@239.998
+baseline_gates=cpu_median_pct<=2.64 rss_peak_mib<=760.68
+end_utc=2026-07-16T03:34:06Z
+completion=267/300 samples; user accepted as passing on 2026-07-16

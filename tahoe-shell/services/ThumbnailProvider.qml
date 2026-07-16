@@ -10,9 +10,12 @@ import Quickshell.Io
  * Public contract:
  * - requestThumbnail(window, maxWidth, maxHeight, reason, force) is the only
  *   shell-side entry point for a single window preview. window may be a niri
- *   window object or a numeric niri window id. reason is diagnostic only.
+ *   window object or a numeric niri window id. reason identifies the consumer
+ *   for shared in-flight ownership, cancellation, and Overview budgeting.
  * - requestThumbnails(windows, maxWidth, maxHeight, reason, force) batches
  *   requests through the same queue and keeps the same cache semantics.
+ * - WindowOverview batches are capped and paced by this provider, then
+ *   cancelRequests("window-overview") releases only that consumer's work.
  * - thumbnailStateForWindow(window, revisionToken) returns the provider-owned
  *   state object. Callers should bind revisionToken to revision so QML updates
  *   when queued/loading/ready/failed changes.
@@ -34,7 +37,9 @@ import Quickshell.Io
  * Cleanup:
  * - When Windows.windowList changes, stale cache entries are removed and their
  *   runtime PNG files are deleted.
- * - A cancelled active job is allowed to exit, then its output path is removed.
+ * - Window closure removes its cache file immediately. A consumer-cancelled
+ *   shared job may exit, but its result is ignored without deleting another
+ *   consumer's valid cache entry.
  *
  * Guardrail:
  * - Dock, TaskSwitcher, WindowOverview, and future window-preview surfaces must
@@ -48,6 +53,8 @@ Item {
     property var windowsService
     property int maxQueueLength: 64
     property int maxCacheAgeMs: 30000
+    property int overviewBatchLimit: 8
+    property int overviewMinIntervalMs: 48
     property int revision: 0
     property int successCount: 0
     property int failureCount: 0
@@ -59,6 +66,8 @@ Item {
     property int queueHead: 0
     property int pendingQueueLength: 0
     property var activeJob: null
+    property double lastOverviewCaptureAt: 0
+    property int nextJobToken: 0
     // Membership fingerprint so layout-only windowList patches (geometry churn)
     // do not re-walk the whole cache every compositor frame.
     property string lastLiveWindowKeys: ""
@@ -154,7 +163,9 @@ Item {
             "updatedAt": 0,
             "error": "",
             "status": "idle",
-            "refreshPending": false
+            "refreshPending": false,
+            "pendingRequesters": ({}),
+            "activeToken": 0
         };
     }
 
@@ -182,6 +193,30 @@ Item {
         if (!isFinite(number) || number <= 0)
             number = fallback;
         return Math.max(1, Math.min(4096, number));
+    }
+
+    function requesterKey(reason) {
+        var key = String(reason || "unspecified").trim();
+        return key.length > 0 ? key : "unspecified";
+    }
+
+    function addRequester(requesters, reason) {
+        requesters[requesterKey(reason)] = true;
+    }
+
+    function removeRequester(requesters, reason) {
+        delete requesters[requesterKey(reason)];
+    }
+
+    function requesterCount(requesters) {
+        var count = 0;
+        for (var requester in requesters)
+            count += 1;
+        return count;
+    }
+
+    function hasOnlyOverviewRequester(requesters) {
+        return requesterCount(requesters) === 1 && !!requesters["window-overview"];
     }
 
     function removeQueuedKey(key) {
@@ -267,13 +302,19 @@ Item {
         }
 
         if (state.loading) {
+            if (root.activeJob && String(root.activeJob.key) === key) {
+                addRequester(root.activeJob.requesters, reason);
+                root.activeJob.cancelled = false;
+            }
             // Coalesce equivalent in-flight work onto the single capture.
             // A second capture is only scheduled when force is requested or
             // desired dimensions exceed what the active job will produce.
             // Same-or-smaller non-force requests share the in-flight result
             // (all consumers already read the same per-window state).
-            if (force || loadingJobNeedsUpgrade(key, state))
+            if (force || loadingJobNeedsUpgrade(key, state)) {
                 state.refreshPending = true;
+                addRequester(state.pendingRequesters, reason);
+            }
             touch();
             return true;
         }
@@ -281,6 +322,7 @@ Item {
         state.failed = false;
         state.error = "";
         state.status = "queued";
+        addRequester(state.pendingRequesters, reason);
         return queueKey(key);
     }
 
@@ -298,9 +340,35 @@ Item {
 
     function requestThumbnails(windows, maxWidth, maxHeight, reason, force) {
         var values = Array.isArray(windows) ? windows : [];
-        var limit = Math.min(values.length, root.maxQueueLength);
+        var requestLimit = requesterKey(reason) === "window-overview"
+            ? root.overviewBatchLimit
+            : root.maxQueueLength;
+        var limit = Math.min(values.length, requestLimit, root.maxQueueLength);
         for (var i = 0; i < limit; i++)
             requestThumbnail(values[i], maxWidth, maxHeight, reason, force);
+    }
+
+    function cancelRequests(reason) {
+        var requester = requesterKey(reason);
+        var emptyQueuedKeys = [];
+        for (var key in root.cache) {
+            var state = root.cache[key];
+            removeRequester(state.pendingRequesters, requester);
+            if (state.refreshPending && requesterCount(state.pendingRequesters) === 0)
+                state.refreshPending = false;
+            if (state.queued && requesterCount(state.pendingRequesters) === 0)
+                emptyQueuedKeys.push(key);
+        }
+        for (var i = 0; i < emptyQueuedKeys.length; i++)
+            removeQueuedKey(emptyQueuedKeys[i]);
+
+        var job = root.activeJob;
+        if (job) {
+            removeRequester(job.requesters, requester);
+            if (requesterCount(job.requesters) === 0)
+                job.cancelled = true;
+        }
+        touch();
     }
 
     function markImageFailed(idOrWindow, error) {
@@ -330,8 +398,9 @@ Item {
             return;
 
         removeQueuedKey(key);
-        if (root.activeJob && root.activeJob.key === key)
+        if (root.activeJob && root.activeJob.key === key) {
             root.activeJob.cancelled = true;
+        }
         deleteCacheState(key);
         cleanupThumbnailFileForId(key);
         touch();
@@ -372,11 +441,21 @@ Item {
 
         while (queuePendingCount() > 0) {
             var key = String(root.queue[root.queueHead]);
+            var state = stateForKey(key, false);
+            if (state && hasOnlyOverviewRequester(state.pendingRequesters)) {
+                var elapsed = Date.now() - root.lastOverviewCaptureAt;
+                var delay = Math.ceil(root.overviewMinIntervalMs - elapsed);
+                if (delay > 0) {
+                    pumpTimer.interval = delay;
+                    pumpTimer.restart();
+                    return;
+                }
+            }
+
             root.queueHead += 1;
             delete root.queuedKeys[key];
             compactQueueStorage();
 
-            var state = stateForKey(key, false);
             if (!state || state.path.length === 0)
                 continue;
 
@@ -388,13 +467,22 @@ Item {
 
             var width = clampDimension(state.desiredWidth, 320);
             var height = clampDimension(state.desiredHeight, 220);
+            root.nextJobToken += 1;
+            state.activeToken = root.nextJobToken;
+            var requesters = state.pendingRequesters;
+            state.pendingRequesters = ({});
             root.activeJob = {
                 "key": key,
                 "path": state.path,
                 "maxWidth": width,
                 "maxHeight": height,
-                "cancelled": false
+                "cancelled": false,
+                "requesters": requesters,
+                "token": state.activeToken
             };
+            if (hasOnlyOverviewRequester(requesters))
+                root.lastOverviewCaptureAt = Date.now();
+            pumpTimer.interval = 0;
             thumbnailProcess.command = [
                 "sh",
                 "-c",
@@ -418,16 +506,25 @@ Item {
 
         var state = stateForKey(job.key, false);
         if (job.cancelled) {
-            cleanupThumbnailFileForId(job.key);
+            if (state && state.activeToken === job.token) {
+                state.loading = false;
+                state.activeToken = 0;
+                state.status = state.ready ? "ready" : "idle";
+                if (state.refreshPending && requesterCount(state.pendingRequesters) > 0) {
+                    state.refreshPending = false;
+                    queueKey(job.key);
+                }
+            }
             root.activeJob = null;
             pumpTimer.restart();
             touch();
             return;
         }
 
-        if (state) {
+        if (state && state.activeToken === job.token) {
             state.loading = false;
             state.queued = false;
+            state.activeToken = 0;
             if (code === 0) {
                 state.ready = true;
                 state.failed = false;
@@ -447,7 +544,7 @@ Item {
                 root.failureCount += 1;
             }
 
-            if (state.refreshPending) {
+            if (state.refreshPending && requesterCount(state.pendingRequesters) > 0) {
                 state.refreshPending = false;
                 queueKey(job.key);
             }

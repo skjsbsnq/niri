@@ -57,7 +57,6 @@ PanelWindow {
             flightPhase = "entering";
             pendingFlights = 0;
             selectFocusedOrFirst();
-            requestVisibleThumbnails(false);
             Qt.callLater(function() {
                 if (!root.open)
                     return;
@@ -69,6 +68,8 @@ PanelWindow {
                 });
             });
         } else if (flightPhase === "entering" || flightPhase === "open") {
+            if (root.thumbnailProvider)
+                root.thumbnailProvider.cancelRequests("window-overview");
             flightEpoch += 1;
             flightPhase = "leaving";
             pendingFlights = 0;
@@ -77,6 +78,8 @@ PanelWindow {
                     beginLeaveFlights();
             });
         } else {
+            if (root.thumbnailProvider)
+                root.thumbnailProvider.cancelRequests("window-overview");
             flightPhase = "idle";
             pendingFlights = 0;
         }
@@ -84,8 +87,11 @@ PanelWindow {
 
     onWindowChoicesChanged: if (open) {
         syncSelectionAfterModelChange();
-        requestVisibleThumbnails(false);
+        if (flightPhase === "open")
+            requestVisibleThumbnails(false);
     }
+
+    onFlightPhaseChanged: if (open && flightPhase === "open") requestVisibleThumbnails(false)
 
     function numberOr(value, fallback) {
         var number = Number(value);
@@ -310,7 +316,15 @@ PanelWindow {
     function requestVisibleThumbnails(force) {
         if (!root.thumbnailProvider)
             return;
-        root.thumbnailProvider.requestThumbnails(root.windowChoices, 480, 300, "window-overview", !!force);
+        var selected = currentWindow();
+        var candidates = [];
+        if (selected)
+            candidates.push(selected);
+        for (var i = 0; i < root.windowChoices.length; i++) {
+            if (root.windowChoices[i] !== selected)
+                candidates.push(root.windowChoices[i]);
+        }
+        root.thumbnailProvider.requestThumbnails(candidates, 480, 300, "window-overview", !!force);
     }
 
     function previewRect(window, bounds, canvasWidth, canvasHeight) {
@@ -929,13 +943,11 @@ PanelWindow {
                                     }
 
                                     onSelectedChanged: if (selected) root.selectedCardItem = windowCard
-                                    onModelDataChanged: if (root.open) root.requestThumbnailFor(modelData, false)
+                                    onModelDataChanged: if (root.open && root.flightPhase === "open") root.requestThumbnailFor(modelData, false)
 
                                     Component.onCompleted: {
                                         if (selected)
                                             root.selectedCardItem = windowCard;
-                                        if (root.open)
-                                            root.requestThumbnailFor(modelData, false);
                                         // Late-created cards during open settle at home.
                                         if (root.flightPhase === "open" || root.flightPhase === "entering") {
                                             if (root.flightPhase === "open")
@@ -1110,7 +1122,11 @@ PanelWindow {
                                         anchors.fill: parent
                                         hoverEnabled: true
                                         cursorShape: Qt.PointingHandCursor
-                                        onEntered: root.selectedWindowKey = root.windowKey(windowCard.modelData)
+                                        onEntered: {
+                                            root.selectedWindowKey = root.windowKey(windowCard.modelData);
+                                            if (root.flightPhase === "open")
+                                                root.requestThumbnailFor(windowCard.modelData, false);
+                                        }
                                         onClicked: root.activateWindow(windowCard.modelData)
                                     }
                                 }

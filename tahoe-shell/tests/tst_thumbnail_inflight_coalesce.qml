@@ -192,4 +192,78 @@ TestCase {
         compare(provider.pendingCount, 0);
         compare(provider.activeJob === null || provider.activeJob === undefined, true);
     }
+
+    function test_overview_batch_is_bounded_and_paced() {
+        provider.overviewBatchLimit = 4;
+        provider.overviewMinIntervalMs = 40;
+        TestIo.TestProcessRegistry.commandRules = [
+            { match: "window-thumbnail", delayMs: 1, payload: "", code: 0 }
+        ];
+        var windows = [];
+        for (var i = 0; i < 12; i++)
+            windows.push({ "id": 100 + i });
+
+        var startedAt = Date.now();
+        provider.requestThumbnails(windows, 480, 300, "window-overview", false);
+        compare(provider.pendingCount <= provider.overviewBatchLimit, true);
+        tryCompare(provider, "running", true, 1000);
+        tryVerify(function() {
+            return captureStarts() === provider.overviewBatchLimit
+                && provider.pendingCount === 0
+                && !provider.running
+                && (provider.activeJob === null || provider.activeJob === undefined);
+        }, 4000);
+
+        compare(captureStarts(), provider.overviewBatchLimit);
+        compare(Date.now() - startedAt >= 90, true);
+    }
+
+    function test_cancel_overview_preserves_shared_active_request() {
+        TestIo.TestProcessRegistry.commandRules = [
+            { match: "window-thumbnail", delayMs: 100, payload: "", code: 0 }
+        ];
+        compare(provider.requestThumbnail(201, 320, 220, "window-overview", false), true);
+        tryCompare(provider, "running", true, 1000);
+        compare(provider.requestThumbnail(201, 320, 220, "dock", false), true);
+
+        provider.cancelRequests("window-overview");
+        compare(provider.activeJob.cancelled, false);
+        compare(provider.activeJob.requesters["dock"], true);
+        waitUntilIdle(3000);
+        compare(captureStarts(), 1);
+    }
+
+    function test_new_consumer_reclaims_cancelled_active_request() {
+        TestIo.TestProcessRegistry.commandRules = [
+            { match: "window-thumbnail", delayMs: 100, payload: "", code: 0 }
+        ];
+        compare(provider.requestThumbnail(202, 320, 220, "window-overview", false), true);
+        tryCompare(provider, "running", true, 1000);
+        provider.cancelRequests("window-overview");
+        compare(provider.activeJob.cancelled, true);
+
+        compare(provider.requestThumbnail(202, 320, 220, "dock", false), true);
+        compare(provider.activeJob.cancelled, false);
+        compare(provider.activeJob.requesters["dock"], true);
+        waitUntilIdle(3000);
+        var state = provider.thumbnailStateForWindow(202, provider.revision);
+        compare(state.ready, true);
+        compare(captureStarts(), 1);
+    }
+
+    function test_cancel_overview_drops_its_queued_requests() {
+        TestIo.TestProcessRegistry.commandRules = [
+            { match: "window-thumbnail", delayMs: 120, payload: "", code: 0 }
+        ];
+        compare(provider.requestThumbnail(301, 320, 220, "dock", false), true);
+        tryCompare(provider, "running", true, 1000);
+        compare(provider.requestThumbnail(302, 320, 220, "window-overview", false), true);
+        compare(provider.requestThumbnail(303, 320, 220, "window-overview", false), true);
+        compare(provider.pendingCount, 2);
+
+        provider.cancelRequests("window-overview");
+        compare(provider.pendingCount, 0);
+        waitUntilIdle(3000);
+        compare(captureStarts(), 1);
+    }
 }

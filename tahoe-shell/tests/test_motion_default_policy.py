@@ -26,16 +26,16 @@ class MotionDefaultPolicyTests(unittest.TestCase):
     def read(self, path: Path) -> str:
         return path.read_text(encoding="utf-8")
 
-    def test_policy_documents_conservative_defaults_and_fallbacks(self) -> None:
+    def test_policy_documents_single_outer_animation_owner(self) -> None:
         text = self.read(POLICY)
 
         for needle in (
             "| Default motion profile | `balanced` |",
-            "| New shell state default for compositor layer animations | `true` / default-on |",
+            "| Tahoe surface outer animation owner | niri layer animation / default-on |",
             "| Conservative user profile | `reduced` |",
-            "Do not remove any fallback until a later, explicit goal",
-            '"compositorLayerAnimations": false',
-            '"motionProfile": "balanced"',
+            "QML outer fallback for migrated Tahoe surfaces",
+            "Remove",
+            "--field animations.layer_animations_enabled --value false",
             "--field animations.profile --value balanced",
         ):
             self.assertIn(needle, text)
@@ -45,7 +45,9 @@ class MotionDefaultPolicyTests(unittest.TestCase):
         niri = self.read(NIRI_SETTINGS)
         motion = self.read(MOTION_JS)
 
-        self.assertIn("property bool compositorLayerAnimations: true", desktop)
+        self.assertNotIn("compositorLayerAnimations", desktop)
+        self.assertIn("property bool layerAnimationsEnabled: true", niri)
+        self.assertIn("function setLayerAnimationsEnabled(enabled)", niri)
         self.assertIn('property string motionProfile: "balanced"', desktop)
         self.assertIn('property string motionProfile: "balanced"', niri)
         self.assertEqual(
@@ -58,8 +60,9 @@ class MotionDefaultPolicyTests(unittest.TestCase):
 
         self.assertIn("默认平衡：Tahoe 当前 KDL/QML token timing，可作为回退基线", text)
         self.assertIn("保守回退：layer transform 归零，保留必要 opacity feedback", text)
-        self.assertIn("默认开启：将 Tahoe 面板的打开/关闭交给 niri layer animation", text)
-        self.assertIn("关闭时保留 QML 外层 fallback", text)
+        self.assertIn("Tahoe surface 的打开/关闭由 niri 统一处理", text)
+        self.assertIn("关闭时外层显隐即时完成", text)
+        self.assertNotIn("QML 外层 fallback", text)
 
     def test_balanced_profile_carries_motion_2_timings(self) -> None:
         motion = self.read(MOTION_JS)

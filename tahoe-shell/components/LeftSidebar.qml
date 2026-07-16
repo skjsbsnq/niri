@@ -36,10 +36,6 @@ PanelWindow {
     readonly property color textSecondary: Theme.secondaryLabel(darkMode)
     readonly property color textTertiary: Theme.tertiaryLabel(darkMode)
     readonly property color accentBlue: Theme.accent(darkMode, accentId)
-    readonly property bool compositorLayerAnimations: !!(settingsService && settingsService.compositorLayerAnimations)
-    readonly property real closedSlideX: -(panelWidth + 24)
-    readonly property bool qmlSlideActive: !compositorLayerAnimations && slideTransform.x > closedSlideX + 0.5
-
     // Card enter stagger gate: set true after panel is open so children animate in.
     property bool cardsEnter: false
 
@@ -50,7 +46,7 @@ PanelWindow {
     signal openProcessMenuRequested(var proc, var anchorRect)
     property bool processMenuOpen: false
 
-    visible: compositorLayerAnimations ? open : (open || qmlSlideActive)
+    visible: open
     aboveWindows: true
     exclusionMode: ExclusionMode.Ignore
     exclusiveZone: 0
@@ -69,7 +65,7 @@ PanelWindow {
 
     mask: Region {
         Region {
-            x: Math.round(panel.x + slideTransform.x)
+            x: Math.round(panel.x)
             y: Math.round(panel.y)
             width: panel.width
             height: panel.height
@@ -117,30 +113,13 @@ PanelWindow {
         fillColor: root.glassFill
         strokeColor: root.glassStroke
         useItemRegion: false
-        // Explicit geometry includes the QML Translate fallback. Binding
-        // through `item: panel` does not include item transforms, which makes
-        // the blur stay at the final position while the painted panel slides.
-        regionX: Math.round(panel.x + slideTransform.x)
+        // Stay enabled while unmapped so niri's closing snapshot keeps the glass material.
+        regionX: Math.round(panel.x)
         regionY: Math.round(panel.y)
         regionWidth: panel.width
         regionHeight: panel.height
         interaction: 0.0
-        regionEnabled: root.compositorLayerAnimations || root.open || root.qmlSlideActive
         opacity: 1
-
-        transform: Translate {
-            id: slideTransform
-
-            x: root.compositorLayerAnimations ? 0 : (root.open ? 0 : root.closedSlideX)
-
-            Behavior on x {
-                enabled: !root.compositorLayerAnimations
-                NumberAnimation {
-                    duration: root.open ? Motion.panelEnter(root.settingsService) : Motion.panelExit(root.settingsService)
-                    easing.type: root.open ? Motion.emphasizedDecel : Motion.standardDecel
-                }
-            }
-        }
 
         ColumnLayout {
             anchors.fill: parent

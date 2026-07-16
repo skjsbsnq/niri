@@ -77,6 +77,7 @@ Item {
         "window_resize":     { damping_ratio: 0.96, stiffness: 700, epsilon: 0.0005 },
         "overview_open_close": { damping_ratio: 0.95, stiffness: 760, epsilon: 0.0005 }
     })
+    property bool layerAnimationsEnabled: true
     property string motionProfile: "balanced"
     readonly property var motionProfileModel: [
         { value: "fast", label: "Fast" },
@@ -358,6 +359,14 @@ Item {
         root.writeField("animations.profile", next);
     }
 
+    function setLayerAnimationsEnabled(enabled) {
+        var next = !!enabled;
+        if (root.layerAnimationsEnabled === next)
+            return;
+        root.layerAnimationsEnabled = next;
+        root.writeField("animations.layer_animations_enabled", next);
+    }
+
     function writeField(field, value) {
         root.lastError = "";
         var next = root.pending;
@@ -465,6 +474,8 @@ Item {
         if (!anim || !anim.actions)
             return;
         root.animSprings = anim.actions;
+        if (anim.layerAnimationsEnabled !== undefined)
+            root.layerAnimationsEnabled = !!anim.layerAnimationsEnabled;
         if (anim.profile && root.validMotionProfile(anim.profile))
             root.motionProfile = String(anim.profile);
         else if (anim.profile)

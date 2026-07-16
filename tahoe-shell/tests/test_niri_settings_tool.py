@@ -41,7 +41,7 @@ class NiriSettingsToolTests(unittest.TestCase):
     def test_writable_field_specs_are_an_explicit_whitelist(self) -> None:
         fields = set(niri_settings_tool.WRITABLE_FIELD_SPECS)
 
-        self.assertEqual(len(fields), 71)
+        self.assertEqual(len(fields), 72)
         for field in (
             "layout.gaps",
             "glass.panel.refraction",
@@ -49,6 +49,7 @@ class NiriSettingsToolTests(unittest.TestCase):
             "blur.saturation",
             "input.touchpad.accel_speed",
             "output.scale",
+            "animations.layer_animations_enabled",
             "animations.profile",
             "animations.overview_open_close.epsilon",
         ):
@@ -85,6 +86,46 @@ class NiriSettingsToolTests(unittest.TestCase):
         balanced = niri_settings_tool.update_field(fast, "animations.profile", "balanced")
         self.assertEqual(niri_settings_tool.read_animations_text(balanced)["profile"], "balanced")
         self.assertEqual(balanced, original)
+
+    def test_layer_animation_toggle_is_reversible_and_profile_safe(self) -> None:
+        original = TAHOE_PHASE0.read_text(encoding="utf-8")
+        field = "animations.layer_animations_enabled"
+        self.assertTrue(niri_settings_tool.read_animations_text(original)["layerAnimationsEnabled"])
+
+        disabled = niri_settings_tool.update_field(original, field, "false")
+        self.assertFalse(niri_settings_tool.read_animations_text(disabled)["layerAnimationsEnabled"])
+        self.assertEqual(niri_settings_tool.update_field(disabled, field, "false"), disabled)
+
+        lines = disabled.splitlines(True)
+        for group in niri_settings_tool.LAYER_PROFILE_GROUPS:
+            rule = niri_settings_tool.find_layer_rule_for_group(lines, group)
+            for phase in niri_settings_tool.LAYER_PHASES:
+                block = niri_settings_tool.find_layer_phase_block(lines, rule, phase)
+                self.assertTrue(niri_settings_tool.phase_has_off(lines, block), f"{group}.{phase}")
+
+        reenabled = niri_settings_tool.update_field(disabled, field, "true")
+        self.assertEqual(reenabled, original)
+
+        disabled_fast = niri_settings_tool.update_field(disabled, "animations.profile", "fast")
+        anim = niri_settings_tool.read_animations_text(disabled_fast)
+        self.assertEqual(anim["profile"], "fast")
+        self.assertFalse(anim["layerAnimationsEnabled"])
+        enabled_fast = niri_settings_tool.update_field(disabled_fast, field, "true")
+        self.assertTrue(niri_settings_tool.read_animations_text(enabled_fast)["layerAnimationsEnabled"])
+
+        disabled_reduced = niri_settings_tool.update_field(disabled, "animations.profile", "reduced")
+        reduced_anim = niri_settings_tool.read_animations_text(disabled_reduced)
+        self.assertEqual(reduced_anim["profile"], "reduced")
+        self.assertFalse(reduced_anim["layerAnimationsEnabled"])
+
+        missing_group = original.replace(
+            'match namespace="^tahoe-notification-toast$"',
+            'match namespace="^other-toast$"',
+            1,
+        )
+        self.assertFalse(niri_settings_tool.read_animations_text(missing_group)["layerAnimationsEnabled"])
+        with self.assertRaises(niri_settings_tool.KdlEditError):
+            niri_settings_tool.update_field(missing_group, field, "false")
 
     def test_motion_profile_reduced_roundtrip_stays_byte_identical(self) -> None:
         original = TAHOE_PHASE0.read_text(encoding="utf-8")

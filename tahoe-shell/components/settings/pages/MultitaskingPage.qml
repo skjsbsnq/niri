@@ -53,9 +53,9 @@ Flickable {
             Controls.TahoeListRow {
                 theme: page.theme
                 label: "动画"
-                detail: page.settings && page.settings.compositorLayerAnimations
+                detail: page.niri && page.niri.layerAnimationsEnabled
                     ? "面板交给 compositor layer animation；窗口动画由 niri 管理"
-                    : "工作区、窗口移动/缩放与概览弹簧"
+                    : "面板外层显隐即时完成；窗口动画由 niri 管理"
                 iconCode: "\ue8c1"
 
                 Controls.TahoeButton {

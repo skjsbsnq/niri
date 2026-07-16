@@ -1,15 +1,15 @@
 # Tahoe Motion Default Policy
 
-日期：2026-07-06
+日期：2026-07-16
 
-本文是 GOAL-10 的默认策略记录。它只决策默认 profile、compositor layer animation 开关和 fallback 保留计划；不新增第二套 motion 配置，不删除 fallback。
+本文记录 Tahoe motion 的当前默认策略。2026-07-16 的 R10 所有权治理取代了 GOAL-10 的临时 fallback 保留决策：每类 surface 的外层进出场只有一个 owner。
 
 ## Decisions
 
 | Area | Decision | Source |
 | --- | --- | --- |
 | Default motion profile | `balanced` | `config/niri/tahoe-phase0.kdl`, `NiriSettings.qml`, `DesktopSettings.qml`, `Motion.js`, `niri_settings_tool.py` |
-| New shell state default for compositor layer animations | `true` / default-on | `DesktopSettings.qml` `JsonAdapter.compositorLayerAnimations` |
+| Tahoe surface outer animation owner | niri layer animation / default-on | `NiriSettings.qml`, `niri_settings_tool.py`, Tahoe `layer-rule` |
 | Conservative user profile | `reduced` | Existing `animations.profile` writer and settings page selector |
 | Baseline rollback profile | `balanced` | GOAL-5 byte-for-byte rollback check |
 
@@ -34,6 +34,13 @@ transform override channel absent so the transform inherits the spring.
 line untouched — and every profile round-trips back to `balanced`
 byte-identically. Rollback is `git revert` of the T03 commit.
 
+2026-07-16 update (R10): Toast、LeftSidebar、Spotlight 删除了 surface 级 QML
+位移、缩放和淡出 fallback，niri 成为这些 surface 外层进出场的唯一 owner。
+`animations.layer_animations_enabled` 通过既有 `NiriSettings` writer 在全部受管
+`layer-open`/`layer-close` 中增删 `off`，关闭时外层显隐即时完成，而不是切换到
+第二套 QML 动画。Launchpad 仍明确由 QML 拥有，因为它没有对应 compositor
+layer animation rule。`reduced` 同时约束 niri layer channel 和 QML 内部微动画。
+
 ## Why Balanced Stays Default
 
 `balanced` remains the default because it is the only profile with all of the following evidence:
@@ -48,29 +55,27 @@ byte-identically. Rollback is `git revert` of the T03 commit.
 
 ## Layer Animation Default
 
-`compositorLayerAnimations` is `true` for new `desktop-settings.json` state. Users can turn it off from the Niri animations page.
+`layerAnimationsEnabled` 从当前 KDL layer rules 读取，默认配置中为 `true`。用户可在 Niri animations 页面关闭。
 
 Reasons:
 
 - The compositor layer animation path has automated lifecycle coverage after GOAL-7, including fast toggle, interrupt, and snapshot release tests.
 - The KDL layer animation rules remain present and validated, and `balanced` remains the rollback profile.
-- The active user state may choose `false`; this policy only defines the source default for new or reset shell state.
-- Turning the setting off preserves the QML outer animation fallback as the user rollback path.
+- 开关由唯一 KDL writer 写入所有受管 layer phase，并在写入后热加载 niri。
+- 关闭时 surface 即时 map/unmap；不会恢复 QML 外层 fallback。
 
-## Fallback Retention Plan
-
-Keep these fallback paths:
+## Ownership And Fallback Plan
 
 | Fallback | Keep/Remove | Reason |
 | --- | --- | --- |
-| QML outer open/close animation when `compositorLayerAnimations=false` | Keep | Primary user rollback path |
+| QML outer fallback for migrated Tahoe surfaces | Remove | niri is the sole outer owner; disabling means instant outer visibility |
 | Launchpad QML outer animation | Keep | Not migrated to compositor layer animation |
 | Dock, TaskSwitcher, WindowOverview QML path | Keep | Not forced into compositor layer animation |
 | TahoeGlass client fallback to BackgroundEffect | Keep | Protocol/fallback lifecycle is separate from motion defaults |
 | Thumbnail `WindowPreviewFallback` | Keep | Required when niri thumbnail IPC or image decode fails |
 | `reduced` motion profile | Keep | Conservative profile for low-motion preference |
 
-Do not remove any fallback until a later, explicit goal provides live visual/RSS/frame-time evidence and a rollback plan.
+不得为 Toast、LeftSidebar、Spotlight 或其它已迁移 surface 重新增加条件式 QML 外层路径。
 
 ## User Rollback Paths
 
@@ -79,21 +84,13 @@ Settings UI:
 - Open Niri animations.
 - Set `Motion profile` to `Balanced` for the baseline profile.
 - Set `Motion profile` to `Reduced` for conservative low-spatial-motion behavior.
-- Turn off `使用 compositor layer 动画` to return outer surface open/close to QML fallback.
-
-State file rollback:
-
-```json
-{
-  "compositorLayerAnimations": false,
-  "motionProfile": "balanced"
-}
-```
+- Turn off `使用 compositor layer 动画` for instant outer surface visibility.
 
 KDL/profile rollback through the existing writer:
 
 ```text
 python3 tahoe-shell/services/niri_settings_tool.py write --config "$HOME/.config/niri/tahoe/config.kdl" --field animations.profile --value balanced --niri-bin /home/wwt/.local/bin/niri
+python3 tahoe-shell/services/niri_settings_tool.py write --config "$HOME/.config/niri/tahoe/config.kdl" --field animations.layer_animations_enabled --value false --niri-bin /home/wwt/.local/bin/niri
 /home/wwt/.local/bin/niri validate --config "$HOME/.config/niri/tahoe/config.kdl"
 ```
 
@@ -102,6 +99,6 @@ python3 tahoe-shell/services/niri_settings_tool.py write --config "$HOME/.config
 - Do not introduce a profile JSON file or component-private motion token file.
 - Do not let QML components write niri KDL directly.
 - Keep `Motion.js` profile names synchronized with `niri_settings_tool.py`.
-- Keep `DesktopSettings.qml` source defaults aligned with this document.
-- If the default `compositorLayerAnimations` value changes again, update this document, the GOAL acceptance record, and tests in the same change.
-- If a fallback is removed, document the measured evidence, affected surfaces, and user rollback path in a new goal.
+- Keep `NiriSettings.qml` and `niri_settings_tool.py` layer animation state aligned with this document.
+- `DesktopSettings.qml` must not regain a compositor layer animation mirror.
+- Migrated components may keep internal content motion, but must not retain a surface-level fallback owner.

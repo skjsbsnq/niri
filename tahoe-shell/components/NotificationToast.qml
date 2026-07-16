@@ -51,10 +51,6 @@ PanelWindow {
     property bool useSpring: false
     readonly property int screenWidth: Math.max(1, root.numberOr(root.screen && root.screen.width, 1))
     readonly property int toastLeftMargin: Math.round(Math.max(8, root.screenWidth - root.implicitWidth - 16))
-    readonly property bool compositorLayerAnimations:
-        root.settingsService && root.settingsService.compositorLayerAnimations
-    property real toastMaterialAlpha: shouldShowToast ? 1 : 0
-    readonly property bool toastGlassActive: shouldShowToast || toastMaterialAlpha > 0.01
     readonly property int cardBaseHeight: 86
     property int measuredStackHeight: cardBaseHeight
     // Previous frame's visible ids — used so promote/demote does not re-enter.
@@ -140,7 +136,7 @@ PanelWindow {
         measuredStackHeight = Math.ceil(h + 4);
     }
 
-    visible: toastGlassActive
+    visible: shouldShowToast
     aboveWindows: true
     exclusionMode: ExclusionMode.Ignore
     exclusiveZone: 0
@@ -158,10 +154,6 @@ PanelWindow {
     margins {
         top: 48
         left: root.toastLeftMargin
-    }
-
-    Behavior on toastMaterialAlpha {
-        NumberAnimation { duration: Motion.fadeFast(root.settingsService); easing.type: Motion.standardDecel }
     }
 
     Behavior on implicitHeight {
@@ -239,7 +231,7 @@ PanelWindow {
         y: stackY - hoverLift
         z: root.stackMax - stackIndex
         visible: active || contentOpacity > 0.01 || Math.abs(swipeX) > 0.5
-        opacity: root.toastMaterialAlpha
+        opacity: contentOpacity
 
         onHeightChanged: root.recomputeStackHeight()
         onYChanged: root.recomputeStackHeight()
@@ -467,10 +459,10 @@ PanelWindow {
             radius: GlassStyle.RadiusToast
             fillColor: GlassStyle.FillPanelBright
             strokeWidth: 0
-            interaction: root.toastMaterialAlpha * (cardRoot.stackIndex === 0 && cardHover.hovered ? 1 : 0.85)
-            materialAlpha: root.toastMaterialAlpha * cardRoot.contentOpacity
-            regionEnabled: cardRoot.active && root.toastGlassActive
-            opacity: cardRoot.contentOpacity
+            interaction: cardRoot.contentOpacity * (cardRoot.stackIndex === 0 && cardHover.hovered ? 1 : 0.85)
+            materialAlpha: cardRoot.contentOpacity
+            regionEnabled: cardRoot.active && root.shouldShowToast
+            opacity: 1
 
             Rectangle {
                 anchors.fill: parent

@@ -832,6 +832,7 @@ LAYER_PROFILE_GROUPS = {
     ),
     "toast": ("tahoe-notification-toast",),
 }
+LAYER_PHASES = ("layer-open", "layer-close")
 
 
 def layer_phase(
@@ -1084,6 +1085,14 @@ def build_writable_field_specs() -> dict[str, dict[str, str]]:
     )
 
     add(
+        "animations.layer_animations_enabled",
+        "tahoe layer-rule animations.layer-open/layer-close.off",
+        "boolean",
+        bool_validation,
+        "animations + tahoe layer-rule animations",
+    )
+
+    add(
         "animations.profile",
         "animations + tahoe layer-rule animations",
         ", ".join(MOTION_PROFILE_NAMES),
@@ -1159,7 +1168,12 @@ def read_animations_text(text: str) -> dict[str, Any]:
             "stiffness": normalize_number(vals["stiffness"]),
             "epsilon": normalize_number(vals["epsilon"]),
         }
-    return {"actions": actions, "profile": detect_motion_profile(text), "availableProfiles": MOTION_PROFILE_NAMES}
+    return {
+        "actions": actions,
+        "layerAnimationsEnabled": layer_animations_enabled_text(text),
+        "profile": detect_motion_profile(text),
+        "availableProfiles": MOTION_PROFILE_NAMES,
+    }
 
 
 def set_anim_spring(lines: list[str], anim: tuple[int, int], action: str, param: str, value: float) -> None:
@@ -1235,6 +1249,58 @@ def find_layer_phase_block(lines: list[str], layer_rule: tuple[int, int], phase:
     if block is None:
         raise KdlEditError(f"layer-rule {layer_rule_namespaces(lines, layer_rule)} has no {phase} block")
     return block
+
+
+def phase_has_off(lines: list[str], block: tuple[int, int]) -> bool:
+    return any(
+        uncommented_body(lines[index]).strip() == "off"
+        for index in iter_depth_lines(lines, block[0], block[1], 1)
+    )
+
+
+def set_phase_off(lines: list[str], block: tuple[int, int], disabled: bool) -> None:
+    indices = [
+        index
+        for index in iter_depth_lines(lines, block[0], block[1], 1)
+        if uncommented_body(lines[index]).strip() == "off"
+    ]
+    if disabled:
+        if not indices:
+            lines.insert(block[0] + 1, f"{block_child_indent(lines, block)}off\n")
+        return
+    for index in reversed(indices):
+        del lines[index]
+
+
+def layer_animations_enabled_text(text: str) -> bool:
+    lines = text.splitlines(True)
+    try:
+        for group in LAYER_PROFILE_GROUPS:
+            layer_rule = find_layer_rule_for_group(lines, group)
+            for phase in LAYER_PHASES:
+                if phase_has_off(lines, find_layer_phase_block(lines, layer_rule, phase)):
+                    return False
+    except KdlEditError:
+        return False
+    return True
+
+
+def update_layer_animations_enabled_text(text: str, raw_value: str) -> str:
+    enabled = parse_bool(raw_value)
+    lines = text.splitlines(True)
+
+    for group in LAYER_PROFILE_GROUPS:
+        layer_rule = find_layer_rule_for_group(lines, group)
+        for phase in LAYER_PHASES:
+            find_layer_phase_block(lines, layer_rule, phase)
+
+    for group in LAYER_PROFILE_GROUPS:
+        for phase in LAYER_PHASES:
+            layer_rule = find_layer_rule_for_group(lines, group)
+            block = find_layer_phase_block(lines, layer_rule, phase)
+            set_phase_off(lines, block, disabled=not enabled)
+
+    return "".join(lines)
 
 
 def phase_number(lines: list[str], block: tuple[int, int], key: str) -> float | None:
@@ -1511,6 +1577,8 @@ def update_field(text: str, field: str, raw_value: str) -> str:
         return "".join(lines)
 
     if field.startswith("animations."):
+        if field == "animations.layer_animations_enabled":
+            return update_layer_animations_enabled_text(text, raw_value)
         if field == "animations.profile":
             return update_motion_profile_text(text, raw_value)
 

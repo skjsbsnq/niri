@@ -33,9 +33,6 @@ PanelWindow {
     readonly property var selectedResult: root.resultAtSelectableIndex(root.selectedIndex)
     readonly property bool hasQuery: root.query.trim().length > 0
     readonly property bool showResults: root.hasQuery
-    readonly property bool compositorLayerAnimations:
-        root.settingsService && root.settingsService.compositorLayerAnimations
-
     readonly property string accentId: settingsService ? settingsService.accentColor : "blue"
     readonly property color accent: Theme.accent(darkMode, accentId)
     readonly property color textPrimary: Theme.label(darkMode)
@@ -58,7 +55,7 @@ PanelWindow {
 
     signal closeRequested()
 
-    visible: compositorLayerAnimations ? open : (open || spotlightPanel.opacity > 0.01)
+    visible: open
     aboveWindows: true
     exclusiveZone: 0
     focusable: open
@@ -326,16 +323,6 @@ PanelWindow {
         y: Math.max(58, parent.height * 0.16)
         width: Math.min(parent.width - 28, 760)
         height: panelSurface.height
-        opacity: root.compositorLayerAnimations ? 1 : (root.open ? 1 : 0)
-        scale: root.compositorLayerAnimations ? 1 : (root.open ? 1 : 1.04)
-
-        Behavior on opacity {
-            NumberAnimation { duration: Motion.fadeFast(root.settingsService); easing.type: Motion.standardDecel }
-        }
-
-        Behavior on scale {
-            NumberAnimation { duration: Motion.panelEnter(root.settingsService); easing.type: Motion.emphasizedDecel }
-        }
 
         MouseArea {
             anchors.fill: parent
@@ -361,9 +348,9 @@ PanelWindow {
             regionY: Math.round(spotlightPanel.y + panelSurface.y)
             regionWidth: Math.round(panelSurface.width)
             regionHeight: Math.round(panelSurface.height)
-            interaction: root.compositorLayerAnimations ? 1 : spotlightPanel.opacity
-            materialAlpha: root.compositorLayerAnimations ? 1 : spotlightPanel.opacity
-            glassEnabled: root.open || spotlightPanel.opacity > 0.01
+            // Stay enabled while unmapped so niri's closing snapshot keeps the glass material.
+            interaction: 1
+            materialAlpha: 1
             clip: true
 
             Behavior on height {

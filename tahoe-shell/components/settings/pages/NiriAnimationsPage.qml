@@ -24,7 +24,6 @@ Flickable {
     boundsBehavior: Flickable.StopAtBounds
 
     readonly property var svc: page.panel && page.panel.niriSettingsService ? page.panel.niriSettingsService : null
-    readonly property var desktopSettings: page.panel && page.panel.settingsService ? page.panel.settingsService : null
     readonly property bool ready: !!page.svc && page.svc.loaded
     readonly property real f64Epsilon: 2.220446049250313e-16
     readonly property real f32Epsilon: 1.1920928955078125e-7
@@ -355,14 +354,14 @@ Flickable {
             Controls.TahoeListRow {
                 theme: page.theme
                 label: "使用 compositor layer 动画"
-                detail: "默认开启：将 Tahoe 面板的打开/关闭交给 niri layer animation；关闭时保留 QML 外层 fallback，内部按钮、列表和切页动画仍由 QML 处理。"
+                detail: "默认开启：Tahoe surface 的打开/关闭由 niri 统一处理；关闭时外层显隐即时完成，内部按钮、列表和切页动画仍由 QML 处理。"
                 iconCode: "\ue8d1"
                 checkable: true
-                checked: page.desktopSettings && page.desktopSettings.compositorLayerAnimations
-                enabled: !!page.desktopSettings
+                checked: page.svc && page.svc.layerAnimationsEnabled
+                enabled: page.ready
                 onToggled: function(checked) {
-                    if (page.desktopSettings)
-                        page.desktopSettings.setCompositorLayerAnimations(checked);
+                    if (page.svc)
+                        page.svc.setLayerAnimationsEnabled(checked);
                 }
             }
         }

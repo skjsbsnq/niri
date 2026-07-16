@@ -40,7 +40,6 @@ Item {
     readonly property bool screenshotCopyToClipboard: settingsAdapter.screenshotCopyToClipboard
     readonly property bool screenshotOfferActions: settingsAdapter.screenshotOfferActions
     readonly property string startupNote: settingsAdapter.startupNote
-    readonly property bool compositorLayerAnimations: settingsAdapter.compositorLayerAnimations
     readonly property string motionProfile: settingsAdapter.motionProfile
     readonly property bool dynamicIslandEnabled: settingsAdapter.dynamicIslandEnabled
     readonly property bool dynamicIslandHideTopbarTime: settingsAdapter.dynamicIslandHideTopbarTime
@@ -438,15 +437,6 @@ Item {
             return;
 
         settingsAdapter.startupNote = next;
-        settingsFile.writeAdapter();
-    }
-
-    function setCompositorLayerAnimations(enabled) {
-        var next = !!enabled;
-        if (settingsAdapter.compositorLayerAnimations === next)
-            return;
-
-        settingsAdapter.compositorLayerAnimations = next;
         settingsFile.writeAdapter();
     }
 
@@ -894,7 +884,6 @@ Item {
             property bool screenshotCopyToClipboard: true
             property bool screenshotOfferActions: true
             property string startupNote: ""
-            property bool compositorLayerAnimations: true
             property string motionProfile: "balanced"
             property string accentColor: "blue"
             property int notificationToastStackMax: 3

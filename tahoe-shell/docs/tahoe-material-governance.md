@@ -23,30 +23,42 @@
 | Material | 用途 | 默认风险级别 |
 | --- | --- | --- |
 | `panel` | 大面板、侧栏、设置页、普通 popup | 中；面积可能大，refraction 保守 |
-| `pill` | Dynamic Island、Spotlight 输入 pill | 中；边缘高光较强但面积小 |
-| `launcher` | Launchpad 主面板 | 中；大面积，lens/refraction 保守 |
+| `pill` | Dynamic Island | 中；边缘高光较强但面积小 |
+| `launcher` | 保留的启动器 profile，当前无生产 surface 绑定 | 中；大面积，lens/refraction 保守 |
 | `dock` | Dock 胶囊 | 中；持续可见，不能高成本 |
 | `menu` | MenuPopup、Dock menus、TaskSwitcher | 低到中；面积小，文字清晰优先 |
 | `toast` | NotificationToast | 低；短时显示，避免完全透明闪烁 |
-| `backdrop` | 全屏 scrim/backdrop | 高面积；refraction/lens/chromatic 必须低 |
+| `backdrop` | Launchpad 全屏 scrim/backdrop | 高面积；refraction/lens/chromatic 必须低 |
 
 `chromatic` 默认保持 `0.0`。`refraction` 默认只允许在已测量预算内小幅调整，不允许为了“更玻璃”直接提高全局值。
 
 ## Sampling Strategy
 
-采样策略仍由现有 material 的 `xray` 字段唯一决定，不新增协议或 QML 玻璃路径：
+采样策略仍由现有 material 的 `xray` 字段唯一决定，不新增协议或 QML 玻璃路径。所有液态玻璃 material 必须明确使用 `xray false`，采样其 region 后方已经合成的实时 framebuffer。`xray true` 不是透明的性能开关：它只采样 workspace backdrop 和 background layer，会跳过普通窗口，导致白色窗口上方的玻璃仍显示壁纸颜色。
 
 | Material | Sampling | 原因 |
 | --- | --- | --- |
-| `panel` | shared xray backdrop | TopBar 和静态面板面积大或常驻，不逐 region 抓取真实 framebuffer |
-| `launcher` | shared xray backdrop | 大面积启动器使用共享背景采样 |
-| `dock` | shared xray backdrop | Dock 常驻，避免每帧独立 framebuffer capture |
-| `backdrop` | shared xray backdrop | 全屏大面积区域只使用共享背景 |
-| `pill` | live framebuffer | Dynamic Island 和 Spotlight pill 面积小，需要保留局部实时内容 |
-| `menu` | live framebuffer | 菜单短时显示且区域有界 |
-| `toast` | live framebuffer | 通知短时显示且区域有界 |
+| `panel` | live composed framebuffer | TopBar、面板和 popup 必须随后方窗口变化 |
+| `pill` | live composed framebuffer | Dynamic Island 必须保持真实局部折射和模糊 |
+| `launcher` | live composed framebuffer | 保留 profile 也必须采用安全的实时默认值 |
+| `dock` | live composed framebuffer | Dock 必须随下方窗口和桌面内容变化 |
+| `menu` | live composed framebuffer | 菜单必须反映其父窗口和邻近内容 |
+| `toast` | live composed framebuffer | 通知必须反映其显示位置的实时内容 |
+| `backdrop` | live composed framebuffer | Launchpad 全屏玻璃必须模糊当前桌面和窗口 |
 
-普通窗口的 `background-effect` 继续使用 live framebuffer；窗口移动时不会因为共享背景策略而采样到陈旧的相邻窗口内容。fallback `background-effect` 必须与对应 material 使用相同的采样策略。
+当前 22 个生产 `GlassPanel` 调用点的覆盖如下：
+
+| Material | 数量 | Surface |
+| --- | ---: | --- |
+| `panel` | 11 | TopBar、BatteryPopup、ClipboardPopup、ControlCenter、FanPopup、LeftSidebar、NotificationCenter、SettingsPanel、Spotlight、WifiPopup、WindowOverview |
+| `pill` | 1 | DynamicIslandOverlay |
+| `launcher` | 0 | 保留 token，当前无生产调用点 |
+| `dock` | 1 | Dock |
+| `menu` | 7 | AppMenuPopup、DockAppMenu、DockWindowMenu、MenuPopup、ProcessMenu、TaskSwitcher、TrayMenu |
+| `toast` | 1 | NotificationToast |
+| `backdrop` | 1 | Launchpad |
+
+普通窗口的 `background-effect` 和 7 个 layer-rule fallback（ControlCenter、NotificationCenter、LeftSidebar、BatteryPopup、WifiPopup、FanPopup、ClipboardPopup）同样保持 live framebuffer。性能预算由 R05 的 FBO 复用、R06 的 shader feature 短路和 R07 的精确 damage/commit 控制，不得再用改变视觉语义的 `xray true` 规避实时采样。
 
 ## Surface Recipes
 
@@ -58,8 +70,8 @@
 | Dock | 1 | `dock` | 持续显示；region height 限制为 visible dock 高度 |
 | ControlCenter | 1 | `panel` | 大 popup；compositor layer motion 时 region geometry 固定 |
 | NotificationToast | 1 | `toast` | 短时 toast；materialAlpha 跟随 toast 生命期 |
-| Launchpad | 1 | `launcher` | 大面积 launcher；不提高 chromatic/refraction |
-| Spotlight | 2 | `pill`, `panel` | 输入 pill 和结果面板分开，避免整块大 region |
+| Launchpad | 1 | `backdrop` | 全屏 backdrop；不提高 chromatic/refraction |
+| Spotlight | 1 | `panel` | 输入与结果共用一个紧凑 panel region |
 | MenuPopup | 1 | `menu` | 小面积 menu；清晰度优先 |
 | SettingsPanel | 1 | `panel` | 大面板；region 绑定 panel surface safe area |
 | DynamicIsland | 1 | `pill` | 每输出一个 Overlay PanelWindow；单一 `islandSurface` GlassPanel region；`exclusiveZone: 0`；fill/stroke 由 SettingsTheme island tokens 提供，不新增第八 material；region geometry 仅 NumberAnimation（禁止 Spring）；scene host 用 Loader，隐藏输出不实例化 expanded media/summary |
@@ -121,7 +133,7 @@ Fallback rule：`background-effect` fallback block 只服务没有 TahoeGlass re
 - Material token set unchanged: `panel`, `pill`, `launcher`, `dock`, `menu`, `toast`, `backdrop`。
 - Default `chromatic` remains `0.0` for every material。
 - Default `refraction` remains unchanged。
-- Existing TahoeGlass region recipes stay at 1 region for most surfaces and 2 regions for Spotlight。
+- Existing TahoeGlass region recipes stay at 1 region for every production surface。
 - Runtime measurement hooks now expose region count, area, sample padding, framebuffer capture, and blur render spans for live DRM/TTY capture。
 
 调整建议：先采集 TopBar、ControlCenter、Launchpad、Spotlight、Dock 的 DRM/TTY Tracy capture，再考虑只调整 `edge-highlight` 或 `inner-shadow`。在没有 capture 前，不调整 `refraction`、`chromatic` 或 global blur。

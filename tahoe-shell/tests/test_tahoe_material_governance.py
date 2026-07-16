@@ -17,14 +17,30 @@ NIRI_CONFIG_TAHOE_GLASS = REPO_ROOT / "niri" / "niri-config" / "src" / "tahoe_gl
 GOVERNANCE_DOC = SHELL_ROOT / "docs" / "tahoe-material-governance.md"
 
 MATERIALS = ["panel", "pill", "launcher", "dock", "menu", "toast", "backdrop"]
-SAMPLING_STRATEGIES = {
-    "panel": "xray true",
-    "pill": "xray false",
-    "launcher": "xray true",
-    "dock": "xray true",
-    "menu": "xray false",
-    "toast": "xray false",
-    "backdrop": "xray true",
+LIVE_SAMPLING = "xray false"
+PRODUCTION_GLASS_SURFACES = {
+    "AppMenuPopup.qml": "MaterialMenu",
+    "BatteryPopup.qml": "MaterialPanel",
+    "ClipboardPopup.qml": "MaterialPanel",
+    "ControlCenter.qml": "MaterialPanel",
+    "Dock.qml": "MaterialDock",
+    "DockAppMenu.qml": "MaterialMenu",
+    "DockWindowMenu.qml": "MaterialMenu",
+    "DynamicIslandOverlay.qml": "MaterialPill",
+    "FanPopup.qml": "MaterialPanel",
+    "Launchpad.qml": "MaterialBackdrop",
+    "LeftSidebar.qml": "MaterialPanel",
+    "MenuPopup.qml": "MaterialMenu",
+    "NotificationCenter.qml": "MaterialPanel",
+    "NotificationToast.qml": "MaterialToast",
+    "ProcessMenu.qml": "MaterialMenu",
+    "SettingsPanel.qml": "MaterialPanel",
+    "Spotlight.qml": "MaterialPanel",
+    "TaskSwitcher.qml": "MaterialMenu",
+    "TopBar.qml": "MaterialPanel",
+    "TrayMenu.qml": "MaterialMenu",
+    "WifiPopup.qml": "MaterialPanel",
+    "WindowOverview.qml": "MaterialPanel",
 }
 PROFILE_FIELDS = [
     "noise",
@@ -98,7 +114,7 @@ def parse_rust_material_defaults() -> dict[str, dict[str, float]]:
 
     insert_re = re.compile(
         r'materials\.insert\(\s*"(?P<name>[^"]+)"\.to_owned\(\),\s*'
-        r"(?:live_)?material_profile\((?P<args>[^)]*)\),\s*\);",
+        r"material_profile\((?P<args>[^)]*)\),\s*\);",
         re.DOTALL,
     )
     for match in insert_re.finditer(text):
@@ -157,26 +173,35 @@ class TahoeMaterialGovernanceTests(unittest.TestCase):
             for material in MATERIALS
         })
 
-    def test_material_sampling_strategy_is_explicit_and_bounded(self) -> None:
+    def test_all_materials_sample_the_live_composed_framebuffer(self) -> None:
         text = NIRI_CONFIG.read_text(encoding="utf-8")
         glass = extract_block(text, r"(?m)^\s*tahoe-glass\s*\{")
 
-        for material, expected in SAMPLING_STRATEGIES.items():
+        for material in MATERIALS:
             with self.subTest(material=material):
                 block = extract_block(
                     glass,
                     rf'(?m)^\s*material\s+"{re.escape(material)}"\s*\{{',
                 )
-                self.assertIn(expected, block)
+                self.assertIn(LIVE_SAMPLING, block)
 
-        top_bar = (SHELL_ROOT / "components" / "TopBar.qml").read_text(encoding="utf-8")
-        dock = (SHELL_ROOT / "components" / "Dock.qml").read_text(encoding="utf-8")
-        self.assertIn("material: GlassStyle.MaterialPanel", top_bar)
-        self.assertIn("material: GlassStyle.MaterialDock", dock)
+        components = SHELL_ROOT / "components"
+        discovered = {
+            path.name
+            for path in components.glob("*.qml")
+            if re.search(r"\bGlassPanel\s*\{", path.read_text(encoding="utf-8"))
+        }
+        self.assertEqual(discovered, set(PRODUCTION_GLASS_SURFACES))
+        self.assertEqual(len(discovered), 22)
+
+        for filename, material_constant in PRODUCTION_GLASS_SURFACES.items():
+            with self.subTest(surface=filename):
+                surface = (components / filename).read_text(encoding="utf-8")
+                self.assertIn(f"material: GlassStyle.{material_constant}", surface)
 
         window_rule = extract_block(text, r"(?m)^window-rule\s*\{")
         window_effect = extract_block(window_rule, r"(?m)^\s*background-effect\s*\{")
-        self.assertIn("xray false", window_effect)
+        self.assertIn(LIVE_SAMPLING, window_effect)
 
     def test_kdl_fallback_background_effects_match_material_profiles(self) -> None:
         text = NIRI_CONFIG.read_text(encoding="utf-8")
@@ -194,7 +219,7 @@ class TahoeMaterialGovernanceTests(unittest.TestCase):
             fallback_counts[material] += 1
 
             with self.subTest(material=material, fallback=fallback_counts[material]):
-                self.assertIn(SAMPLING_STRATEGIES[material], block)
+                self.assertIn(LIVE_SAMPLING, block)
                 self.assertIn("blur true", block)
                 self.assertIn('tint-color "#ffffff"', block)
                 self.assertEqual(values, kdl[material])

@@ -72,9 +72,10 @@ blur {
 
 // tahoe-managed: begin tahoe-glass
 tahoe-glass {
-    // Sampling is selected by material. Persistent and large surfaces use
-    // niri's shared xray backdrop, while small transient surfaces keep live
-    // framebuffer sampling so local content remains visible through them.
+    // Every liquid-glass material samples the composed framebuffer directly
+    // behind its region. The xray buffer contains only the workspace backdrop
+    // and background layers, so enabling it makes glass ignore ordinary
+    // windows and visibly retain the wallpaper color.
     //
     // Phase 2/3/4: enable real liquid material. edge-highlight drives the
     // shader's rim/specular light (postprocess.frag glass_light_strength,
@@ -97,7 +98,7 @@ tahoe-glass {
     // panel, pill, launcher, dock, menu, toast, backdrop.
     // chromatic stays at 0.0 by default so text does not pick up color fringes.
     material "panel" {
-        xray true
+        xray false
         noise 0.005
         saturation 1.10
         tint-color "#ffffff"
@@ -110,8 +111,6 @@ tahoe-glass {
         lens-depth 0.0
     }
     material "pill" {
-        // Dynamic Island and Spotlight pills are small enough to retain live
-        // framebuffer sampling during local interaction.
         xray false
         noise 0.005
         saturation 1.12
@@ -125,7 +124,7 @@ tahoe-glass {
         lens-depth 0.010
     }
     material "launcher" {
-        xray true
+        xray false
         noise 0.005
         saturation 1.08
         tint-color "#ffffff"
@@ -138,7 +137,7 @@ tahoe-glass {
         lens-depth 0.003
     }
     material "dock" {
-        xray true
+        xray false
         noise 0.005
         saturation 1.10
         tint-color "#ffffff"
@@ -152,7 +151,6 @@ tahoe-glass {
     }
     // menu/toast read clearer: controlled edge light, gentler lens distortion.
     material "menu" {
-        // Menus and toasts are transient, bounded live-sampling regions.
         xray false
         noise 0.004
         saturation 1.08
@@ -183,7 +181,7 @@ tahoe-glass {
     // code default). glass_surface_detail() also fades these out on big
     // surfaces.
     material "backdrop" {
-        xray true
+        xray false
         noise 0.003
         saturation 1.04
         tint-color "#ffffff"
@@ -391,7 +389,7 @@ layer-rule {
     // Fallback path (BackgroundEffect.blurRegion). Keep in sync with the
     // tahoe-glass "panel" material so the protocol and fallback look alike.
     background-effect {
-        xray true
+        xray false
         blur true
         noise 0.005
         saturation 1.10
@@ -537,7 +535,7 @@ layer-rule {
 
     // Fallback path. Keep in sync with the tahoe-glass "panel" material.
     background-effect {
-        xray true
+        xray false
         blur true
         noise 0.005
         saturation 1.10

@@ -8,8 +8,8 @@ import "../controls" as Controls
 // NiriSettings.setGlassField (optimistic object update + queued KDL write +
 // hot-reload); blur fields go through setBlurX. Ranges follow the niri schema:
 // edge-highlight [0,2], refraction [0,0.12], inner-shadow [0,0.5],
-// chromatic [0,0.1], lens-depth [0,0.3]. xray is intentionally not exposed
-// (stays false, guardrail 74b384a).
+// chromatic [0,0.1], lens-depth [0,0.3]. xray is intentionally not exposed;
+// the compositor material profile owns the shared/live sampling strategy.
 Flickable {
     id: page
 
@@ -216,7 +216,7 @@ Flickable {
 
         Text {
             Layout.fillWidth: true
-            text: "这些选项写入 niri 的 config.kdl 并在写入后立即热重载，重启 niri 后仍然生效。xray 保持关闭（护栏）。"
+            text: "这些选项写入 niri 的 config.kdl 并在写入后立即热重载，重启 niri 后仍然生效。采样策略由材质配置统一管理。"
             color: page.theme ? page.theme.textSecondary : "#721d1d1f"
             font.pixelSize: 10
             wrapMode: Text.WordWrap

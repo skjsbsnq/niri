@@ -32,6 +32,22 @@
 
 `chromatic` 默认保持 `0.0`。`refraction` 默认只允许在已测量预算内小幅调整，不允许为了“更玻璃”直接提高全局值。
 
+## Sampling Strategy
+
+采样策略仍由现有 material 的 `xray` 字段唯一决定，不新增协议或 QML 玻璃路径：
+
+| Material | Sampling | 原因 |
+| --- | --- | --- |
+| `panel` | shared xray backdrop | TopBar 和静态面板面积大或常驻，不逐 region 抓取真实 framebuffer |
+| `launcher` | shared xray backdrop | 大面积启动器使用共享背景采样 |
+| `dock` | shared xray backdrop | Dock 常驻，避免每帧独立 framebuffer capture |
+| `backdrop` | shared xray backdrop | 全屏大面积区域只使用共享背景 |
+| `pill` | live framebuffer | Dynamic Island 和 Spotlight pill 面积小，需要保留局部实时内容 |
+| `menu` | live framebuffer | 菜单短时显示且区域有界 |
+| `toast` | live framebuffer | 通知短时显示且区域有界 |
+
+普通窗口的 `background-effect` 继续使用 live framebuffer；窗口移动时不会因为共享背景策略而采样到陈旧的相邻窗口内容。fallback `background-effect` 必须与对应 material 使用相同的采样策略。
+
 ## Surface Recipes
 
 这些 recipes 是 shell 侧 glass region 的治理集合。新增或改动时，要记录 material、region 数量、最大面积和 fallback 行为。

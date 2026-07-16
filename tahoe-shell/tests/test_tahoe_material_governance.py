@@ -17,6 +17,15 @@ NIRI_CONFIG_TAHOE_GLASS = REPO_ROOT / "niri" / "niri-config" / "src" / "tahoe_gl
 GOVERNANCE_DOC = SHELL_ROOT / "docs" / "tahoe-material-governance.md"
 
 MATERIALS = ["panel", "pill", "launcher", "dock", "menu", "toast", "backdrop"]
+SAMPLING_STRATEGIES = {
+    "panel": "xray true",
+    "pill": "xray false",
+    "launcher": "xray true",
+    "dock": "xray true",
+    "menu": "xray false",
+    "toast": "xray false",
+    "backdrop": "xray true",
+}
 PROFILE_FIELDS = [
     "noise",
     "saturation",
@@ -89,7 +98,7 @@ def parse_rust_material_defaults() -> dict[str, dict[str, float]]:
 
     insert_re = re.compile(
         r'materials\.insert\(\s*"(?P<name>[^"]+)"\.to_owned\(\),\s*'
-        r"material_profile\((?P<args>[^)]*)\),\s*\);",
+        r"(?:live_)?material_profile\((?P<args>[^)]*)\),\s*\);",
         re.DOTALL,
     )
     for match in insert_re.finditer(text):
@@ -148,6 +157,27 @@ class TahoeMaterialGovernanceTests(unittest.TestCase):
             for material in MATERIALS
         })
 
+    def test_material_sampling_strategy_is_explicit_and_bounded(self) -> None:
+        text = NIRI_CONFIG.read_text(encoding="utf-8")
+        glass = extract_block(text, r"(?m)^\s*tahoe-glass\s*\{")
+
+        for material, expected in SAMPLING_STRATEGIES.items():
+            with self.subTest(material=material):
+                block = extract_block(
+                    glass,
+                    rf'(?m)^\s*material\s+"{re.escape(material)}"\s*\{{',
+                )
+                self.assertIn(expected, block)
+
+        top_bar = (SHELL_ROOT / "components" / "TopBar.qml").read_text(encoding="utf-8")
+        dock = (SHELL_ROOT / "components" / "Dock.qml").read_text(encoding="utf-8")
+        self.assertIn("material: GlassStyle.MaterialPanel", top_bar)
+        self.assertIn("material: GlassStyle.MaterialDock", dock)
+
+        window_rule = extract_block(text, r"(?m)^window-rule\s*\{")
+        window_effect = extract_block(window_rule, r"(?m)^\s*background-effect\s*\{")
+        self.assertIn("xray false", window_effect)
+
     def test_kdl_fallback_background_effects_match_material_profiles(self) -> None:
         text = NIRI_CONFIG.read_text(encoding="utf-8")
         kdl = parse_kdl_materials()
@@ -164,7 +194,7 @@ class TahoeMaterialGovernanceTests(unittest.TestCase):
             fallback_counts[material] += 1
 
             with self.subTest(material=material, fallback=fallback_counts[material]):
-                self.assertIn("xray false", block)
+                self.assertIn(SAMPLING_STRATEGIES[material], block)
                 self.assertIn("blur true", block)
                 self.assertIn('tint-color "#ffffff"', block)
                 self.assertEqual(values, kdl[material])

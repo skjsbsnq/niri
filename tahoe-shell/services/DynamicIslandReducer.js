@@ -12,6 +12,7 @@ var VALID_STATES = [
     "transient_notification",
     "transient_workspace",
     "transient_timer_complete",
+    "transient_bluetooth",
     "expanded_media",
     "expanded_timer"
 ];
@@ -26,6 +27,7 @@ var PRIORITY = {
     "critical_notification": 90,
     "notification": 80,
     "timer_completion": 70,
+    "bluetooth": 60,
     "workspace": 40,
     "media_preview": 30,
     "clock": 0
@@ -51,6 +53,8 @@ function presentationPriority(presentation, flags) {
         return PRIORITY.workspace;
     if (p === "transient_timer_complete")
         return PRIORITY.timer_completion;
+    if (p === "transient_bluetooth")
+        return PRIORITY.bluetooth;
     if (p === "resting_timer" || p === "expanded_timer")
         return p === "expanded_timer" ? PRIORITY.interaction : PRIORITY.media_preview;
     if (p === "resting_media" || p === "expanded_media")
@@ -90,6 +94,18 @@ function blocksNotification(presentation, flags) {
     if (f.displayingNotification)
         return true;
     return false;
+}
+
+function blocksBluetooth(presentation, flags) {
+    var f = flags || {};
+    if (f.userInteracting || f.expanded)
+        return true;
+    if (String(presentation || "") === "transient_notification"
+            || String(presentation || "") === "transient_osd")
+        return true;
+    if (f.displayingNotification)
+        return true;
+    return blocksCandidate(presentationPriority(presentation, f), PRIORITY.bluetooth);
 }
 
 function cloneState(state) {
@@ -198,6 +214,7 @@ function reduce(state, event, context) {
                 effect("clearPendingNotifications"),
                 effect("clearDisplayingNotification"),
                 effect("clearPendingOsd"),
+                effect("clearPendingBluetooth"),
                 effect("clearUserInteracting"),
                 effect("clearSwipe")
             ]);
@@ -212,7 +229,8 @@ function reduce(state, event, context) {
                 effect("clearTransientFields"),
                 effect("clearPendingNotifications"),
                 effect("clearDisplayingNotification"),
-                effect("clearPendingOsd")
+                effect("clearPendingOsd"),
+                effect("clearPendingBluetooth")
             ]);
         }
         // Other events while disabled are no-ops for presentation slice.
@@ -232,6 +250,23 @@ function reduce(state, event, context) {
         if (blocksCandidate(curP, PRIORITY.timer_completion))
             return result(slice, [effect("queueTimerCompletion")]);
         slice.forcedState = "transient_timer_complete";
+        return result(slice, [
+            effect("stopTransientTimer"),
+            effect("clearEventOwner"),
+            effect("clearTransientFields")
+        ]);
+    }
+
+    case "SHOW_BLUETOOTH": {
+        var bluetoothFlags = {
+            "userInteracting": ctx.userInteracting,
+            "expanded": isExpandedPresentation(presentationState(slice, ctx)),
+            "displayingNotification": !!(ev.payload && ev.payload.displayingNotification),
+            "critical": !!(ev.payload && ev.payload.criticalNotification)
+        };
+        if (blocksBluetooth(presentationState(slice, ctx), bluetoothFlags))
+            return result(slice, [effect("queueBluetoothEvent", ev.payload || null)]);
+        slice.forcedState = "transient_bluetooth";
         return result(slice, [
             effect("stopTransientTimer"),
             effect("clearEventOwner"),
@@ -274,7 +309,8 @@ function reduce(state, event, context) {
             effect("clearTransientFields"),
             effect("clearPendingNotifications"),
             effect("clearDisplayingNotification"),
-            effect("clearPendingOsd")
+            effect("clearPendingOsd"),
+            effect("clearPendingBluetooth")
         ]);
 
     case "SHOW_TIME":

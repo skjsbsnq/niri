@@ -100,9 +100,17 @@ TestCase {
         island.captureEventOwnerOutput();
         compare(island.eventOwnerOutput, "eDP-2");
 
+        // A new notification event must replace any stale pre-event pin with
+        // the output focused when that notification is created.
+        island.clearEventOwnerOutput();
+        focusedWindow.output = "eDP-2";
+        windows.focusedOutputName = "eDP-2";
         island.showTransientNotification("Hello", "body");
         compare(island.presentation, "transient_notification");
-        // Focus jumps — target must stay pinned.
+        compare(island.eventOwnerOutput, "eDP-2");
+        // Focus jumps after creation — target must stay pinned.
+        focusedWindow.output = "HDMI-A-1";
+        windows.focusedOutputName = "HDMI-A-1";
         compare(island.targetScreenName, "eDP-2");
 
         // Clear pin after hide.

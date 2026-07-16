@@ -68,6 +68,13 @@ Item {
     // T15: expand + actions stay on the same transient_notification presentation.
     property bool transientNotificationExpanded: false
     property var transientNotificationActions: []
+    // Bluetooth lifecycle is consumed as immutable snapshots from Controls.
+    property string transientBluetoothKind: ""
+    property string transientBluetoothDeviceName: ""
+    property string transientBluetoothDeviceIcon: ""
+    property string transientBluetoothDeviceKey: ""
+    property bool transientBluetoothUserInitiated: false
+    property var pendingBluetoothEvent: null
     property bool userInteracting: false
     // Stable notification identity tracking (T07 lease model).
     // seenNotificationIds: IDs already observed in activeModel (set membership).
@@ -170,14 +177,16 @@ Item {
     // bar/value while state remains "transient_osd".
     readonly property string displayText: (root.presentation === "transient_osd"
             || root.presentation === "transient_notification"
-            || root.presentation === "transient_workspace")
+            || root.presentation === "transient_workspace"
+            || root.presentation === "transient_bluetooth")
         ? (root.transientDisplayText.length > 0
             ? root.transientDisplayText
             : fallbackTransientText(root.presentation))
         : displayTextForState(root.presentation)
     readonly property string secondaryText: (root.presentation === "transient_osd"
             || root.presentation === "transient_notification"
-            || root.presentation === "transient_workspace")
+            || root.presentation === "transient_workspace"
+            || root.presentation === "transient_bluetooth")
         ? root.transientSecondaryText
         : secondaryTextForState(root.presentation)
     readonly property real progress: root.presentation === "transient_osd"
@@ -200,6 +209,7 @@ Item {
         "transient_notification",
         "transient_workspace",
         "transient_timer_complete",
+        "transient_bluetooth",
         "expanded_media",
         "expanded_timer"
     ]
@@ -303,6 +313,9 @@ Item {
         case "queueTimerCompletion":
             root.pendingTimerCompletion = true;
             break;
+        case "queueBluetoothEvent":
+            root.queueBluetoothEvent(item.payload || null);
+            break;
         case "stopTransientTimer":
             transientTimer.stop();
             break;
@@ -328,6 +341,9 @@ Item {
             break;
         case "clearPendingOsd":
             root.pendingOsd = null;
+            break;
+        case "clearPendingBluetooth":
+            root.pendingBluetoothEvent = null;
             break;
         case "clearUserInteracting":
             root.userInteracting = false;
@@ -369,6 +385,7 @@ Item {
             "clearDisplayingNotification": true,
             "endNotificationLease": true,
             "clearPendingOsd": true,
+            "clearPendingBluetooth": true,
             "clearUserInteracting": true,
             "clearSwipe": true
         };
@@ -481,6 +498,8 @@ Item {
         case "expanded_timer":
         case "transient_timer_complete":
             return root.timerRemainingLabel.length > 0 ? root.timerRemainingLabel : "0:00";
+        case "transient_bluetooth":
+            return root.bluetoothKindLabel(root.transientBluetoothKind);
         case "transient_osd":
         case "transient_notification":
         case "transient_workspace":
@@ -500,6 +519,8 @@ Item {
         case "transient_notification":
         case "transient_workspace":
             return root.transientSecondaryText;
+        case "transient_bluetooth":
+            return root.transientBluetoothDeviceName;
         case "resting_time":
         default:
             // V2 clock uses clockWeekdayText + clockTimeText only. Do not expose
@@ -528,6 +549,8 @@ Item {
             return "\ue7f4";
         case "transient_workspace":
             return "\ue1b1";
+        case "transient_bluetooth":
+            return root.bluetoothKindIcon(root.transientBluetoothKind);
         case "transient_osd":
             return "\ue050";
         case "resting_time":
@@ -544,9 +567,130 @@ Item {
             return "通知";
         case "transient_workspace":
             return activeWorkspaceText();
+        case "transient_bluetooth":
+            return "蓝牙";
         default:
             return timeText();
         }
+    }
+
+    function bluetoothKindLabel(kind) {
+        switch (String(kind || "")) {
+        case "connecting": return "正在连接";
+        case "connected": return "已连接";
+        case "failed": return "连接失败";
+        case "disconnected": return "已断开";
+        default: return "蓝牙";
+        }
+    }
+
+    function bluetoothKindIcon(kind) {
+        switch (String(kind || "")) {
+        case "connecting": return "\ue1ad"; // bluetooth-searching
+        case "failed": return "\ue001"; // error
+        case "disconnected": return "\ue1a7";
+        case "connected":
+        default: return "\ue1a7";
+        }
+    }
+
+    function normalizeBluetoothEvent(event) {
+        var source = event || {};
+        var key = String(source.deviceKey || source.dbusPath || "").trim();
+        var name = String(source.deviceName || "").trim();
+        if (name.length === 0)
+            name = "蓝牙设备";
+        return {
+            "kind": String(source.kind || "").trim(),
+            "deviceKey": key,
+            "deviceName": name,
+            "deviceIcon": String(source.deviceIcon || "").trim(),
+            "userInitiated": !!source.userInitiated,
+            "output": String(source.output || "").trim(),
+            "displayingNotification": Number(root.displayingNotificationId) >= 0
+                || root.presentation === "transient_notification",
+            "criticalNotification": root.presentation === "transient_notification"
+                && root.transientNotificationUrgency === "critical"
+        };
+    }
+
+    function applyBluetoothPresentation(event) {
+        var entry = normalizeBluetoothEvent(event);
+        if (entry.kind.length === 0 || entry.deviceKey.length === 0)
+            return false;
+        root.transientBluetoothKind = entry.kind;
+        root.transientBluetoothDeviceName = entry.deviceName;
+        root.transientBluetoothDeviceIcon = entry.deviceIcon;
+        root.transientBluetoothDeviceKey = entry.deviceKey;
+        root.transientBluetoothUserInitiated = entry.userInitiated;
+        root.setEventOwnerOutput(entry.output || root.liveFocusedOutputName());
+        root.transientDisplayText = root.bluetoothKindLabel(entry.kind);
+        root.transientSecondaryText = entry.deviceName;
+        root.transientIconCode = root.bluetoothKindIcon(entry.kind);
+        root.forcedState = "transient_bluetooth";
+        root.recomputePresentation();
+        transientTimer.interval = entry.kind === "connecting" ? 5000 : 3000;
+        transientTimer.restart();
+        return true;
+    }
+
+    function presentBluetoothEvent(event) {
+        var entry = normalizeBluetoothEvent(event);
+        if (entry.kind.length === 0 || entry.deviceKey.length === 0)
+            return false;
+        var outcome = root.dispatchPresentation("SHOW_BLUETOOTH", entry);
+        var queued = false;
+        var effects = outcome && outcome.effects ? outcome.effects : [];
+        for (var i = 0; i < effects.length; i++) {
+            if (effects[i] && String(effects[i].type || "") === "queueBluetoothEvent") {
+                queued = true;
+                break;
+            }
+        }
+        if (queued)
+            return false;
+        if (root.presentation !== "transient_bluetooth")
+            return false;
+        return root.applyBluetoothPresentation(entry);
+    }
+
+    function handleBluetoothConnectionEvent(event) {
+        if (!root.islandEnabled)
+            return;
+        var entry = root.normalizeBluetoothEvent(event);
+        if (entry.kind.length === 0 || entry.deviceKey.length === 0)
+            return;
+        if (entry.output.length === 0)
+            entry.output = root.liveFocusedOutputName() || root.firstAvailableOutputName();
+        // Same device lifecycle updates stay in one scene and only refresh its
+        // snapshot/lease; this avoids a notification-like re-entry flash.
+        if (root.presentation === "transient_bluetooth"
+                && root.transientBluetoothDeviceKey === entry.deviceKey) {
+            entry.output = root.eventOwnerOutput || entry.output;
+            root.applyBluetoothPresentation(entry);
+            return;
+        }
+        if (root.presentation === "transient_bluetooth"
+                && entry.userInitiated
+                && !root.transientBluetoothUserInitiated) {
+            root.applyBluetoothPresentation(entry);
+            return;
+        }
+        root.presentBluetoothEvent(entry);
+    }
+
+    function queueBluetoothEvent(event) {
+        var next = root.normalizeBluetoothEvent(event);
+        if (next.kind.length === 0 || next.deviceKey.length === 0)
+            return;
+        var current = root.pendingBluetoothEvent;
+        if (current && current.deviceKey === next.deviceKey) {
+            root.pendingBluetoothEvent = next;
+            return;
+        }
+        if (current && !!current.userInitiated && !next.userInitiated)
+            return;
+        root.pendingBluetoothEvent = next;
     }
 
     function liveFocusedOutputName() {
@@ -608,6 +752,15 @@ Item {
         var first = root.firstAvailableOutputName();
         root.eventOwnerOutput = first;
         return first;
+    }
+
+    function setEventOwnerOutput(preferred) {
+        var name = String(preferred || "").trim();
+        if (name.length > 0) {
+            root.eventOwnerOutput = name;
+            return name;
+        }
+        return root.captureEventOwnerOutput();
     }
 
     function clearEventOwnerOutput() {
@@ -675,6 +828,11 @@ Item {
         root.transientNotificationHasOverflow = false;
         root.transientNotificationExpanded = false;
         root.transientNotificationActions = [];
+        root.transientBluetoothKind = "";
+        root.transientBluetoothDeviceName = "";
+        root.transientBluetoothDeviceIcon = "";
+        root.transientBluetoothDeviceKey = "";
+        root.transientBluetoothUserInitiated = false;
     }
 
     function handleIslandEnabledChanged() {
@@ -753,6 +911,9 @@ Item {
         root.transientOsdReturnState = root.expanded ? current : "";
         transientTimer.stop();
         osdExitTimer.stop();
+        // A new higher-priority hardware event owns the output at creation;
+        // never inherit the preempted Bluetooth/workspace event pin.
+        root.clearEventOwnerOutput();
 
         // OSD is direct hardware feedback and may interrupt any scene. End a
         // notification presentation lease cleanly; the notification itself
@@ -1670,6 +1831,8 @@ Item {
             root.transientNotificationExpanded = false;
 
         if (restartTimer) {
+            if (root.presentation !== "transient_notification")
+                root.clearEventOwnerOutput();
             root.captureEventOwnerOutput();
             root.forcedState = "transient_notification";
             if (!root.userInteracting) {
@@ -1810,7 +1973,20 @@ Item {
         root.maybeShowPendingNotification();
         root.maybeShowPendingOsd();
         root.maybeShowPendingTimerCompletion();
+        root.maybeShowPendingBluetooth();
         root.maybeRestoreTimerPresentation();
+    }
+
+    function maybeShowPendingBluetooth() {
+        if (!root.pendingBluetoothEvent)
+            return;
+        var flags = root.arbitrationFlags();
+        var current = IslandReducer.presentationPriority(root.presentation, flags);
+        if (IslandReducer.blocksCandidate(current, IslandReducer.PRIORITY.bluetooth))
+            return;
+        var next = root.pendingBluetoothEvent;
+        root.pendingBluetoothEvent = null;
+        root.presentBluetoothEvent(next);
     }
 
     function maybeShowPendingTimerCompletion() {
@@ -2226,6 +2402,10 @@ Item {
 
         function onAudioReadyChanged() {
             root.handleAudioReadyChange();
+        }
+
+        function onBluetoothConnectionEvent(event) {
+            root.handleBluetoothConnectionEvent(event);
         }
     }
 

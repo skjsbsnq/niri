@@ -226,6 +226,12 @@ PanelWindow {
     readonly property bool timerContentVisible: (contentState === "resting_timer"
             || contentState === "expanded_timer"
             || contentState === "transient_timer_complete") && activeForScreen
+    readonly property string bluetoothKind: (activeForScreen && dynamicIslandService)
+        ? String(dynamicIslandService.transientBluetoothKind || "") : ""
+    readonly property string bluetoothDeviceName: (activeForScreen && dynamicIslandService)
+        ? String(dynamicIslandService.transientBluetoothDeviceName || "") : ""
+    readonly property string bluetoothDeviceIcon: (activeForScreen && dynamicIslandService)
+        ? String(dynamicIslandService.transientBluetoothDeviceIcon || "") : ""
     readonly property int workspaceCount: dynamicIslandService
         ? Number(dynamicIslandService.workspaceCount) || 0
         : 0
@@ -238,6 +244,9 @@ PanelWindow {
             return Math.round((IslandMotion.v2MediaExpandedWidthMin + IslandMotion.v2MediaExpandedWidthMax) / 2);
         case "transient_notification":
             return notificationCompactTargetWidth();
+        case "transient_bluetooth":
+            return Math.round((IslandMotion.v2NotificationCompactWidthMin
+                               + IslandMotion.v2NotificationCompactWidthMax) / 2);
         case "transient_osd":
             return Math.round((IslandMotion.v2OsdWidthMin + IslandMotion.v2OsdWidthMax) / 2);
         case "transient_workspace":
@@ -314,6 +323,8 @@ PanelWindow {
             return Math.round((IslandMotion.v2MediaExpandedHeightMin + IslandMotion.v2MediaExpandedHeightMax) / 2);
         case "transient_notification":
             return notificationCompactTargetHeight();
+        case "transient_bluetooth":
+            return IslandMotion.v2NotificationCompactHeightMin;
         case "transient_osd":
             return IslandMotion.v2OsdHeight;
         case "transient_workspace":
@@ -345,6 +356,7 @@ PanelWindow {
         if (stateName === "transient_osd"
                 || stateName === "transient_workspace"
                 || stateName === "transient_notification"
+                || stateName === "transient_bluetooth"
                 || stateName === "transient_timer_complete")
             return "transient";
         return "compact";
@@ -364,6 +376,10 @@ PanelWindow {
                 IslandMotion.v2RadiusExpandedMax,
                 Math.max(IslandMotion.v2RadiusExpandedMin, 30));
         case "transient_notification":
+            return Math.min(
+                IslandMotion.v2RadiusNotificationMax,
+                Math.max(IslandMotion.v2RadiusNotificationMin, 24));
+        case "transient_bluetooth":
             return Math.min(
                 IslandMotion.v2RadiusNotificationMax,
                 Math.max(IslandMotion.v2RadiusNotificationMin, 24));
@@ -627,6 +643,9 @@ PanelWindow {
                 timerPaused: root.timerPaused
                 timerFinished: root.timerFinished
                 timerContentVisible: root.timerContentVisible
+                bluetoothKind: root.bluetoothKind
+                bluetoothDeviceName: root.bluetoothDeviceName
+                bluetoothDeviceIcon: root.bluetoothDeviceIcon
                 sceneTransitionExternallyOwned: root.contentTransitionRunning
                 onMediaPreviousRequested: if (root.dynamicIslandService) root.dynamicIslandService.mediaPrevious()
                 onMediaPlayPauseRequested: if (root.dynamicIslandService) root.dynamicIslandService.mediaTogglePlayPause()

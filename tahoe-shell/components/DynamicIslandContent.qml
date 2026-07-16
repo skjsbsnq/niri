@@ -85,6 +85,9 @@ Item {
     property bool timerPaused: false
     property bool timerFinished: false
     property bool timerContentVisible: false
+    property string bluetoothKind: ""
+    property string bluetoothDeviceName: ""
+    property string bluetoothDeviceIcon: ""
     // Overlay owns scene-to-scene crossfades. While it is swapping at zero
     // opacity, local scene Behaviors must settle immediately instead of adding
     // a second fade on top of the host transition.
@@ -121,7 +124,8 @@ Item {
         : IslandMotion.contentExitMs(root.settingsService)
 
     readonly property bool notificationActive: islandState === "transient_notification"
-    readonly property bool standardDetailActive: !compactResting && !notificationActive && !osdActive && !mediaExpanded && !summaryExpanded && !workspaceActive && !timerActiveScene
+    readonly property bool bluetoothActive: islandState === "transient_bluetooth"
+    readonly property bool standardDetailActive: !compactResting && !notificationActive && !osdActive && !mediaExpanded && !summaryExpanded && !workspaceActive && !timerActiveScene && !bluetoothActive
     readonly property bool osdActive: islandState === "transient_osd"
     readonly property bool workspaceActive: islandState === "transient_workspace"
     readonly property bool timerActiveScene: islandState === "resting_timer"
@@ -381,6 +385,26 @@ Item {
             enabled: !root.sceneTransitionExternallyOwned
             NumberAnimation {
                 duration: root.compactContentMotionMs
+                easing.type: IslandMotion.v2ContentEasing
+            }
+        }
+    }
+
+    DynamicIslandBluetoothView {
+        id: bluetoothView
+        anchors.fill: parent
+        kind: root.bluetoothKind
+        deviceName: root.bluetoothDeviceName
+        deviceIcon: root.bluetoothDeviceIcon
+        textPrimary: root.textPrimary
+        textSecondary: root.textSecondary
+        accentColor: root.accentColor
+        visible: root.bluetoothActive
+        opacity: visible ? 1 : 0
+        Behavior on opacity {
+            enabled: !root.sceneTransitionExternallyOwned
+            NumberAnimation {
+                duration: IslandMotion.contentEnterMs(root.settingsService)
                 easing.type: IslandMotion.v2ContentEasing
             }
         }

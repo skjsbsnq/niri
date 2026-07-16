@@ -38,6 +38,10 @@ Item {
     property string bluetoothErrorText: ""
     property string brightnessErrorText: ""
     property var lastActionResult: null
+    // Bluetooth lifecycle snapshots are emitted from this shared owner. The
+    // island consumes these immutable maps and never retains a device object.
+    signal bluetoothConnectionEvent(var event)
+    property var bluetoothConnectionIntents: ({})
     property var knownWifiProfiles: []
     property string knownWifiStatus: "unknown"
     property string knownWifiDetail: "尚未读取已知网络"
@@ -1074,6 +1078,178 @@ Item {
         return count;
     }
 
+    function bluetoothDeviceKey(device) {
+        if (!device)
+            return "";
+        var path = "";
+        try { path = String(device.dbusPath || "").trim(); } catch (e) {}
+        if (path.length > 0)
+            return path;
+        try { return String(device.address || "").trim(); } catch (e) { return ""; }
+    }
+
+    function setBluetoothConnectionIntent(device, action) {
+        var key = root.bluetoothDeviceKey(device);
+        if (key.length === 0)
+            return;
+        var next = Object.assign({}, root.bluetoothConnectionIntents || {});
+        next[key] = String(action || "");
+        root.bluetoothConnectionIntents = next;
+    }
+
+    function bluetoothConnectionIntent(device) {
+        return root.bluetoothConnectionIntentForKey(root.bluetoothDeviceKey(device));
+    }
+
+    function bluetoothConnectionIntentForKey(key) {
+        return String((root.bluetoothConnectionIntents || {})[String(key || "")] || "");
+    }
+
+    function clearBluetoothConnectionIntent(device) {
+        root.clearBluetoothConnectionIntentForKey(root.bluetoothDeviceKey(device));
+    }
+
+    function clearBluetoothConnectionIntentForKey(key) {
+        key = String(key || "");
+        if (key.length === 0)
+            return;
+        var current = root.bluetoothConnectionIntents || {};
+        if (!current[key])
+            return;
+        var next = Object.assign({}, current);
+        delete next[key];
+        root.bluetoothConnectionIntents = next;
+    }
+
+    function emitBluetoothConnectionEvent(kind, device, userInitiated) {
+        if (!device)
+            return;
+        var entry = root.bluetoothDeviceEntry(device);
+        if (!entry)
+            return;
+        root.emitBluetoothConnectionSnapshot(kind, root.bluetoothDeviceKey(device),
+            entry.name, entry.icon, entry.dbusPath, userInitiated);
+    }
+
+    function emitBluetoothConnectionSnapshot(kind, key, name, icon, dbusPath, userInitiated) {
+        key = String(key || "").trim();
+        if (key.length === 0)
+            return;
+        root.bluetoothConnectionEvent({
+            "kind": String(kind || ""),
+            "deviceKey": key,
+            "deviceName": String(name || "蓝牙设备"),
+            "deviceIcon": String(icon || ""),
+            "dbusPath": String(dbusPath || ""),
+            "userInitiated": !!userInitiated
+        });
+    }
+
+    Repeater {
+        id: bluetoothDeviceObservers
+        model: root.bluetoothAdapter && root.bluetoothAdapter.devices
+               ? root.bluetoothAdapter.devices : null
+
+        delegate: Item {
+            id: deviceObserver
+            required property var modelData
+            visible: false
+            width: 0
+            height: 0
+            property int previousState: -1
+            property bool initialized: false
+            property string snapshotKey: ""
+            property string snapshotName: "蓝牙设备"
+            property string snapshotIcon: ""
+            property string snapshotDbusPath: ""
+
+            function refreshSnapshot() {
+                if (!modelData)
+                    return;
+                var entry = root.bluetoothDeviceEntry(modelData);
+                if (!entry)
+                    return;
+                deviceObserver.snapshotKey = root.bluetoothDeviceKey(modelData);
+                deviceObserver.snapshotName = entry.name;
+                deviceObserver.snapshotIcon = entry.icon;
+                deviceObserver.snapshotDbusPath = entry.dbusPath;
+            }
+
+            function currentState() {
+                try { return Number(modelData.state); } catch (e) { return modelData.connected ? 1 : 0; }
+            }
+
+            function handleStateChanged() {
+                if (!modelData)
+                    return;
+                deviceObserver.refreshSnapshot();
+                var nextState = currentState();
+                if (!deviceObserver.initialized) {
+                    deviceObserver.previousState = nextState;
+                    deviceObserver.initialized = true;
+                    return;
+                }
+                var oldState = deviceObserver.previousState;
+                if (nextState === oldState) {
+                    return;
+                }
+                deviceObserver.previousState = nextState;
+                var intent = root.bluetoothConnectionIntent(modelData);
+                if (nextState === 3) {
+                    if (intent === "connect")
+                        root.emitBluetoothConnectionEvent("connecting", modelData, true);
+                    return;
+                }
+                if (nextState === 1) {
+                    root.emitBluetoothConnectionEvent("connected", modelData, intent === "connect");
+                    root.clearBluetoothConnectionIntent(modelData);
+                    return;
+                }
+                if (nextState === 0) {
+                    if (oldState === 3) {
+                        if (intent === "connect")
+                            root.emitBluetoothConnectionEvent("failed", modelData, true);
+                    } else if (oldState === 1 || oldState === 2) {
+                        root.emitBluetoothConnectionEvent("disconnected", modelData, intent === "disconnect");
+                    }
+                    root.clearBluetoothConnectionIntent(modelData);
+                }
+            }
+
+            Component.onCompleted: {
+                deviceObserver.refreshSnapshot();
+                deviceObserver.previousState = deviceObserver.currentState();
+                deviceObserver.initialized = true;
+            }
+
+            Component.onDestruction: {
+                if (!deviceObserver.initialized || deviceObserver.snapshotKey.length === 0)
+                    return;
+                var intent = root.bluetoothConnectionIntentForKey(deviceObserver.snapshotKey);
+                if (deviceObserver.previousState === 3 && intent === "connect")
+                    root.emitBluetoothConnectionSnapshot("failed", deviceObserver.snapshotKey,
+                        deviceObserver.snapshotName, deviceObserver.snapshotIcon,
+                        deviceObserver.snapshotDbusPath, true);
+                else if (deviceObserver.previousState === 1 || deviceObserver.previousState === 2)
+                    root.emitBluetoothConnectionSnapshot("disconnected", deviceObserver.snapshotKey,
+                        deviceObserver.snapshotName, deviceObserver.snapshotIcon,
+                        deviceObserver.snapshotDbusPath, intent === "disconnect");
+                root.clearBluetoothConnectionIntentForKey(deviceObserver.snapshotKey);
+            }
+
+            Connections {
+                target: deviceObserver.modelData
+                ignoreUnknownSignals: true
+                function onStateChanged() { deviceObserver.handleStateChanged(); }
+                function onConnectedChanged() { deviceObserver.handleStateChanged(); }
+                function onNameChanged() { deviceObserver.refreshSnapshot(); }
+                function onDeviceNameChanged() { deviceObserver.refreshSnapshot(); }
+                function onIconChanged() { deviceObserver.refreshSnapshot(); }
+                function onAddressChanged() { deviceObserver.refreshSnapshot(); }
+            }
+        }
+    }
+
     function bluetoothDeviceEntry(device) {
         if (!device)
             return null;
@@ -1188,34 +1364,45 @@ Item {
         var d = root.bluetoothDeviceFromEntry(entry);
         if (!d)
             return;
+        root.setBluetoothConnectionIntent(d, "connect");
         try {
             if (d.connect)
                 d.connect();
             else
                 d.connected = true;
-        } catch (e) {}
+        } catch (e) {
+            root.emitBluetoothConnectionEvent("failed", d, true);
+            root.clearBluetoothConnectionIntent(d);
+        }
     }
 
     function disconnectBluetoothDevice(entry) {
         var d = root.bluetoothDeviceFromEntry(entry);
         if (!d)
             return;
+        root.setBluetoothConnectionIntent(d, "disconnect");
         try {
             if (d.disconnect)
                 d.disconnect();
             else
                 d.connected = false;
-        } catch (e) {}
+        } catch (e) {
+            root.clearBluetoothConnectionIntent(d);
+        }
     }
 
     function pairBluetoothDevice(entry) {
         var d = root.bluetoothDeviceFromEntry(entry);
         if (!d)
             return;
+        root.setBluetoothConnectionIntent(d, "connect");
         try {
             if (d.pair)
                 d.pair();
-        } catch (e) {}
+        } catch (e) {
+            root.emitBluetoothConnectionEvent("failed", d, true);
+            root.clearBluetoothConnectionIntent(d);
+        }
     }
 
     function cancelBluetoothPairing(entry) {

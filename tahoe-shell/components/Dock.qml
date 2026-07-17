@@ -13,6 +13,7 @@ PanelWindow {
     property var niriService
     property var thumbnailProvider
     property var settingsService
+    property bool fullscreenActive: false
     property bool launchpadOpen: false
     // See shell.qml useSpring. Spring on Image geometry corrupts textures on
     // VMware/software GPUs; NumberAnimation is safe. Default false.
@@ -130,7 +131,7 @@ PanelWindow {
     signal openPinnedAppMenu(var app, string appId, var anchorRect)
     signal openWindowMenu(var window, var anchorRect)
 
-    visible: true
+    visible: !root.fullscreenActive
 
     onDockHiddenChanged: {
         dockRevealPrepareTimer.stop();

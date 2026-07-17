@@ -22,6 +22,7 @@ Item {
     property string monoFontFamily: "Noto Sans Mono CJK SC"
     property bool cardsEnter: false
     property bool useSpring: false
+    property bool backgroundEffectsAllowed: true
 
     readonly property var dailyForecast: weatherService ? (weatherService.dailyForecast || []) : []
     readonly property var hourlyForecast: weatherService ? (weatherService.hourlyForecast || []) : []
@@ -173,6 +174,7 @@ Item {
                                 windSpeedMs: root.weatherNumber("currentWindSpeedMs", 0)
                                 windGustsMs: root.weatherNumber("currentWindGustMs", 0)
                                 animate: root.sidebarOpen && root.active && root.visible
+                                    && root.backgroundEffectsAllowed
                                     && !Motion.reducedMotion(root.settingsService)
                                 // Sky palette only (not UI darkMode desaturation).
                                 darkMode: false

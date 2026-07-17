@@ -678,6 +678,15 @@ ShellRoot {
         }
     }
 
+    Connections {
+        target: niri
+
+        function onAnyFullscreenChanged() {
+            if (niri.anyFullscreen)
+                shell.closeMotionSamplingSurfaces();
+        }
+    }
+
     Power {
         id: power
         lockService: lockScreen
@@ -791,6 +800,8 @@ ShellRoot {
                 appsService: apps
                 settingsService: desktopSettings
                 launchpadOpen: shell.launchpadOpen
+                fullscreenActive: niri.anyFullscreen
+                onBattery: battery.onBattery
             }
 
             PopupDismissLayer {
@@ -805,6 +816,7 @@ ShellRoot {
 
             TopBar {
                 screen: modelData
+                fullscreenActive: niri.fullscreenOnOutput(modelData)
                 appsService: apps
                 appMenuService: appMenu
                 niriService: niri
@@ -877,6 +889,7 @@ ShellRoot {
 
             DynamicIslandOverlay {
                 screen: modelData
+                fullscreenActive: niri.fullscreenOnOutput(modelData)
                 dynamicIslandService: dynamicIsland
                 settingsService: desktopSettings
                 useSpring: shell.useSpring
@@ -896,6 +909,7 @@ ShellRoot {
                 monoFontFamily: shell.monoFontFamily
                 useSpring: shell.useSpring
                 processMenuOpen: shell.processMenuOpenFor(modelData)
+                backgroundEffectsAllowed: !niri.anyFullscreen && !battery.onBattery
                 onCloseRequested: shell.closeLeftSidebar()
                 onOpenProcessMenuRequested: function(proc, anchorRect) {
                     // 系统页右键进程行 → 实例化 ProcessMenu。先登记屏幕/proc/锚点，
@@ -980,6 +994,7 @@ ShellRoot {
 
             Dock {
                 screen: modelData
+                fullscreenActive: niri.fullscreenOnOutput(modelData)
                 appsService: apps
                 niriService: niri
                 thumbnailProvider: thumbnailProvider

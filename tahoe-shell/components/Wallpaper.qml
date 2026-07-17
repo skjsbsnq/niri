@@ -13,6 +13,8 @@ PanelWindow {
     property var settingsService
     // T18: Launchpad open drives static wallpaper zoom + dim (content-side only).
     property bool launchpadOpen: false
+    property bool fullscreenActive: false
+    property bool onBattery: false
 
     readonly property bool settingsReady: settingsService && settingsService.loaded
     // Idle budget for live wallpaperengine (ext-idle-notify). Short of lock timeout.
@@ -27,8 +29,11 @@ PanelWindow {
         : 8
     readonly property bool wallpaperPauseWhenIdle: !!(settingsService && settingsService.wallpaperPauseWhenIdle)
     property bool sessionIdle: false
-    readonly property int effectiveWallpaperFps: sessionIdle ? wallpaperIdleFps : wallpaperActiveFps
-    readonly property bool liveWallpaperAllowed: !sessionIdle || !wallpaperPauseWhenIdle
+    readonly property int effectiveWallpaperFps: (sessionIdle || onBattery)
+        ? wallpaperIdleFps
+        : wallpaperActiveFps
+    readonly property bool liveWallpaperAllowed: !fullscreenActive
+        && (!sessionIdle || !wallpaperPauseWhenIdle)
 
     readonly property bool dynamicDesired: settingsReady
         && settingsService.wallpaperMode === "dynamic"
@@ -172,9 +177,6 @@ PanelWindow {
             parts.push("--disable-parallax");
         if (entry.disableParticles || entry.disableParticles === undefined)
             parts.push("--disable-particles");
-        if (entry.noFullscreenPause)
-            parts.push("--no-fullscreen-pause");
-
         var assetsDir = wallpaperEngineAssetsDir();
         if (assetsDir.length > 0)
             parts.push("--assets-dir", shellQuote(assetsDir));

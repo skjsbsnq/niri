@@ -25,6 +25,7 @@ PanelWindow {
     property var inputMethodService
     property var dynamicIslandService
     property var settingsService
+    property bool fullscreenActive: false
     property bool controlCenterOpen: false
     property bool launchpadOpen: false
     property bool appMenuOpen: false
@@ -141,7 +142,7 @@ PanelWindow {
         }
     }
 
-    visible: true
+    visible: !root.fullscreenActive
 
     anchors {
         left: true

@@ -198,10 +198,11 @@ resolve_power_profile_target() {
       ;;
     auto)
       if is_on_external_power; then
-        printf 'performance\n'
-        return 0
+        printf 'balanced\n'
+      else
+        printf 'power-saver\n'
       fi
-      return 1
+      return 0
       ;;
     power-saver|balanced|performance)
       printf '%s\n' "$TAHOE_POWER_PROFILE"

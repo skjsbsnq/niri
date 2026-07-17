@@ -44,6 +44,11 @@ Item {
         || findActiveWorkspace(WindowManager.windowsets)
     readonly property string activeWorkspaceName: workspaceLabel(activeWorkspace, 0)
     readonly property string focusedOutputName: WindowModel.focusedOutputName(ipcWorkspaces)
+    // zwlr_foreign_toplevel exposes committed fullscreen state and the exact
+    // outputs entered by each surface. Keep this separate from IPC geometry:
+    // size equality is not a valid fullscreen signal.
+    readonly property var fullscreenOutputNames: WindowModel.fullscreenOutputNames(toplevelList)
+    readonly property bool anyFullscreen: fullscreenOutputNames.length > 0
 
     property bool available: false
     property string lastError: ""
@@ -84,6 +89,15 @@ Item {
     function setValue(name, value) {
         if (root[name] !== value)
             root[name] = value;
+    }
+
+    function fullscreenOnOutput(screenOrName) {
+        var name = typeof screenOrName === "object" && screenOrName
+            ? String(screenOrName.name || "").trim()
+            : String(screenOrName || "").trim();
+        if (name.length === 0)
+            return false;
+        return root.fullscreenOutputNames.indexOf(name) !== -1;
     }
 
     function scheduleLayoutPatch() {

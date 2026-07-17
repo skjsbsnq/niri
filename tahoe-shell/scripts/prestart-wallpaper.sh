@@ -122,7 +122,7 @@ def external_args(entry, fallback_screen):
         # Prefer desktop-settings budget; hard-cap 20 for background layer.
         default_fps = 15
         try:
-            default_fps = max(1, min(20, int(round(float(settings.get("wallpaperEngineFps", 15))))))
+            default_fps = startup_fps_budget()
         except Exception:
             default_fps = 15
         fps = max(1, min(20, round(float(entry.get("fps", default_fps)))))
@@ -144,7 +144,6 @@ def external_args(entry, fallback_screen):
         ("noAutomute", "--noautomute"),
         ("noAudioProcessing", "--no-audio-processing"),
         ("disableMouse", "--disable-mouse"),
-        ("noFullscreenPause", "--no-fullscreen-pause"),
     ):
         if entry.get(key):
             args.append(option)
@@ -176,6 +175,45 @@ def settings_fps_budget():
         return 15
 
 
+def settings_idle_fps_budget():
+    try:
+        value = int(round(float(settings.get("wallpaperEngineIdleFps", 8))))
+        return max(1, min(settings_fps_budget(), value))
+    except Exception:
+        return min(settings_fps_budget(), 8)
+
+
+def system_on_battery():
+    power_root = "/sys/class/power_supply"
+    has_battery = False
+    external_online = False
+    try:
+        supplies = os.listdir(power_root)
+    except Exception:
+        return False
+
+    for supply in supplies:
+        base = os.path.join(power_root, supply)
+        try:
+            with open(os.path.join(base, "type"), "r", encoding="utf-8") as file:
+                supply_type = file.read().strip()
+        except Exception:
+            continue
+        if supply_type == "Battery":
+            has_battery = True
+        if supply_type in {"Mains", "USB", "USB_C", "USB_PD", "Wireless"}:
+            try:
+                with open(os.path.join(base, "online"), "r", encoding="utf-8") as file:
+                    external_online = external_online or file.read().strip() == "1"
+            except Exception:
+                pass
+    return has_battery and not external_online
+
+
+def startup_fps_budget():
+    return settings_idle_fps_budget() if system_on_battery() else settings_fps_budget()
+
+
 def inject_fps(command, fps):
     text = str(command or "").strip()
     if not text:
@@ -192,7 +230,7 @@ if mode == "dynamic":
     if not command:
         sys.exit(0)
 
-    command = inject_fps(command, settings_fps_budget())
+    command = inject_fps(command, startup_fps_budget())
     outputs = niri_outputs()
     if not outputs:
         spawn_shell(command)

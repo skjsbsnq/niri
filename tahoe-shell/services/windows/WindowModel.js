@@ -474,6 +474,28 @@ function focusedOutputName(workspaces) {
     return focused ? textOrEmpty(focused.output) : "";
 }
 
+function fullscreenOutputNames(toplevels) {
+    var list = toplevels || [];
+    var seen = {};
+    var names = [];
+    for (var i = 0; i < list.length; i++) {
+        var toplevel = list[i];
+        if (!toplevel || !toplevel.fullscreen)
+            continue;
+
+        var screens = toplevel.screens || [];
+        for (var j = 0; j < screens.length; j++) {
+            var name = textOrEmpty(screens[j] ? screens[j].name : "");
+            if (name.length === 0 || seen[name])
+                continue;
+            seen[name] = true;
+            names.push(name);
+        }
+    }
+    names.sort();
+    return names;
+}
+
 function activeWorkspaceForOutput(workspaces, outputName) {
     var target = String(outputName || "").trim();
     if (target.length === 0)

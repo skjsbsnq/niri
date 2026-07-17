@@ -23,6 +23,7 @@ PanelWindow {
     property bool darkMode: false
     property string monoFontFamily: "Noto Sans Mono CJK SC"
     property bool useSpring: false
+    property bool backgroundEffectsAllowed: true
 
     readonly property int screenWidth: Math.max(1, Number(root.screen && root.screen.width) || root.width)
     readonly property int screenHeight: Math.max(1, Number(root.screen && root.screen.height) || root.height)
@@ -256,6 +257,7 @@ PanelWindow {
                     monoFontFamily: root.monoFontFamily
                     cardsEnter: root.cardsEnter && root.currentTab === "weather"
                     useSpring: root.useSpring
+                    backgroundEffectsAllowed: root.backgroundEffectsAllowed
                     onOpenWeatherSettingsRequested: root.openWeatherSettingsRequested()
                 }
             }

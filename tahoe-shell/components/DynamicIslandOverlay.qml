@@ -13,6 +13,7 @@ PanelWindow {
 
     property var dynamicIslandService
     property var settingsService
+    property bool fullscreenActive: false
     // useSpring dual-branch for content-scale only. Glass region geometry
     // (islandSurface x/width/height/radius) must never use SpringAnimation.
     property bool useSpring: false
@@ -474,7 +475,7 @@ PanelWindow {
         easing.type: IslandMotion.v2ContentEasing
     }
 
-    visible: true
+    visible: !root.fullscreenActive
     aboveWindows: true
     exclusionMode: ExclusionMode.Ignore
     exclusiveZone: 0

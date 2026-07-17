@@ -12,6 +12,49 @@ MOTION = SHELL_ROOT / "components" / "Motion.js"
 SHELL_QML = SHELL_ROOT / "shell.qml"
 
 
+def qml_block(text: str, marker: str, start: int = 0) -> str:
+    marker_index = text.index(marker, start)
+    brace_index = text.index("{", marker_index)
+    depth = 0
+    quote = ""
+    escaped = False
+    line_comment = False
+    block_comment = False
+    index = brace_index
+    while index < len(text):
+        char = text[index]
+        following = text[index + 1] if index + 1 < len(text) else ""
+        if line_comment:
+            line_comment = char != "\n"
+        elif block_comment:
+            if char == "*" and following == "/":
+                block_comment = False
+                index += 1
+        elif quote:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == quote:
+                quote = ""
+        elif char == "/" and following == "/":
+            line_comment = True
+            index += 1
+        elif char == "/" and following == "*":
+            block_comment = True
+            index += 1
+        elif char in {'"', "'"}:
+            quote = char
+        elif char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return text[brace_index + 1 : index]
+        index += 1
+    raise AssertionError(f"unterminated QML block after {marker!r}")
+
+
 class LaunchpadRefactorTests(unittest.TestCase):
     def test_fullscreen_no_category_chips(self) -> None:
         text = LAUNCHPAD.read_text(encoding="utf-8")
@@ -82,6 +125,36 @@ class LaunchpadRefactorTests(unittest.TestCase):
         self.assertIn("launchApp", text)
         # Press feedback retained.
         self.assertIn("Motion.pressScaleFor", text)
+
+    def test_query_filter_does_not_replay_full_grid_enter(self) -> None:
+        text = LAUNCHPAD.read_text(encoding="utf-8")
+        query_handler = qml_block(text, "onQueryChanged:")
+        self.assertIn("pageFlick.contentX = 0", query_handler)
+        self.assertNotIn("playGridEnter", query_handler)
+        self.assertNotIn("gridEnter =", query_handler)
+        self.assertNotRegex(query_handler, r"\bplay\w*Enter\s*\(")
+        self.assertNotRegex(query_handler, r"\b(?:opacity|scale)\s*[:=]")
+
+        open_handler = qml_block(text, "onOpenChanged:")
+        self.assertIn("playGridEnter", open_handler)
+
+    def test_app_icons_decode_asynchronously_with_placeholder(self) -> None:
+        text = LAUNCHPAD.read_text(encoding="utf-8")
+        icon_match = re.search(r"\bid:\s*appIcon\b", text)
+        self.assertIsNotNone(icon_match)
+        assert icon_match
+        icon_id = icon_match.start()
+        icon_start = text.rfind("Image {", 0, icon_id)
+        self.assertGreaterEqual(icon_start, 0)
+        icon_block = qml_block(text, "Image {", icon_start)
+        self.assertIn("asynchronous: true", icon_block)
+        self.assertNotIn("asynchronous: false", icon_block)
+        self.assertIn("visible: status === Image.Ready", icon_block)
+        slot_id = text.index("id: appIconSlot")
+        slot_start = text.rfind("Item {", 0, slot_id)
+        self.assertGreaterEqual(slot_start, 0)
+        slot_block = qml_block(text, "Item {", slot_start)
+        self.assertEqual(slot_block.count("visible: appIcon.status !== Image.Ready"), 2)
 
     def test_unified_enter_not_per_icon_cascade(self) -> None:
         text = LAUNCHPAD.read_text(encoding="utf-8")

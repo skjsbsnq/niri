@@ -14,7 +14,7 @@
 | R00 | 基线锁定 | — | S | DONE | [R00](acceptance/R00-baseline-2026-07-17.md)：747 tests 全绿、validate 过、嵌套冒烟过、grep 基数 124/10/0/27 |
 | R01 | 弹跳物理统一（死 bounce + 点击上行） | #74 #75 | S | DONE | [R01](acceptance/R01-bounce-physics-2026-07-17.md)：双 agent 审查 3 问题已修，749 tests 全绿 |
 | R02 | Spotlight 打字闪烁修复 | #86 | S | DONE | [R02](acceptance/R02-spotlight-stable-rows-2026-07-17.md)：双独立复审 PASS，752 tests 全绿，宿主/嵌套验收通过 |
-| R03 | Launchpad 打字脉冲修复 + 图标异步 | #83 #84 #85 | S | PENDING | |
+| R03 | Launchpad 打字脉冲修复 + 图标异步 | #83 #84 #85 | S | DONE | [R03](acceptance/R03-launchpad-filter-icons-2026-07-17.md)：最终独立复审 PASS，754 tests 全绿，宿主/嵌套验收通过 |
 | R04 | WiFi 弹窗稳定列表（点名②） | #7 #8 #9 #10 | M | PENDING | |
 | R05 | 剪贴板弹窗稳定列表与动画（点名①） | #1 #2 #3 #4 #5(部分) | M | PENDING | |
 | R06 | 菜单时序重排（点名③） | #13 #14 #15 #16 #17 #19 | M | PENDING | |

@@ -366,9 +366,9 @@ PanelWindow {
             pageFlick.contentX = 0;
             pageSnapPending = false;
         }
-        // Re-play a short enter when filtering reshuffles the grid.
-        if (root.open)
-            playGridEnter();
+        // Filtering swaps in place. Replaying the whole-field opacity + scale
+        // on every keystroke made rapid typing read as a grid pulse; the
+        // unified enter belongs exclusively to the open path above.
     }
 
     onAppCountChanged: {
@@ -751,30 +751,52 @@ PanelWindow {
                                             }
                                         }
 
-                                        Image {
-                                            id: appIcon
+                                        Item {
+                                            id: appIconSlot
                                             anchors.horizontalCenter: parent.horizontalCenter
                                             anchors.top: parent.top
                                             anchors.topMargin: Math.max(8, (root.cellHeight - root.iconSize - 28) / 2)
                                             width: root.iconSize
                                             height: root.iconSize
-                                            source: root.appsService && cell.app
-                                                ? root.appsService.iconForApp(cell.app)
-                                                : ""
-                                            fillMode: Image.PreserveAspectFit
-                                            smooth: true
-                                            mipmap: true
-                                            sourceSize.width: 128
-                                            sourceSize.height: 128
-                                            // Sync decode avoids empty first frame cascade.
-                                            asynchronous: false
-                                            cache: true
+
+                                            Rectangle {
+                                                anchors.fill: parent
+                                                radius: Math.round(width * 0.22)
+                                                color: "#24ffffff"
+                                                visible: appIcon.status !== Image.Ready
+                                            }
+
+                                            TahoeSymbol {
+                                                anchors.centerIn: parent
+                                                name: "\ue5c3"
+                                                color: root.textSecondary
+                                                size: Math.round(parent.width * 0.42)
+                                                visible: appIcon.status !== Image.Ready
+                                            }
+
+                                            Image {
+                                                id: appIcon
+                                                anchors.fill: parent
+                                                source: root.appsService && cell.app
+                                                    ? root.appsService.iconForApp(cell.app)
+                                                    : ""
+                                                fillMode: Image.PreserveAspectFit
+                                                smooth: true
+                                                mipmap: true
+                                                sourceSize.width: 128
+                                                sourceSize.height: 128
+                                                // Decode off the GUI thread; the slot above
+                                                // remains visible until the image is ready.
+                                                asynchronous: true
+                                                cache: true
+                                                visible: status === Image.Ready
+                                            }
                                         }
 
                                         Text {
                                             anchors.left: parent.left
                                             anchors.right: parent.right
-                                            anchors.top: appIcon.bottom
+                                            anchors.top: appIconSlot.bottom
                                             anchors.topMargin: 6
                                             anchors.leftMargin: 4
                                             anchors.rightMargin: 4

@@ -54,6 +54,8 @@ ShellRoot {
     property string processMenuScreenName: ""
     property var processMenuAnchorRect: null
     property var processMenuProc: null
+    // Numeric system views explicitly consume the mono family token.
+    property string monoFontFamily: "Noto Sans Mono CJK SC"
     property bool darkMode: appearance.darkMode
     readonly property bool servicePollingActive: controlCenterOpen
         || appMenuOpen

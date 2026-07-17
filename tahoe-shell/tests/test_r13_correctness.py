@@ -59,6 +59,7 @@ class R13CorrectnessTests(unittest.TestCase):
         shell = SHELL.read_text(encoding="utf-8")
         startup = STARTUP.read_text(encoding="utf-8")
         self.assertNotRegex(shell, r"Qt\.application\.font\s*=")
+        self.assertIn('property string monoFontFamily: "Noto Sans Mono CJK SC"', shell)
         self.assertIn("id: addApplicationRow", startup)
         self.assertIn("addApplicationRow.modelData", startup)
         self.assertNotIn("addCandidateRow.modelData", startup)

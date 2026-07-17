@@ -31,6 +31,35 @@ class SpotlightRefactorTests(unittest.TestCase):
         self.assertIn("groupTitleForProvider", text)
         self.assertIn("buildSections", text)
 
+    def test_result_rows_use_stable_identity_and_pruned_caches(self) -> None:
+        text = SPOTLIGHT.read_text(encoding="utf-8")
+        self.assertIn('objectProp: "modelKey"', text)
+        self.assertIn("function stableResultKey(result)", text)
+        self.assertIn("JSON.stringify([provider, resultId, kind])", text)
+        self.assertIn("property var _sectionCache: ({})", text)
+        self.assertIn("property var _flatRowCache: ({})", text)
+        self.assertIn("sameResultSequence(cached.items, candidate.items)", text)
+        self.assertIn("function currentResultForModelKey(modelKey, fallback)", text)
+        self.assertIn("function selectableIndexForModelKey(modelKey)", text)
+        self.assertIn("row.result = result", text)
+        self.assertIn("pruneCache(cache, activeKeys)", text)
+
+    def test_results_refresh_is_imperative_and_provider_revision_driven(self) -> None:
+        text = SPOTLIGHT.read_text(encoding="utf-8")
+        self.assertIn("property var results: []", text)
+        self.assertNotRegex(
+            text,
+            r"readonly property var results\s*:[\s\S]{0,180}resultsForQuery\(",
+        )
+        self.assertIn("function refreshResults()", text)
+        self.assertIn("onSearchServiceChanged: root.refreshResults()", text)
+        self.assertIn("function onProviderRevisionChanged() { root.refreshResults(); }", text)
+        query_handler = re.search(r"onQueryChanged:\s*\{(.*?)\n    \}", text, re.S)
+        self.assertIsNotNone(query_handler)
+        assert query_handler
+        self.assertIn("selectedIndex = 0", query_handler.group(1))
+        self.assertIn("root.refreshResults()", query_handler.group(1))
+
     def test_height_uses_eased_not_spring_on_glass(self) -> None:
         text = SPOTLIGHT.read_text(encoding="utf-8")
         self.assertIn("Motion.spotlightHeightDuration", text)

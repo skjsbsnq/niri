@@ -22,11 +22,11 @@ PanelWindow {
     property string query: ""
     property int selectedIndex: 0
     property int previewEpoch: 0
+    property var _sectionCache: ({})
+    property var _flatRowCache: ({})
+    property var results: []
 
     readonly property int resultLimit: Motion.spotlightMaxResults
-    readonly property var results: root.searchService
-        ? root.searchService.resultsForQuery(root.query, root.resultLimit)
-        : []
     readonly property var resultSections: root.buildSections(root.results)
     readonly property var flatRows: root.flattenRows(root.resultSections)
     readonly property int selectableCount: root.countSelectable(root.flatRows)
@@ -84,14 +84,28 @@ PanelWindow {
     onQueryChanged: {
         selectedIndex = 0;
         previewEpoch += 1;
+        root.refreshResults();
         Qt.callLater(function() { root.syncHighlightY(false); });
     }
+
+    onSearchServiceChanged: root.refreshResults()
 
     onResultsChanged: {
         if (selectedIndex >= selectableCount)
             selectedIndex = Math.max(0, selectableCount - 1);
         previewEpoch += 1;
         Qt.callLater(function() { root.syncHighlightY(false); });
+    }
+
+    Connections {
+        target: root.searchService
+        function onProviderRevisionChanged() { root.refreshResults(); }
+    }
+
+    function refreshResults() {
+        root.results = root.searchService
+            ? root.searchService.resultsForQuery(root.query, root.resultLimit)
+            : [];
     }
 
     function activateResult(result) {
@@ -201,6 +215,62 @@ PanelWindow {
         }
     }
 
+    function stableResultKey(result) {
+        var provider = providerKey(result);
+        var resultId = String(result && (result.id || result.resultId) || "");
+        if (resultId.length === 0)
+            resultId = resultLabel(result);
+        var kind = String(result && result.kind || "action").toLowerCase();
+        return "result:" + JSON.stringify([provider, resultId, kind]);
+    }
+
+    function currentResultForModelKey(modelKey, fallback) {
+        var items = root.results || [];
+        for (var i = 0; i < items.length; i++) {
+            if (stableResultKey(items[i]) === modelKey)
+                return items[i];
+        }
+        return fallback || null;
+    }
+
+    function selectableIndexForModelKey(modelKey) {
+        var rows = root.flatRows || [];
+        for (var i = 0; i < rows.length; i++) {
+            if (rows[i].type === "result" && rows[i].modelKey === modelKey)
+                return Number(rows[i].selectableIndex) || 0;
+        }
+        return -1;
+    }
+
+    function resultFingerprint(result) {
+        return JSON.stringify([
+            stableResultKey(result),
+            resultLabel(result),
+            resultSubtitle(result),
+            resultIcon(result)
+        ]);
+    }
+
+    function sameResultSequence(previous, next) {
+        var oldItems = previous || [];
+        var newItems = next || [];
+        if (oldItems.length !== newItems.length)
+            return false;
+        for (var i = 0; i < oldItems.length; i++) {
+            if (stableResultKey(oldItems[i]) !== stableResultKey(newItems[i])
+                    || resultFingerprint(oldItems[i]) !== resultFingerprint(newItems[i]))
+                return false;
+        }
+        return true;
+    }
+
+    function pruneCache(cache, activeKeys) {
+        for (var cachedKey in cache) {
+            if (!activeKeys[cachedKey])
+                delete cache[cachedKey];
+        }
+    }
+
     function buildSections(list) {
         var sections = [];
         var indexByKey = {};
@@ -220,6 +290,24 @@ PanelWindow {
             }
             sections[idx].items.push(result);
         }
+
+        var cache = root._sectionCache;
+        var activeKeys = {};
+        for (var s = 0; s < sections.length; s++) {
+            var candidate = sections[s];
+            var cached = cache[candidate.key];
+            if (cached
+                    && cached.title === candidate.title
+                    && sameResultSequence(cached.items, candidate.items)) {
+                for (var j = 0; j < cached.items.length; j++)
+                    cached.items[j] = candidate.items[j];
+                sections[s] = cached;
+            } else {
+                cache[candidate.key] = candidate;
+            }
+            activeKeys[candidate.key] = true;
+        }
+        pruneCache(cache, activeKeys);
         return sections;
     }
 
@@ -227,23 +315,53 @@ PanelWindow {
         var rows = [];
         var selectable = 0;
         var secs = sections || [];
+        var cache = root._flatRowCache;
+        var activeKeys = {};
         for (var s = 0; s < secs.length; s++) {
             var section = secs[s];
-            rows.push({
-                "type": "header",
-                "title": section.title,
-                "key": section.key
-            });
+            var headerKey = "header:" + JSON.stringify([section.key, section.key, "header"]);
+            var header = cache[headerKey];
+            if (!header) {
+                header = {
+                    "type": "header",
+                    "title": section.title,
+                    "modelKey": headerKey
+                };
+                cache[headerKey] = header;
+            } else {
+                header.title = section.title;
+            }
+            rows.push(header);
+            activeKeys[headerKey] = true;
+
             var items = section.items || [];
             for (var i = 0; i < items.length; i++) {
-                rows.push({
-                    "type": "result",
-                    "result": items[i],
-                    "selectableIndex": selectable
-                });
+                var result = items[i];
+                var rowKey = stableResultKey(result);
+                var fingerprint = resultFingerprint(result);
+                var row = cache[rowKey];
+                if (!row || row.type !== "result") {
+                    row = {
+                        "type": "result",
+                        "result": result,
+                        "selectableIndex": selectable,
+                        "modelKey": rowKey,
+                        "resultFingerprint": fingerprint
+                    };
+                    cache[rowKey] = row;
+                } else {
+                    // ScriptModel's move path keeps the old role value. Reuse and
+                    // update this exact object so moved delegates keep fresh data.
+                    row.result = result;
+                    row.selectableIndex = selectable;
+                    row.resultFingerprint = fingerprint;
+                }
+                rows.push(row);
+                activeKeys[rowKey] = true;
                 selectable += 1;
             }
         }
+        pruneCache(cache, activeKeys);
         return rows;
     }
 
@@ -505,6 +623,7 @@ PanelWindow {
 
                             Repeater {
                                 model: ScriptModel {
+                                    objectProp: "modelKey"
                                     values: root.flatRows
                                 }
 
@@ -537,8 +656,13 @@ PanelWindow {
                                         anchors.fill: parent
                                         visible: rowDelegate.modelData.type === "result"
 
-                                        readonly property var result: rowDelegate.modelData.result
-                                        readonly property int selIndex: Number(rowDelegate.modelData.selectableIndex) || 0
+                                        // Resolve through current models: ScriptModel keeps a moved
+                                        // delegate's original role wrapper by design.
+                                        readonly property var result: root.currentResultForModelKey(
+                                            rowDelegate.modelData.modelKey,
+                                            rowDelegate.modelData.result)
+                                        readonly property int selIndex: root.selectableIndexForModelKey(
+                                            rowDelegate.modelData.modelKey)
                                         readonly property bool selected: root.selectedIndex === selIndex
                                         readonly property string subtitleText: root.resultSubtitle(result)
 

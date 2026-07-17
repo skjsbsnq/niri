@@ -274,6 +274,15 @@ main() {
       ;;
   esac
 
+  # Nested previews share the user's D-Bus and systemd user manager with the
+  # real desktop. Mark them so the main config does not publish the nested
+  # WAYLAND_DISPLAY/DISPLAY or replace session-wide agents such as Fcitx.
+  if [[ "$resolved_mode" == nested ]]; then
+    export TAHOE_NESTED_SESSION=1
+  else
+    unset TAHOE_NESTED_SESSION
+  fi
+
   if [[ "$shell_launch_mode" != none ]]; then
     require_cmd "$QUICKSHELL_BIN"
     [[ -d "$TAHOE_CONFIG_DIR" ]] || die "Tahoe shell config directory does not exist: $TAHOE_CONFIG_DIR"

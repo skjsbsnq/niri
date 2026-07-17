@@ -241,17 +241,19 @@ recent-windows {
 }
 
 // Fallback for direct niri launches: xdg-desktop-portal 1.22+ requires this target.
-spawn-sh-at-startup "command -v systemd-run >/dev/null 2>&1 && systemd-run --user --unit=tahoe-gsession-activate.service --service-type=oneshot --remain-after-exit --property=Wants=graphical-session.target true >/dev/null 2>&1 || true; command -v systemctl >/dev/null 2>&1 && systemctl --user import-environment WAYLAND_DISPLAY DISPLAY XAUTHORITY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE XDG_SESSION_DESKTOP ELECTRON_OZONE_PLATFORM_HINT __GLX_VENDOR_LIBRARY_NAME QS_ICON_THEME >/dev/null 2>&1 || true"
+spawn-sh-at-startup "if [ \"${TAHOE_NESTED_SESSION:-0}\" = \"1\" ]; then exit 0; fi; command -v systemd-run >/dev/null 2>&1 && systemd-run --user --unit=tahoe-gsession-activate.service --service-type=oneshot --remain-after-exit --property=Wants=graphical-session.target true >/dev/null 2>&1 || true; command -v systemctl >/dev/null 2>&1 && systemctl --user import-environment WAYLAND_DISPLAY DISPLAY XAUTHORITY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE XDG_SESSION_DESKTOP ELECTRON_OZONE_PLATFORM_HINT __GLX_VENDOR_LIBRARY_NAME QS_ICON_THEME >/dev/null 2>&1 || true"
 
 spawn-sh-at-startup "prestart=\"${TAHOE_CONFIG_DIR:-$HOME/.config/quickshell/tahoe}/scripts/prestart-wallpaper.sh\"; [ -r \"$prestart\" ] && bash \"$prestart\" &"
 
 spawn-sh-at-startup "if [ \"${TAHOE_SKIP_QUICKSHELL_AUTOSTART:-0}\" != \"1\" ]; then launcher=\"${TAHOE_CONFIG_DIR:-$HOME/.config/quickshell/tahoe}/scripts/start-quickshell.sh\"; if [ -r \"$launcher\" ]; then exec bash \"$launcher\"; fi; qs_bin=\"${TAHOE_QUICKSHELL_BIN:-}\"; if [ -z \"$qs_bin\" ]; then if [ -x \"$HOME/.local/bin/quickshell\" ]; then qs_bin=\"$HOME/.local/bin/quickshell\"; else qs_bin=quickshell; fi; fi; exec \"$qs_bin\" -p \"${TAHOE_CONFIG_DIR:-$HOME/.config/quickshell/tahoe}\"; fi"
 
-spawn-at-startup "fcitx5" "-d" "--replace"
+// Nested previews share the real user's D-Bus session. Replacing Fcitx there
+// would strand the desktop input method on the preview's temporary displays.
+spawn-sh-at-startup "if [ \"${TAHOE_NESTED_SESSION:-0}\" != \"1\" ]; then exec fcitx5 -d --replace; fi"
 
 // Polkit authentication agent. Guarded so direct niri launches on hosts
 // without polkit-gnome don't log a missing-binary error.
-spawn-sh-at-startup "command -v /usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1 >/dev/null 2>&1 && /usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1 &"
+spawn-sh-at-startup "if [ \"${TAHOE_NESTED_SESSION:-0}\" != \"1\" ]; then command -v /usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1 >/dev/null 2>&1 && /usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1 & fi"
 
 // tahoe-managed: begin animations
 animations {

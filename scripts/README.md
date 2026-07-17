@@ -273,6 +273,8 @@ The script also defaults to `TAHOE_SHELL_LAUNCH_MODE=auto`:
 
 In child mode the script exports `TAHOE_SKIP_QUICKSHELL_AUTOSTART=1`, which prevents the config startup hook from creating a second Tahoe shell.
 
+Nested mode also exports `TAHOE_NESTED_SESSION=1`. The Tahoe niri config uses it to skip session-wide systemd/DBus environment imports, Fcitx replacement, and the duplicate polkit agent, so closing a preview cannot leave the real desktop attached to the preview's temporary displays.
+
 Both Tahoe session launchers default to `TAHOE_POWER_PROFILE=auto`. When the machine is on external power, or when no battery is present, they ask `power-profiles-daemon` for the `performance` profile for the lifetime of the niri session and restore the previous profile when niri exits. This avoids GPU/CPU downclock stutter after the desktop has been idle. On battery, `auto` leaves the profile unchanged.
 
 When running from a terminal inside an existing desktop, force nested mode if needed:

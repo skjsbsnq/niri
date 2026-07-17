@@ -6,9 +6,9 @@ import "../controls" as Controls
 
 // S5.0 split: the niri layout domain (formerly the whole NiriPage) now lives
 // behind the niri hub's "布局与窗口" tile. Every control reads the service
-// mirror and writes through setX, which updates the property optimistically
-// (so sliders track the drag), queues the field write, and hot-reloads niri
-// once the write round-trips. No binds/MRU/task-switcher are touched here
+// mirror and writes through setX on slider commit. The control owns drag
+// preview; the service queues one field write and hot-reloads niri once the
+// write round-trips. No binds/MRU/task-switcher are touched here
 // (guardrail 441b637). Behavior is identical to the S4 baseline.
 Flickable {
     id: page
@@ -64,7 +64,7 @@ Flickable {
                 valueText: (page.svc ? page.svc.gaps : 16) + " px"
                 value: page.svc ? Math.max(0, Math.min(1, page.svc.gaps / 64)) : 0
                 enabled: page.ready
-                onUserSet: function(v) {
+                onUserCommit: function(v) {
                     if (page.svc)
                         page.svc.setGaps(Math.round(v * 64));
                 }
@@ -131,7 +131,7 @@ Flickable {
                 valueText: page.svc ? page.svc.shadowSoftness : ""
                 value: page.svc ? Math.max(0, Math.min(1, page.svc.shadowSoftness / 100)) : 0
                 enabled: page.ready
-                onUserSet: function(v) {
+                onUserCommit: function(v) {
                     if (page.svc)
                         page.svc.setShadowSoftness(Math.round(v * 100));
                 }
@@ -144,7 +144,7 @@ Flickable {
                 valueText: page.svc ? page.svc.shadowSpread : ""
                 value: page.svc ? Math.max(0, Math.min(1, page.svc.shadowSpread / 40)) : 0
                 enabled: page.ready
-                onUserSet: function(v) {
+                onUserCommit: function(v) {
                     if (page.svc)
                         page.svc.setShadowSpread(Math.round(v * 40));
                 }
@@ -157,7 +157,7 @@ Flickable {
                 valueText: page.svc ? page.signed(page.svc.shadowOffsetX) : ""
                 value: page.svc ? Math.max(0, Math.min(1, (page.svc.shadowOffsetX + 40) / 80)) : 0.5
                 enabled: page.ready
-                onUserSet: function(v) {
+                onUserCommit: function(v) {
                     if (page.svc)
                         page.svc.setShadowOffsetX(Math.round(v * 80 - 40));
                 }
@@ -170,7 +170,7 @@ Flickable {
                 valueText: page.svc ? page.signed(page.svc.shadowOffsetY) : ""
                 value: page.svc ? Math.max(0, Math.min(1, (page.svc.shadowOffsetY + 40) / 80)) : 0.5
                 enabled: page.ready
-                onUserSet: function(v) {
+                onUserCommit: function(v) {
                     if (page.svc)
                         page.svc.setShadowOffsetY(Math.round(v * 80 - 40));
                 }
@@ -203,7 +203,7 @@ Flickable {
                 valueText: (page.svc ? page.svc.snapAssistThreshold : 16) + " px"
                 value: page.svc ? Math.max(0, Math.min(1, page.svc.snapAssistThreshold / 80)) : 0
                 enabled: page.ready
-                onUserSet: function(v) {
+                onUserCommit: function(v) {
                     if (page.svc)
                         page.svc.setSnapAssistThreshold(Math.round(v * 80));
                 }

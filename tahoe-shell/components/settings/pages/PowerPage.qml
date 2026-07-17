@@ -82,9 +82,13 @@ Flickable {
                     : "不可用"
                 value: page.controls ? page.controls.brightness : 0
                 enabled: !!(page.controls && page.controls.brightnessAvailable)
-                onUserSet: function(v) {
+                onUserPreview: function(v) {
                     if (page.controls)
-                        page.controls.setBrightness(v);
+                        page.controls.previewBrightness(v);
+                }
+                onUserCommit: function(v) {
+                    if (page.controls)
+                        page.controls.commitBrightness(v);
                 }
             }
 

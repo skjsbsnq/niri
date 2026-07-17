@@ -11,6 +11,11 @@ Item {
     readonly property bool darkMode: appearanceAdapter.darkMode
     readonly property bool nightMode: appearanceAdapter.nightMode
     readonly property int colorTemperature: appearanceAdapter.colorTemperature
+    property bool requestedNightModeEnabled: false
+    property int requestedColorTemperature: 4500
+    property string requestedNightModeKey: ""
+    property string activeNightModeKey: ""
+    property string appliedNightModeKey: ""
 
     function setDarkMode(enabled) {
         var next = !!enabled;
@@ -81,27 +86,52 @@ Item {
     }
 
     function applyNightMode() {
-        Quickshell.execDetached({
-            command: [
-                "sh",
-                "-lc",
-                [
-                    "enabled=\"$1\"",
-                    "temperature=\"$2\"",
-                    "if ! command -v gammastep >/dev/null 2>&1; then exit 0; fi",
-                    "if [ \"$enabled\" = \"1\" ]; then",
-                    "  gammastep -x >/dev/null 2>&1 || true",
-                    "  gammastep -O \"$temperature\" >/dev/null 2>&1 || true",
-                    "else",
-                    "  gammastep -x >/dev/null 2>&1 || true",
-                    "fi"
-                ].join("\n"),
-                "sh",
-                nightMode ? "1" : "0",
-                String(colorTemperature)
-            ],
-            workingDirectory: ""
-        });
+        root.requestedNightModeEnabled = root.nightMode;
+        root.requestedColorTemperature = root.colorTemperature;
+        root.requestedNightModeKey = root.requestedNightModeEnabled
+            ? "1:" + String(root.requestedColorTemperature)
+            : "0";
+        root.flushNightModeApply();
+    }
+
+    function flushNightModeApply() {
+        if (nightModeProcess.running
+                || root.requestedNightModeKey.length === 0
+                || root.requestedNightModeKey === root.appliedNightModeKey)
+            return;
+
+        root.activeNightModeKey = root.requestedNightModeKey;
+        nightModeProcess.command = [
+            "sh",
+            "-lc",
+            [
+                "enabled=\"$1\"",
+                "temperature=\"$2\"",
+                "if ! command -v gammastep >/dev/null 2>&1; then exit 0; fi",
+                "if [ \"$enabled\" = \"1\" ]; then",
+                "  gammastep -x >/dev/null 2>&1 || true",
+                "  gammastep -O \"$temperature\" >/dev/null 2>&1 || true",
+                "else",
+                "  gammastep -x >/dev/null 2>&1 || true",
+                "fi"
+            ].join("\n"),
+            "sh",
+            root.requestedNightModeEnabled ? "1" : "0",
+            String(root.requestedColorTemperature)
+        ];
+        nightModeProcess.running = true;
+    }
+
+    function finishNightModeApply() {
+        root.appliedNightModeKey = root.activeNightModeKey;
+        root.activeNightModeKey = "";
+        Qt.callLater(function() { root.flushNightModeApply(); });
+    }
+
+    Process {
+        id: nightModeProcess
+        running: false
+        onExited: root.finishNightModeApply()
     }
 
     FileView {

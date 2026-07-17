@@ -14,9 +14,10 @@ Item {
     property string iconCode: ""
     property string label: ""
     property string valueText: ""
-    property real value: 0 // 0..1
+    property real value: 0 // committed 0..1 value
     property bool interactive: true
     property bool dragging: trackMouse.pressed
+    property real dragValue: 0
 
     readonly property color textPrimary: theme ? theme.textPrimary : "#1d1d1f"
     readonly property color accentBlue: theme ? theme.accentBlue : "#007ff7"
@@ -25,8 +26,10 @@ Item {
     readonly property color trackColor: theme ? theme.sliderTrack : "#26000000"
     readonly property real knobDiameter: 18
     readonly property real knobScale: dragging ? 1.12 : 1.0
+    readonly property real displayValue: dragging ? dragValue : clampRatio(value)
 
-    signal userSet(real value)
+    signal userPreview(real value)
+    signal userCommit(real value)
 
     Layout.fillWidth: true
     Layout.preferredHeight: 56
@@ -102,7 +105,7 @@ Item {
 
                     Rectangle {
                         height: parent.height
-                        width: Math.max(0, (parent.width - slider.knobDiameter) * slider.clampRatio(slider.value) + slider.knobDiameter / 2)
+                        width: Math.max(0, (parent.width - slider.knobDiameter) * slider.displayValue + slider.knobDiameter / 2)
                         radius: parent.radius
                         color: slider.accentBlue
                     }
@@ -112,7 +115,7 @@ Item {
                     id: knob
                     width: slider.knobDiameter
                     height: slider.knobDiameter
-                    x: (trackHost.width - width) * slider.clampRatio(slider.value)
+                    x: (trackHost.width - width) * slider.displayValue
                     anchors.verticalCenter: parent.verticalCenter
                     scale: slider.knobScale
 
@@ -146,9 +149,11 @@ Item {
 
                 MouseArea {
                     id: trackMouse
+                    objectName: "trackMouse"
                     anchors.fill: parent
                     enabled: slider.enabled && slider.interactive
                     cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                    preventStealing: true
 
                     // Map pointer x onto the knob-center travel range so ends
                     // match the visual knob (half-width compensation).
@@ -157,12 +162,24 @@ Item {
                         return slider.clampRatio((mx - slider.knobDiameter / 2) / travel);
                     }
 
+                    function previewAt(mx) {
+                        slider.dragValue = ratioAt(mx);
+                        slider.userPreview(slider.dragValue);
+                    }
+
                     onPressed: function(mouse) {
-                        slider.userSet(ratioAt(mouse.x));
+                        previewAt(mouse.x);
                     }
                     onPositionChanged: function(mouse) {
                         if (pressed)
-                            slider.userSet(ratioAt(mouse.x));
+                            previewAt(mouse.x);
+                    }
+                    onReleased: function(mouse) {
+                        previewAt(mouse.x);
+                        slider.userCommit(slider.dragValue);
+                    }
+                    onCanceled: {
+                        slider.userCommit(slider.dragValue);
                     }
                 }
             }

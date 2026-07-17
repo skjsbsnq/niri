@@ -49,7 +49,7 @@ Flickable {
                 valueText: page.controlsService ? page.percent(page.controlsService.volume) + "%" : "-"
                 value: page.controlsService ? page.controlsService.volume : 0
                 enabled: !!(page.controlsService && page.controlsService.audioReady)
-                onUserSet: function(value) {
+                onUserPreview: function(value) {
                     if (page.controlsService)
                         page.controlsService.setVolume(value);
                 }

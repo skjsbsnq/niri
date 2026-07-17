@@ -97,7 +97,7 @@ Flickable {
                 valueText: page.svc ? page.signed(page.svc.touchpadAccelSpeed) : "0"
                 value: page.svc ? Math.max(0, Math.min(1, (page.svc.touchpadAccelSpeed + 1) / 2)) : 0.5
                 enabled: page.ready
-                onUserSet: function(v) {
+                onUserCommit: function(v) {
                     if (page.svc)
                         page.svc.setTouchpadAccelSpeed(Math.round((v * 2 - 1) * 100) / 100);
                 }

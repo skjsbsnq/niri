@@ -58,7 +58,7 @@ Flickable {
                 valueText: page.niri && page.niri.outputPresent ? page.niri.outputScale.toFixed(2) + "x" : "-"
                 value: page.niri && page.niri.outputPresent ? Math.max(0, Math.min(1, (page.niri.outputScale - 0.5) / 3.5)) : 0
                 enabled: page.niriReady && page.niri && page.niri.outputPresent && !page.niri.updating
-                onUserSet: function(value) {
+                onUserCommit: function(value) {
                     if (page.niri)
                         page.niri.setOutputScale(0.5 + value * 3.5);
                 }
@@ -102,7 +102,7 @@ Flickable {
                     ? Math.max(0, Math.min(1, (page.appearance.colorTemperature - 2500) / 4000))
                     : 0
                 enabled: !!page.appearance
-                onUserSet: function(v) {
+                onUserCommit: function(v) {
                     if (page.appearance)
                         page.appearance.setColorTemperature(2500 + Math.round(v * 4000));
                 }

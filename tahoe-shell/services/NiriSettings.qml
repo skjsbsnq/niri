@@ -91,11 +91,10 @@ Item {
     // for the viewer; protected marks the task-switcher IPC binds (441b637).
     property var bindsList: []
 
-    // Per-field queue of the latest intended value while a write is in
-    // flight. setX updates its property optimistically (so the UI tracks a
-    // drag immediately) and records the intended write here; the writer
-    // drains one field per round-trip so rapid slider drags and overlapping
-    // cross-field edits all converge on disk. See S4 wiring (NiriPage).
+    // Per-field queue of the latest committed value while a write is in
+    // flight. Sliders own their drag preview and call setX once on commit;
+    // setX updates the mirror immediately and records the final write here.
+    // Overlapping cross-field edits still converge on disk in one queue.
     property var pending: ({})
 
     function envString(name) {

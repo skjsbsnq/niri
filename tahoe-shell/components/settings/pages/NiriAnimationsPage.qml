@@ -6,7 +6,7 @@ import "../controls" as Controls
 
 // S5.3: animations domain. Spring params (damping-ratio/stiffness/epsilon) for
 // the four spring-based actions present in the config write through
-// NiriSettings.setAnimParam (optimistic object update + queued KDL write +
+// NiriSettings.setAnimParam on slider commit (single queued KDL write +
 // hot-reload). window-open/close carry custom GLSL shaders and are never
 // written here. Ranges follow the niri schema parse-time bounds:
 // damping-ratio [0.1,10], stiffness >=1, epsilon [0.00001,0.1].
@@ -667,7 +667,7 @@ Flickable {
                 valueText: page.animValue("workspace_switch", "damping_ratio")
                 value: page.dampingFromValue(page.animValue("workspace_switch", "damping_ratio"))
                 enabled: page.ready
-                onUserSet: function(r) {
+                onUserCommit: function(r) {
                     if (page.svc)
                         page.svc.setAnimParam("workspace_switch", "damping_ratio", page.dampingToValue(r));
                 }
@@ -678,7 +678,7 @@ Flickable {
                 valueText: page.animValue("workspace_switch", "stiffness")
                 value: page.stiffnessFromValue(page.animValue("workspace_switch", "stiffness"))
                 enabled: page.ready
-                onUserSet: function(r) {
+                onUserCommit: function(r) {
                     if (page.svc)
                         page.svc.setAnimParam("workspace_switch", "stiffness", page.stiffnessToValue(r));
                 }
@@ -689,7 +689,7 @@ Flickable {
                 valueText: page.animValue("workspace_switch", "epsilon")
                 value: page.epsilonFromValue(page.animValue("workspace_switch", "epsilon"))
                 enabled: page.ready
-                onUserSet: function(r) {
+                onUserCommit: function(r) {
                     if (page.svc)
                         page.svc.setAnimParam("workspace_switch", "epsilon", page.epsilonToValue(r));
                 }
@@ -707,7 +707,7 @@ Flickable {
                 valueText: page.animValue("window_movement", "damping_ratio")
                 value: page.dampingFromValue(page.animValue("window_movement", "damping_ratio"))
                 enabled: page.ready
-                onUserSet: function(r) {
+                onUserCommit: function(r) {
                     if (page.svc)
                         page.svc.setAnimParam("window_movement", "damping_ratio", page.dampingToValue(r));
                 }
@@ -718,7 +718,7 @@ Flickable {
                 valueText: page.animValue("window_movement", "stiffness")
                 value: page.stiffnessFromValue(page.animValue("window_movement", "stiffness"))
                 enabled: page.ready
-                onUserSet: function(r) {
+                onUserCommit: function(r) {
                     if (page.svc)
                         page.svc.setAnimParam("window_movement", "stiffness", page.stiffnessToValue(r));
                 }
@@ -729,7 +729,7 @@ Flickable {
                 valueText: page.animValue("window_movement", "epsilon")
                 value: page.epsilonFromValue(page.animValue("window_movement", "epsilon"))
                 enabled: page.ready
-                onUserSet: function(r) {
+                onUserCommit: function(r) {
                     if (page.svc)
                         page.svc.setAnimParam("window_movement", "epsilon", page.epsilonToValue(r));
                 }
@@ -747,7 +747,7 @@ Flickable {
                 valueText: page.animValue("window_resize", "damping_ratio")
                 value: page.dampingFromValue(page.animValue("window_resize", "damping_ratio"))
                 enabled: page.ready
-                onUserSet: function(r) {
+                onUserCommit: function(r) {
                     if (page.svc)
                         page.svc.setAnimParam("window_resize", "damping_ratio", page.dampingToValue(r));
                 }
@@ -758,7 +758,7 @@ Flickable {
                 valueText: page.animValue("window_resize", "stiffness")
                 value: page.stiffnessFromValue(page.animValue("window_resize", "stiffness"))
                 enabled: page.ready
-                onUserSet: function(r) {
+                onUserCommit: function(r) {
                     if (page.svc)
                         page.svc.setAnimParam("window_resize", "stiffness", page.stiffnessToValue(r));
                 }
@@ -769,7 +769,7 @@ Flickable {
                 valueText: page.animValue("window_resize", "epsilon")
                 value: page.epsilonFromValue(page.animValue("window_resize", "epsilon"))
                 enabled: page.ready
-                onUserSet: function(r) {
+                onUserCommit: function(r) {
                     if (page.svc)
                         page.svc.setAnimParam("window_resize", "epsilon", page.epsilonToValue(r));
                 }
@@ -787,7 +787,7 @@ Flickable {
                 valueText: page.animValue("overview_open_close", "damping_ratio")
                 value: page.dampingFromValue(page.animValue("overview_open_close", "damping_ratio"))
                 enabled: page.ready
-                onUserSet: function(r) {
+                onUserCommit: function(r) {
                     if (page.svc)
                         page.svc.setAnimParam("overview_open_close", "damping_ratio", page.dampingToValue(r));
                 }
@@ -798,7 +798,7 @@ Flickable {
                 valueText: page.animValue("overview_open_close", "stiffness")
                 value: page.stiffnessFromValue(page.animValue("overview_open_close", "stiffness"))
                 enabled: page.ready
-                onUserSet: function(r) {
+                onUserCommit: function(r) {
                     if (page.svc)
                         page.svc.setAnimParam("overview_open_close", "stiffness", page.stiffnessToValue(r));
                 }
@@ -809,7 +809,7 @@ Flickable {
                 valueText: page.animValue("overview_open_close", "epsilon")
                 value: page.epsilonFromValue(page.animValue("overview_open_close", "epsilon"))
                 enabled: page.ready
-                onUserSet: function(r) {
+                onUserCommit: function(r) {
                     if (page.svc)
                         page.svc.setAnimParam("overview_open_close", "epsilon", page.epsilonToValue(r));
                 }

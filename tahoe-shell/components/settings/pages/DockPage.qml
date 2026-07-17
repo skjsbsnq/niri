@@ -52,7 +52,7 @@ Flickable {
                     ? Math.max(0, Math.min(1, page.panel.settingsService.dockAutoHideDelayMs / 1500))
                     : 0
                 enabled: !!(page.panel && page.panel.settingsService && page.panel.settingsService.dockAutoHide)
-                onUserSet: function(v) {
+                onUserPreview: function(v) {
                     if (page.panel.settingsService)
                         page.panel.settingsService.setDockAutoHideDelayMs(Math.round(v * 1500));
                 }
@@ -67,7 +67,7 @@ Flickable {
                     ? Math.max(0, Math.min(1, (page.panel.settingsService.dockRevealZoneHeight - 2) / 22))
                     : 0
                 enabled: !!(page.panel && page.panel.settingsService && page.panel.settingsService.dockAutoHide)
-                onUserSet: function(v) {
+                onUserPreview: function(v) {
                     if (page.panel.settingsService)
                         page.panel.settingsService.setDockRevealZoneHeight(2 + Math.round(v * 22));
                 }

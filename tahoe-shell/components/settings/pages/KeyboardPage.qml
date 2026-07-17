@@ -51,7 +51,7 @@ Flickable {
                 valueText: (page.svc ? page.svc.keyboardRepeatRate : 25) + " /秒"
                 value: page.svc ? Math.max(0, Math.min(1, page.svc.keyboardRepeatRate / 100)) : 0.25
                 enabled: page.ready
-                onUserSet: function(v) {
+                onUserCommit: function(v) {
                     if (page.svc)
                         page.svc.setKeyboardRepeatRate(Math.round(v * 100));
                 }
@@ -64,7 +64,7 @@ Flickable {
                 valueText: (page.svc ? page.svc.keyboardRepeatDelay : 600) + " ms"
                 value: page.svc ? Math.max(0, Math.min(1, page.svc.keyboardRepeatDelay / 1000)) : 0.6
                 enabled: page.ready
-                onUserSet: function(v) {
+                onUserCommit: function(v) {
                     if (page.svc)
                         page.svc.setKeyboardRepeatDelay(Math.round(v * 1000));
                 }

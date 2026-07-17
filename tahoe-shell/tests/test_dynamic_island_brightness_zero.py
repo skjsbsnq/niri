@@ -57,7 +57,7 @@ class BrightnessZeroTests(unittest.TestCase):
         self.assertIn("Math.max(0,Math.min(1,brightnessSample))", compact)
 
     def test_set_brightness_allows_zero_percent_command(self) -> None:
-        body = _function_body(self.controls, "setBrightness")
+        body = _function_body(self.controls, "queueBrightness")
         compact = _compact(body)
         self.assertNotIn("Math.max(0.05", body)
         self.assertIn("Math.max(0,Math.min(1,sample))", compact)
@@ -68,12 +68,13 @@ class BrightnessZeroTests(unittest.TestCase):
         self.assertIn("if(!isFinite(sample))sample=0", compact)
 
     def test_brightness_drag_uses_latest_wins_queue(self) -> None:
-        setter = _function_body(self.controls, "setBrightness")
+        setter = _function_body(self.controls, "queueBrightness")
         finish = _function_body(self.controls, "finishBrightnessWrite")
         self.assertIn("pendingBrightnessWrite", setter)
         self.assertIn("setBrightnessValue(v)", setter)
         self.assertIn("pendingBrightnessWrite", finish)
         self.assertIn("startBrightnessWrite", finish)
+        self.assertIn("Qt.callLater", finish)
         self.assertIn("brightnessUpdating = false", finish)
 
     def test_brightness_monitor_is_event_driven(self) -> None:

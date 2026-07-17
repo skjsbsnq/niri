@@ -23,7 +23,19 @@ class ControlCenterRealtimeSliderTests(unittest.TestCase):
         self.assertIn("property real userValue", self.control_center)
         self.assertIn("gs.userDragging ? gs.userValue : gs.sourceValue", self.control_center)
         self.assertIn("gs.userValue = v", self.control_center)
-        self.assertIn("gs.userSet(v)", self.control_center)
+        self.assertIn("gs.userPreview(v)", self.control_center)
+        self.assertIn("gs.userCommit(value)", self.control_center)
+
+    def test_brightness_uses_preview_and_release_commit(self) -> None:
+        self.assertIn("root.controlsService.previewBrightness(v)", self.control_center)
+        self.assertIn("root.controlsService.commitBrightness(v)", self.control_center)
+        self.assertNotIn("root.controlsService.setBrightness(v)", self.control_center)
+
+    def test_brightness_hardware_writes_are_below_30_hz(self) -> None:
+        self.assertIn("readonly property int brightnessWriteIntervalMs: 34", self.controls)
+        self.assertIn("Date.now() - root.lastBrightnessWriteStartedAt", self.controls)
+        self.assertIn("brightnessWriteThrottle.restart()", self.controls)
+        self.assertEqual(self.controls.count("id: brightnessSetter"), 1)
 
     def test_volume_write_is_optimistic_and_rejects_stale_echo(self) -> None:
         self.assertIn("property bool volumeWritePending", self.controls)

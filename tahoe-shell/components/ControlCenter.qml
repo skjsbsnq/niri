@@ -249,9 +249,13 @@ PanelWindow {
                     label: "显示"
                     value: root.controlsService ? root.controlsService.brightness : 0
                     enabled: root.controlsService && root.controlsService.brightnessAvailable
-                    onUserSet: function(v) {
+                    onUserPreview: function(v) {
                         if (root.controlsService)
-                            root.controlsService.setBrightness(v);
+                            root.controlsService.previewBrightness(v);
+                    }
+                    onUserCommit: function(v) {
+                        if (root.controlsService)
+                            root.controlsService.commitBrightness(v);
                     }
                 }
 
@@ -262,7 +266,7 @@ PanelWindow {
                     label: "声音"
                     value: root.controlsService && !root.controlsService.muted ? root.controlsService.volume : 0
                     enabled: root.controlsService && root.controlsService.audioReady
-                    onUserSet: function(v) {
+                    onUserPreview: function(v) {
                         if (root.controlsService)
                             root.controlsService.setVolume(v);
                     }
@@ -1311,7 +1315,8 @@ PanelWindow {
         property bool enabled: true
         property bool userDragging: false
         property real userValue: 0
-        signal userSet(real value)
+        signal userPreview(real value)
+        signal userCommit(real value)
 
         readonly property real sourceValue: Math.max(0, Math.min(1, Number(gs.value) || 0))
         readonly property real clampedValue: gs.userDragging ? gs.userValue : gs.sourceValue
@@ -1430,9 +1435,10 @@ PanelWindow {
                                 return;
                             var v = Math.max(0, Math.min(1, mouseX / w));
                             // Paint from pointer position before any backend
-                            // round-trip. Controls still receives every sample.
+                            // round-trip. The service decides the write budget.
                             gs.userValue = v;
-                            gs.userSet(v);
+                            gs.userPreview(v);
+                            return v;
                         }
 
                         onPressed: function(mouse) {
@@ -1444,10 +1450,15 @@ PanelWindow {
                                 dragArea.applyValue(mouse.x);
                         }
                         onReleased: function(mouse) {
-                            dragArea.applyValue(mouse.x);
+                            var value = dragArea.applyValue(mouse.x);
+                            gs.userCommit(value);
                             gs.userDragging = false;
                         }
-                        onCanceled: gs.userDragging = false
+                        onCanceled: {
+                            if (gs.userDragging)
+                                gs.userCommit(gs.userValue);
+                            gs.userDragging = false;
+                        }
                     }
                 }
             }

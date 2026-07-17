@@ -203,6 +203,8 @@ Item {
     property bool brightnessRefreshQueued: false
     property real pendingBrightnessWrite: -1
     property real activeBrightnessWrite: -1
+    property double lastBrightnessWriteStartedAt: 0
+    readonly property int brightnessWriteIntervalMs: 34
 
     function setBrightnessValue(value) {
         // 0 is legal; only non-finite input falls back to 0 after clamp.
@@ -275,14 +277,20 @@ Item {
         root.applyBrightnessHardwareSample(current, max);
     }
 
-    function setBrightness(value) {
+    function brightnessWriteAvailable() {
         if (!brightnessAvailable)
-            return;
+            return false;
         if (root.commandRunner && root.commandRunner.revision > 0 && !root.commandRunner.commandAvailable("brightnessctl")) {
             root.brightnessErrorText = "缺少 brightnessctl";
             root.setBrightnessAvailable(false);
-            return;
+            return false;
         }
+        return true;
+    }
+
+    function queueBrightness(value) {
+        if (!root.brightnessWriteAvailable())
+            return;
         // Real 0% must reach brightnessctl. Only non-finite input becomes 0
         // after clamp; negative and >1 are clamped to the [0, 1] range.
         var sample = Number(value);
@@ -296,9 +304,29 @@ Item {
         root.startBrightnessWrite();
     }
 
+    function previewBrightness(value) {
+        root.queueBrightness(value);
+    }
+
+    function commitBrightness(value) {
+        root.queueBrightness(value);
+    }
+
+    function setBrightness(value) {
+        root.queueBrightness(value);
+    }
+
     function startBrightnessWrite() {
         if (brightnessSetter.running || root.pendingBrightnessWrite < 0)
             return;
+        var elapsed = Date.now() - root.lastBrightnessWriteStartedAt;
+        var remaining = root.brightnessWriteIntervalMs - elapsed;
+        if (remaining > 0) {
+            brightnessWriteThrottle.interval = Math.max(1, Math.ceil(remaining));
+            brightnessWriteThrottle.restart();
+            return;
+        }
+        brightnessWriteThrottle.stop();
         root.activeBrightnessWrite = root.pendingBrightnessWrite;
         root.pendingBrightnessWrite = -1;
         brightnessSetter.command = [
@@ -306,11 +334,13 @@ Item {
             "set",
             Math.round(root.activeBrightnessWrite * 100).toString() + "%"
         ];
+        root.lastBrightnessWriteStartedAt = Date.now();
         brightnessSetter.running = true;
     }
 
     function finishBrightnessWrite(code) {
         if (code !== 0) {
+            brightnessWriteThrottle.stop();
             root.pendingBrightnessWrite = -1;
             root.activeBrightnessWrite = -1;
             root.brightnessUpdating = false;
@@ -326,6 +356,7 @@ Item {
             return;
         }
 
+        brightnessWriteThrottle.stop();
         root.pendingBrightnessWrite = -1;
         root.brightnessUpdating = false;
         Qt.callLater(function() { root.refreshBrightness(); });
@@ -351,6 +382,13 @@ Item {
         id: brightnessSetter
         running: false
         onExited: function (code, exitStatus) { root.finishBrightnessWrite(code); }
+    }
+
+    Timer {
+        id: brightnessWriteThrottle
+        interval: root.brightnessWriteIntervalMs
+        repeat: false
+        onTriggered: root.startBrightnessWrite()
     }
 
     // Backlight drivers emit a kernel uevent for each real brightness change.

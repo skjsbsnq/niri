@@ -5,7 +5,7 @@ import QtQuick.Layouts
 import "../controls" as Controls
 
 // S5.1: tahoe-glass materials + global blur. Material fields write through
-// NiriSettings.setGlassField (optimistic object update + queued KDL write +
+// NiriSettings.setGlassField on slider commit (single queued KDL write +
 // hot-reload); blur fields go through setBlurX. Ranges follow the niri schema:
 // edge-highlight [0,2], refraction [0,0.12], inner-shadow [0,0.5],
 // chromatic [0,0.1], lens-depth [0,0.3]. xray is intentionally not exposed
@@ -79,7 +79,7 @@ Flickable {
                 valueText: page.svc ? page.svc.blurPasses : ""
                 value: page.svc ? Math.max(0, Math.min(1, page.svc.blurPasses / 10)) : 0
                 enabled: page.ready
-                onUserSet: function(v) {
+                onUserCommit: function(v) {
                     if (page.svc)
                         page.svc.setBlurPasses(Math.round(v * 10));
                 }
@@ -92,7 +92,7 @@ Flickable {
                 valueText: page.svc ? page.svc.blurOffset : ""
                 value: page.svc ? Math.max(0, Math.min(1, page.svc.blurOffset / 100)) : 0
                 enabled: page.ready
-                onUserSet: function(v) {
+                onUserCommit: function(v) {
                     if (page.svc)
                         page.svc.setBlurOffset(v * 100);
                 }
@@ -105,7 +105,7 @@ Flickable {
                 valueText: page.svc ? page.svc.blurNoise : ""
                 value: page.svc ? Math.max(0, Math.min(1, page.svc.blurNoise / 0.1)) : 0
                 enabled: page.ready
-                onUserSet: function(v) {
+                onUserCommit: function(v) {
                     if (page.svc)
                         page.svc.setBlurNoise(v * 0.1);
                 }
@@ -118,7 +118,7 @@ Flickable {
                 valueText: page.svc ? page.svc.blurSaturation : ""
                 value: page.svc ? Math.max(0, Math.min(1, page.svc.blurSaturation / 3)) : 0.5
                 enabled: page.ready
-                onUserSet: function(v) {
+                onUserCommit: function(v) {
                     if (page.svc)
                         page.svc.setBlurSaturation(v * 3);
                 }
@@ -155,7 +155,7 @@ Flickable {
                 valueText: page.glassValue("edge_highlight")
                 value: Math.max(0, Math.min(1, page.glassValue("edge_highlight") / 2))
                 enabled: page.ready
-                onUserSet: function(v) {
+                onUserCommit: function(v) {
                     if (page.svc)
                         page.svc.setGlassField(page.material, "edge_highlight", v * 2);
                 }
@@ -168,7 +168,7 @@ Flickable {
                 valueText: page.glassValue("refraction")
                 value: Math.max(0, Math.min(1, page.glassValue("refraction") / 0.12))
                 enabled: page.ready
-                onUserSet: function(v) {
+                onUserCommit: function(v) {
                     if (page.svc)
                         page.svc.setGlassField(page.material, "refraction", v * 0.12);
                 }
@@ -181,7 +181,7 @@ Flickable {
                 valueText: page.glassValue("inner_shadow")
                 value: Math.max(0, Math.min(1, page.glassValue("inner_shadow") / 0.5))
                 enabled: page.ready
-                onUserSet: function(v) {
+                onUserCommit: function(v) {
                     if (page.svc)
                         page.svc.setGlassField(page.material, "inner_shadow", v * 0.5);
                 }
@@ -194,7 +194,7 @@ Flickable {
                 valueText: page.glassValue("chromatic")
                 value: Math.max(0, Math.min(1, page.glassValue("chromatic") / 0.1))
                 enabled: page.ready
-                onUserSet: function(v) {
+                onUserCommit: function(v) {
                     if (page.svc)
                         page.svc.setGlassField(page.material, "chromatic", v * 0.1);
                 }
@@ -207,7 +207,7 @@ Flickable {
                 valueText: page.glassValue("lens_depth")
                 value: Math.max(0, Math.min(1, page.glassValue("lens_depth") / 0.3))
                 enabled: page.ready
-                onUserSet: function(v) {
+                onUserCommit: function(v) {
                     if (page.svc)
                         page.svc.setGlassField(page.material, "lens_depth", v * 0.3);
                 }

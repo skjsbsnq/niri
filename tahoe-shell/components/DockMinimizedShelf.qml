@@ -10,6 +10,8 @@ Item {
     property var thumbnailProvider
     property var appsService
     property var settingsService
+    // See Dock.qml useSpring — forwarded to DockMinimizedWindow bounce.
+    property bool useSpring: false
     property var dockWindow
     property var dockSurfaceItem
     property real dockSlideOffset: 0
@@ -62,6 +64,7 @@ Item {
                     thumbnailProvider: root.thumbnailProvider
                     appsService: root.appsService
                     settingsService: root.settingsService
+                    useSpring: root.useSpring
                     dockWindow: root.dockWindow
                     dockSurfaceItem: root.dockSurfaceItem
                     dockSlideOffset: root.dockSlideOffset

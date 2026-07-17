@@ -1241,22 +1241,24 @@ PanelWindow {
 
                                 Component.onDestruction: pinnedButton.stopLaunchBounce()
 
-                                // ── Click bounce (single hop) ──────────────────────
-                                Timer {
-                                    id: bounceTimer
-                                    interval: 16
-                                    repeat: false
-                                    onTriggered: pinnedButton.animateBounceTo(0)
-                                }
-
+                                // ── Click bounce (single hop, R01 #75) ─────────────
+                                // Animated InQuad up leg (aligned with the launch
+                                // loop parabola), dual-branch spring/ease down leg.
                                 function bounce() {
                                     if (pinnedButton.launching)
                                         return;
                                     bounceSpring.stop();
                                     bounceEase.stop();
+                                    bounceUp.stop();
                                     launchBounceLoop.stop();
-                                    pinnedButton.bounceOffset = 14;
-                                    bounceTimer.restart();
+                                    if (Motion.reducedMotion(root.settingsService)) {
+                                        // Single hop: instant up, eased settle.
+                                        pinnedButton.bounceOffset = Motion.dockClickBounceHeightPx;
+                                        bounceEase.to = 0;
+                                        bounceEase.restart();
+                                        return;
+                                    }
+                                    bounceUp.restart();
                                 }
                                 function animateBounceTo(value) {
                                     if (root.useSpring) {
@@ -1268,6 +1270,15 @@ PanelWindow {
                                     }
                                 }
 
+                                NumberAnimation {
+                                    id: bounceUp
+                                    target: pinnedButton
+                                    property: "bounceOffset"
+                                    to: Motion.dockClickBounceHeightPx
+                                    duration: Motion.dockClickBounceUpMs
+                                    easing.type: Easing.InQuad
+                                    onFinished: pinnedButton.animateBounceTo(0)
+                                }
                                 SpringAnimation {
                                     id: bounceSpring
                                     target: pinnedButton
@@ -1280,7 +1291,7 @@ PanelWindow {
                                     id: bounceEase
                                     target: pinnedButton
                                     property: "bounceOffset"
-                                    duration: 220
+                                    duration: Motion.dockClickBounceDownMs
                                     easing.type: Motion.emphasizedDecel
                                 }
 
@@ -1298,7 +1309,7 @@ PanelWindow {
                                     }
                                     bounceSpring.stop();
                                     bounceEase.stop();
-                                    bounceTimer.stop();
+                                    bounceUp.stop();
                                     pinnedButton.bounceOffset = 0;
                                     pinnedButton.launching = true;
                                     launchBounceLoop.restart();
@@ -1312,7 +1323,7 @@ PanelWindow {
                                     // Settle residual offset to 0 without stacking.
                                     bounceSpring.stop();
                                     bounceEase.stop();
-                                    bounceTimer.stop();
+                                    bounceUp.stop();
                                     if (Math.abs(pinnedButton.bounceOffset) > 0.5)
                                         pinnedButton.animateBounceTo(0);
                                     else
@@ -1472,6 +1483,7 @@ PanelWindow {
                     thumbnailProvider: root.thumbnailProvider
                     appsService: root.appsService
                     settingsService: root.settingsService
+                    useSpring: root.useSpring
                     dockWindow: root
                     dockSurfaceItem: dockSurface
                     dockSlideOffset: root.dockSlideOffset

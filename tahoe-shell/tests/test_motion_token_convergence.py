@@ -115,6 +115,31 @@ class MotionTokenConvergenceTests(unittest.TestCase):
         self.assertIn("function dockLaunchBounceHeight(iconSizePx)", text)
         self.assertIn("dockLaunchBounceHeightFactor", text)
 
+    def test_motion_exports_dock_click_bounce_tokens(self) -> None:
+        text = MOTION_JS.read_text(encoding="utf-8")
+
+        self.assertIn("var dockClickBounceHeightPx = 14;", text)
+        self.assertIn("var dockClickBounceShelfHeightPx = 8;", text)
+        self.assertIn("var dockClickBounceUpMs = 90;", text)
+        self.assertIn("var dockClickBounceDownMs = 220;", text)
+
+    def test_dock_click_bounce_sites_use_tokens(self) -> None:
+        # R01 (#74/#75): all three bounce sites share one token set — no
+        # per-site magic numbers, animated up leg, spring/ease down leg.
+        components = MOTION_JS.parent
+        for name in ("Dock.qml", "WindowButton.qml", "DockMinimizedWindow.qml"):
+            text = (components / name).read_text(encoding="utf-8")
+            self.assertIn("Motion.dockClickBounceUpMs", text, name)
+            self.assertIn("Motion.dockClickBounceDownMs", text, name)
+            self.assertNotIn("bounceOffset = 14", text, name)
+            self.assertNotIn("bounceOffset = 8", text, name)
+        dock = (components / "Dock.qml").read_text(encoding="utf-8")
+        window_button = (components / "WindowButton.qml").read_text(encoding="utf-8")
+        shelf_window = (components / "DockMinimizedWindow.qml").read_text(encoding="utf-8")
+        self.assertIn("Motion.dockClickBounceHeightPx", dock)
+        self.assertIn("Motion.dockClickBounceHeightPx", window_button)
+        self.assertIn("Motion.dockClickBounceShelfHeightPx", shelf_window)
+
     def test_motion_exports_toast_stack_tokens(self) -> None:
         text = MOTION_JS.read_text(encoding="utf-8")
 

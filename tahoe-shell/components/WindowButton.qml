@@ -316,20 +316,20 @@ Item {
         }
     }
 
-    // Wave mag/push are direct bindings (T08-fix8). Click bounce still uses
-    // dual-branch spring/ease on bounceOffset only.
-    Timer {
-        id: bounceTimer
-        interval: 16
-        repeat: false
-        onTriggered: root.animateBounceTo(0)
-    }
-
+    // Wave mag/push are direct bindings (T08-fix8). Click bounce (R01 #75):
+    // animated InQuad up leg, then dual-branch spring/ease down leg.
     function bounce() {
         bounceSpring.stop();
         bounceEase.stop();
-        root.bounceOffset = 14;
-        bounceTimer.restart();
+        bounceUp.stop();
+        if (Motion.reducedMotion(root.settingsService)) {
+            // Single hop: instant up, eased settle.
+            root.bounceOffset = Motion.dockClickBounceHeightPx;
+            bounceEase.to = 0;
+            bounceEase.restart();
+            return;
+        }
+        bounceUp.restart();
     }
     function animateBounceTo(value) {
         if (root.useSpring) {
@@ -341,6 +341,15 @@ Item {
         }
     }
 
+    NumberAnimation {
+        id: bounceUp
+        target: root
+        property: "bounceOffset"
+        to: Motion.dockClickBounceHeightPx
+        duration: Motion.dockClickBounceUpMs
+        easing.type: Easing.InQuad
+        onFinished: root.animateBounceTo(0)
+    }
     SpringAnimation {
         id: bounceSpring
         target: root
@@ -353,7 +362,7 @@ Item {
         id: bounceEase
         target: root
         property: "bounceOffset"
-        duration: 220
+        duration: Motion.dockClickBounceDownMs
         easing.type: Motion.emphasizedDecel
     }
 }

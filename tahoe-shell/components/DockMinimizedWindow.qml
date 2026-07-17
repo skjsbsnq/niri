@@ -14,6 +14,9 @@ Item {
     property var dockWindow
     property var dockSurfaceItem
     property real dockSlideOffset: 0
+    // See Dock.qml useSpring — forwarded so the bounce down leg can use the
+    // spring branch off software GPUs.
+    property bool useSpring: false
     property int thumbnailMaxWidth: 320
     property int thumbnailMaxHeight: 220
     property real bounceOffset: 0
@@ -98,9 +101,30 @@ Item {
         root.activated(root.windowModel);
     }
 
+    // Click bounce (R01 #74): animated InQuad up leg, dual-branch spring/ease
+    // down leg — same physics as Dock icons / WindowButton, shorter height
+    // because the thumbnail shelf has less vertical travel.
     function bounce() {
-        root.bounceOffset = 8;
-        bounceTimer.restart();
+        bounceSpring.stop();
+        bounceEase.stop();
+        bounceUp.stop();
+        if (Motion.reducedMotion(root.settingsService)) {
+            // Single hop: instant up, eased settle.
+            root.bounceOffset = Motion.dockClickBounceShelfHeightPx;
+            bounceEase.to = 0;
+            bounceEase.restart();
+            return;
+        }
+        bounceUp.restart();
+    }
+    function animateBounceTo(value) {
+        if (root.useSpring) {
+            bounceSpring.to = value;
+            bounceSpring.restart();
+        } else {
+            bounceEase.to = value;
+            bounceEase.restart();
+        }
     }
 
     onWindowModelChanged: scheduleThumbnailRefresh()
@@ -245,16 +269,28 @@ Item {
         }
     }
 
-    Timer {
-        id: bounceTimer
-        interval: 16
-        repeat: false
-        onTriggered: root.bounceOffset = 0
+    NumberAnimation {
+        id: bounceUp
+        target: root
+        property: "bounceOffset"
+        to: Motion.dockClickBounceShelfHeightPx
+        duration: Motion.dockClickBounceUpMs
+        easing.type: Easing.InQuad
+        onFinished: root.animateBounceTo(0)
     }
-
-    // Local exception: minimized-thumbnail bounce is shorter than the dock icon
-    // fallback because the thumbnail shelf has less vertical travel.
-    Behavior on bounceOffset {
-        NumberAnimation { duration: 170; easing.type: Motion.emphasizedDecel }
+    SpringAnimation {
+        id: bounceSpring
+        target: root
+        property: "bounceOffset"
+        spring: Motion.springBouncy.spring
+        damping: Motion.springBouncy.damping
+        epsilon: 0.01
+    }
+    NumberAnimation {
+        id: bounceEase
+        target: root
+        property: "bounceOffset"
+        duration: Motion.dockClickBounceDownMs
+        easing.type: Motion.emphasizedDecel
     }
 }

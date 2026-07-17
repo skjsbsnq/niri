@@ -77,6 +77,15 @@ function dockLaunchBounceHeight(iconSizePx) {
     return size * dockLaunchBounceHeightFactor;
 }
 
+// R01 (#74/#75): click bounce (single hop) shares the launch-loop parabola
+// vocabulary — animated InQuad up leg, spring/ease down leg. Single token set
+// for all three sites (pinned icon / window button / minimized thumbnail);
+// the shelf height is smaller because the thumbnail row has less travel.
+var dockClickBounceHeightPx = 14;
+var dockClickBounceShelfHeightPx = 8;
+var dockClickBounceUpMs = 90;
+var dockClickBounceDownMs = 220;
+
 // Notification toast stack + swipe dismiss (T09). Stack count lives in
 // DesktopSettings.notificationToastStackMax (default 3). Glass region geometry
 // still uses eased NumberAnimation only; springPanel drives content transforms.

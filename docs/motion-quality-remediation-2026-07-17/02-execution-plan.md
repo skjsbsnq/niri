@@ -12,7 +12,7 @@
 | 任务 | 名称 | 覆盖问题 | 规模 | 状态 | 审查/验收记录 |
 | --- | --- | --- | --- | --- | --- |
 | R00 | 基线锁定 | — | S | DONE | [R00](acceptance/R00-baseline-2026-07-17.md)：747 tests 全绿、validate 过、嵌套冒烟过、grep 基数 124/10/0/27 |
-| R01 | 弹跳物理统一（死 bounce + 点击上行） | #74 #75 | S | PENDING | |
+| R01 | 弹跳物理统一（死 bounce + 点击上行） | #74 #75 | S | DONE | [R01](acceptance/R01-bounce-physics-2026-07-17.md)：双 agent 审查 3 问题已修，749 tests 全绿 |
 | R02 | Spotlight 打字闪烁修复 | #86 | S | PENDING | |
 | R03 | Launchpad 打字脉冲修复 + 图标异步 | #83 #84 #85 | S | PENDING | |
 | R04 | WiFi 弹窗稳定列表（点名②） | #7 #8 #9 #10 | M | PENDING | |

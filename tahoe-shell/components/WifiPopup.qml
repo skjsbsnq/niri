@@ -16,6 +16,7 @@ PanelWindow {
     property var anchorRect: null
     property var settingsService
     readonly property var networks: controlsService ? controlsService.wifiNetworks : []
+    readonly property bool scanning: controlsService ? !!controlsService.wifiScanning : false
     readonly property int edgePadding: 8
     readonly property int fallbackRight: 132
     readonly property int fallbackTop: 28
@@ -31,7 +32,7 @@ PanelWindow {
     focusable: open
     exclusionMode: ExclusionMode.Ignore
     implicitWidth: 328
-    implicitHeight: panel.implicitHeight
+    implicitHeight: panel.height
     color: "transparent"
     WlrLayershell.namespace: "tahoe-wifi-popup"
 
@@ -54,11 +55,20 @@ PanelWindow {
         width: parent.width
         implicitHeight: content.implicitHeight + 24
         height: implicitHeight
+        clip: true
         material: GlassStyle.MaterialPanel
         radius: GlassStyle.RadiusPopup
         fillColor: GlassStyle.FillPanelBright
         strokeColor: GlassStyle.StrokePanelBright
         opacity: 1
+
+        // Glass region geometry follows this height: eased only, never spring.
+        Behavior on height {
+            NumberAnimation {
+                duration: Motion.elementResize(root.settingsService)
+                easing.type: Motion.emphasizedDecel
+            }
+        }
 
         ColumnLayout {
             id: content
@@ -141,7 +151,9 @@ PanelWindow {
 
             Text {
                 Layout.fillWidth: true
-                text: root.controlsService && root.controlsService.wifiEnabled ? "未发现网络" : "Wi-Fi 已关闭"
+                text: root.controlsService && root.controlsService.wifiEnabled
+                    ? (root.scanning ? "正在扫描…" : "未发现网络")
+                    : "Wi-Fi 已关闭"
                 color: "#8a1d1d1f"
                 font.pixelSize: 12
                 font.weight: Font.DemiBold
@@ -162,9 +174,47 @@ PanelWindow {
                 clip: true
                 spacing: 4
                 boundsBehavior: Flickable.StopAtBounds
-                model: root.networks
+                model: ScriptModel {
+                    objectProp: "name"
+                    values: root.networks
+                }
 
                 property string expandedSsid: ""
+
+                Behavior on Layout.preferredHeight {
+                    NumberAnimation {
+                        duration: Motion.elementResize(root.settingsService)
+                        easing.type: Motion.emphasizedDecel
+                    }
+                }
+
+                add: Transition {
+                    NumberAnimation {
+                        property: "opacity"
+                        from: 0
+                        to: 1
+                        duration: Motion.fadeFast(root.settingsService)
+                        easing.type: Motion.standardDecel
+                    }
+                }
+
+                remove: Transition {
+                    NumberAnimation {
+                        property: "opacity"
+                        from: 1
+                        to: 0
+                        duration: Motion.fadeFast(root.settingsService)
+                        easing.type: Motion.standardDecel
+                    }
+                }
+
+                displaced: Transition {
+                    NumberAnimation {
+                        properties: "x,y"
+                        duration: Motion.elementMove(root.settingsService)
+                        easing.type: Motion.emphasizedDecel
+                    }
+                }
 
                 delegate: WifiNetworkRow {
                     required property var modelData
@@ -377,12 +427,27 @@ PanelWindow {
                 Rectangle {
                     Layout.fillWidth: true
                     Layout.preferredHeight: row.expanded ? 42 : 0
+                    opacity: row.expanded ? 1 : 0
                     radius: 10
                     color: "#24ffffff"
                     border.color: "#3cffffff"
                     border.width: 1
-                    visible: row.expanded
+                    visible: row.expanded || opacity > 0.01 || Layout.preferredHeight > 0.5
                     clip: true
+
+                    Behavior on Layout.preferredHeight {
+                        NumberAnimation {
+                            duration: Motion.elementResize(root.settingsService)
+                            easing.type: Motion.emphasizedDecel
+                        }
+                    }
+
+                    Behavior on opacity {
+                        NumberAnimation {
+                            duration: Motion.fadeFast(root.settingsService)
+                            easing.type: Motion.standardDecel
+                        }
+                    }
 
                     RowLayout {
                         anchors.fill: parent

@@ -52,6 +52,31 @@ Item {
     property bool hotspotActive: false
     property string hotspotName: ""
 
+    QtObject {
+        id: wifiNetworkState
+
+        property var entries: []
+        property var cache: Object.create(null)
+        property bool scanning: false
+        property int scanGeneration: 0
+    }
+
+    Component {
+        id: wifiNetworkEntryFactory
+
+        QtObject {
+            property var network
+            property string name: ""
+            property int signalPercent: 0
+            property var security
+            property bool secured: false
+            property bool pskSupported: false
+            property bool known: false
+            property bool connected: false
+            property bool stateChanging: false
+        }
+    }
+
     FileView {
         id: controlsStateFile
         path: root.controlsStatePath
@@ -531,7 +556,10 @@ Item {
         return null;
     }
 
-    readonly property var wifiNetworks: {
+    readonly property var wifiNetworks: wifiNetworkState.entries
+    readonly property bool wifiScanning: wifiNetworkState.scanning
+
+    function wifiNetworkCandidates() {
         var d = root.wifiDevice;
         if (!d)
             return [];
@@ -541,7 +569,7 @@ Item {
             if (!nets || !nets.values)
                 return [];
 
-            var byName = {};
+            var byName = Object.create(null);
             for (var i = 0; i < nets.values.length; i++) {
                 var n = nets.values[i];
                 if (!n)
@@ -553,7 +581,9 @@ Item {
 
                 var signal = root.signalPercent(n.signalStrength);
                 var existing = byName[name];
-                if (!existing || n.connected || signal > existing.signalPercent) {
+                if (!existing
+                        || (!!n.connected && !existing.connected)
+                        || (!!n.connected === existing.connected && signal > existing.signalPercent)) {
                     byName[name] = {
                         network: n,
                         name: name,
@@ -577,7 +607,9 @@ Item {
                     return a.connected ? -1 : 1;
                 if (a.known !== b.known)
                     return a.known ? -1 : 1;
-                return b.signalPercent - a.signalPercent;
+                if (a.signalPercent !== b.signalPercent)
+                    return b.signalPercent - a.signalPercent;
+                return a.name.localeCompare(b.name);
             });
 
             return out;
@@ -585,6 +617,169 @@ Item {
             console.warn("[Controls] failed to read wifi networks:", e);
             return [];
         }
+    }
+
+    function mergeWifiNetworkCandidates(candidates, retainMissing) {
+        var cache = wifiNetworkState.cache || Object.create(null);
+        var activeNames = Object.create(null);
+        var next = [];
+        var incoming = candidates || [];
+
+        for (var i = 0; i < incoming.length; i++) {
+            var candidate = incoming[i];
+            if (!candidate)
+                continue;
+            var name = String(candidate.name || "").trim();
+            if (name.length === 0 || activeNames[name])
+                continue;
+
+            var entry = cache[name];
+            if (!entry) {
+                entry = wifiNetworkEntryFactory.createObject(root);
+                if (!entry)
+                    continue;
+                cache[name] = entry;
+            }
+            // Stable QObject wrappers provide real notify signals for field
+            // updates while ScriptModel preserves the delegate itself.
+            entry.network = candidate.network;
+            entry.name = name;
+            entry.signalPercent = Number(candidate.signalPercent) || 0;
+            entry.security = candidate.security;
+            entry.secured = !!candidate.secured;
+            entry.pskSupported = !!candidate.pskSupported;
+            entry.known = !!candidate.known;
+            entry.connected = !!candidate.connected;
+            entry.stateChanging = !!candidate.stateChanging;
+            activeNames[name] = true;
+            next.push(entry);
+        }
+
+        if (retainMissing) {
+            var previous = wifiNetworkState.entries || [];
+            for (var p = 0; p < previous.length; p++) {
+                var retained = previous[p];
+                var retainedName = String(retained && retained.name || "").trim();
+                if (retainedName.length === 0 || activeNames[retainedName])
+                    continue;
+                activeNames[retainedName] = true;
+                next.push(retained);
+            }
+        } else {
+            for (var cachedName in cache) {
+                if (!activeNames[cachedName]) {
+                    var removedEntry = cache[cachedName];
+                    delete cache[cachedName];
+                    // Allow ListView's remove transition to finish before the
+                    // retired wrapper is released.
+                    if (removedEntry && removedEntry.destroy)
+                        removedEntry.destroy(1000);
+                }
+            }
+        }
+
+        next.sort(function(a, b) {
+            if (a.connected !== b.connected)
+                return a.connected ? -1 : 1;
+            if (a.known !== b.known)
+                return a.known ? -1 : 1;
+            if (a.signalPercent !== b.signalPercent)
+                return b.signalPercent - a.signalPercent;
+            return a.name.localeCompare(b.name);
+        });
+
+        wifiNetworkState.cache = cache;
+        wifiNetworkState.entries = next;
+        return next;
+    }
+
+    function clearWifiNetworkEntries() {
+        var cache = wifiNetworkState.cache || Object.create(null);
+        for (var name in cache) {
+            var entry = cache[name];
+            if (entry && entry.destroy)
+                entry.destroy(1000);
+        }
+        wifiNetworkState.cache = Object.create(null);
+        wifiNetworkState.entries = [];
+    }
+
+    function syncWifiNetworks(retainMissing) {
+        if (!root.wifiDevice || !root.wifiEnabled) {
+            wifiScanFallbackTimer.stop();
+            wifiNetworkState.scanning = false;
+            root.clearWifiNetworkEntries();
+            return;
+        }
+        root.mergeWifiNetworkCandidates(root.wifiNetworkCandidates(), !!retainMissing);
+    }
+
+    function handleWifiNetworkChange() {
+        var candidates = root.wifiNetworkCandidates();
+        root.mergeWifiNetworkCandidates(candidates, root.wifiScanning);
+    }
+
+    function finishWifiScan() {
+        wifiScanFallbackTimer.stop();
+        wifiNetworkState.scanning = false;
+        root.syncWifiNetworks(false);
+    }
+
+    Connections {
+        target: root.wifiDevice && root.wifiDevice.networks
+            ? root.wifiDevice.networks : null
+        ignoreUnknownSignals: true
+        function onValuesChanged() { root.handleWifiNetworkChange(); }
+    }
+
+    Repeater {
+        id: wifiNetworkObservers
+        model: root.wifiDevice && root.wifiDevice.networks
+            ? root.wifiDevice.networks.values : []
+
+        delegate: Item {
+            id: wifiNetworkObserver
+            required property var modelData
+            visible: false
+            width: 0
+            height: 0
+
+            Component.onCompleted: Qt.callLater(function() { root.handleWifiNetworkChange(); })
+
+            Connections {
+                target: wifiNetworkObserver.modelData
+                ignoreUnknownSignals: true
+                function onNameChanged() { root.handleWifiNetworkChange(); }
+                function onSignalStrengthChanged() { root.handleWifiNetworkChange(); }
+                function onSecurityChanged() { root.handleWifiNetworkChange(); }
+                function onKnownChanged() { root.handleWifiNetworkChange(); }
+                function onConnectedChanged() { root.handleWifiNetworkChange(); }
+                function onStateChangingChanged() { root.handleWifiNetworkChange(); }
+            }
+        }
+    }
+
+    Timer {
+        id: wifiScanFallbackTimer
+        // Quickshell rate-limits NetworkManager scans to 10001ms. Keep the
+        // previous non-empty snapshot until that window has elapsed so a
+        // rate-limited rescan cannot publish the scanner-toggle empty state.
+        interval: 10500
+        repeat: false
+        onTriggered: root.finishWifiScan()
+    }
+
+    onWifiDeviceChanged: {
+        wifiNetworkState.scanGeneration += 1;
+        Qt.callLater(function() {
+            root.syncWifiNetworks(false);
+            if (root.pollingActive && root.wifiDevice && root.wifiEnabled)
+                root.rescanWifi();
+        });
+    }
+    onWifiEnabledChanged: {
+        wifiNetworkState.scanGeneration += 1;
+        Qt.callLater(function() { root.syncWifiNetworks(false); });
     }
 
     onWifiConnectedChanged: {
@@ -938,13 +1133,22 @@ Item {
         if (!root.pollingActive || !d || !root.wifiEnabled)
             return;
 
+        wifiNetworkState.scanning = true;
+        wifiNetworkState.scanGeneration += 1;
+        var scanGeneration = wifiNetworkState.scanGeneration;
+        var scanDevice = d;
+        root.syncWifiNetworks(true);
+        wifiScanFallbackTimer.restart();
+
         try {
             d.scannerEnabled = false;
         } catch (e) {}
         Qt.callLater(function() {
             try {
-                if (root.pollingActive && root.wifiDevice && root.wifiEnabled)
-                    root.wifiDevice.scannerEnabled = true;
+                if (wifiNetworkState.scanGeneration === scanGeneration
+                        && root.pollingActive && root.wifiDevice === scanDevice
+                        && root.wifiEnabled)
+                    scanDevice.scannerEnabled = true;
             } catch (e) {}
         });
     }
@@ -991,6 +1195,9 @@ Item {
             root.refreshKnownWifiProfiles();
         } else {
             knownWifiRefreshTimer.stop();
+            wifiNetworkState.scanGeneration += 1;
+            wifiScanFallbackTimer.stop();
+            wifiNetworkState.scanning = false;
             if (knownWifiProbe.running)
                 knownWifiProbe.running = false;
             root.knownWifiRefreshing = false;

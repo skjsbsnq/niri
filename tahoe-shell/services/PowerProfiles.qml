@@ -10,6 +10,7 @@ Item {
     visible: false
 
     property bool available: false
+    property bool pollingActive: true
     property bool updating: false
     property string profile: ""
     property string errorText: ""
@@ -39,6 +40,9 @@ Item {
     ]
 
     function refresh() {
+        if (!root.pollingActive)
+            return;
+
         if (!busProfileProbe.running)
             busProfileProbe.running = true;
         if (!busListProbe.running)
@@ -100,6 +104,9 @@ Item {
     }
 
     function parseProfile(text, source) {
+        if (!root.pollingActive)
+            return;
+
         var raw = String(text || "").trim();
         var match = raw.match(/(power-saver|balanced|performance)/);
         if (!match)
@@ -112,6 +119,9 @@ Item {
     }
 
     function parseProfileList(text) {
+        if (!root.pollingActive)
+            return;
+
         var found = [];
         var raw = String(text || "");
         var re = /(power-saver|balanced|performance)/g;
@@ -141,7 +151,7 @@ Item {
             onStreamFinished: root.parseProfile(busProfileProbeOut.text, "busctl")
         }
         onExited: function(code, exitStatus) {
-            if (code !== 0 && !cliProfileProbe.running)
+            if (root.pollingActive && code !== 0 && !cliProfileProbe.running)
                 cliProfileProbe.running = true;
         }
     }
@@ -162,7 +172,7 @@ Item {
             onStreamFinished: root.parseProfileList(busListProbeOut.text)
         }
         onExited: function(code, exitStatus) {
-            if (code !== 0 && !cliListProbe.running)
+            if (root.pollingActive && code !== 0 && !cliListProbe.running)
                 cliListProbe.running = true;
         }
     }
@@ -176,7 +186,7 @@ Item {
             onStreamFinished: root.parseProfile(cliProfileProbeOut.text, "powerprofilesctl")
         }
         onExited: function(code, exitStatus) {
-            if (code !== 0 && !root.available) {
+            if (root.pollingActive && code !== 0 && !root.available) {
                 root.setValue("backend", "");
                 root.setValue("errorText", "需要 power-profiles-daemon");
             }
@@ -192,7 +202,7 @@ Item {
             onStreamFinished: root.parseProfileList(cliListProbeOut.text)
         }
         onExited: function(code, exitStatus) {
-            if (code !== 0 && !root.available && root.availableProfileIds.length > 0)
+            if (root.pollingActive && code !== 0 && !root.available && root.availableProfileIds.length > 0)
                 root.availableProfileIds = [];
         }
     }
@@ -202,16 +212,36 @@ Item {
         running: false
         onExited: function(code, exitStatus) {
             root.setValue("updating", false);
-            root.refresh();
+            if (root.pollingActive)
+                root.refresh();
         }
     }
 
     Timer {
+        id: profileRefreshTimer
         interval: 15000
-        running: true
+        running: root.pollingActive
         repeat: true
         onTriggered: root.refresh()
     }
 
-    Component.onCompleted: root.refresh()
+    onPollingActiveChanged: {
+        if (root.pollingActive) {
+            root.refresh();
+        } else {
+            if (busProfileProbe.running)
+                busProfileProbe.running = false;
+            if (busListProbe.running)
+                busListProbe.running = false;
+            if (cliProfileProbe.running)
+                cliProfileProbe.running = false;
+            if (cliListProbe.running)
+                cliListProbe.running = false;
+        }
+    }
+
+    Component.onCompleted: {
+        if (root.pollingActive)
+            root.refresh();
+    }
 }

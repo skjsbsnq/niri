@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
+import hashlib
 import json
 import os
 import shutil
 import subprocess
 import sys
+import time
 from collections import Counter
 from pathlib import Path
 
@@ -78,19 +80,62 @@ PERMISSIONS = [
 ]
 
 SCHEMA_VERSION = 1
+DEFAULT_PROBE_BUDGET_MS = 2500
+DEFAULT_FINGERPRINT_BUDGET_MS = 600
+PERMISSIONS_PROBE_BUDGET_MS = 1600
+MAX_DESKTOP_FILES = 5000
+MAX_STORAGE_FILES = 4000
 
 CONTROL_READONLY = "readonly"
 CONTROL_WARNING = "warning"
 CONTROL_EXTERNAL = "external"
 
 
+class Budget:
+    def __init__(self, limit_ms):
+        self.limit_ms = max(1, int(limit_ms))
+        self.started = time.monotonic()
+        self.deadline = self.started + self.limit_ms / 1000.0
+
+    def remaining(self):
+        return max(0.0, self.deadline - time.monotonic())
+
+    def expired(self):
+        return self.remaining() <= 0
+
+    def timeout(self, requested):
+        remaining = self.remaining()
+        if remaining <= 0:
+            return 0.001
+        return max(0.001, min(float(requested), remaining))
+
+    def summary(self):
+        elapsed = max(0, round((time.monotonic() - self.started) * 1000))
+        return {
+            "limitMs": self.limit_ms,
+            "elapsedMs": elapsed,
+            "expired": self.expired(),
+        }
+
+
 def emit(payload):
     print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
 
 
-def run(command, timeout=4):
+def run(command, timeout=4, budget=None):
+    if budget is not None and budget.expired():
+        return subprocess.CompletedProcess(command, 124, "", "probe budget exhausted")
     try:
-        return subprocess.run(command, capture_output=True, text=True, timeout=timeout, check=False)
+        effective_timeout = budget.timeout(timeout) if budget is not None else timeout
+        return subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            timeout=effective_timeout,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        return subprocess.CompletedProcess(command, 124, "", "command timed out")
     except Exception as exc:
         return subprocess.CompletedProcess(command, 1, "", str(exc))
 
@@ -159,6 +204,83 @@ def desktop_roots():
         if item:
             roots.append(Path(item) / "applications")
     return roots
+
+
+def mimeapps_paths():
+    home = Path.home()
+    config_home = Path(os.environ.get("XDG_CONFIG_HOME") or home / ".config")
+    data_home = Path(os.environ.get("XDG_DATA_HOME") or home / ".local/share")
+    paths = [config_home / "mimeapps.list", data_home / "applications" / "mimeapps.list"]
+    for item in (os.environ.get("XDG_DATA_DIRS") or "/usr/local/share:/usr/share").split(":"):
+        if item:
+            paths.append(Path(item) / "applications" / "mimeapps.list")
+    unique = []
+    seen = set()
+    for path in paths:
+        text = str(path)
+        if text not in seen:
+            seen.add(text)
+            unique.append(path)
+    return unique
+
+
+def update_stat_fingerprint(hasher, label, path):
+    try:
+        stat = path.stat()
+        value = f"{label}\0{path}\0{stat.st_mtime_ns}\0{stat.st_size}\0"
+    except OSError:
+        value = f"{label}\0{path}\0missing\0"
+    hasher.update(value.encode("utf-8", errors="surrogateescape"))
+
+
+def defaults_fingerprint(budget_ms=DEFAULT_FINGERPRINT_BUDGET_MS):
+    budget = budget_ms if isinstance(budget_ms, Budget) else Budget(budget_ms)
+    hasher = hashlib.sha256()
+    hasher.update(f"schema={SCHEMA_VERSION}\0lang={os.environ.get('LANG', '')}\0".encode())
+    hasher.update(f"xdg-mime={shutil.which('xdg-mime') or ''}\0".encode())
+    file_count = 0
+    truncated = False
+
+    for root in desktop_roots():
+        update_stat_fingerprint(hasher, "root", root)
+        if budget.expired():
+            truncated = True
+            break
+        if not root.is_dir():
+            continue
+        try:
+            for current, dirs, files in os.walk(root):
+                dirs.sort()
+                files.sort()
+                for name in files:
+                    if not name.endswith(".desktop"):
+                        continue
+                    if budget.expired() or file_count >= MAX_DESKTOP_FILES:
+                        truncated = True
+                        break
+                    update_stat_fingerprint(hasher, "desktop", Path(current) / name)
+                    file_count += 1
+                if truncated:
+                    break
+        except OSError:
+            continue
+        if truncated:
+            break
+
+    for path in mimeapps_paths():
+        if budget.expired():
+            truncated = True
+            break
+        update_stat_fingerprint(hasher, "mimeapps", path)
+
+    return {
+        **schema_fields("defaults-fingerprint"),
+        "status": "warn" if truncated else "ok",
+        "fingerprint": hasher.hexdigest(),
+        "desktopFiles": file_count,
+        "complete": not truncated,
+        "budget": budget.summary(),
+    }
 
 
 def locale_score(key):
@@ -241,12 +363,18 @@ def parse_desktop(path, desktop_id):
     }
 
 
-def scan_desktop_entries():
+def scan_desktop_entries(budget=None, max_files=MAX_DESKTOP_FILES):
     entries = {}
+    scanned = 0
     for root in desktop_roots():
+        if budget is not None and budget.expired():
+            break
         if not root.is_dir():
             continue
         for path in root.rglob("*.desktop"):
+            if (budget is not None and budget.expired()) or scanned >= max_files:
+                return entries
+            scanned += 1
             try:
                 relative = path.relative_to(root)
             except ValueError:
@@ -260,11 +388,11 @@ def scan_desktop_entries():
     return entries
 
 
-def query_default(mime):
+def query_default(mime, budget=None):
     xdg_mime = shutil.which("xdg-mime")
     if not xdg_mime:
         return ""
-    result = run([xdg_mime, "query", "default", mime])
+    result = run([xdg_mime, "query", "default", mime], budget=budget)
     if result.returncode != 0:
         return ""
     return result.stdout.strip().splitlines()[0] if result.stdout.strip() else ""
@@ -294,15 +422,21 @@ def candidate_entry(meta, category_mimes):
     return out
 
 
-def probe_defaults():
-    meta = scan_desktop_entries()
+def probe_defaults(budget_ms=DEFAULT_PROBE_BUDGET_MS):
+    budget = budget_ms if isinstance(budget_ms, Budget) else Budget(budget_ms)
+    fingerprint = defaults_fingerprint(min(DEFAULT_FINGERPRINT_BUDGET_MS, budget.limit_ms))
+    meta = scan_desktop_entries(budget)
     xdg_mime = shutil.which("xdg-mime")
     status = "ok" if xdg_mime else "missing"
     detail = "xdg-mime 可用" if xdg_mime else "缺少 xdg-mime，无法读取或修改默认应用"
     rows = []
 
     for category in CATEGORIES:
-        defaults = {mime: query_default(mime) for mime in category["mimes"]} if xdg_mime else {}
+        defaults = {
+            mime: query_default(mime, budget)
+            for mime in category["mimes"]
+            if not budget.expired()
+        } if xdg_mime else {}
         current = current_default_for(defaults, category["mimes"])
         current_set = set(value for value in defaults.values() if value)
         category_mimes = set(category["mimes"])
@@ -341,10 +475,17 @@ def probe_defaults():
             }
         )
 
+    if budget.expired() and status == "ok":
+        status = "warn"
+        detail = "默认应用探测达到时间预算，结果可能不完整"
+
     return {
         **schema_fields("defaults"),
         "status": status,
         "detail": detail,
+        "fingerprint": fingerprint["fingerprint"],
+        "fingerprintComplete": fingerprint["complete"],
+        "budget": budget.summary(),
         "xdgMime": {
             "status": status,
             "available": bool(xdg_mime),
@@ -391,18 +532,22 @@ def set_default(desktop_id, mimes):
     }
 
 
-def permission_store_available():
+def permission_store_available(budget=None):
     busctl = shutil.which("busctl")
     if not busctl:
         return False, "missing", "缺少 busctl，无法读取 portal permission store"
-    result = run([busctl, "--user", "status", "org.freedesktop.impl.portal.PermissionStore"], timeout=2)
+    result = run(
+        [busctl, "--user", "status", "org.freedesktop.impl.portal.PermissionStore"],
+        timeout=2,
+        budget=budget,
+    )
     if result.returncode == 0:
         return True, "ok", "portal permission store 可读取"
     detail = (result.stderr or result.stdout).strip() or "未检测到 org.freedesktop.impl.portal.PermissionStore"
     return False, "missing", detail.splitlines()[0]
 
 
-def lookup_permission(table, object_id, app_key):
+def lookup_permission(table, object_id, app_key, budget=None):
     busctl = shutil.which("busctl")
     if not busctl:
         return {"status": "unavailable", "detail": "缺少 busctl", "raw": ""}
@@ -420,6 +565,7 @@ def lookup_permission(table, object_id, app_key):
             object_id,
         ],
         timeout=2,
+        budget=budget,
     )
     if result.returncode != 0:
         detail = (result.stderr or result.stdout).strip() or "读取失败"
@@ -473,7 +619,7 @@ def parse_flatpak_permissions(text):
     return rows
 
 
-def static_permissions_for(item, sandbox):
+def static_permissions_for(item, sandbox, budget=None):
     sandbox_type = sandbox.get("type", "unknown")
     sandbox_id = sandbox.get("id", "")
     if sandbox_type != "flatpak":
@@ -487,7 +633,19 @@ def static_permissions_for(item, sandbox):
             "status": "unavailable",
         }
         return [apply_control(row, external_permission_control("Flatpak", row["status"]))]
-    result = run([flatpak, "info", "--show-permissions", sandbox_id], timeout=4)
+    if budget is not None and budget.expired():
+        row = {
+            "id": "flatpak-budget",
+            "title": "Flatpak permissions",
+            "detail": "权限探测达到时间预算",
+            "status": "unavailable",
+        }
+        return [apply_control(row, external_permission_control("Flatpak", row["status"]))]
+    result = run(
+        [flatpak, "info", "--show-permissions", sandbox_id],
+        timeout=4,
+        budget=budget,
+    )
     if result.returncode != 0:
         detail = (result.stderr or result.stdout).strip() or "flatpak info 读取失败"
         row = {
@@ -509,7 +667,7 @@ def static_permissions_for(item, sandbox):
     return [apply_control(row, external_permission_control("Flatpak", row["status"])) for row in rows]
 
 
-def snap_connections_for(item, sandbox):
+def snap_connections_for(item, sandbox, budget=None):
     sandbox_type = sandbox.get("type", "unknown")
     sandbox_id = sandbox.get("id", "")
     if sandbox_type != "snap":
@@ -523,7 +681,15 @@ def snap_connections_for(item, sandbox):
             "status": "unavailable",
         }
         return [apply_control(row, external_permission_control("Snap", row["status"]))]
-    result = run([snap, "connections", sandbox_id], timeout=5)
+    if budget is not None and budget.expired():
+        row = {
+            "id": "snap-budget",
+            "title": "Snap connections",
+            "detail": "权限探测达到时间预算",
+            "status": "unavailable",
+        }
+        return [apply_control(row, external_permission_control("Snap", row["status"]))]
+    result = run([snap, "connections", sandbox_id], timeout=5, budget=budget)
     if result.returncode != 0:
         detail = (result.stderr or result.stdout).strip() or "snap connections 读取失败"
         row = {
@@ -548,13 +714,15 @@ def snap_connections_for(item, sandbox):
     return rows
 
 
-def dir_size(path, limit_files=20000):
+def dir_size(path, limit_files=MAX_STORAGE_FILES, budget=None):
     total = 0
     count = 0
     try:
         for root, dirs, files in os.walk(path):
             dirs[:] = [d for d in dirs if not os.path.islink(os.path.join(root, d))]
             for name in files:
+                if budget is not None and budget.expired():
+                    return total, True
                 full = os.path.join(root, name)
                 if os.path.islink(full):
                     continue
@@ -601,13 +769,15 @@ def storage_candidates(item, sandbox):
     return paths
 
 
-def storage_for(item, sandbox):
+def storage_for(item, sandbox, budget=None):
     rows = []
     total = 0
     for title, path in storage_candidates(item, sandbox):
+        if budget is not None and budget.expired():
+            break
         if not path.exists():
             continue
-        size, truncated = dir_size(path)
+        size, truncated = dir_size(path, budget=budget)
         total += size
         rows.append(
             {
@@ -623,11 +793,13 @@ def storage_for(item, sandbox):
         "totalBytes": total,
         "total": human_bytes(total),
         "items": rows,
+        "budgetExpired": bool(budget is not None and budget.expired()),
     }
 
 
-def permissions_for(desktop_id):
-    meta = scan_desktop_entries()
+def permissions_for(desktop_id, budget_ms=PERMISSIONS_PROBE_BUDGET_MS):
+    budget = budget_ms if isinstance(budget_ms, Budget) else Budget(budget_ms)
+    meta = scan_desktop_entries(budget)
     item = meta.get(desktop_id, {})
     app_key = item.get("sandboxId") or desktop_id.removesuffix(".desktop")
     sandbox_type = item.get("sandboxType", "none")
@@ -643,7 +815,7 @@ def permissions_for(desktop_id):
         "enforcementScope": "runtime-sandbox" if fully_enforceable else "none",
     }
 
-    available, portal_status, portal_detail = permission_store_available()
+    available, portal_status, portal_detail = permission_store_available(budget)
     capability = {
         "sandboxType": sandbox_type,
         "sandboxId": app_key,
@@ -659,8 +831,14 @@ def permissions_for(desktop_id):
     rows = []
     for permission in PERMISSIONS:
         object_id = app_key if permission["object"] == "app" else permission["object"]
-        if available:
-            result = lookup_permission(permission["table"], object_id, app_key)
+        if budget.expired():
+            result = {
+                "status": "unavailable",
+                "detail": "权限探测达到时间预算",
+                "raw": "",
+            }
+        elif available:
+            result = lookup_permission(permission["table"], object_id, app_key, budget)
         else:
             result = {"status": "unavailable", "detail": portal_detail, "raw": ""}
         rows.append(
@@ -699,20 +877,41 @@ def permissions_for(desktop_id):
         "capability": capability,
         "sandbox": sandbox,
         "permissions": rows,
-        "staticPermissions": static_permissions_for(item, sandbox),
-        "snapConnections": snap_connections_for(item, sandbox),
-        "storage": storage_for(item, sandbox),
+        "staticPermissions": static_permissions_for(item, sandbox, budget),
+        "snapConnections": snap_connections_for(item, sandbox, budget),
+        "storage": storage_for(item, sandbox, budget),
+        "budget": budget.summary(),
     }
+
+
+def budget_option(argv, default):
+    try:
+        index = argv.index("--budget-ms")
+    except ValueError:
+        return default
+    if index + 1 >= len(argv):
+        return default
+    try:
+        return max(1, int(argv[index + 1]))
+    except (TypeError, ValueError):
+        return default
 
 
 def main(argv):
     mode = argv[1] if len(argv) > 1 else "probe"
     if mode == "probe":
-        emit(probe_defaults())
+        emit(probe_defaults(budget_option(argv, DEFAULT_PROBE_BUDGET_MS)))
+    elif mode == "fingerprint":
+        emit(defaults_fingerprint(budget_option(argv, DEFAULT_FINGERPRINT_BUDGET_MS)))
     elif mode == "set-default":
         emit(set_default(argv[2] if len(argv) > 2 else "", argv[3:]))
     elif mode == "permissions":
-        emit(permissions_for(argv[2] if len(argv) > 2 else ""))
+        emit(
+            permissions_for(
+                argv[2] if len(argv) > 2 else "",
+                budget_option(argv, PERMISSIONS_PROBE_BUDGET_MS),
+            )
+        )
     else:
         emit({"success": False, "message": "unknown mode"})
         return 2

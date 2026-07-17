@@ -11,6 +11,7 @@ Item {
     visible: false
 
     property bool backendAvailable: false
+    property bool pollingActive: true
     property bool controlEnabled: false
     property bool available: false
     property bool updating: false
@@ -39,11 +40,14 @@ Item {
     }
 
     function detectBackend() {
-        if (!backendProbe.running)
+        if (root.pollingActive && !backendProbe.running)
             backendProbe.running = true;
     }
 
     function refresh() {
+        if (!root.pollingActive)
+            return;
+
         if (!root.backendAvailable) {
             root.detectBackend();
             return;
@@ -57,11 +61,14 @@ Item {
     }
 
     function refreshServiceState() {
-        if (!serviceProbe.running)
+        if (root.pollingActive && !serviceProbe.running)
             serviceProbe.running = true;
     }
 
     function parseBackend(path) {
+        if (!root.pollingActive)
+            return;
+
         var value = String(path || "").trim();
         var detected = value.length > 0;
         root.setValue("backendAvailable", detected);
@@ -75,6 +82,9 @@ Item {
     }
 
     function parseServiceState(text) {
+        if (!root.pollingActive)
+            return;
+
         var active = String(text || "").trim() === "active";
         root.setValue("controlEnabled", active);
         root.setValue("available", root.backendAvailable && active);
@@ -105,6 +115,9 @@ Item {
     }
 
     function parseStatus(text) {
+        if (!root.pollingActive)
+            return;
+
         var raw = String(text || "").trim();
         if (raw.length === 0)
             return;
@@ -212,7 +225,7 @@ Item {
             onStreamFinished: root.parseBackend(backendProbeOut.text)
         }
         onExited: function(code, exitStatus) {
-            if (code !== 0) {
+            if (root.pollingActive && code !== 0) {
                 root.setValue("backendAvailable", false);
                 root.setValue("controlEnabled", false);
                 root.setValue("available", false);
@@ -232,7 +245,7 @@ Item {
             onStreamFinished: root.parseServiceState(serviceProbeOut.text)
         }
         onExited: function(code, exitStatus) {
-            if (code !== 0 && String(serviceProbeOut.text || "").trim().length === 0)
+            if (root.pollingActive && code !== 0 && String(serviceProbeOut.text || "").trim().length === 0)
                 root.parseServiceState("inactive");
         }
     }
@@ -246,7 +259,7 @@ Item {
             onStreamFinished: root.parseStatus(statusProbeOut.text)
         }
         onExited: function(code, exitStatus) {
-            if (code !== 0) {
+            if (root.pollingActive && code !== 0) {
                 root.setValue("statusText", "NBFC 状态不可用");
                 root.setValue("errorText", "请确认 nbfc 服务已启动并选择了机型配置");
             }
@@ -262,7 +275,8 @@ Item {
                 root.setValue("errorText", "风扇写入失败，请检查 NBFC 权限或服务状态");
             if (root.pendingManualPercent >= 0)
                 manualCommitTimer.restart();
-            root.refresh();
+            if (root.pollingActive)
+                root.refresh();
         }
     }
 
@@ -273,7 +287,8 @@ Item {
             root.setValue("updating", false);
             if (code !== 0)
                 root.setValue("errorText", "NBFC 服务切换失败，请检查权限或服务状态");
-            root.refreshServiceState();
+            if (root.pollingActive)
+                root.refreshServiceState();
         }
     }
 
@@ -285,11 +300,28 @@ Item {
     }
 
     Timer {
+        id: statusRefreshTimer
         interval: 5000
-        running: true
+        running: root.pollingActive
         repeat: true
         onTriggered: root.refresh()
     }
 
-    Component.onCompleted: root.detectBackend()
+    onPollingActiveChanged: {
+        if (root.pollingActive) {
+            root.refresh();
+        } else {
+            if (backendProbe.running)
+                backendProbe.running = false;
+            if (serviceProbe.running)
+                serviceProbe.running = false;
+            if (statusProbe.running)
+                statusProbe.running = false;
+        }
+    }
+
+    Component.onCompleted: {
+        if (root.pollingActive)
+            root.detectBackend();
+    }
 }

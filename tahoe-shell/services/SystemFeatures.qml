@@ -10,6 +10,7 @@ Item {
     visible: false
 
     property var commandRunner
+    property bool pollingActive: true
     property var items: []
     property var itemMap: ({})
     property bool refreshing: false
@@ -17,7 +18,7 @@ Item {
     property string lastUpdatedText: "尚未检测"
 
     function refresh() {
-        if (probe.running)
+        if (!root.pollingActive || probe.running)
             return;
         root.refreshing = true;
         probe.running = true;
@@ -55,6 +56,9 @@ Item {
     }
 
     function parse(text) {
+        if (!root.pollingActive)
+            return;
+
         var out = [];
         var map = {};
         var updatedAt = new Date().toISOString();
@@ -118,11 +122,24 @@ Item {
     }
 
     Timer {
+        id: featureRefreshTimer
         interval: 30000
-        running: true
+        running: root.pollingActive
         repeat: true
         onTriggered: root.refresh()
     }
 
-    Component.onCompleted: root.refresh()
+    onPollingActiveChanged: {
+        if (root.pollingActive) {
+            root.refresh();
+        } else if (probe.running) {
+            probe.running = false;
+            root.refreshing = false;
+        }
+    }
+
+    Component.onCompleted: {
+        if (root.pollingActive)
+            root.refresh();
+    }
 }

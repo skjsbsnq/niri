@@ -9,6 +9,7 @@ Item {
     visible: false
 
     property var commandRunner
+    property bool pollingActive: true
     property var vpnProfiles: []
     property var wiredProfiles: []
     property var proxySettings: ({
@@ -226,6 +227,9 @@ Item {
     }
 
     function refreshVpnProfiles() {
+        if (!root.pollingActive)
+            return;
+
         if (!root.commandRunner || !root.commandRunner.networkVpnListCommand) {
             root.networkProbeState = "missing";
             root.networkProbeDetail = "CommandRunner 未注入，无法检测 NetworkManager。";
@@ -246,6 +250,9 @@ Item {
     }
 
     function parseVpnProfiles(text) {
+        if (!root.pollingActive)
+            return;
+
         var state = "missing";
         var detail = "NetworkManager 状态未知。";
         var profiles = [];
@@ -414,7 +421,7 @@ Item {
         }
         onExited: function(code, exitStatus) {
             root.vpnRefreshing = false;
-            if (code !== 0 && root.networkProbeState !== "ok") {
+            if (root.pollingActive && code !== 0 && root.networkProbeState !== "ok") {
                 root.networkProbeState = "missing";
                 root.networkProbeDetail = "VPN 列表检测失败，退出码 " + String(code);
                 root.vpnProfiles = [];
@@ -443,18 +450,34 @@ Item {
     }
 
     Timer {
+        id: vpnRefreshTimer
         interval: 15000
-        running: true
+        running: root.pollingActive
         repeat: true
         onTriggered: root.refreshVpnProfiles()
+    }
+
+    onPollingActiveChanged: {
+        if (root.pollingActive) {
+            root.refreshVpnProfiles();
+        } else {
+            actionRefreshTimer.stop();
+            if (vpnProbe.running)
+                vpnProbe.running = false;
+            root.vpnRefreshing = false;
+        }
     }
 
     Connections {
         target: root.commandRunner
         function onRevisionChanged() {
-            root.refreshVpnProfiles();
+            if (root.pollingActive)
+                root.refreshVpnProfiles();
         }
     }
 
-    Component.onCompleted: root.refreshVpnProfiles()
+    Component.onCompleted: {
+        if (root.pollingActive)
+            root.refreshVpnProfiles();
+    }
 }

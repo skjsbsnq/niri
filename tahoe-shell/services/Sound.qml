@@ -9,6 +9,7 @@ Item {
     visible: false
 
     property var commandRunner
+    property bool pollingActive: true
     property bool eventSoundsMuted: false
     property var outputDevices: []
     property var inputDevices: []
@@ -52,7 +53,7 @@ Item {
     }
 
     function refreshDevices() {
-        if (deviceProbe.running)
+        if (!root.pollingActive || deviceProbe.running)
             return;
         root.refreshingDevices = true;
         deviceProbe.running = true;
@@ -73,6 +74,9 @@ Item {
     }
 
     function parseDevices(text) {
+        if (!root.pollingActive)
+            return;
+
         var raw = String(text || "");
         var parts = raw.split("\n---TAHOE-SOURCES---\n");
         if (parts.length < 2) {
@@ -150,7 +154,7 @@ Item {
         }
         onExited: function(code, exitStatus) {
             root.refreshingDevices = false;
-            if (code !== 0 && root.deviceStatus !== "ok") {
+            if (root.pollingActive && code !== 0 && root.deviceStatus !== "ok") {
                 root.deviceStatus = "error";
                 root.deviceDetail = "音频设备读取失败，退出码 " + String(code);
                 root.revision += 1;
@@ -166,11 +170,26 @@ Item {
     }
 
     Timer {
+        id: deviceRefreshTimer
         interval: 15000
-        running: true
+        running: root.pollingActive
         repeat: true
         onTriggered: root.refreshDevices()
     }
 
-    Component.onCompleted: root.refreshDevices()
+    onPollingActiveChanged: {
+        if (root.pollingActive) {
+            root.refreshDevices();
+        } else {
+            refreshTimer.stop();
+            if (deviceProbe.running)
+                deviceProbe.running = false;
+            root.refreshingDevices = false;
+        }
+    }
+
+    Component.onCompleted: {
+        if (root.pollingActive)
+            root.refreshDevices();
+    }
 }

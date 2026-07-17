@@ -15,6 +15,8 @@ Item {
     property bool updating: false
     property string errorText: ""
     property var commandRunner
+    property bool pollingActive: true
+    property bool initialProbePending: false
     readonly property string displayText: !available ? "--" : (active ? languageLabel(currentName) : "EN")
     readonly property string tooltipText: !available
         ? (errorText.length > 0 ? errorText : "输入法不可用")
@@ -93,6 +95,9 @@ Item {
     }
 
     function applyProbe(text) {
+        if (!root.pollingActive && !root.initialProbePending)
+            return;
+
         var line = String(text || "").trim();
         if (line.length === 0) {
             available = false;
@@ -128,8 +133,10 @@ Item {
             onStreamFinished: root.applyProbe(probeOut.text)
         }
         onExited: function(code, exitStatus) {
-            if (code !== 0)
+            var mayPublish = root.pollingActive || root.initialProbePending;
+            if (code !== 0 && mayPublish)
                 root.applyProbe("");
+            root.initialProbePending = false;
         }
     }
 
@@ -151,10 +158,21 @@ Item {
     }
 
     Timer {
+        id: statusPollTimer
         interval: 1800
-        running: true
+        running: root.pollingActive
         repeat: true
         onTriggered: root.refresh()
+    }
+
+    onPollingActiveChanged: {
+        if (root.pollingActive) {
+            root.refresh();
+        } else if (!root.initialProbePending) {
+            refreshDelay.stop();
+            if (probe.running)
+                probe.running = false;
+        }
     }
 
     Connections {
@@ -170,5 +188,8 @@ Item {
         }
     }
 
-    Component.onCompleted: root.refresh()
+    Component.onCompleted: {
+        root.initialProbePending = true;
+        root.refresh();
+    }
 }

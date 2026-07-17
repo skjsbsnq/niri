@@ -13,6 +13,7 @@ Item {
     property var dependencies: ({})
     property var commandMap: ({})
     property var statusItems: []
+    property bool pollingActive: true
     property bool refreshing: false
     property int revision: 0
     property string lastUpdatedText: "尚未检测"
@@ -22,7 +23,7 @@ Item {
     signal actionFinished(var result)
 
     function refreshDependencies() {
-        if (dependencyProbe.running)
+        if ((!root.pollingActive && root.revision > 0) || dependencyProbe.running)
             return;
 
         refreshing = true;
@@ -607,7 +608,11 @@ Item {
     }
 
     function appsDefaultsProbeCommand() {
-        return ["python3", appsSettingsProbePath(), "probe"];
+        return ["python3", appsSettingsProbePath(), "probe", "--budget-ms", "2500"];
+    }
+
+    function appsDefaultsFingerprintCommand() {
+        return ["python3", appsSettingsProbePath(), "fingerprint", "--budget-ms", "600"];
     }
 
     function appsSetDefaultCommand(desktopId, mimes) {
@@ -619,7 +624,14 @@ Item {
     }
 
     function appsPermissionsCommand(desktopId) {
-        return ["python3", appsSettingsProbePath(), "permissions", String(desktopId || "")];
+        return [
+            "python3",
+            appsSettingsProbePath(),
+            "permissions",
+            String(desktopId || ""),
+            "--budget-ms",
+            "1600"
+        ];
     }
 
     function runNetworkVpnUp(uuid, name) {
@@ -760,6 +772,9 @@ Item {
     }
 
     function parseProbe(text) {
+        if (!root.pollingActive && root.revision > 0)
+            return;
+
         var commands = {};
         var deps = {};
         var statuses = [];
@@ -901,16 +916,26 @@ Item {
         }
         onExited: function(code, exitStatus) {
             root.refreshing = false;
-            if (code !== 0)
+            if (code !== 0 && (root.pollingActive || root.revision === 0))
                 root.lastError = "命令依赖检测失败，退出码 " + String(code);
         }
     }
 
     Timer {
+        id: dependencyPollTimer
         interval: 30000
-        running: true
+        running: root.pollingActive
         repeat: true
         onTriggered: root.refreshDependencies()
+    }
+
+    onPollingActiveChanged: {
+        if (root.pollingActive) {
+            root.refreshDependencies();
+        } else if (root.revision > 0 && dependencyProbe.running) {
+            dependencyProbe.running = false;
+            root.refreshing = false;
+        }
     }
 
     Component.onCompleted: root.refreshDependencies()

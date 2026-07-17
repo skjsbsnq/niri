@@ -34,9 +34,12 @@ Item {
     property int preferredWifiRestoreAttempts: 0
     property bool preferredWifiRestoreSuppressed: false
     property var commandRunner
+    property bool pollingActive: true
     property string networkErrorText: ""
     property string bluetoothErrorText: ""
     property string brightnessErrorText: ""
+    property var bluetoothDiscoveryOwners: ({})
+    readonly property int bluetoothDiscoveryTimeoutMs: 15000
     property var lastActionResult: null
     // Bluetooth lifecycle snapshots are emitted from this shared owner. The
     // island consumes these immutable maps and never retains a device object.
@@ -423,8 +426,9 @@ Item {
 
     // Slow fallback for systems where udevadm/backlight uevents are unavailable.
     Timer {
+        id: brightnessFallbackTimer
         interval: 2000
-        running: true
+        running: root.pollingActive && !brightnessUdevMonitor.running
         repeat: true
         onTriggered: {
             if (!root.brightnessUpdating)
@@ -830,6 +834,9 @@ Item {
     }
 
     function refreshKnownWifiProfiles() {
+        if (!root.pollingActive)
+            return;
+
         if (!root.commandRunner || !root.commandRunner.wifiKnownListCommand) {
             root.knownWifiStatus = "missing";
             root.knownWifiDetail = "CommandRunner 未注入，无法读取已知网络。";
@@ -845,6 +852,9 @@ Item {
     }
 
     function parseKnownWifiProfiles(text) {
+        if (!root.pollingActive)
+            return;
+
         var profiles = [];
         var status = "missing";
         var detail = "NetworkManager 状态未知。";
@@ -925,7 +935,7 @@ Item {
 
     function rescanWifi() {
         var d = root.wifiDevice;
-        if (!d || !root.wifiEnabled)
+        if (!root.pollingActive || !d || !root.wifiEnabled)
             return;
 
         try {
@@ -933,15 +943,16 @@ Item {
         } catch (e) {}
         Qt.callLater(function() {
             try {
-                if (root.wifiDevice && root.wifiEnabled)
+                if (root.pollingActive && root.wifiDevice && root.wifiEnabled)
                     root.wifiDevice.scannerEnabled = true;
             } catch (e) {}
         });
     }
 
     Timer {
+        id: wifiRefreshTimer
         interval: 30000
-        running: true
+        running: root.pollingActive
         repeat: true
         onTriggered: {
             root.rescanWifi();
@@ -958,7 +969,7 @@ Item {
         }
         onExited: function(code, exitStatus) {
             root.knownWifiRefreshing = false;
-            if (code !== 0 && root.knownWifiStatus !== "ok") {
+            if (root.pollingActive && code !== 0 && root.knownWifiStatus !== "ok") {
                 root.knownWifiStatus = "missing";
                 root.knownWifiDetail = "已知网络读取失败，退出码 " + String(code);
                 root.knownWifiProfiles = [];
@@ -971,6 +982,23 @@ Item {
         interval: 1600
         repeat: false
         onTriggered: root.refreshKnownWifiProfiles()
+    }
+
+    onPollingActiveChanged: {
+        if (root.pollingActive) {
+            root.refreshBrightness();
+            root.rescanWifi();
+            root.refreshKnownWifiProfiles();
+        } else {
+            knownWifiRefreshTimer.stop();
+            if (knownWifiProbe.running)
+                knownWifiProbe.running = false;
+            root.knownWifiRefreshing = false;
+            try {
+                if (root.wifiDevice)
+                    root.wifiDevice.scannerEnabled = false;
+            } catch (e) {}
+        }
     }
 
     // ------------------------------------------------------------------
@@ -1353,14 +1381,16 @@ Item {
         var a = root.bluetoothAdapter;
         if (!a)
             return;
+        if (!enabled)
+            root.stopAllBluetoothDiscovery();
         try {
             a.enabled = !!enabled;
         } catch (e) {}
     }
 
-    function setBluetoothDiscovering(enabled) {
+    function applyBluetoothDiscovering(enabled) {
         var a = root.bluetoothAdapter;
-        if (!a || !root.bluetoothEnabled)
+        if (!a || (enabled && !root.bluetoothEnabled))
             return;
 
         try {
@@ -1376,8 +1406,62 @@ Item {
         } catch (e) {}
     }
 
-    function toggleBluetoothDiscovering() {
-        root.setBluetoothDiscovering(!root.bluetoothDiscovering);
+    function bluetoothDiscoveryOwned(owner) {
+        return !!(root.bluetoothDiscoveryOwners || {})[String(owner || "")];
+    }
+
+    function updateBluetoothDiscovery() {
+        var owners = Object.keys(root.bluetoothDiscoveryOwners || {});
+        var requested = owners.length > 0 && root.bluetoothEnabled;
+        if (requested) {
+            root.applyBluetoothDiscovering(true);
+            bluetoothDiscoveryTimeout.restart();
+        } else {
+            bluetoothDiscoveryTimeout.stop();
+            root.applyBluetoothDiscovering(false);
+        }
+    }
+
+    function setBluetoothDiscoveryActive(owner, active) {
+        var key = String(owner || "").trim();
+        if (key.length === 0)
+            return;
+        var next = Object.assign({}, root.bluetoothDiscoveryOwners || {});
+        if (active)
+            next[key] = true;
+        else
+            delete next[key];
+        root.bluetoothDiscoveryOwners = next;
+        root.updateBluetoothDiscovery();
+    }
+
+    function toggleBluetoothDiscovery(owner) {
+        root.setBluetoothDiscoveryActive(owner, !root.bluetoothDiscoveryOwned(owner));
+    }
+
+    function stopAllBluetoothDiscovery() {
+        root.bluetoothDiscoveryOwners = ({});
+        bluetoothDiscoveryTimeout.stop();
+        root.applyBluetoothDiscovering(false);
+    }
+
+    Timer {
+        id: bluetoothDiscoveryTimeout
+        interval: root.bluetoothDiscoveryTimeoutMs
+        repeat: false
+        onTriggered: root.stopAllBluetoothDiscovery()
+    }
+
+    onBluetoothEnabledChanged: {
+        if (!root.bluetoothEnabled)
+            root.stopAllBluetoothDiscovery();
+        else if (Object.keys(root.bluetoothDiscoveryOwners || {}).length > 0)
+            root.updateBluetoothDiscovery();
+    }
+
+    onBluetoothAdapterChanged: {
+        if (Object.keys(root.bluetoothDiscoveryOwners || {}).length > 0)
+            root.updateBluetoothDiscovery();
     }
 
     function setBluetoothDiscoverable(enabled) {

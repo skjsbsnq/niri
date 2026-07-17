@@ -11,6 +11,10 @@ Flickable {
     property var panel
     property var theme
     property var controlsService
+    property bool active: false
+    readonly property string discoveryOwner: "settings-bluetooth"
+    readonly property bool discoveryRequested: hasControls
+        && controlsService.bluetoothDiscoveryOwned(discoveryOwner)
 
     readonly property bool hasControls: !!controlsService
     readonly property bool backendReady: hasControls && controlsService.bluetoothBackendAvailable
@@ -38,6 +42,16 @@ Flickable {
     contentHeight: settingsColumn.implicitHeight
     clip: true
     boundsBehavior: Flickable.StopAtBounds
+
+    onActiveChanged: {
+        if (!page.active && page.controlsService)
+            page.controlsService.setBluetoothDiscoveryActive(page.discoveryOwner, false);
+    }
+
+    Component.onDestruction: {
+        if (page.controlsService)
+            page.controlsService.setBluetoothDiscoveryActive(page.discoveryOwner, false);
+    }
 
     function filterDevices(kind) {
         var out = [];
@@ -108,7 +122,7 @@ Flickable {
         if (kind === "off")
             return "打开蓝牙后可以扫描、配对和连接设备。";
         if (kind === "empty")
-            return page.controlsService && page.controlsService.bluetoothDiscovering
+            return page.discoveryRequested
                 ? "正在扫描附近设备。"
                 : "开启扫描后，附近设备会显示在这里。";
         return "";
@@ -134,7 +148,7 @@ Flickable {
         if (kind === "off")
             return "打开蓝牙";
         if (kind === "empty")
-            return page.controlsService && page.controlsService.bluetoothDiscovering ? "停止扫描" : "开始扫描";
+            return page.discoveryRequested ? "停止扫描" : "开始扫描";
         return "";
     }
 
@@ -148,7 +162,7 @@ Flickable {
         } else if (kind === "off") {
             page.controlsService.setBluetoothEnabled(true);
         } else if (kind === "empty") {
-            page.controlsService.toggleBluetoothDiscovering();
+            page.controlsService.toggleBluetoothDiscovery(page.discoveryOwner);
         }
     }
 
@@ -220,14 +234,14 @@ Flickable {
             Controls.TahoeListRow {
                 theme: page.theme
                 label: "扫描附近设备"
-                detail: page.controlsService && page.controlsService.bluetoothDiscovering ? "正在扫描" : "未扫描"
+                detail: page.discoveryRequested ? "正在扫描" : "未扫描"
                 iconCode: "\ue8b6"
                 checkable: true
-                checked: page.controlsService && page.controlsService.bluetoothDiscovering
+                checked: page.discoveryRequested
                 enabled: page.hasControls && page.backendReady && page.adapterAvailable && page.bluetoothOn && !page.airplaneMode
                 onToggled: function(checked) {
                     if (page.controlsService)
-                        page.controlsService.setBluetoothDiscovering(checked);
+                        page.controlsService.setBluetoothDiscoveryActive(page.discoveryOwner, checked);
                 }
             }
 
@@ -336,7 +350,7 @@ Flickable {
         Controls.TahoeSection {
             theme: page.theme
             title: "附近设备"
-            subtitle: page.controlsService && page.controlsService.bluetoothDiscovering ? "正在扫描" : "开启扫描后显示附近设备"
+            subtitle: page.discoveryRequested ? "正在扫描" : "开启扫描后显示附近设备"
             visible: page.bluetoothOn && page.nearbyDevices.length > 0
 
             Repeater {

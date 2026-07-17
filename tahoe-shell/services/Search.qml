@@ -22,12 +22,17 @@ Item {
     property var windowsService
     property var clipboardService
     property var commandRunner
+    property bool active: true
     readonly property int defaultLimit: 6
     readonly property int slowProviderDebounceMs: 90
     property int providerRevision: 0
+    property int taskIndexGeneration: 0
+    property int activeTaskGeneration: 0
+    property string latestTaskQuery: ""
     property string pendingTaskQuery: ""
     property string activeTaskQuery: ""
-    property string taskIndexOutputQuery: ""
+    property string taskIndexStdoutText: ""
+    property int taskIndexStdoutGeneration: 0
     property string cachedTaskQuery: ""
     property var cachedTaskEntries: []
     readonly property var settingsItems: [
@@ -503,12 +508,20 @@ Item {
 
     function scheduleTaskIndex(query) {
         var normalized = String(query || "").trim();
-        if (!shouldRunTaskIndex(normalized)) {
-            root.pendingTaskQuery = "";
+        if (root.latestTaskQuery === normalized && root.active)
             return;
-        }
 
-        if (root.cachedTaskQuery === normalized || root.activeTaskQuery === normalized || root.pendingTaskQuery === normalized)
+        root.taskIndexGeneration += 1;
+        root.latestTaskQuery = normalized;
+        root.pendingTaskQuery = "";
+        taskIndexDebounceTimer.stop();
+
+        if (taskIndexProcess.running)
+            taskIndexProcess.running = false;
+
+        if (!root.active || !shouldRunTaskIndex(normalized))
+            return;
+        if (root.cachedTaskQuery === normalized)
             return;
 
         root.pendingTaskQuery = normalized;
@@ -516,15 +529,28 @@ Item {
     }
 
     function startTaskIndex() {
-        if (taskIndexProcess.running)
+        if (!root.active || taskIndexProcess.running)
             return;
         if (root.pendingTaskQuery.length === 0)
             return;
+        if (root.pendingTaskQuery !== root.latestTaskQuery)
+            return;
 
         root.activeTaskQuery = root.pendingTaskQuery;
-        root.taskIndexOutputQuery = root.activeTaskQuery;
+        root.activeTaskGeneration = root.taskIndexGeneration;
+        root.taskIndexStdoutText = "";
+        root.taskIndexStdoutGeneration = 0;
         root.pendingTaskQuery = "";
         taskIndexProcess.running = true;
+    }
+
+    function cancelTaskIndex() {
+        root.taskIndexGeneration += 1;
+        root.latestTaskQuery = "";
+        root.pendingTaskQuery = "";
+        taskIndexDebounceTimer.stop();
+        if (taskIndexProcess.running)
+            taskIndexProcess.running = false;
     }
 
     function taskIndexCommand(query) {
@@ -551,12 +577,34 @@ Item {
         return TaskIndexProvider.pythonSource();
     }
 
-    function parseTaskIndexOutput(text) {
+    function parseTaskIndexOutput(text, query) {
         var entries = TaskIndexProvider.parseOutput(text, providerContext());
 
-        root.cachedTaskQuery = root.taskIndexOutputQuery;
+        root.cachedTaskQuery = String(query || "");
         root.cachedTaskEntries = entries;
         bumpProviderRevision();
+    }
+
+    function finishTaskIndex(code, generation, query, text) {
+        var gen = Number(generation);
+        if (gen <= 0 || gen !== Number(root.activeTaskGeneration))
+            return;
+
+        root.activeTaskGeneration = 0;
+        root.activeTaskQuery = "";
+        if (code === 0
+                && root.active
+                && gen === Number(root.taskIndexGeneration)
+                && String(query || "") === root.latestTaskQuery)
+            root.parseTaskIndexOutput(text, query);
+
+        Qt.callLater(function() {
+            if (root.active
+                    && root.pendingTaskQuery.length > 0
+                    && !taskIndexDebounceTimer.running
+                    && !taskIndexProcess.running)
+                root.startTaskIndex();
+        });
     }
 
     function resultsForQuery(query, limit) {
@@ -805,15 +853,28 @@ Item {
 
         stdout: StdioCollector {
             id: taskIndexOut
-            onStreamFinished: root.parseTaskIndexOutput(taskIndexOut.text)
+            onStreamFinished: {
+                root.taskIndexStdoutText = taskIndexOut.text;
+                root.taskIndexStdoutGeneration = root.activeTaskGeneration;
+            }
         }
 
         onExited: function(code, exitStatus) {
-            Qt.callLater(function() {
-                root.activeTaskQuery = "";
-                if (root.pendingTaskQuery.length > 0)
-                    root.startTaskIndex();
-            });
+            var generation = root.activeTaskGeneration;
+            var query = root.activeTaskQuery;
+            var text = root.taskIndexStdoutGeneration === generation
+                ? root.taskIndexStdoutText
+                : taskIndexOut.text;
+            root.finishTaskIndex(code, generation, query, text);
         }
+        onRunningChanged: {
+            if (!taskIndexProcess.running && root.activeTaskGeneration > 0)
+                root.finishTaskIndex(-1, root.activeTaskGeneration, root.activeTaskQuery, "");
+        }
+    }
+
+    onActiveChanged: {
+        if (!root.active)
+            root.cancelTaskIndex();
     }
 }

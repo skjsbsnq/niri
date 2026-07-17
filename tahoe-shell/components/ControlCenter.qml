@@ -21,6 +21,7 @@ PanelWindow {
     property bool controlsExpanded: false
     // T11: "" | "wifi" | "bluetooth" — module morph expand state.
     property string expandedModule: ""
+    readonly property string bluetoothDiscoveryOwner: "control-center"
     readonly property bool moduleExpanded: expandedModule === "wifi" || expandedModule === "bluetooth"
     readonly property bool darkMode: appearanceService && appearanceService.darkMode
 
@@ -59,6 +60,8 @@ PanelWindow {
         var key = String(name || "");
         if (key !== "wifi" && key !== "bluetooth")
             return;
+        if (root.expandedModule === "bluetooth" && key !== "bluetooth" && root.controlsService)
+            root.controlsService.setBluetoothDiscoveryActive(root.bluetoothDiscoveryOwner, false);
         root.expandedModule = key;
         if (!root.controlsService)
             return;
@@ -66,18 +69,22 @@ PanelWindow {
             try { root.controlsService.rescanWifi(); } catch (e) {}
         } else if (key === "bluetooth") {
             try {
-                if (root.controlsService.bluetoothEnabled && !root.controlsService.bluetoothDiscovering)
-                    root.controlsService.setBluetoothDiscovering(true);
+                if (root.controlsService.bluetoothEnabled)
+                    root.controlsService.setBluetoothDiscoveryActive(root.bluetoothDiscoveryOwner, true);
             } catch (e) {}
         }
     }
 
     function closeModule() {
+        if (root.expandedModule === "bluetooth" && root.controlsService)
+            root.controlsService.setBluetoothDiscoveryActive(root.bluetoothDiscoveryOwner, false);
         root.expandedModule = "";
     }
 
     onOpenChanged: {
         if (!open) {
+            if (root.controlsService)
+                root.controlsService.setBluetoothDiscoveryActive(root.bluetoothDiscoveryOwner, false);
             root.expandedModule = "";
             root.controlsExpanded = false;
         }
@@ -1067,7 +1074,7 @@ PanelWindow {
                         text: {
                             if (mp.isWifi)
                                 return "重新扫描";
-                            if (mp.controls && mp.controls.bluetoothDiscovering)
+                            if (mp.controls && mp.controls.bluetoothDiscoveryOwned(root.bluetoothDiscoveryOwner))
                                 return "停止扫描";
                             return "扫描设备";
                         }
@@ -1093,7 +1100,7 @@ PanelWindow {
                                 if (mp.isWifi)
                                     mp.controls.rescanWifi();
                                 else
-                                    mp.controls.toggleBluetoothDiscovering();
+                                    mp.controls.toggleBluetoothDiscovery(root.bluetoothDiscoveryOwner);
                             }
                         }
                     }

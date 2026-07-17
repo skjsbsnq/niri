@@ -59,6 +59,17 @@ ShellRoot {
     property string baseFontFamily: "Noto Sans CJK SC"
     property string monoFontFamily: "Noto Sans Mono CJK SC"
     property bool darkMode: appearance.darkMode
+    readonly property bool servicePollingActive: controlCenterOpen
+        || appMenuOpen
+        || applicationMenuOpen
+        || batteryPopupOpen
+        || wifiPopupOpen
+        || fanPopupOpen
+        || clipboardPopupOpen
+        || settingsPanelOpen
+        || leftSidebarOpen
+        || spotlightOpen
+        || launchpadOpen
     readonly property real idleLockTimeoutSeconds: Math.max(0, envNumber("TAHOE_IDLE_LOCK_SECONDS", 600))
     readonly property bool idleLockEnabled: idleLockTimeoutSeconds > 0
     property string lastLockSource: ""
@@ -496,10 +507,12 @@ ShellRoot {
 
     CommandRunner {
         id: commandRunner
+        pollingActive: shell.servicePollingActive
     }
 
     AppsSettings {
         id: appsSettings
+        active: shell.settingsPanelOpen
         appsService: apps
         commandRunner: commandRunner
     }
@@ -622,16 +635,19 @@ ShellRoot {
 
     Controls {
         id: controls
+        pollingActive: shell.servicePollingActive
         commandRunner: commandRunner
     }
 
     NetworkSettings {
         id: networkSettings
+        pollingActive: shell.servicePollingActive
         commandRunner: commandRunner
     }
 
     SystemFeatures {
         id: systemFeatures
+        pollingActive: shell.servicePollingActive
         commandRunner: commandRunner
     }
 
@@ -685,20 +701,24 @@ ShellRoot {
 
     PowerProfiles {
         id: powerProfiles
+        pollingActive: shell.servicePollingActive
         commandRunner: commandRunner
     }
 
     FanControl {
         id: fanControl
+        pollingActive: shell.servicePollingActive
     }
 
     InputMethod {
         id: inputMethod
+        pollingActive: shell.servicePollingActive
         commandRunner: commandRunner
     }
 
     Sound {
         id: sound
+        pollingActive: shell.servicePollingActive
         commandRunner: commandRunner
     }
 
@@ -715,6 +735,7 @@ ShellRoot {
 
     Search {
         id: search
+        active: shell.spotlightOpen
         appsService: apps
         screenshotService: screenshotService
         windowsService: niri

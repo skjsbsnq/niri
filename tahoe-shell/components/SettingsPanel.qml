@@ -478,6 +478,7 @@ PanelWindow {
                             panel: root
                             theme: root
                             controlsService: root.controlsService
+                            active: root.open && root.currentPageId === "bluetooth"
                         }
                     }
 

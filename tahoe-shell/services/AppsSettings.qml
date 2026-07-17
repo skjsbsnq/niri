@@ -10,11 +10,16 @@ Item {
 
     property var appsService
     property var commandRunner
+    property bool active: true
     property var defaultRows: []
     property var desktopMeta: ({})
     property string defaultsStatus: "unknown"
     property string defaultsDetail: "尚未检测"
     property bool defaultsRefreshing: false
+    property bool defaultsRefreshPending: false
+    property string defaultsProbeMode: ""
+    property string defaultsFingerprint: ""
+    property bool defaultsHavePayload: false
     property bool settingDefault: false
     property string settingCategoryId: ""
     property string lastActionText: ""
@@ -168,7 +173,13 @@ Item {
     }
 
     function refreshDefaults() {
-        if (!root.commandRunner || !root.commandRunner.appsDefaultsProbeCommand) {
+        if (!root.active) {
+            root.defaultsRefreshPending = true;
+            return;
+        }
+        if (!root.commandRunner
+                || !root.commandRunner.appsDefaultsProbeCommand
+                || !root.commandRunner.appsDefaultsFingerprintCommand) {
             root.defaultsStatus = "missing";
             root.defaultsDetail = "CommandRunner 未注入，默认应用不可用。";
             root.defaultRows = [];
@@ -178,10 +189,22 @@ Item {
 
         if (root.commandRunner.revision === 0)
             root.commandRunner.refreshDependencies();
-        if (defaultsProbe.running)
+        if (defaultsProbe.running) {
+            root.defaultsRefreshPending = true;
             return;
+        }
 
+        root.defaultsRefreshPending = false;
         root.defaultsRefreshing = true;
+        root.defaultsProbeMode = "fingerprint";
+        defaultsProbe.command = root.commandRunner.appsDefaultsFingerprintCommand();
+        defaultsProbe.running = true;
+    }
+
+    function startFullDefaultsProbe() {
+        if (!root.active || defaultsProbe.running)
+            return;
+        root.defaultsProbeMode = "probe";
         defaultsProbe.command = root.commandRunner.appsDefaultsProbeCommand();
         defaultsProbe.running = true;
     }
@@ -193,6 +216,8 @@ Item {
             root.defaultsDetail = String(parsed.detail || "");
             root.defaultRows = parsed.categories || [];
             root.desktopMeta = parsed.desktopMeta || ({});
+            root.defaultsFingerprint = String(parsed.fingerprint || root.defaultsFingerprint || "");
+            root.defaultsHavePayload = true;
         } catch (e) {
             root.defaultsStatus = "error";
             root.defaultsDetail = "默认应用数据解析失败：" + String(e);
@@ -200,6 +225,56 @@ Item {
             root.desktopMeta = ({});
         }
         root.revision += 1;
+    }
+
+    function finishDefaultsProbe(code, mode, text) {
+        root.defaultsProbeMode = "";
+        if (!root.active) {
+            root.defaultsRefreshing = false;
+            return;
+        }
+
+        if (code !== 0) {
+            root.defaultsRefreshing = false;
+            root.defaultsStatus = "error";
+            root.defaultsDetail = "默认应用检测失败，退出码 " + String(code);
+            root.defaultRows = [];
+            root.revision += 1;
+        } else if (mode === "fingerprint") {
+            try {
+                var parsed = JSON.parse(String(text || "{}"));
+                var fingerprint = String(parsed.fingerprint || "");
+                var cacheValid = root.defaultsHavePayload
+                    && parsed.complete !== false
+                    && fingerprint.length > 0
+                    && fingerprint === root.defaultsFingerprint;
+                if (cacheValid) {
+                    root.defaultsRefreshing = false;
+                } else {
+                    Qt.callLater(function() { root.startFullDefaultsProbe(); });
+                    return;
+                }
+            } catch (e) {
+                root.defaultsRefreshing = false;
+                root.defaultsStatus = "error";
+                root.defaultsDetail = "默认应用 fingerprint 无法解析：" + String(e);
+                root.revision += 1;
+            }
+        } else if (mode === "probe") {
+            root.parseDefaults(text);
+            root.defaultsRefreshing = false;
+        }
+
+        if (root.defaultsRefreshPending)
+            Qt.callLater(function() { root.refreshDefaults(); });
+    }
+
+    function cancelDefaultsProbe() {
+        root.defaultsRefreshPending = false;
+        root.defaultsRefreshing = false;
+        root.defaultsProbeMode = "";
+        if (defaultsProbe.running)
+            defaultsProbe.running = false;
     }
 
     function setDefaultCategory(categoryId, desktopId) {
@@ -298,6 +373,10 @@ Item {
     }
 
     function refreshPermissions() {
+        if (!root.active) {
+            root.permissionsRefreshing = false;
+            return;
+        }
         if (!root.selectedDesktopId || root.selectedDesktopId.length === 0) {
             // Bump generation so any in-flight A result cannot write after clear.
             root.permissionsProbeGeneration += 1;
@@ -332,6 +411,7 @@ Item {
                 root.permissionsRefreshing = true;
                 if (String(root.permissionsOwnerDesktopId || "") !== String(root.selectedDesktopId || ""))
                     root.invalidateStalePermissionDisplay();
+                permissionsProbe.running = false;
             }
             return;
         }
@@ -342,7 +422,7 @@ Item {
 
     function startPermissionsProbe(generation, desktopId) {
         // Never start a superseded generation; keep pending so a later exit can re-run latest.
-        if (Number(generation) !== Number(root.permissionsProbeGeneration))
+        if (!root.active || Number(generation) !== Number(root.permissionsProbeGeneration))
             return;
         if (String(desktopId || "") !== String(root.selectedDesktopId || ""))
             return;
@@ -465,21 +545,30 @@ Item {
             root.schedulePendingPermissionsProbe();
     }
 
+    function cancelPermissionsProbe() {
+        root.permissionsProbeGeneration += 1;
+        root.permissionsProbePending = false;
+        root.permissionsRefreshing = false;
+        root.permissionsProbeInFlightGeneration = 0;
+        root.permissionsProbeInFlightDesktopId = "";
+        root.permissionsStdoutText = "";
+        root.permissionsStdoutGeneration = 0;
+        if (permissionsProbe.running)
+            permissionsProbe.running = false;
+    }
+
     Process {
         id: defaultsProbe
         running: false
         stdout: StdioCollector {
             id: defaultsOut
-            onStreamFinished: root.parseDefaults(defaultsOut.text)
         }
         onExited: function(code, exitStatus) {
-            root.defaultsRefreshing = false;
-            if (code !== 0) {
-                root.defaultsStatus = "error";
-                root.defaultsDetail = "默认应用检测失败，退出码 " + String(code);
-                root.defaultRows = [];
-                root.revision += 1;
-            }
+            root.finishDefaultsProbe(code, root.defaultsProbeMode, defaultsOut.text);
+        }
+        onRunningChanged: {
+            if (!defaultsProbe.running && root.defaultsProbeMode.length > 0)
+                root.finishDefaultsProbe(-1, root.defaultsProbeMode, "");
         }
     }
 
@@ -532,16 +621,36 @@ Item {
     Connections {
         target: root.commandRunner
         function onRevisionChanged() {
-            root.refreshDefaults();
+            if (root.active)
+                root.refreshDefaults();
+            else
+                root.defaultsRefreshPending = true;
         }
     }
 
     Connections {
         target: root.appsService
         function onDesktopEntriesRevisionChanged() {
-            root.refreshDefaults();
+            if (root.active)
+                root.refreshDefaults();
+            else
+                root.defaultsRefreshPending = true;
         }
     }
 
-    Component.onCompleted: root.refreshDefaults()
+    onActiveChanged: {
+        if (root.active) {
+            root.refreshDefaults();
+            if (root.selectedDesktopId.length > 0)
+                root.refreshPermissions();
+        } else {
+            root.cancelDefaultsProbe();
+            root.cancelPermissionsProbe();
+        }
+    }
+
+    Component.onCompleted: {
+        if (root.active)
+            root.refreshDefaults();
+    }
 }

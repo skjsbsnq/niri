@@ -23,6 +23,12 @@ TestCase {
                     "0"];
         }
 
+        function appsDefaultsFingerprintCommand() {
+            return ["test-probe", "defaults-fingerprint", "999999",
+                    JSON.stringify({ status: "ok", complete: true, fingerprint: "test" }),
+                    "0"];
+        }
+
         function appsPermissionsCommand(desktopId) {
             return ["test-permissions", String(desktopId || "")];
         }
@@ -70,7 +76,8 @@ TestCase {
             { match: "defaults", delayMs: 999999, payload: "{}", code: 0 }
         ];
         settings = settingsComponent.createObject(testCase, {
-            commandRunner: runner
+            commandRunner: runner,
+            appsService: null
         });
         verify(settings !== null);
         // Drain any synchronous bookkeeping; defaults stays running but idle.
@@ -201,7 +208,8 @@ TestCase {
         selectDesktop("B.desktop");
         selectDesktop("C.desktop");
         compare(settings.selectedDesktopId, "C.desktop");
-        compare(settings.permissionsProbePending, true);
+        compare(settings.permissionsProbePending, false);
+        compare(settings.permissionsProbeInFlightDesktopId, "C.desktop");
 
         tryCompare(settings, "permissionsRefreshing", false, 4000);
         compare(settings.permissionsOwnerDesktopId, "C.desktop");

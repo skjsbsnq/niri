@@ -46,7 +46,7 @@ def install_command_fakes(monkeypatch, *, portal=True, xdg_mime=True, flatpak=Tr
     def fake_which(name):
         return paths.get(name)
 
-    def fake_run(command, timeout=4):
+    def fake_run(command, timeout=4, budget=None):
         binary = Path(command[0]).name
         if binary == "busctl" and "status" in command:
             return completed(command, 0 if portal else 1, stdout="portal store\n", stderr="")
@@ -187,6 +187,44 @@ def test_xdg_mime_missing_is_explicit_in_defaults_schema(monkeypatch, tmp_path):
     assert payload["xdgMime"]["canWrite"] is False
     assert payload["categories"]
     assert "org.example.Editor.desktop" in payload["desktopMeta"]
+    assert payload["fingerprint"]
+    assert payload["budget"]["limitMs"] == probe.DEFAULT_PROBE_BUDGET_MS
+
+
+def test_defaults_fingerprint_changes_with_desktop_and_mimeapps_metadata(monkeypatch, tmp_path):
+    configure_fixture_env(monkeypatch, tmp_path)
+    install_command_fakes(monkeypatch)
+    data_home = Path(FIXTURES / "xdg-data")
+    config_home = Path(tmp_path / "config")
+
+    first = probe.defaults_fingerprint()
+    mimeapps = config_home / "mimeapps.list"
+    mimeapps.write_text("[Default Applications]\ntext/plain=org.example.Editor.desktop\n", encoding="utf-8")
+    second = probe.defaults_fingerprint()
+
+    assert first["status"] == "ok"
+    assert first["complete"] is True
+    assert first["desktopFiles"] >= 3
+    assert first["fingerprint"] != second["fingerprint"]
+    assert data_home.is_dir()
+
+
+def test_permission_and_storage_scan_obey_small_budget(monkeypatch, tmp_path):
+    configure_fixture_env(monkeypatch, tmp_path)
+    install_command_fakes(monkeypatch)
+    data_dir = Path(tmp_path / "home" / ".local" / "share" / "org.example.Editor")
+    data_dir.mkdir(parents=True)
+    for index in range(32):
+        (data_dir / f"{index}.dat").write_bytes(b"x" * 32)
+
+    budget = probe.Budget(1)
+    budget.deadline = budget.started
+    payload = probe.permissions_for("org.example.Editor.desktop", budget_ms=budget)
+
+    assert payload["budget"]["limitMs"] == 1
+    assert payload["budget"]["expired"] is True
+    assert payload["storage"]["budgetExpired"] is True
+    assert any(row["status"] == "unavailable" for row in payload["permissions"])
 
 
 def test_app_permissions_page_consumes_schema_without_permission_switches():

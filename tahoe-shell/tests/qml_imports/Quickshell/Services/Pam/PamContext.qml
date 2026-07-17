@@ -9,6 +9,7 @@ QtObject {
     property bool messageIsError: false
     property bool responseRequired: false
     property bool responseVisible: false
+    property string lastResponse: ""
 
     signal completed(int result)
     signal error(int err)
@@ -23,6 +24,7 @@ QtObject {
     }
 
     function respond(text) {
+        lastResponse = String(text || "");
         return true;
     }
 }

@@ -82,6 +82,10 @@ Item {
     property bool stateLoaded: false
     // id → absolute expire deadline (ms since epoch). Critical ids are absent.
     property var expireMap: ({})
+    // Interaction pauses retain only the remaining lifetime. Toast reports
+    // hover/press state; this service remains the sole deadline owner.
+    property var pausedExpireMap: ({})
+    property var toastInteractionMap: ({})
     // Live Notification property updates (replace-id) do not rewrite activeModel.
     // Narrow identity signal for consumers (Dynamic Island); carries only the
     // stable id — never a second snapshot or copied model.
@@ -108,6 +112,10 @@ Item {
     onDndEnabledChanged: {
         if (soundService)
             soundService.setEventSoundsMuted(dndEnabled);
+        // The UI promises that banners are muted. Withdraw already-visible
+        // cards as well as suppressing future arrivals; history is preserved.
+        if (dndEnabled && root.activeCount > 0)
+            root.clearAll();
         root.saveState();
     }
 
@@ -214,19 +222,85 @@ Item {
     function rearmVisibleExpires() {
         var stack = root.visibleStack(3);
         var nextMap = {};
+        var nextPausedMap = {};
+        var nextInteractionMap = {};
         var prev = root.expireMap || {};
+        var paused = root.pausedExpireMap || {};
+        var interactions = root.toastInteractionMap || {};
+        var now = Date.now();
         for (var i = 0; i < stack.length; i++) {
             var n = stack[i];
             if (!n || root.isCritical(n))
                 continue;
             var sid = String(n.id);
-            if (Object.prototype.hasOwnProperty.call(prev, sid) && isFinite(Number(prev[sid])))
+            if (interactions[sid] === true) {
+                nextInteractionMap[sid] = true;
+                if (Object.prototype.hasOwnProperty.call(paused, sid) && isFinite(Number(paused[sid])))
+                    nextPausedMap[sid] = Math.max(1, Number(paused[sid]));
+                else if (Object.prototype.hasOwnProperty.call(prev, sid) && isFinite(Number(prev[sid])))
+                    nextPausedMap[sid] = Math.max(1, Number(prev[sid]) - now);
+                else
+                    nextPausedMap[sid] = root.expireMsFor(n);
+            } else if (Object.prototype.hasOwnProperty.call(prev, sid) && isFinite(Number(prev[sid]))) {
                 nextMap[sid] = prev[sid];
-            else
-                nextMap[sid] = Date.now() + root.expireMsFor(n);
+            } else if (Object.prototype.hasOwnProperty.call(paused, sid) && isFinite(Number(paused[sid]))) {
+                nextMap[sid] = now + Math.max(1, Number(paused[sid]));
+            } else {
+                nextMap[sid] = now + root.expireMsFor(n);
+            }
         }
         root.expireMap = nextMap;
+        root.pausedExpireMap = nextPausedMap;
+        root.toastInteractionMap = nextInteractionMap;
         root.armSoonestExpire();
+    }
+
+    function mapWithout(source, excludedKey) {
+        var out = {};
+        var input = source || {};
+        for (var key in input) {
+            if (Object.prototype.hasOwnProperty.call(input, key) && key !== excludedKey)
+                out[key] = input[key];
+        }
+        return out;
+    }
+
+    function setToastInteraction(id, active) {
+        var nid = Number(id);
+        if (!isFinite(nid) || nid < 0)
+            return;
+        var sid = String(nid);
+        var interactions = root.toastInteractionMap || {};
+        var requested = !!active;
+        if ((interactions[sid] === true) === requested)
+            return;
+        if (requested && !root.findActiveById(nid))
+            return;
+
+        var nextInteractions = root.mapWithout(interactions, sid);
+        var nextPaused = root.mapWithout(root.pausedExpireMap, sid);
+        var nextExpires = root.mapWithout(root.expireMap, sid);
+        if (requested) {
+            nextInteractions[sid] = true;
+            var deadline = Number((root.expireMap || {})[sid]);
+            var remaining = Number((root.pausedExpireMap || {})[sid]);
+            if (isFinite(deadline))
+                remaining = Math.max(1, deadline - Date.now());
+            if (!isFinite(remaining) || remaining <= 0) {
+                var notification = root.findActiveById(nid);
+                remaining = notification ? root.expireMsFor(notification) : root.defaultExpireMs;
+            }
+            nextPaused[sid] = remaining;
+        } else {
+            var pausedRemaining = Number((root.pausedExpireMap || {})[sid]);
+            if (isFinite(pausedRemaining) && pausedRemaining > 0)
+                nextPaused[sid] = pausedRemaining;
+        }
+
+        root.toastInteractionMap = nextInteractions;
+        root.pausedExpireMap = nextPaused;
+        root.expireMap = nextExpires;
+        root.rearmVisibleExpires();
     }
 
     // Group history by appName, newest group first (first-seen order of apps
@@ -405,27 +479,32 @@ Item {
     }
 
     function scheduleExpire(id, expireMs) {
-        var at = Date.now() + Math.max(1, Math.round(Number(expireMs) || root.defaultExpireMs));
+        var duration = Math.max(1, Math.round(Number(expireMs) || root.defaultExpireMs));
+        var sid = String(id);
+        if ((root.toastInteractionMap || {})[sid] === true) {
+            var paused = root.mapWithout(root.pausedExpireMap, sid);
+            paused[sid] = duration;
+            root.pausedExpireMap = paused;
+            root.armSoonestExpire();
+            return;
+        }
+        var at = Date.now() + duration;
         var map = {};
         var prev = root.expireMap || {};
         for (var key in prev) {
             if (Object.prototype.hasOwnProperty.call(prev, key))
                 map[key] = prev[key];
         }
-        map[String(id)] = at;
+        map[sid] = at;
         root.expireMap = map;
         root.armSoonestExpire();
     }
 
     function clearExpire(id) {
-        var map = {};
-        var prev = root.expireMap || {};
         var sid = String(id);
-        for (var key in prev) {
-            if (Object.prototype.hasOwnProperty.call(prev, key) && key !== sid)
-                map[key] = prev[key];
-        }
-        root.expireMap = map;
+        root.expireMap = root.mapWithout(root.expireMap, sid);
+        root.pausedExpireMap = root.mapWithout(root.pausedExpireMap, sid);
+        root.toastInteractionMap = root.mapWithout(root.toastInteractionMap, sid);
         root.armSoonestExpire();
     }
 
@@ -459,6 +538,10 @@ Item {
         repeat: false
         onTriggered: {
             var id = targetId;
+            if ((root.toastInteractionMap || {})[String(id)] === true) {
+                root.rearmVisibleExpires();
+                return;
+            }
             root.clearExpire(id);
             root.dismissId(id, "expire");
             // armSoonestExpire runs again from clearExpire / handleClosed.

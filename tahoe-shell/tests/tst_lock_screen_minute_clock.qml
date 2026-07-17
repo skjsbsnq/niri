@@ -51,6 +51,48 @@ TestCase {
         return null;
     }
 
+    function findPasswordInput(item) {
+        if (!item)
+            return null;
+        if (item.echoMode !== undefined && item.text !== undefined
+                && item.forceActiveFocus !== undefined)
+            return item;
+        var kids = item.children || [];
+        for (var i = 0; i < kids.length; i++) {
+            var found = findPasswordInput(kids[i]);
+            if (found)
+                return found;
+        }
+        var data = item.data || [];
+        for (var j = 0; j < data.length; j++) {
+            var nested = findPasswordInput(data[j]);
+            if (nested)
+                return nested;
+        }
+        return null;
+    }
+
+    function findPam(item) {
+        if (!item)
+            return null;
+        if (item.config === "login" && item.respond !== undefined
+                && item.completed !== undefined)
+            return item;
+        var kids = item.children || [];
+        for (var i = 0; i < kids.length; i++) {
+            var found = findPam(kids[i]);
+            if (found)
+                return found;
+        }
+        var data = item.data || [];
+        for (var j = 0; j < data.length; j++) {
+            var nested = findPam(data[j]);
+            if (nested)
+                return nested;
+        }
+        return null;
+    }
+
     function test_opens_locked_shows_current_time() {
         lock.lock();
         wait(0);
@@ -138,5 +180,34 @@ TestCase {
         wait(0);
         compare(Qt.formatDateTime(lock.clockNow, "HH:mm"), "09:07");
         compare(Qt.formatDateTime(lock.clockNow, "yyyy年M月d日"), "2026年1月5日");
+    }
+
+    function test_password_input_is_the_only_authentication_state() {
+        lock.lock();
+        wait(0);
+        var input = findPasswordInput(lock);
+        var pam = findPam(lock);
+        verify(input !== null, "LockScreen must own one password TextInput");
+        verify(pam !== null, "LockScreen must own the PAM context");
+
+        input.text = "secret";
+        lock.submitPassword();
+        pam.responseRequired = true;
+        wait(0);
+        compare(pam.lastResponse, "secret");
+        compare(input.text, "");
+
+        input.text = "bad";
+        pam.completed(2);
+        wait(0);
+        compare(input.text, "");
+
+        input.text = "stale";
+        lock.unlock();
+        compare(input.text, "");
+        input.text = "stale-again";
+        lock.lock();
+        wait(0);
+        compare(input.text, "");
     }
 }

@@ -54,10 +54,6 @@ ShellRoot {
     property string processMenuScreenName: ""
     property var processMenuAnchorRect: null
     property var processMenuProc: null
-    // Global default font. Noto Sans CJK SC covers Chinese and Latin; the
-    // fontconfig fallback installed by arch-zh-setup handles emoji/edge cases.
-    property string baseFontFamily: "Noto Sans CJK SC"
-    property string monoFontFamily: "Noto Sans Mono CJK SC"
     property bool darkMode: appearance.darkMode
     readonly property bool servicePollingActive: controlCenterOpen
         || appMenuOpen
@@ -477,15 +473,6 @@ ShellRoot {
         closeSettingsPanel();
         closeLeftSidebar();
     }
-
-
-    Component.onCompleted: {
-        Qt.application.font = Qt.font({
-            family: shell.baseFontFamily,
-            pixelSize: 13
-        });
-    }
-
     Apps {
         id: apps
         settingsService: desktopSettings

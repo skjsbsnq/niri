@@ -3,6 +3,7 @@ import QtQuick
 // Minimal test stub for FileView consumers (Weather cache, Apps pinned state).
 QtObject {
     id: root
+    default property list<QtObject> data
     property string path: ""
     property bool blockLoading: false
     property bool blockWrites: false

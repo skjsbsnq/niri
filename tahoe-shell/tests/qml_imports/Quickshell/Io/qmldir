@@ -2,5 +2,6 @@ module Quickshell.Io
 Process 1.0 Process.qml
 StdioCollector 1.0 StdioCollector.qml
 FileView 1.0 FileView.qml
+JsonAdapter 1.0 JsonAdapter.qml
 SplitParser 1.0 SplitParser.qml
 singleton TestProcessRegistry 1.0 TestProcessRegistry.qml

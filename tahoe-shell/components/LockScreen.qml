@@ -9,21 +9,40 @@ import Quickshell.Wayland
 WlSessionLock {
     id: root
 
-    property string password: ""
+    // Declare the sole wall-clock owner before bindings consume its id. This
+    // avoids an early construction-time ReferenceError in the lock root.
+    SystemClock {
+        id: lockClock
+        precision: SystemClock.Minutes
+        enabled: root.locked
+    }
+
     property string statusText: ""
     property bool authFailed: false
-    // Display only: wall time comes from the sole SystemClock owner below.
+    // Display only: wall time comes from the sole SystemClock owner above.
     readonly property date clockNow: lockClock.date
     readonly property string userName: {
         var user = Quickshell.env("USER");
         return user ? String(user) : "用户";
     }
 
+    function resetPasswordInput(requestFocus) {
+        passwordInput.text = "";
+        if (requestFocus) {
+            Qt.callLater(function() {
+                if (root.locked && !pam.active)
+                    passwordInput.forceActiveFocus();
+            });
+        }
+    }
+
     function lock() {
-        root.password = "";
+        if (pam.active)
+            pam.abort();
         root.statusText = "";
         root.authFailed = false;
         root.locked = true;
+        root.resetPasswordInput(true);
         // Wake / re-lock: explicit resync on the SystemClock owner.
         root.syncLockClock();
     }
@@ -36,42 +55,38 @@ WlSessionLock {
     function unlock() {
         if (pam.active)
             pam.abort();
-        root.password = "";
+        root.resetPasswordInput(false);
         root.statusText = "";
         root.authFailed = false;
         root.locked = false;
     }
 
-    function submitPassword(text) {
-        var value = String(text || "");
+    function submitPassword() {
+        var value = String(passwordInput.text || "");
         if (value.length === 0 || pam.active)
             return;
 
-        root.password = value;
         root.authFailed = false;
         root.statusText = "正在验证...";
 
         if (!pam.start()) {
-            root.password = "";
+            root.resetPasswordInput(true);
             root.statusText = "无法启动认证";
             root.authFailed = true;
         }
     }
 
     onLockedChanged: {
-        if (!locked && pam.active)
-            pam.abort();
+        if (!locked) {
+            if (pam.active)
+                pam.abort();
+            root.resetPasswordInput(false);
+        } else {
+            root.resetPasswordInput(true);
+        }
         // enabled is bound to locked; only reseed wall time when locking.
         if (locked)
             root.syncLockClock();
-    }
-
-    // Sole wall-clock owner: Minutes precision, no parallel LockScreen Timer.
-    // Explicit resync on lock / ApplicationActive; minute ticks via SystemClock.
-    SystemClock {
-        id: lockClock
-        precision: SystemClock.Minutes
-        enabled: root.locked
     }
 
     // Suspend/resume: call the same SystemClock.resync entry (no local Timer).
@@ -89,8 +104,8 @@ WlSessionLock {
 
         onResponseRequiredChanged: {
             if (responseRequired) {
-                pam.respond(root.password);
-                root.password = "";
+                pam.respond(passwordInput.text);
+                root.resetPasswordInput(false);
             }
         }
 
@@ -100,7 +115,7 @@ WlSessionLock {
                 return;
             }
 
-            root.password = "";
+            root.resetPasswordInput(true);
             root.authFailed = true;
             root.statusText = result === PamResult.MaxTries
                 ? "认证次数过多，请稍后重试"
@@ -108,7 +123,7 @@ WlSessionLock {
         }
 
         onError: function(error) {
-            root.password = "";
+            root.resetPasswordInput(true);
             root.authFailed = true;
             root.statusText = "认证失败：" + PamError.toString(error);
         }
@@ -209,8 +224,8 @@ WlSessionLock {
                     clip: true
                     enabled: !pam.active
                     verticalAlignment: TextInput.AlignVCenter
-                    Keys.onReturnPressed: root.submitPassword(text)
-                    Keys.onEscapePressed: text = ""
+                    Keys.onReturnPressed: root.submitPassword()
+                    Keys.onEscapePressed: root.resetPasswordInput(true)
 
                     onTextChanged: {
                         if (root.authFailed) {
@@ -219,7 +234,10 @@ WlSessionLock {
                         }
                     }
 
-                    Component.onCompleted: forceActiveFocus()
+                    Component.onCompleted: {
+                        if (root.locked)
+                            forceActiveFocus();
+                    }
                 }
 
                 Rectangle {
@@ -248,7 +266,7 @@ WlSessionLock {
                         cursorShape: parent.opacity > 0.5 ? Qt.PointingHandCursor : Qt.ArrowCursor
                         onClicked: {
                             if (passwordInput.text.length > 0 && !pam.active)
-                                root.submitPassword(passwordInput.text);
+                                root.submitPassword();
                         }
                     }
                 }

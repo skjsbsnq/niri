@@ -221,6 +221,10 @@ PanelWindow {
         property real swipePointerStartX: 0
         property real swipePointerStartY: 0
         property int boundNotifId: -1
+        property int interactionNotifId: -1
+        property bool pointerPressed: false
+        readonly property bool interactionActive: active && stackIndex === 0
+            && (cardHover.hovered || pointerPressed)
 
         readonly property alias cardRegion: glass.region
 
@@ -292,16 +296,48 @@ PanelWindow {
             }
         }
 
-        onActiveChanged: syncFromStack()
-        onNotifIdChanged: syncFromStack()
+        function releaseToastInteraction() {
+            if (interactionNotifId < 0)
+                return;
+            if (root.notificationsService && root.notificationsService.setToastInteraction)
+                root.notificationsService.setToastInteraction(interactionNotifId, false);
+            interactionNotifId = -1;
+        }
+
+        function syncToastInteraction() {
+            var nextId = interactionActive && notifId >= 0 ? notifId : -1;
+            if (interactionNotifId === nextId)
+                return;
+            releaseToastInteraction();
+            if (nextId >= 0 && root.notificationsService
+                    && root.notificationsService.setToastInteraction) {
+                root.notificationsService.setToastInteraction(nextId, true);
+                interactionNotifId = nextId;
+            }
+        }
+
+        onActiveChanged: {
+            syncFromStack();
+            syncToastInteraction();
+        }
+        onNotifIdChanged: {
+            syncFromStack();
+            syncToastInteraction();
+        }
+        onInteractionActiveChanged: syncToastInteraction()
         onStackIndexChanged: {
             if (active) {
                 stackY = Motion.toastStackYForIndex(stackIndex);
                 animateScaleTo(Motion.toastStackScaleForIndex(stackIndex));
             }
+            syncToastInteraction();
         }
 
-        Component.onCompleted: syncFromStack()
+        Component.onCompleted: {
+            syncFromStack();
+            syncToastInteraction();
+        }
+        Component.onDestruction: releaseToastInteraction()
 
         function animateEnterTo(value) {
             enterSpring.stop();
@@ -607,6 +643,9 @@ PanelWindow {
                                     anchors.fill: parent
                                     hoverEnabled: true
                                     cursorShape: Qt.PointingHandCursor
+                                    onPressed: cardRoot.pointerPressed = true
+                                    onReleased: cardRoot.pointerPressed = false
+                                    onCanceled: cardRoot.pointerPressed = false
                                     onClicked: root.invokeAction(cardRoot.notification, modelData.identifier)
                                 }
                             }
@@ -655,6 +694,9 @@ PanelWindow {
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
+                    onPressed: cardRoot.pointerPressed = true
+                    onReleased: cardRoot.pointerPressed = false
+                    onCanceled: cardRoot.pointerPressed = false
                     onClicked: root.dismissNotification(cardRoot.notification)
                     onContainsMouseChanged: {
                         if (!containsMouse && !cardHover.hovered)
@@ -672,6 +714,7 @@ PanelWindow {
                 preventStealing: true
 
                 onPressed: function (mouse) {
+                    cardRoot.pointerPressed = true;
                     cardRoot.beginSwipe(mouse.x, mouse.y);
                 }
                 onPositionChanged: function (mouse) {
@@ -679,6 +722,7 @@ PanelWindow {
                         cardRoot.advanceSwipe(mouse.x, mouse.y);
                 }
                 onReleased: function (mouse) {
+                    cardRoot.pointerPressed = false;
                     if (cardRoot.swipeMoved) {
                         cardRoot.resolveSwipe();
                     } else {
@@ -688,6 +732,7 @@ PanelWindow {
                     }
                 }
                 onCanceled: {
+                    cardRoot.pointerPressed = false;
                     cardRoot.swipeDragging = false;
                     cardRoot.swipeX = 0;
                     cardRoot.clearPendingDismiss();

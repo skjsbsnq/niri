@@ -46,7 +46,7 @@ PanelWindow {
     aboveWindows: true
     exclusionMode: ExclusionMode.Ignore
     implicitWidth: 360
-    implicitHeight: panel.implicitHeight
+    implicitHeight: panelLoader.item ? panelLoader.item.implicitHeight : 0
     color: "transparent"
     WlrLayershell.namespace: "tahoe-notification-center"
 
@@ -60,7 +60,7 @@ PanelWindow {
         left: root.popupLeftMargin
     }
 
-    TahoeGlass.regions: [panel.region]
+    TahoeGlass.regions: panelLoader.item ? [panelLoader.item.region] : []
 
     function startClearAll() {
         if (!notificationsService || root.clearing)
@@ -122,24 +122,34 @@ PanelWindow {
             root.finishClearAll();
     }
 
-    GlassPanel {
-        id: panel
-
-        // Keep the compositor glass region anchored. In compositor animation
-        // mode niri owns the outer motion.
-        y: 0
+    Loader {
+        id: panelLoader
         width: parent.width
-        implicitHeight: content.implicitHeight + 24
-        height: implicitHeight
-        material: GlassStyle.MaterialPanel
-        radius: GlassStyle.RadiusPanel
-        fillColor: GlassStyle.FillPanelBright
-        strokeColor: GlassStyle.StrokePanelBright
-        interaction: 0.0
-        opacity: 1
+        active: root.open
+        sourceComponent: panelComponent
+    }
 
-        ColumnLayout {
-            id: content
+    Component {
+        id: panelComponent
+
+        GlassPanel {
+            id: panel
+
+            // Keep the compositor glass region anchored. In compositor animation
+            // mode niri owns the outer motion.
+            y: 0
+            width: root.width
+            implicitHeight: content.implicitHeight + 24
+            height: implicitHeight
+            material: GlassStyle.MaterialPanel
+            radius: GlassStyle.RadiusPanel
+            fillColor: GlassStyle.FillPanelBright
+            strokeColor: GlassStyle.StrokePanelBright
+            interaction: 0.0
+            opacity: 1
+
+            ColumnLayout {
+                id: content
 
             anchors.left: parent.left
             anchors.right: parent.right
@@ -315,6 +325,7 @@ PanelWindow {
                         }
                     }
                 }
+            }
             }
         }
     }

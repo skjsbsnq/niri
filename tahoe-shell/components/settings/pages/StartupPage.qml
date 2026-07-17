@@ -344,6 +344,8 @@ Flickable {
                 }
 
                 delegate: Controls.TahoeListRow {
+                    id: addApplicationRow
+
                     required property var modelData
 
                     theme: page.theme
@@ -355,7 +357,7 @@ Flickable {
                     Controls.TahoeButton {
                         id: addCandidateButton
 
-                        property var candidateApp: addCandidateRow.modelData
+                        property var candidateApp: addApplicationRow.modelData
 
                         theme: page.theme
                         label: "添加"

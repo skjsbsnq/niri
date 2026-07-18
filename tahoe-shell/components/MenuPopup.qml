@@ -6,6 +6,7 @@ import Quickshell
 import Quickshell.Wayland
 import "TahoeGlass.js" as GlassStyle
 import "PopupGeometry.js" as PopupGeometry
+import "Motion.js" as Motion
 
 PanelWindow {
     id: root
@@ -13,6 +14,8 @@ PanelWindow {
     property bool open: false
     property string activeApp: "桌面"
     property var powerService
+    property var appMenuService
+    property var shellBridge
     property var anchorRect: null
     property var settingsService
     property bool darkMode: false
@@ -27,14 +30,26 @@ PanelWindow {
     readonly property real popupOriginX: anchorRect
         ? PopupGeometry.originX(anchorRect, popupLeftMargin, root.implicitWidth, screenWidth, 12)
         : 0
+    readonly property bool confirmOpen: powerService && powerService.hasPending
+    readonly property int confirmCardHeight: 90
+    // Keep the layer mapped while a row is flashing even if activated() already
+    // closed appMenuOpen (settings/overview). Otherwise the flash is clipped.
+    // holdSeq is the in-flight flash token; 0 means no hold. Reopen clears it so a
+    // stale flashFinished cannot close the newly opened menu.
+    property int flashSeq: 0
+    property int holdSeq: 0
+    readonly property bool flashHold: holdSeq !== 0
+
     signal closeRequested()
     signal openSettingsRequested(string page)
 
-    visible: open
+    visible: open || flashHold
     aboveWindows: true
     exclusionMode: ExclusionMode.Ignore
     implicitWidth: 218
-    implicitHeight: powerService && powerService.hasPending ? 380 : 300
+    // Base menu content is fixed; confirm card expands in-place so panel height
+    // can animate via Behavior (eased only — feeds glass region geometry).
+    implicitHeight: 300 + (confirmOpen ? (confirmCardHeight + 2) : 0)
     color: "transparent"
     WlrLayershell.namespace: "tahoe-menu-popup"
 
@@ -48,20 +63,44 @@ PanelWindow {
         left: root.popupLeftMargin
     }
 
+    Behavior on implicitHeight {
+        NumberAnimation {
+            duration: Motion.elementResize(root.settingsService)
+            easing.type: Motion.emphasizedDecel
+        }
+    }
+
     onOpenChanged: {
-        if (!open && powerService)
+        if (open) {
+            // Invalidate any in-flight flash from a previous open epoch.
+            holdSeq = 0;
+            flashSeq += 1;
+            return;
+        }
+        if (powerService)
             powerService.cancelPending();
     }
 
-    function triggerPower(action) {
-        if (!powerService) {
-            root.closeRequested();
-            return;
-        }
+    function armFlashHold() {
+        flashSeq += 1;
+        holdSeq = flashSeq;
+    }
 
-        var pending = powerService.requestAction(action);
-        if (!pending)
+    function finishRowFlash(closeMenu) {
+        // Stale finish after reopen (hold cleared) must not close the new menu.
+        if (holdSeq === 0)
+            return;
+        holdSeq = 0;
+        if (closeMenu && root.open)
             root.closeRequested();
+    }
+
+    function triggerPower(action) {
+        // Action only. Closing is owned by MenuRow.flashFinished so the flash
+        // stays visible; confirm-card actions leave the menu open via hasPending.
+        if (!powerService)
+            return;
+        powerService.requestAction(action);
     }
 
     TahoeGlass.regions: [menuSurface.region]
@@ -80,11 +119,15 @@ PanelWindow {
         fillColor: GlassStyle.FillPanelBright
         strokeColor: GlassStyle.StrokePanelBright
         opacity: 1
+        clip: true
 
         ColumnLayout {
             anchors.fill: parent
             anchors.margins: 8
             spacing: 2
+            // Ghost (hold, !open) is visual-only. While a flash is in flight, block
+            // further row clicks so a second arm cannot orphan the first finish.
+            enabled: root.open && root.holdSeq === 0
 
             MenuRow {
                 text: "关于 niri"
@@ -93,9 +136,10 @@ PanelWindow {
                 settingsService: root.settingsService
                 darkMode: root.darkMode
                 onActivated: {
+                    root.armFlashHold();
                     root.openSettingsRequested("about");
-                    root.closeRequested();
                 }
+                onFlashFinished: root.finishRowFlash(true)
             }
 
             MenuSeparator {
@@ -107,7 +151,12 @@ PanelWindow {
                 icon: "\ue8b8"
                 settingsService: root.settingsService
                 darkMode: root.darkMode
-                onActivated: root.closeRequested()
+                onActivated: {
+                    root.armFlashHold();
+                    if (root.appMenuService)
+                        root.appMenuService.activateFocusedWindow();
+                }
+                onFlashFinished: root.finishRowFlash(true)
             }
 
             MenuRow {
@@ -115,7 +164,12 @@ PanelWindow {
                 icon: "\ue8a7"
                 settingsService: root.settingsService
                 darkMode: root.darkMode
-                onActivated: root.closeRequested()
+                onActivated: {
+                    root.armFlashHold();
+                    if (root.shellBridge && root.shellBridge.toggleWindowOverview)
+                        root.shellBridge.toggleWindowOverview();
+                }
+                onFlashFinished: root.finishRowFlash(true)
             }
 
             MenuRow {
@@ -124,9 +178,10 @@ PanelWindow {
                 settingsService: root.settingsService
                 darkMode: root.darkMode
                 onActivated: {
+                    root.armFlashHold();
                     root.openSettingsRequested("settings");
-                    root.closeRequested();
                 }
+                onFlashFinished: root.finishRowFlash(true)
             }
 
             MenuSeparator {
@@ -138,7 +193,13 @@ PanelWindow {
                 icon: "\ue897"
                 settingsService: root.settingsService
                 darkMode: root.darkMode
-                onActivated: root.triggerPower("lock")
+                onActivated: {
+                    root.armFlashHold();
+                    root.triggerPower("lock");
+                }
+                onFlashFinished: {
+                    root.finishRowFlash(!(root.powerService && root.powerService.hasPending));
+                }
             }
 
             MenuRow {
@@ -146,7 +207,13 @@ PanelWindow {
                 icon: "\ue51c"
                 settingsService: root.settingsService
                 darkMode: root.darkMode
-                onActivated: root.triggerPower("sleep")
+                onActivated: {
+                    root.armFlashHold();
+                    root.triggerPower("sleep");
+                }
+                onFlashFinished: {
+                    root.finishRowFlash(!(root.powerService && root.powerService.hasPending));
+                }
             }
 
             MenuRow {
@@ -154,7 +221,13 @@ PanelWindow {
                 icon: "\ue9ba"
                 settingsService: root.settingsService
                 darkMode: root.darkMode
-                onActivated: root.triggerPower("logout")
+                onActivated: {
+                    root.armFlashHold();
+                    root.triggerPower("logout");
+                }
+                onFlashFinished: {
+                    root.finishRowFlash(!(root.powerService && root.powerService.hasPending));
+                }
             }
 
             MenuSeparator {
@@ -167,7 +240,13 @@ PanelWindow {
                 destructive: true
                 settingsService: root.settingsService
                 darkMode: root.darkMode
-                onActivated: root.triggerPower("restart")
+                onActivated: {
+                    root.armFlashHold();
+                    root.triggerPower("restart");
+                }
+                onFlashFinished: {
+                    root.finishRowFlash(!(root.powerService && root.powerService.hasPending));
+                }
             }
 
             MenuRow {
@@ -176,57 +255,92 @@ PanelWindow {
                 destructive: true
                 settingsService: root.settingsService
                 darkMode: root.darkMode
-                onActivated: root.triggerPower("shutdown")
+                onActivated: {
+                    root.armFlashHold();
+                    root.triggerPower("shutdown");
+                }
+                onFlashFinished: {
+                    root.finishRowFlash(!(root.powerService && root.powerService.hasPending));
+                }
             }
 
-            Rectangle {
+            Item {
+                id: confirmHost
+
                 Layout.fillWidth: true
-                Layout.preferredHeight: 90
-                radius: 12
-                color: "#5cffffff"
-                border.color: "#50ffffff"
-                visible: root.powerService && root.powerService.hasPending
+                Layout.preferredHeight: root.confirmOpen ? root.confirmCardHeight : 0
+                clip: true
+                opacity: root.confirmOpen ? 1 : 0
+                visible: Layout.preferredHeight > 0.5 || opacity > 0.01
 
-                ColumnLayout {
-                    anchors.fill: parent
-                    anchors.margins: 10
-                    spacing: 7
-
-                    Text {
-                        text: root.powerService ? root.powerService.pendingTitle : ""
-                        color: "#1d1d1f"
-                        font.pixelSize: 12
-                        font.weight: Font.DemiBold
-                        Layout.fillWidth: true
+                Behavior on Layout.preferredHeight {
+                    NumberAnimation {
+                        duration: Motion.elementResize(root.settingsService)
+                        easing.type: Motion.emphasizedDecel
                     }
+                }
 
-                    Text {
-                        text: root.powerService ? root.powerService.pendingMessage : ""
-                        color: "#991d1d1f"
-                        font.pixelSize: 11
-                        wrapMode: Text.WordWrap
-                        Layout.fillWidth: true
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: root.confirmOpen
+                            ? Motion.elementResize(root.settingsService)
+                            : Motion.panelExit(root.settingsService)
+                        easing.type: root.confirmOpen
+                            ? Motion.emphasizedDecel
+                            : Motion.emphasizedAccel
                     }
+                }
 
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 8
+                Rectangle {
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.top: parent.top
+                    height: root.confirmCardHeight
+                    radius: 12
+                    color: "#5cffffff"
+                    border.color: "#50ffffff"
 
-                        ConfirmButton {
-                            text: "取消"
-                            onActivated: {
-                                if (root.powerService)
-                                    root.powerService.cancelPending();
-                            }
+                    ColumnLayout {
+                        anchors.fill: parent
+                        anchors.margins: 10
+                        spacing: 7
+
+                        Text {
+                            text: root.powerService ? root.powerService.pendingTitle : ""
+                            color: "#1d1d1f"
+                            font.pixelSize: 12
+                            font.weight: Font.DemiBold
+                            Layout.fillWidth: true
                         }
 
-                        ConfirmButton {
-                            text: root.powerService ? root.powerService.pendingTitle : "确认"
-                            primary: true
-                            onActivated: {
-                                if (root.powerService)
-                                    root.powerService.confirmPending();
-                                root.closeRequested();
+                        Text {
+                            text: root.powerService ? root.powerService.pendingMessage : ""
+                            color: "#991d1d1f"
+                            font.pixelSize: 11
+                            wrapMode: Text.WordWrap
+                            Layout.fillWidth: true
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            spacing: 8
+
+                            ConfirmButton {
+                                text: "取消"
+                                onActivated: {
+                                    if (root.powerService)
+                                        root.powerService.cancelPending();
+                                }
+                            }
+
+                            ConfirmButton {
+                                text: root.powerService ? root.powerService.pendingTitle : "确认"
+                                primary: true
+                                onActivated: {
+                                    if (root.powerService)
+                                        root.powerService.confirmPending();
+                                    root.closeRequested();
+                                }
                             }
                         }
                     }

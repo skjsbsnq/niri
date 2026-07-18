@@ -30,9 +30,10 @@ var pressDuration = 120;
 var pressScale = 0.96;
 var pressEasing = QtQuick.Easing.OutQuad;
 
-// Menu selection flash (T06). Two half-cycles of highlight at this interval
-// before the parent closes the menu and runs the action.
-var menuFlashInterval = 70;
+// Menu selection flash (T06 / R06). Visual-only highlight blink after the
+// action already fired. Interval × (count×2 half-cycles) ≈ close delay;
+// reduced motion skips the flash and finishes in the same frame.
+var menuFlashInterval = 55;
 var menuFlashCount = 2;
 
 // Dock magnification wave (T07 / T08-fix9). Cosine-bell attenuation:

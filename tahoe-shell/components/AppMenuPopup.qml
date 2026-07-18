@@ -135,7 +135,12 @@ PanelWindow {
                 }
 
                 Repeater {
-                    model: root.nativeMenuAvailable && root.appMenuService ? root.appMenuService.nativeMenuItems : []
+                    model: ScriptModel {
+                        objectProp: "modelKey"
+                        values: root.nativeMenuAvailable && root.appMenuService
+                            ? root.appMenuService.nativeMenuItems
+                            : []
+                    }
 
                     delegate: MenuRow {
                         required property var modelData
@@ -157,8 +162,8 @@ PanelWindow {
                             if (!root.appMenuService)
                                 return;
                             root.appMenuService.activateNativeItem(modelData);
-                            root.closeRequested();
                         }
+                        onFlashFinished: root.closeRequested()
                     }
                 }
 
@@ -176,8 +181,8 @@ PanelWindow {
                     onActivated: {
                         if (root.appMenuService)
                             root.appMenuService.pinFocusedApp();
-                        root.closeRequested();
                     }
+                    onFlashFinished: root.closeRequested()
                 }
 
                 MenuRow {
@@ -189,8 +194,8 @@ PanelWindow {
                     onActivated: {
                         if (root.appMenuService)
                             root.appMenuService.activateFocusedWindow();
-                        root.closeRequested();
                     }
+                    onFlashFinished: root.closeRequested()
                 }
 
                 MenuRow {
@@ -202,8 +207,8 @@ PanelWindow {
                     onActivated: {
                         if (root.appMenuService)
                             root.appMenuService.minimizeFocusedWindow();
-                        root.closeRequested();
                     }
+                    onFlashFinished: root.closeRequested()
                 }
             }
         }

@@ -177,8 +177,8 @@ PanelWindow {
                 onActivated: {
                     if (root.appsService && root.hasApp)
                         root.appsService.launchPinnedApp(root.resolvedApp, root.resolvedAppId);
-                    root.closeRequested();
                 }
+                onFlashFinished: root.closeRequested()
             }
 
             MenuRow {
@@ -191,8 +191,8 @@ PanelWindow {
                 onActivated: {
                     if (root.canUnpin)
                         root.appsService.unpinAppId(root.resolvedAppId);
-                    root.closeRequested();
                 }
+                onFlashFinished: root.closeRequested()
             }
         }
     }

@@ -147,8 +147,8 @@ PanelWindow {
                         if (!modelData)
                             return;
                         modelData.triggered();
-                        root.closeRequested();
                     }
+                    onFlashFinished: root.closeRequested()
                 }
             }
 

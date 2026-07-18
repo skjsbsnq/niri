@@ -15,6 +15,10 @@ Item {
     property string registrarOwner: ""
     property bool probing: false
     property var nativeMenuItems: []
+    // Stable QtObject cache for nativeMenuItems so ScriptModel objectProp reuse
+    // survives refresh() without rebuilding every MenuRow delegate (R06 #19).
+    property var nativeMenuItemCache: Object.create(null)
+
     property string nativeMenuService: ""
     property string nativeMenuPath: ""
     property string nativeMenuStatus: "尚未检测"
@@ -31,6 +35,27 @@ Item {
     property bool probePending: false
     property string probeStdoutText: ""
     property int probeStdoutGeneration: 0
+
+    Component {
+        id: nativeMenuItemFactory
+
+        QtObject {
+            property string modelKey: ""
+            property int itemId: -1
+            property string text: ""
+            property string kind: "item"
+            property bool enabled: true
+            property int indent: 0
+            property string group: ""
+            property string icon: ""
+            property string toggleType: ""
+            property bool checked: false
+            property bool hasChildren: false
+            // Compat for older tests that read label.
+            property string label: ""
+        }
+    }
+
     readonly property var focusedWindow: windowsService ? windowsService.focusedWindow : null
     readonly property string activeTitle: appsService ? appsService.windowAppLabel(focusedWindow) : "桌面"
     readonly property string activeWindowTitle: appsService ? appsService.toplevelLabel(focusedWindow) : "桌面"
@@ -58,7 +83,7 @@ Item {
                 menuOwnerIdentity = "";
                 nativeMenuService = "";
                 nativeMenuPath = "";
-                nativeMenuItems = [];
+                nativeMenuItems = root.clearNativeMenuItems();
                 nativeMenuStatus = "正在检测";
                 nativeMenuDetail = "";
             }
@@ -192,7 +217,7 @@ Item {
         registrarAvailable = !!parsed.registrarAvailable || registrarOwner.length > 0;
         nativeMenuService = String(parsed.menuService || "");
         nativeMenuPath = String(parsed.menuPath || "");
-        nativeMenuItems = Array.isArray(parsed.items) ? parsed.items : [];
+        nativeMenuItems = root.mergeNativeMenuItems(Array.isArray(parsed.items) ? parsed.items : []);
         nativeMenuStatus = String(parsed.status || "");
         nativeMenuDetail = String(parsed.detail || "");
         menuOwnerIdentity = identity;
@@ -232,6 +257,91 @@ Item {
             schedulePendingProbe();
     }
 
+
+    function nativeMenuModelKey(item) {
+        var kind = String(item && item.kind || "item");
+        var rawId = item && item.itemId !== undefined && item.itemId !== null
+            ? item.itemId
+            : (item && item.id !== undefined && item.id !== null ? item.id : "");
+        var id = String(rawId);
+        var text = String(item && (item.text || item.label) || "");
+        var indent = String(item && item.indent !== undefined ? item.indent : 0);
+        if (kind === "separator")
+            return "sep:" + indent + ":" + id + ":" + text;
+        if (kind === "header")
+            return "hdr:" + indent + ":" + id + ":" + text;
+        return "item:" + indent + ":" + id + ":" + text;
+    }
+
+    function clearNativeMenuItems() {
+        var cache = root.nativeMenuItemCache || Object.create(null);
+        for (var key in cache) {
+            var entry = cache[key];
+            if (entry && entry.destroy)
+                entry.destroy(1000);
+        }
+        root.nativeMenuItemCache = Object.create(null);
+        return [];
+    }
+
+    function mergeNativeMenuItems(rawItems) {
+        var list = Array.isArray(rawItems) ? rawItems : [];
+        var cache = root.nativeMenuItemCache || Object.create(null);
+        var nextCache = Object.create(null);
+        var result = [];
+
+        for (var i = 0; i < list.length; i++) {
+            var raw = list[i] || {};
+            // Normalize probe payloads that still use label instead of text.
+            if ((raw.text === undefined || raw.text === null || String(raw.text).length === 0)
+                    && raw.label !== undefined && raw.label !== null)
+                raw = {
+                    "id": raw.id,
+                    "text": raw.label,
+                    "kind": raw.kind,
+                    "enabled": raw.enabled,
+                    "indent": raw.indent,
+                    "group": raw.group,
+                    "icon": raw.icon,
+                    "toggleType": raw.toggleType,
+                    "checked": raw.checked,
+                    "hasChildren": raw.hasChildren,
+                    "label": raw.label
+                };
+            var key = root.nativeMenuModelKey(raw);
+            var entry = cache[key];
+            if (!entry) {
+                entry = nativeMenuItemFactory.createObject(root);
+                if (!entry)
+                    continue;
+            }
+            entry.modelKey = key;
+            entry.itemId = raw.id !== undefined && raw.id !== null ? Number(raw.id) : -1;
+            entry.text = String(raw.text || raw.label || "");
+            entry.kind = String(raw.kind || "item");
+            entry.enabled = raw.enabled === undefined ? true : !!raw.enabled;
+            entry.indent = Math.max(0, Number(raw.indent || 0));
+            entry.group = String(raw.group || "");
+            entry.icon = String(raw.icon || "");
+            entry.toggleType = String(raw.toggleType || "");
+            entry.checked = !!raw.checked;
+            entry.hasChildren = !!raw.hasChildren;
+            entry.label = entry.text;
+            nextCache[key] = entry;
+            result.push(entry);
+        }
+
+        for (var oldKey in cache) {
+            if (!nextCache[oldKey]) {
+                var stale = cache[oldKey];
+                if (stale && stale.destroy)
+                    stale.destroy(1000);
+            }
+        }
+        root.nativeMenuItemCache = nextCache;
+        return result;
+    }
+
     function activateNativeItem(item) {
         if (!item || !nativeMenuAvailable || nativeMenuService.length === 0 || nativeMenuPath.length === 0)
             return;
@@ -249,8 +359,9 @@ Item {
             }
         }
 
+        var itemId = item.itemId !== undefined && item.itemId !== null ? item.itemId : item.id;
         trigger.command = commandRunner && commandRunner.appMenuTriggerCommand
-            ? commandRunner.appMenuTriggerCommand(nativeMenuService, nativeMenuPath, item.id)
+            ? commandRunner.appMenuTriggerCommand(nativeMenuService, nativeMenuPath, itemId)
             : [
                 "busctl",
                 "--user",
@@ -260,7 +371,7 @@ Item {
                 "com.canonical.dbusmenu",
                 "Event",
                 "isvu",
-                String(item.id),
+                String(itemId),
                 "clicked",
                 "i",
                 "0",

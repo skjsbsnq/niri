@@ -159,8 +159,8 @@ PanelWindow {
                 onActivated: {
                     if (root.proc && root.proc.pid)
                         copyToClipboard(String(root.proc.pid));
-                    root.closeRequested();
                 }
+                onFlashFinished: root.closeRequested()
             }
             MenuRow {
                 text: "复制名称"
@@ -171,8 +171,8 @@ PanelWindow {
                 onActivated: {
                     if (root.proc && root.proc.name)
                         copyToClipboard(root.proc.name);
-                    root.closeRequested();
                 }
+                onFlashFinished: root.closeRequested()
             }
             MenuRow {
                 text: "复制完整命令"
@@ -183,8 +183,8 @@ PanelWindow {
                 onActivated: {
                     if (root.proc && root.proc.cmdline)
                         copyToClipboard(root.proc.cmdline);
-                    root.closeRequested();
                 }
+                onFlashFinished: root.closeRequested()
             }
 
             MenuSeparator {
@@ -200,8 +200,8 @@ PanelWindow {
                 onActivated: {
                     if (root.proc && root.proc.pid)
                         Quickshell.execDetached(["kill", String(root.proc.pid)]);
-                    root.closeRequested();
                 }
+                onFlashFinished: root.closeRequested()
             }
             MenuRow {
                 text: "强制结束 (SIGKILL)"
@@ -216,8 +216,8 @@ PanelWindow {
                 onActivated: {
                     if (root.proc && root.proc.pid)
                         Quickshell.execDetached(["kill", "-9", String(root.proc.pid)]);
-                    root.closeRequested();
                 }
+                onFlashFinished: root.closeRequested()
             }
         }
 

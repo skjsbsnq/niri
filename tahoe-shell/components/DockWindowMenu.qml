@@ -198,8 +198,8 @@ PanelWindow {
                         else
                             root.windowsService.activate(root.window);
                     }
-                    root.closeRequested();
                 }
+                onFlashFinished: root.closeRequested()
             }
 
             MenuRow {
@@ -211,8 +211,8 @@ PanelWindow {
                 onActivated: {
                     if (root.windowsService && root.window)
                         root.windowsService.minimize(root.window);
-                    root.closeRequested();
                 }
+                onFlashFinished: root.closeRequested()
             }
 
             MenuRow {
@@ -225,8 +225,8 @@ PanelWindow {
                 onActivated: {
                     if (root.appsService && root.window)
                         root.appsService.togglePinnedWindow(root.window);
-                    root.closeRequested();
                 }
+                onFlashFinished: root.closeRequested()
             }
 
             MenuRow {
@@ -239,8 +239,8 @@ PanelWindow {
                 onActivated: {
                     if (root.windowsService && root.window)
                         root.windowsService.closeWindow(root.window);
-                    root.closeRequested();
                 }
+                onFlashFinished: root.closeRequested()
             }
 
             MenuSeparator {
@@ -294,8 +294,8 @@ PanelWindow {
                                 onActivated: {
                                     if (root.windowsService && root.window)
                                         root.windowsService.moveWindowToWorkspace(root.window, modelData, false);
-                                    root.closeRequested();
                                 }
+                                onFlashFinished: root.closeRequested()
                             }
                         }
                     }

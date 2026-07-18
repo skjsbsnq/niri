@@ -17,7 +17,7 @@
 | R03 | Launchpad 打字脉冲修复 + 图标异步 | #83 #84 #85 | S | DONE | [R03](acceptance/R03-launchpad-filter-icons-2026-07-17.md)：最终独立复审 PASS，754 tests 全绿，宿主/嵌套验收通过 |
 | R04 | WiFi 弹窗稳定列表（点名②） | #7 #8 #9 #10 | M | DONE | [R04](acceptance/R04-wifi-stable-list-2026-07-17.md)：终审 FINAL PASS，758 tests 全绿，宿主 30s+/嵌套验收通过 |
 | R05 | 剪贴板弹窗稳定列表与动画（点名①） | #1 #2 #3 #4 #5(部分) | M | DONE | [R05](acceptance/R05-clipboard-stable-list-2026-07-18.md)：终审 FINAL PASS，762 tests 全绿，宿主/嵌套验收通过 |
-| R06 | 菜单时序重排（点名③） | #13 #14 #15 #16 #17 #19 | M | PENDING | |
+| R06 | 菜单时序重排（点名③） | #13 #14 #15 #16 #17 #19 | M | DONE | [R06](acceptance/R06-menu-timing-2026-07-18.md)：终审 FINAL PASS，764 tests 全绿，flashHold 门控幽灵点击/陈旧 close，宿主部署 parity OK |
 | R07 | 灵动岛换场重构（点名④a） | #20 #24 #25 #26 #27 #28 #29 | L | PENDING | |
 | R08 | 灵动岛几何手感 + OSD 进场（点名④b） | #21 #22 #23 | M | PENDING | |
 | R09 | Toast 栈重构与退出统一 | #31 #32 #33 #34 | M–L | PENDING | |

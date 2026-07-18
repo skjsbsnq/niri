@@ -5,10 +5,10 @@ import QtQuick.Layouts
 import "Motion.js" as Motion
 import "settings/SettingsTheme.js" as Theme
 
-// Shared menu row for every shell menu (T06).
+// Shared menu row for every shell menu (T06 / R06).
 // macOS signatures: height 26 / 13px / radius 6 / accent-blue hover + white text;
-// click flashes the selection twice (~70ms) then emits activated so the parent
-// can close the menu and run the action. Reduced motion skips the flash.
+// click runs the action immediately, then flashes the selection purely as visual
+// feedback before the parent closes the menu. Reduced motion skips the flash.
 Item {
     id: row
 
@@ -65,7 +65,12 @@ Item {
     property bool forceHighlight: false
     property int flashStep: 0
 
+    // Action runs immediately on click. Parent should start work here and must
+    // not assume the menu has closed yet.
     signal activated()
+    // Pure visual flash finished (or skipped under reduced motion). Parent
+    // closes the menu here when the action is not keeping the menu open.
+    signal flashFinished()
 
     width: parent ? parent.width : implicitWidth
     height: implicitHeight
@@ -74,28 +79,27 @@ Item {
     Layout.fillWidth: true
     Layout.preferredHeight: rowHeight
     opacity: interactive || header || separator ? 1 : 0.45
-    scale: Motion.pressScaleFor(settingsService, rowMouse.pressed && interactive && !flashing)
 
-    Behavior on scale {
-        NumberAnimation {
-            duration: Motion.pressDurationFor(row.settingsService)
-            easing.type: Motion.pressEasing
-        }
-    }
-
-    function cancelFlash() {
+    function cancelFlash(emitFinished) {
+        var wasFlashing = flashing;
         flashTimer.stop();
         flashing = false;
         forceHighlight = false;
         flashStep = 0;
+        // Abort paths (hidden mid-flash / destruction) still release parent hold.
+        if (emitFinished && wasFlashing)
+            flashFinished();
     }
 
     function requestActivate() {
         if (!interactive || flashing)
             return;
 
+        // Action first — never wait on the flash timer.
+        activated();
+
         if (Motion.reducedMotion(settingsService)) {
-            activated();
+            flashFinished();
             return;
         }
 
@@ -111,17 +115,18 @@ Item {
             return;
 
         if (!row.visible) {
-            cancelFlash();
+            // Parent already hid the row; still finish so holds/close settle.
+            cancelFlash(true);
             return;
         }
 
         flashStep += 1;
-        // Two full flashes: ON → OFF → ON → OFF, then activate.
+        // Two full flashes: ON → OFF → ON → OFF, then finish.
         // Starts ON at requestActivate; steps 1 OFF, 2 ON, 3 OFF, 4 done.
         var halfCycles = Motion.menuFlashCount * 2;
         if (flashStep >= halfCycles) {
             cancelFlash();
-            activated();
+            flashFinished();
             return;
         }
 
@@ -216,5 +221,5 @@ Item {
         onClicked: row.requestActivate()
     }
 
-    Component.onDestruction: row.cancelFlash()
+    Component.onDestruction: row.cancelFlash(true)
 }

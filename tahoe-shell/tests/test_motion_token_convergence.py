@@ -82,7 +82,7 @@ class MotionTokenConvergenceTests(unittest.TestCase):
     def test_motion_exports_menu_flash_tokens(self) -> None:
         text = MOTION_JS.read_text(encoding="utf-8")
 
-        self.assertIn("var menuFlashInterval = 70;", text)
+        self.assertIn("var menuFlashInterval = 55;", text)
         self.assertIn("var menuFlashCount = 2;", text)
 
     def test_motion_exports_dock_magnification_tokens(self) -> None:
@@ -564,7 +564,7 @@ class MotionTokenConvergenceTests(unittest.TestCase):
         self.assertNotIn("mapToItem(root.dockWindow", window_button)
 
     def test_phase_b_press_feedback_uses_motion_single_outlet(self) -> None:
-        # T06 moved menu press feedback into the shared MenuRow.qml outlet.
+        # T06/R06: menus use shared MenuRow.qml; press scale was removed (macOS has none).
         required_counts = {
             "TopBar.qml": 12,
             "Tray.qml": 1,
@@ -577,7 +577,6 @@ class MotionTokenConvergenceTests(unittest.TestCase):
             "Spotlight.qml": 1,
             # T18: category chips removed; one press outlet on app cells.
             "Launchpad.qml": 1,
-            "MenuRow.qml": 1,
             "settings/controls/TahoeButton.qml": 1,
             "settings/controls/TahoeListRow.qml": 1,
             "settings/controls/TahoeSidebarButton.qml": 1,
@@ -591,7 +590,9 @@ class MotionTokenConvergenceTests(unittest.TestCase):
                 self.assertIn("Motion.pressDurationFor", text)
 
         # Parent menus must not re-introduce private pressScale paths.
+        # MenuRow itself also must stay free of press scale (R06 #17).
         for relative in (
+            "MenuRow.qml",
             "MenuPopup.qml",
             "AppMenuPopup.qml",
             "TrayMenu.qml",
@@ -603,6 +604,30 @@ class MotionTokenConvergenceTests(unittest.TestCase):
                 text = (COMPONENTS_ROOT / relative).read_text(encoding="utf-8")
                 self.assertEqual(text.count("Motion.pressScaleFor"), 0)
                 self.assertNotIn("component MenuRow", text)
+
+
+    def test_r06_menu_popup_confirm_card_and_actions(self) -> None:
+        menu = (COMPONENTS_ROOT / "MenuPopup.qml").read_text(encoding="utf-8")
+        motion = MOTION_JS.read_text(encoding="utf-8")
+
+        self.assertIn("var menuFlashInterval = 55;", motion)
+        self.assertIn("Behavior on implicitHeight", menu)
+        self.assertIn("Motion.elementResize", menu)
+        self.assertIn("confirmHost", menu)
+        self.assertIn("Layout.preferredHeight", menu)
+        self.assertIn("toggleWindowOverview", menu)
+        self.assertIn("activateFocusedWindow", menu)
+        self.assertIn("appMenuService", menu)
+        self.assertIn("shellBridge", menu)
+        # Glass height path is eased NumberAnimation only — no spring.
+        self.assertNotIn("SpringAnimation", menu)
+        self.assertIn("onFlashFinished:", menu)
+        self.assertIn("armFlashHold", menu)
+        self.assertIn("finishRowFlash", menu)
+        self.assertIn("flashHold", menu)
+        self.assertIn("holdSeq", menu)
+        self.assertIn("visible: open || flashHold", menu)
+        self.assertIn("enabled: root.open && root.holdSeq === 0", menu)
 
     def test_shared_menu_row_macos_signatures(self) -> None:
         row = (COMPONENTS_ROOT / "MenuRow.qml").read_text(encoding="utf-8")
@@ -618,6 +643,12 @@ class MotionTokenConvergenceTests(unittest.TestCase):
         self.assertIn("Motion.menuFlashCount", row)
         self.assertIn("function requestActivate()", row)
         self.assertIn("Motion.reducedMotion(settingsService)", row)
+        # R06: action fires immediately; flash is pure visual; no press scale.
+        self.assertIn("signal flashFinished()", row)
+        self.assertIn("activated();", row)
+        self.assertIn("flashFinished();", row)
+        self.assertNotIn("Motion.pressScaleFor", row)
+        self.assertNotIn("Behavior on scale", row)
         self.assertIn('"#1a000000"', separator)
         self.assertIn("anchors.leftMargin: 10", separator)
         self.assertIn("anchors.rightMargin: 10", separator)
@@ -638,6 +669,14 @@ class MotionTokenConvergenceTests(unittest.TestCase):
                 self.assertNotIn("component MenuRow", text)
                 self.assertNotIn("component MenuEntry", text)
                 self.assertNotIn("component NativeMenuRow", text)
+                # R06: interactive MenuRow closes after the flash, not from activated.
+                self.assertIn("onFlashFinished:", text)
+                # Scan only MenuRow { ... } blocks; ConfirmButton may still close on click.
+                for block in re.findall(r"MenuRow\s*\{(?:[^{}]|\{[^{}]*\})*\}", text):
+                    if "onActivated" not in block:
+                        continue
+                    self.assertIn("onFlashFinished", block)
+                    self.assertNotIn("root.closeRequested()", block.split("onFlashFinished")[0])
                 # Dark mode must be wired through so accent/text resolve correctly.
                 self.assertIn("property bool darkMode", text)
                 self.assertIn("darkMode: root.darkMode", text)

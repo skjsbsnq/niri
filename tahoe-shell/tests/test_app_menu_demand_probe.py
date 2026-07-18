@@ -294,6 +294,23 @@ class AppMenuDemandProbeTests(unittest.TestCase):
         self.assertEqual(ids.count("probe"), 1)
         self.assertIn("trigger", ids)
 
+    def test_r06_native_menu_items_use_stable_cache(self) -> None:
+        src = APP_MENU.read_text(encoding="utf-8")
+        popup = APP_MENU_POPUP.read_text(encoding="utf-8")
+        for token in (
+            "nativeMenuItemCache",
+            "mergeNativeMenuItems",
+            "clearNativeMenuItems",
+            "nativeMenuModelKey",
+            "modelKey",
+        ):
+            self.assertIn(token, src)
+        self.assertIn('objectProp: "modelKey"', popup)
+        self.assertIn("ScriptModel", popup)
+        # Refresh must merge, not wholesale replace with raw JS arrays.
+        self.assertIn("mergeNativeMenuItems(", src)
+        self.assertNotIn("nativeMenuItems = Array.isArray(parsed.items)", src)
+
 
 if __name__ == "__main__":
     unittest.main()

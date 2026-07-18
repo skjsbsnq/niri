@@ -974,6 +974,8 @@ ShellRoot {
                 open: shell.topBarPopupOpenFor(shell.appMenuOpen, modelData)
                 activeApp: apps.windowAppLabel(niri.focusedWindow || niri.activeToplevel)
                 powerService: power
+                appMenuService: appMenu
+                shellBridge: shell
                 settingsService: desktopSettings
                 darkMode: shell.darkMode
                 onCloseRequested: shell.appMenuOpen = false

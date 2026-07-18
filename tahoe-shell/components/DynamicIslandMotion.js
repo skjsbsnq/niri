@@ -25,6 +25,10 @@ var swipeVerticalRejectPx = 20;
 var swipeSettleIdleMs = 150;
 var swipeSuppressClickMs = 180;
 
+// Notification swipe-to-dismiss (finger-following, R07).
+var notificationDismissThresholdPx = 72;
+var notificationFlyOutMs = 160;
+
 // Hover expand (settings-gated; default off for product).
 var hoverExpandDelayMs = 350;
 var hoverCollapseDelayMs = 250;

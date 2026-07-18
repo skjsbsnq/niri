@@ -115,9 +115,10 @@ class DynamicIslandCompactMediaTests(unittest.TestCase):
         self.assertIn("compactMediaActive", self.content)
         # Old single-line compactLabel path is gone.
         self.assertNotIn("id: compactLabel", self.content)
-        # Shares compact layer opacity with clock for clock↔media morph.
-        self.assertIn("compactLayerOpacity", self.content)
-        self.assertIn("compactLayerY", self.content)
+        # R07: clock and compact media each own a crossfading opacity so
+        # clock↔media morph has no black frame (in-place fade, no shared latch).
+        self.assertIn("opacity: root.compactMediaActive && root.compactContentVisible ? 1 : 0", self.content)
+        self.assertIn("opacity: root.restingClockActive && root.compactContentVisible ? 1 : 0", self.content)
 
     def test_media_title_not_bound_to_display_text_or_clock(self) -> None:
         # Overlay must mirror Controls title, not contentDisplayText / fallbackTimeText.
@@ -193,10 +194,11 @@ class DynamicIslandCompactMediaTests(unittest.TestCase):
         self.assertNotIn("#b56cff", self.content)
 
     def test_media_unavailable_smooth_clock_restore_path(self) -> None:
-        # compactLayerWanted covers both clock and media resting; exit hold
-        # shared so media→clock is not a hard cut black frame.
-        self.assertIn("compactLayerWanted", self.content)
-        self.assertIn("compactLayerHeld", self.content)
+        # R07: clock and media crossfade in place (opacity swap), so media→clock
+        # is not a hard cut black frame. Latched title/width keep the fading
+        # media scene stable while the player disappears.
+        self.assertIn("latchedCompactMediaTitle", self.content)
+        self.assertIn("latchedCompactMediaWidth", self.content)
         self.assertIn("contentExitMs", self.content)
         # Reducer drops media presentation when hasMedia is false (existing).
         self.assertIn("resting_media", self.island)

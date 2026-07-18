@@ -20,6 +20,7 @@ Item {
     property color accentColor: "#0a84ff"
     property color trackColor: "#30ffffff"
     property color artFallbackFill: "#28ffffff"
+    property var settingsService
 
     readonly property int artSize: 22
     readonly property int statusSize: 16
@@ -93,14 +94,23 @@ Item {
 
             // Only bind Image.source while this compact scene is visible so
             // non-owner / hidden outputs never kick off album art loads.
+            // Art crossfades in over the fallback glyph once loaded (#28).
             Image {
                 id: artImage
                 anchors.fill: parent
                 source: (root.visible && root.showArt) ? root.safeArtUrl : ""
                 fillMode: Image.PreserveAspectCrop
                 asynchronous: true
-                visible: root.showArt && status === Image.Ready
+                opacity: (root.showArt && status === Image.Ready) ? 1 : 0
+                visible: opacity > 0.01
                 sourceSize: Qt.size(44, 44)
+
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: IslandMotion.contentEnterMs(root.settingsService)
+                        easing.type: IslandMotion.v2ContentEasing
+                    }
+                }
             }
 
             TahoeSymbol {
@@ -108,7 +118,8 @@ Item {
                 name: "\ue405" // music_note
                 color: root.textSecondary
                 size: 14
-                visible: !artImage.visible
+                opacity: 1 - artImage.opacity
+                visible: opacity > 0.01
             }
         }
 
@@ -130,15 +141,46 @@ Item {
             verticalAlignment: Text.AlignVCenter
         }
 
+        // Playing → pause (e034); paused → play_arrow (e037). Match
+        // DynamicIsland.iconCodeForState so font glyphs stay consistent.
+        // Glyph switch fades out, swaps, fades back in (#28 short crossfade).
         TahoeSymbol {
             id: statusIcon
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
-            // Playing → pause (e034); paused → play_arrow (e037). Match
-            // DynamicIsland.iconCodeForState so font glyphs stay consistent.
-            name: root.isPlaying ? "\ue034" : "\ue037"
+            property bool shownPlaying: root.isPlaying
+            name: statusIcon.shownPlaying ? "\ue034" : "\ue037"
             color: root.textSecondary
             size: root.statusSize
+
+            Connections {
+                target: root
+                function onIsPlayingChanged() {
+                    if (statusIcon.shownPlaying !== root.isPlaying)
+                        statusGlyphSwap.restart();
+                }
+            }
+
+            SequentialAnimation {
+                id: statusGlyphSwap
+                NumberAnimation {
+                    target: statusIcon
+                    property: "opacity"
+                    to: 0
+                    duration: Math.round(IslandMotion.contentExitMs(root.settingsService) / 2)
+                    easing.type: IslandMotion.v2ContentEasing
+                }
+                ScriptAction {
+                    script: statusIcon.shownPlaying = root.isPlaying
+                }
+                NumberAnimation {
+                    target: statusIcon
+                    property: "opacity"
+                    to: 1
+                    duration: Math.round(IslandMotion.contentExitMs(root.settingsService) / 2)
+                    easing.type: IslandMotion.v2ContentEasing
+                }
+            }
         }
     }
 

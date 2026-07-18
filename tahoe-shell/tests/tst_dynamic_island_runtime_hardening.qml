@@ -56,7 +56,8 @@ TestCase {
         compare(notification.active, true);
         verify(notification.item !== null);
         content.islandState = "resting_time";
-        wait(0);
+        // R07: loader holds through the exit fade before unloading.
+        wait(content.expandedUnloadHoldMs + 80);
         compare(notification.active, false);
         compare(notification.item, null);
     }

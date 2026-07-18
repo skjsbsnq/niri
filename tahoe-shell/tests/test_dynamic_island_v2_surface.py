@@ -303,7 +303,7 @@ class DynamicIslandV2SurfaceTests(unittest.TestCase):
         self.assertIn("mediaLoaderActive = false", self.content)
         self.assertIn("property bool mediaLoaderActive: false", self.content)
         self.assertIn("id: notificationLoader", self.content)
-        self.assertIn("active: root.notificationActive", self.content)
+        self.assertIn("active: root.notificationLoaderActive", self.content)
         self.assertIn("sourceComponent: notificationSceneComponent", self.content)
         self.assertNotIn("id: notificationView", self.content)
         self.assertNotIn("id: detailRow", self.content)

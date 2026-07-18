@@ -71,20 +71,34 @@ class DynamicIslandV2MotionTests(unittest.TestCase):
         self.assertNotIn("notificationFadeInDuration: 280", self.content)
         self.assertNotIn("notificationFadeOutDuration: 140", self.content)
 
-    def test_overlay_coordinates_scene_swap_with_geometry(self) -> None:
-        self.assertIn("id: contentSwap", self.overlay)
-        self.assertIn('property: "contentLayerOpacity"', self.overlay)
-        self.assertIn("contentExitMs(root.settingsService)", self.overlay)
-        self.assertIn("root.contentState = root.pendingContentState", self.overlay)
-        self.assertIn("root.renderedNotificationExpanded = root.pendingNotificationExpanded", self.overlay)
-        self.assertIn("contentEnterMs(root.settingsService)", self.overlay)
-        self.assertIn("sceneTransitionExternallyOwned", self.overlay)
-        self.assertIn("sceneTransitionExternallyOwned", self.content)
-        # OSD remains immediate instead of joining the staged scene swap.
-        self.assertIn('if (next === "transient_osd")', self.overlay)
-        # Same-presentation notification expand/collapse also uses the swap.
-        self.assertIn("onContentNotificationExpandedChanged", self.overlay)
-        self.assertIn("root.syncContentTransition(true)", self.overlay)
+    def test_scene_crossfade_replaces_staged_swap(self) -> None:
+        # R07: no staged full-hide swap machinery in the Overlay.
+        self.assertNotIn("id: contentSwap", self.overlay)
+        self.assertNotIn("contentLayerOpacity", self.overlay)
+        self.assertNotIn("syncContentTransition", self.overlay)
+        self.assertNotIn("pendingContentState", self.overlay)
+        self.assertNotIn("renderedNotificationExpanded", self.overlay)
+        self.assertNotIn("sceneTransitionExternallyOwned", self.overlay)
+        self.assertNotIn("sceneTransitionExternallyOwned", self.content)
+        # Scenes crossfade in place: visibility follows opacity, and heavy
+        # loaders hold through the exit fade before unloading.
+        self.assertIn("visible: opacity > 0.01", self.content)
+        self.assertIn("notificationLoaderActive", self.content)
+        self.assertIn("mediaLoaderActive", self.content)
+        self.assertIn("expandedUnloadHoldMs", self.content)
+        # Content reads reduced-aware enter/exit helpers.
+        self.assertIn("contentExitMs(root.settingsService)", self.content)
+        self.assertIn("contentEnterMs(root.settingsService)", self.content)
+        # OSD remains immediate: compact exits collapse to v2OsdEnterMs under OSD.
+        self.assertIn("v2OsdEnterMs", self.content)
+        self.assertIn("syncOsdLayerImmediately", self.content)
+        # Notification expand/collapse crossfades inside the view (no forceSwap).
+        view = _read(COMPONENTS / "DynamicIslandNotificationView.qml")
+        self.assertIn("opacity: root.expanded ? 0 : 1", view)
+        self.assertIn("opacity: root.expanded ? 1 : 0", view)
+        # Media collapse is a fade, not a hard cut.
+        self.assertNotIn("Hard-cut", self.content)
+        self.assertIn("opacity: root.mediaExpandedContentVisible ? 1 : 0", self.content)
 
     def test_no_inline_out_cubic_in_island_scenes(self) -> None:
         offenders = []

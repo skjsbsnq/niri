@@ -4,10 +4,12 @@ import QtQuick
 import "DynamicIslandMotion.js" as IslandMotion
 
 // Scene host for the Dynamic Island capsule.
-// Compact/transient chrome stays lightweight and always present.
-// Expanded media uses Loader so hidden outputs and non-expanded
-// states do not keep heavy scenes (and their Timers) instantiated.
-// Transition may hold current + outgoing for the exit fade only.
+// R07 crossfade architecture: every scene owns its own enter/exit fade
+// (exit v2ContentExitMs while the incoming scene enters over v2ContentEnterMs
+// with <=6px directional travel). Outgoing scenes keep rendering while they
+// fade — there is no staged full-hide swap and no blank-capsule frame.
+// Heavy scenes (notification, expanded media) use Loaders with a hold/release
+// window (expandedUnloadHoldMs) so their exit fade completes before unload.
 Item {
     id: root
     clip: true
@@ -43,6 +45,9 @@ Item {
     property color textPrimary: "#f7f8fa"
     property color textSecondary: "#aeb6c2"
     property bool darkMode: true
+    // Content-level spring gate (notification swipe settle only — glass region
+    // geometry never springs).
+    property bool useSpring: false
     // Measured resting clock content width (no capsule padding). Overlay adds pad + clamp.
     readonly property int restingClockContentWidth: restingClock.contentWidth
     readonly property bool restingClockActive: islandState === "resting_time"
@@ -77,10 +82,6 @@ Item {
     property string bluetoothKind: ""
     property string bluetoothDeviceName: ""
     property string bluetoothDeviceIcon: ""
-    // Overlay owns scene-to-scene crossfades. While it is swapping at zero
-    // opacity, local scene Behaviors must settle immediately instead of adding
-    // a second fade on top of the host transition.
-    property bool sceneTransitionExternallyOwned: false
     signal timerPauseResumeRequested()
     signal timerCancelRequested()
     signal timerControlPressed()
@@ -88,25 +89,25 @@ Item {
     readonly property bool mediaExpanded: islandState === "expanded_media"
     readonly property bool compactMediaActive: islandState === "resting_media"
     // Measured compact media content width (no capsule padding). Overlay clamps.
-    // While compact media is exiting, freeze measured width on the latch so the
-    // capsule does not shrink mid-fade when the player disappears.
-    readonly property int compactMediaContentWidth: {
-        if (root.compactMediaActive || root.compactLayerHeld)
-            return Math.max(compactMedia.contentWidth, root.latchedCompactMediaWidth);
-        return compactMedia.contentWidth;
-    }
-    // Last non-empty title/width while compact media is shown or exit-held so
-    // player disappear does not rewrite the fading scene with clock text.
+    // While compact media is exiting (still visible mid-fade), freeze measured
+    // width on the latch so the capsule does not shrink mid-fade when the
+    // player disappears.
+    readonly property int compactMediaContentWidth: (root.compactMediaActive || compactMedia.visible)
+        ? Math.max(compactMedia.contentWidth, root.latchedCompactMediaWidth)
+        : compactMedia.contentWidth
+    // Last non-empty title/width while compact media is shown or fading so
+    // player disappear does not rewrite the fading scene with fallback text.
     property string latchedCompactMediaTitle: ""
     property int latchedCompactMediaWidth: 0
     readonly property string compactMediaTitle: {
         var live = String(root.mediaTrackTitle || "").trim();
         if (live.length > 0)
             return live;
-        // Keep latched title through exit fade (including media→clock without
-        // compactLayerHeld, when both stay in the compact resting layer).
+        // Keep latched title through the exit fade.
         return root.latchedCompactMediaTitle;
     }
+    // Compact exits under OSD must be immediate: hardware feedback owns the
+    // first frame, so the outgoing clock/media must not cross-fade over it.
     readonly property int compactContentMotionMs: root.osdActive
         ? IslandMotion.v2OsdEnterMs
         : IslandMotion.contentExitMs(root.settingsService)
@@ -124,15 +125,20 @@ Item {
     readonly property bool osdSceneVisible: osdActive && !osdExiting
     property real osdLayerOpacity: 0
     property real osdLayerOffset: 0
-    // T19: notification enter/exit use V2 content helpers (reduced-aware).
-    readonly property int notificationFadeInDuration: IslandMotion.contentEnterMs(root.settingsService)
-    readonly property int notificationFadeOutDuration: IslandMotion.contentExitMs(root.settingsService)
-    // Hold outgoing expanded loaders through exit fade, then destroy.
+    // T19: scene enter/exit use V2 content helpers (reduced-aware).
+    readonly property int sceneEnterMs: IslandMotion.contentEnterMs(root.settingsService)
+    readonly property int sceneExitMs: IslandMotion.contentExitMs(root.settingsService)
+    readonly property int notificationFadeInDuration: sceneEnterMs
+    readonly property int notificationFadeOutDuration: sceneExitMs
+    // Enter travel (<=6px, top-anchored: scenes settle downward into place).
+    readonly property int sceneTravelPx: IslandMotion.contentTravelPx(root.settingsService)
+    // Hold outgoing heavy loaders through exit fade, then destroy.
     readonly property int expandedUnloadHoldMs: IslandMotion.contentExitMs(root.settingsService) + 40
 
-    // Loader active flags: true while showing or exit-hold. Never both heavy
-    // scenes need to stay loaded forever on resting/hidden outputs.
+    // Loader active flags: true while showing or exit-hold. Neither heavy
+    // scene stays loaded forever on resting/hidden outputs.
     property bool mediaLoaderActive: false
+    property bool notificationLoaderActive: false
 
     function syncOsdLayerImmediately() {
         osdExitOpacity.stop();
@@ -182,7 +188,6 @@ Item {
         }
     }
 
-
     Timer {
         id: mediaUnloadHold
         interval: root.expandedUnloadHoldMs
@@ -193,84 +198,51 @@ Item {
         }
     }
 
-
-    // Compact chrome (clock / media label): real exit animation — fade + move UP
-    // (never sink). Hold the layer for exit duration after state leaves resting.
-    property bool compactLayerWanted: root.compactContentVisible
-        && (root.restingClockActive || (!root.restingClockActive && root.compactResting))
-    property bool compactLayerHeld: false
-    readonly property bool compactLayerShown: compactLayerWanted || compactLayerHeld
-    property real compactLayerOpacity: 0
-    property real compactLayerY: 0
-
-    onCompactLayerWantedChanged: {
-        if (root.compactLayerWanted) {
-            compactExitHold.stop();
-            root.compactLayerHeld = false;
-            root.compactLayerOpacity = 1;
-            root.compactLayerY = 0;
-        } else if (root.compactLayerShown || root.compactLayerOpacity > 0.01) {
-            if (root.osdActive) {
-                // Hardware feedback owns the first frame; do not cross-fade the
-                // old clock/media label over the live bar and number.
-                compactExitHold.stop();
-                root.compactLayerHeld = false;
-                root.compactLayerOpacity = 0;
-                root.compactLayerY = 0;
-                return;
-            }
-            // Exit: fade out and travel up (negative y), then unload.
-            root.compactLayerHeld = true;
-            root.compactLayerOpacity = 0;
-            root.compactLayerY = -IslandMotion.contentTravelPx(root.settingsService);
-            compactExitHold.restart();
+    onNotificationActiveChanged: {
+        if (root.notificationActive) {
+            notificationUnloadHold.stop();
+            root.notificationLoaderActive = true;
+        } else {
+            notificationUnloadHold.restart();
         }
     }
 
     Timer {
-        id: compactExitHold
-        interval: root.compactContentMotionMs + 20
+        id: notificationUnloadHold
+        interval: root.expandedUnloadHoldMs
         repeat: false
         onTriggered: {
-            root.compactLayerHeld = false;
-            root.compactLayerY = 0;
-            if (!root.compactMediaActive) {
-                root.latchedCompactMediaTitle = "";
-                root.latchedCompactMediaWidth = 0;
-            }
+            if (!root.notificationActive)
+                root.notificationLoaderActive = false;
         }
     }
 
-    // V2 resting clock (T12). Top-stable; exit via compactLayerOpacity/Y.
+    // V2 resting clock (T12). Top-stable; crossfades in place (exit up,
+    // enter from above) — no hold timers, visibility follows opacity.
     DynamicIslandRestingClockView {
         id: restingClock
 
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: parent.top
-        anchors.topMargin: root.compactLayerY
+        anchors.topMargin: root.restingClockActive ? 0 : -root.sceneTravelPx
         width: Math.min(parent.width - 16, Math.max(contentWidth, 1))
         height: IslandMotion.v2ClockHeight
         weekdayText: root.clockWeekdayText
         timeText: root.clockTimeText
         textPrimary: root.textPrimary
         textSecondary: root.textSecondary
-        // Show while resting_time, or during exit hold that started from clock.
-        opacity: root.restingClockActive
-                 ? root.compactLayerOpacity
-                 : (root.compactLayerHeld && root.clockTimeText.length > 0 ? root.compactLayerOpacity : 0)
+        opacity: root.restingClockActive && root.compactContentVisible ? 1 : 0
         visible: opacity > 0.01
 
         Behavior on opacity {
-            enabled: !root.sceneTransitionExternallyOwned
             NumberAnimation {
-                duration: root.compactContentMotionMs
+                duration: root.restingClockActive ? root.sceneEnterMs : root.compactContentMotionMs
                 easing.type: IslandMotion.v2ContentEasing
             }
         }
         Behavior on anchors.topMargin {
-            enabled: !root.sceneTransitionExternallyOwned
             NumberAnimation {
-                duration: root.compactContentMotionMs
+                duration: root.restingClockActive ? root.sceneEnterMs : root.compactContentMotionMs
                 easing.type: IslandMotion.v2ContentEasing
             }
         }
@@ -286,27 +258,11 @@ Item {
 
     onCompactMediaActiveChanged: {
         if (root.compactMediaActive) {
-            compactMediaExitLatch.stop();
             var live = String(root.mediaTrackTitle || "").trim();
             if (live.length > 0)
                 root.latchedCompactMediaTitle = live;
             if (compactMedia.contentWidth > 0)
                 root.latchedCompactMediaWidth = compactMedia.contentWidth;
-        } else if (!root.compactLayerHeld) {
-            // media→clock (compact layer stays wanted): clear latch after fade.
-            compactMediaExitLatch.restart();
-        }
-    }
-
-    Timer {
-        id: compactMediaExitLatch
-        interval: root.compactContentMotionMs + 20
-        repeat: false
-        onTriggered: {
-            if (!root.compactMediaActive && !root.compactLayerHeld) {
-                root.latchedCompactMediaTitle = "";
-                root.latchedCompactMediaWidth = 0;
-            }
         }
     }
 
@@ -320,14 +276,15 @@ Item {
         }
     }
 
-    // T16: V2 compact media (art + title + play/pause). Shares compactLayer
-    // opacity/y with the resting clock so clock↔media morph has no black frame.
+    // T16: V2 compact media (art + title + play/pause). Same compact-layer
+    // motion vocabulary as the resting clock so clock↔media morph crossfades
+    // in place with no black frame.
     DynamicIslandCompactMediaView {
         id: compactMedia
 
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: parent.top
-        anchors.topMargin: root.compactLayerY
+        anchors.topMargin: root.compactMediaActive ? 0 : -root.sceneTravelPx
         width: Math.min(parent.width - 8, Math.max(contentWidth, IslandMotion.v2CompactMediaWidthMin))
         height: IslandMotion.v2CompactMediaHeight
         artUrl: root.mediaArtUrl
@@ -337,33 +294,30 @@ Item {
         progress: root.mediaProgress
         // Show progress only when Controls reports position support (and length > 0).
         progressSupported: root.mediaPositionSupported && root.mediaLength > 0
+        settingsService: root.settingsService
         textPrimary: root.textPrimary
         textSecondary: root.textSecondary
         accentColor: root.accentColor
         trackColor: root.progressTrackColor
-        // Active media: follow compact layer. Leave media: fade to 0 (Behavior)
-        // while latched title keeps geometry; leave compact entirely: follow
-        // compactLayerOpacity during exit hold.
-        opacity: {
-            if (root.compactMediaActive)
-                return root.compactLayerOpacity;
-            if (root.compactLayerHeld && root.latchedCompactMediaTitle.length > 0)
-                return root.compactLayerOpacity;
-            return 0;
-        }
+        opacity: root.compactMediaActive && root.compactContentVisible ? 1 : 0
         visible: opacity > 0.01
+        // Release the latch once the exit fade has fully completed.
+        onVisibleChanged: {
+            if (!visible && !root.compactMediaActive) {
+                root.latchedCompactMediaTitle = "";
+                root.latchedCompactMediaWidth = 0;
+            }
+        }
 
         Behavior on opacity {
-            enabled: !root.sceneTransitionExternallyOwned
             NumberAnimation {
-                duration: root.compactContentMotionMs
+                duration: root.compactMediaActive ? root.sceneEnterMs : root.compactContentMotionMs
                 easing.type: IslandMotion.v2ContentEasing
             }
         }
         Behavior on anchors.topMargin {
-            enabled: !root.sceneTransitionExternallyOwned
             NumberAnimation {
-                duration: root.compactContentMotionMs
+                duration: root.compactMediaActive ? root.sceneEnterMs : root.compactContentMotionMs
                 easing.type: IslandMotion.v2ContentEasing
             }
         }
@@ -378,25 +332,33 @@ Item {
         textPrimary: root.textPrimary
         textSecondary: root.textSecondary
         accentColor: root.accentColor
-        visible: root.bluetoothActive
-        opacity: visible ? 1 : 0
+        opacity: root.bluetoothActive ? 1 : 0
+        visible: opacity > 0.01
+        transform: Translate {
+            y: root.bluetoothActive ? 0 : -root.sceneTravelPx
+            Behavior on y {
+                NumberAnimation {
+                    duration: root.bluetoothActive ? root.sceneEnterMs : root.sceneExitMs
+                    easing.type: IslandMotion.v2ContentEasing
+                }
+            }
+        }
         Behavior on opacity {
-            enabled: !root.sceneTransitionExternallyOwned
             NumberAnimation {
-                duration: IslandMotion.contentEnterMs(root.settingsService)
+                duration: root.bluetoothActive ? root.sceneEnterMs : root.sceneExitMs
                 easing.type: IslandMotion.v2ContentEasing
             }
         }
     }
 
     // Notification is the only compact scene with a Flickable and two Images.
-    // Keep it absent outside its active presentation; Overlay holds the outgoing
-    // state until the coordinated exit fade reaches zero.
+    // Loader holds through the exit fade (hold/release), then unloads so
+    // hidden outputs never keep the heavy scene instantiated.
     Loader {
         id: notificationLoader
         objectName: "notificationLoader"
         anchors.fill: parent
-        active: root.notificationActive
+        active: root.notificationLoaderActive
         asynchronous: false
         sourceComponent: notificationSceneComponent
     }
@@ -416,6 +378,8 @@ Item {
             actions: root.notificationActions
             textPrimary: root.textPrimary
             textSecondary: root.textSecondary
+            settingsService: root.settingsService
+            useSpring: root.useSpring
             onBodyClicked: root.notificationBodyClicked()
             onDismissRequested: root.notificationDismissRequested()
             onExpandToggleRequested: root.notificationExpandToggleRequested()
@@ -431,13 +395,25 @@ Item {
             }
 
             opacity: root.notificationActive ? 1 : 0
+            // Outgoing scene must not steal hits from the incoming one.
+            enabled: opacity > 0.5
+            transform: Translate {
+                y: root.notificationActive ? 0 : -root.sceneTravelPx
+                Behavior on y {
+                    NumberAnimation {
+                        duration: root.notificationActive
+                            ? root.notificationFadeInDuration
+                            : root.notificationFadeOutDuration
+                        easing.type: IslandMotion.v2ContentEasing
+                    }
+                }
+            }
             Behavior on opacity {
-                enabled: !root.sceneTransitionExternallyOwned
                 NumberAnimation {
                     duration: root.notificationActive
                         ? root.notificationFadeInDuration
                         : root.notificationFadeOutDuration
-                    easing.type: IslandMotion.overlayColorEasing
+                    easing.type: IslandMotion.v2ContentEasing
                 }
             }
         }
@@ -470,7 +446,6 @@ Item {
         visible: root.osdActive || root.osdLayerOpacity > 0.01
     }
 
-
     // T18: dedicated workspace transient scene (not generic detailRow).
     DynamicIslandWorkspaceView {
         id: workspaceView
@@ -500,21 +475,18 @@ Item {
         }
 
         Behavior on opacity {
-            enabled: !root.sceneTransitionExternallyOwned
             NumberAnimation {
-                duration: root.compactContentMotionMs
+                duration: root.workspaceActive ? root.sceneEnterMs : root.sceneExitMs
                 easing.type: IslandMotion.v2ContentEasing
             }
         }
         Behavior on x {
-            enabled: !root.sceneTransitionExternallyOwned
             NumberAnimation {
-                duration: root.compactContentMotionMs
+                duration: root.workspaceActive ? root.sceneEnterMs : root.sceneExitMs
                 easing.type: IslandMotion.v2ContentEasing
             }
         }
     }
-
 
     DynamicIslandTimerView {
         id: timerView
@@ -532,15 +504,15 @@ Item {
         trackColor: root.progressTrackColor
         opacity: root.timerActiveScene ? 1 : 0
         visible: opacity > 0.01
+        enabled: opacity > 0.5
         onPauseResumeRequested: root.timerPauseResumeRequested()
         onCancelRequested: root.timerCancelRequested()
         onTimerInteractionPressed: root.timerControlPressed()
         onTimerInteractionReleased: root.timerControlReleased()
 
         Behavior on opacity {
-            enabled: !root.sceneTransitionExternallyOwned
             NumberAnimation {
-                duration: IslandMotion.contentEnterMs(root.settingsService)
+                duration: root.timerActiveScene ? root.sceneEnterMs : root.sceneExitMs
                 easing.type: IslandMotion.v2ContentEasing
             }
         }
@@ -578,10 +550,12 @@ Item {
             textSecondary: root.textSecondary
             accentColor: root.accentColor
             trackColor: root.progressTrackColor
-            // T17: no visualizer Timer. Hard-cut on collapse still avoids mid-fade
-            // hit targets; enter fades opacity 0→1 while visible is already true.
+            // R07: collapse fades out (no hard cut). Loader hold keeps the
+            // scene mounted through the exit fade; enabled gate keeps the
+            // fading scene from stealing hits mid-collapse.
             opacity: root.mediaExpandedContentVisible ? 1 : 0
-            visible: root.mediaExpandedContentVisible
+            visible: root.mediaExpandedContentVisible || opacity > 0.01
+            enabled: opacity > 0.5
             onPreviousRequested: root.mediaPreviousRequested()
             onPlayPauseRequested: root.mediaPlayPauseRequested()
             onNextRequested: root.mediaNextRequested()
@@ -589,9 +563,10 @@ Item {
             onControlReleased: root.mediaControlReleased()
 
             Behavior on opacity {
-                enabled: root.mediaExpandedContentVisible && !root.sceneTransitionExternallyOwned
                 NumberAnimation {
-                    duration: IslandMotion.contentEnterMs(root.settingsService)
+                    duration: root.mediaExpandedContentVisible
+                        ? IslandMotion.contentEnterMs(root.settingsService)
+                        : IslandMotion.contentExitMs(root.settingsService)
                     easing.type: IslandMotion.v2ContentEasing
                 }
             }
@@ -600,11 +575,9 @@ Item {
 
     Component.onCompleted: {
         root.syncOsdLayerImmediately();
-        if (root.compactLayerWanted) {
-            root.compactLayerOpacity = 1;
-            root.compactLayerY = 0;
-        }
         if (root.mediaExpandedContentVisible)
             root.mediaLoaderActive = true;
+        if (root.notificationActive)
+            root.notificationLoaderActive = true;
     }
 }

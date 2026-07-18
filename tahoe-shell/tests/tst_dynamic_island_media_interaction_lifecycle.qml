@@ -262,10 +262,14 @@ TestCase {
         compare(userInteracting, true);
 
         content.mediaExpandedContentVisible = false;
-        wait(0);
-        compare(mediaChild.visible, false);
-        compare(userInteracting, false);
+        // R07: collapse is an exit fade, not a hard cut. The scene disables
+        // (enabled: opacity > 0.5) early in the fade — clearing the press —
+        // and hides fully once the fade completes.
+        tryCompare(mediaChild, "enabled", false);
+        tryCompare(testCase, "userInteracting", false);
+        tryCompare(mediaChild, "visible", false);
         compare(releaseCount, 1);
+        mouseRelease(window.contentItem, btnX, btnY, Qt.LeftButton);
         content.destroy();
         wait(0);
     }

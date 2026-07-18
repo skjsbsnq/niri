@@ -54,7 +54,7 @@ class DynamicIslandRuntimeHardeningTests(unittest.TestCase):
 
     def test_notification_and_media_are_loader_owned(self) -> None:
         self.assertIn('objectName: "notificationLoader"', self.content)
-        self.assertIn("active: root.notificationActive", self.content)
+        self.assertIn("active: root.notificationLoaderActive", self.content)
         self.assertIn("sourceComponent: notificationSceneComponent", self.content)
         self.assertIn('objectName: "mediaLoader"', self.content)
         self.assertIn("active: root.mediaLoaderActive", self.content)

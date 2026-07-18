@@ -52,17 +52,10 @@ PanelWindow {
         ? islandState
         : "resting_time"
     readonly property string effectiveContentState: desiredContentState
-    // Geometry starts immediately, while content performs one coordinated
-    // exit/swap/enter sequence. This prevents expanded scenes from appearing
-    // inside a still-compact capsule and compact scenes from flashing inside a
-    // still-expanded capsule during collapse.
-    property string contentState: "resting_time"
-    property string pendingContentState: "resting_time"
-    property bool renderedNotificationExpanded: false
-    property bool pendingNotificationExpanded: false
-    property real contentLayerOpacity: 1
-    property bool contentTransitionsReady: false
-    readonly property bool contentTransitionRunning: contentSwap.running || contentRestore.running
+    // R07: geometry and content start at the same instant. Scene-to-scene
+    // transitions are per-scene crossfades inside DynamicIslandContent
+    // (outgoing keeps rendering while fading; incoming fades in on top), so
+    // there is no staged full-hide swap and no blank-capsule frame.
     // Non-owner screens always render the resting clock, never owner activity text.
     readonly property string contentDisplayText: (!!screenRole && screenRole.showActivity)
         ? displayText
@@ -176,10 +169,10 @@ PanelWindow {
     readonly property int protocolCapsuleRadius: protocolGeometrySettled
         ? Math.round(capsuleTargetRadius)
         : quantizeProtocolGeometry(islandSurface.radius, 4)
-    readonly property bool compactResting: contentState === "resting_time" || contentState === "resting_media" || contentState === "resting_timer"
+    readonly property bool compactResting: effectiveContentState === "resting_time" || effectiveContentState === "resting_media" || effectiveContentState === "resting_timer"
     readonly property bool compactContentVisible: compactResting && capsuleShown
     // Expanded media only on the owner screen.
-    readonly property bool mediaContentVisible: contentState === "expanded_media" && activeForScreen
+    readonly property bool mediaContentVisible: effectiveContentState === "expanded_media" && activeForScreen
     // T11: SettingsTheme island tokens (single color owner). No DynamicIslandTheme.js.
     readonly property string surfaceFillRole: fillRoleForState(effectiveGeometryState)
     readonly property color glassFill: Theme.islandSurfaceFill(root.darkMode, root.surfaceFillRole)
@@ -402,79 +395,6 @@ PanelWindow {
         return stateName === "resting_time" || stateName === "resting_media" || stateName === "resting_timer";
     }
 
-    function syncContentTransition(forceSwap) {
-        var next = String(root.desiredContentState || "resting_time");
-        root.pendingContentState = next;
-        root.pendingNotificationExpanded = root.contentNotificationExpanded;
-
-        if (!root.contentTransitionsReady) {
-            root.contentState = next;
-            root.renderedNotificationExpanded = root.pendingNotificationExpanded;
-            root.contentLayerOpacity = 1;
-            return;
-        }
-
-        contentSwap.stop();
-        contentRestore.stop();
-
-        // OSD is direct hardware feedback and must own its first frame.
-        if (next === "transient_osd") {
-            root.contentState = next;
-            root.renderedNotificationExpanded = root.pendingNotificationExpanded;
-            root.contentLayerOpacity = 1;
-            return;
-        }
-
-        if (!forceSwap && next === root.contentState) {
-            contentRestore.restart();
-            return;
-        }
-
-        contentSwap.restart();
-    }
-
-    onDesiredContentStateChanged: root.syncContentTransition(false)
-    onContentNotificationExpandedChanged: {
-        if (root.desiredContentState === "transient_notification")
-            root.syncContentTransition(true);
-        else
-            root.pendingNotificationExpanded = root.contentNotificationExpanded;
-    }
-
-    SequentialAnimation {
-        id: contentSwap
-
-        NumberAnimation {
-            target: root
-            property: "contentLayerOpacity"
-            to: 0
-            duration: IslandMotion.contentExitMs(root.settingsService)
-            easing.type: IslandMotion.v2ContentEasing
-        }
-        ScriptAction {
-            script: {
-                root.contentState = root.pendingContentState;
-                root.renderedNotificationExpanded = root.pendingNotificationExpanded;
-            }
-        }
-        NumberAnimation {
-            target: root
-            property: "contentLayerOpacity"
-            to: 1
-            duration: IslandMotion.contentEnterMs(root.settingsService)
-            easing.type: IslandMotion.v2ContentEasing
-        }
-    }
-
-    NumberAnimation {
-        id: contentRestore
-        target: root
-        property: "contentLayerOpacity"
-        to: 1
-        duration: IslandMotion.contentEnterMs(root.settingsService)
-        easing.type: IslandMotion.v2ContentEasing
-    }
-
     visible: !root.fullscreenActive
     aboveWindows: true
     exclusionMode: ExclusionMode.Ignore
@@ -574,15 +494,15 @@ PanelWindow {
 
         // Content layer: V2 does not whole-scene scale 0.9→1 on state switch
         // (roadmap §11.2). That scale + height morph made clock/date text look
-        // like it was sinking on click collapse. Scene opacity lives in Content.
+        // like it was sinking on click collapse. Scene crossfades live inside
+        // DynamicIslandContent; per-scene enabled gates (opacity > 0.5) keep
+        // outgoing scenes from stealing hits — no host-level input dead zone.
         // Stack above the capsule MouseArea so media controls receive hits;
         // blank capsule regions still fall through to the fill MouseArea below.
         Item {
             id: contentHost
             anchors.fill: parent
             z: 1
-            opacity: root.contentLayerOpacity
-            enabled: !root.contentTransitionRunning && opacity > 0.99
             // Keep scale fixed at 1. useSpring remains on Overlay for API/tests
             // but must not drive glass-adjacent content scale enter.
             scale: 1.0
@@ -591,7 +511,7 @@ PanelWindow {
             DynamicIslandContent {
                 id: islandContent
                 anchors.fill: parent
-                islandState: root.contentState
+                islandState: root.effectiveContentState
                 displayText: root.contentDisplayText
                 secondaryText: root.contentSecondaryText
                 iconCode: root.contentIconCode
@@ -604,7 +524,7 @@ PanelWindow {
                 notificationIconUrl: root.contentNotificationIconUrl
                 notificationUrgency: root.contentNotificationUrgency
                 notificationHasOverflow: root.contentNotificationHasOverflow
-                notificationExpanded: root.renderedNotificationExpanded
+                notificationExpanded: root.contentNotificationExpanded
                 notificationActions: root.contentNotificationActions
                 compactResting: root.compactResting
                 compactContentVisible: root.compactContentVisible
@@ -638,7 +558,7 @@ PanelWindow {
                 bluetoothKind: root.bluetoothKind
                 bluetoothDeviceName: root.bluetoothDeviceName
                 bluetoothDeviceIcon: root.bluetoothDeviceIcon
-                sceneTransitionExternallyOwned: root.contentTransitionRunning
+                useSpring: root.useSpring
                 onMediaPreviousRequested: if (root.dynamicIslandService) root.dynamicIslandService.mediaPrevious()
                 onMediaPlayPauseRequested: if (root.dynamicIslandService) root.dynamicIslandService.mediaTogglePlayPause()
                 onMediaNextRequested: if (root.dynamicIslandService) root.dynamicIslandService.mediaNext()
@@ -899,14 +819,5 @@ PanelWindow {
                }
            }
        }
-    }
-
-    Component.onCompleted: {
-        root.contentState = root.desiredContentState;
-        root.pendingContentState = root.desiredContentState;
-        root.renderedNotificationExpanded = root.contentNotificationExpanded;
-        root.pendingNotificationExpanded = root.contentNotificationExpanded;
-        root.contentLayerOpacity = 1;
-        root.contentTransitionsReady = true;
     }
 }

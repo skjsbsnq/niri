@@ -279,25 +279,20 @@ TestCase {
         wait(50);
     }
 
-    function test_scene_swap_exits_before_replacing_content() {
+    function test_scene_crossfade_holds_outgoing_then_settles() {
         resetCounts();
-        compare(overlay.contentState, "expanded_media");
+        compare(overlay.effectiveContentState, "expanded_media");
         islandService.presentation = "resting_time";
         wait(0);
+        // R07: content state tracks the desired state immediately; the outgoing
+        // media scene keeps rendering (Loader hold) and fades out in place while
+        // the compact scene fades in — no staged full-hide swap.
         compare(overlay.desiredContentState, "resting_time");
-        compare(overlay.contentState, "expanded_media");
-        compare(overlay.contentTransitionRunning, true);
+        compare(overlay.effectiveContentState, "resting_time");
 
-        // V2 exit is 110ms. The old scene remains mounted until it is fully
-        // transparent, then the compact scene enters during the geometry morph.
-        wait(130);
-        compare(overlay.contentState, "resting_time");
-        verify(overlay.contentLayerOpacity < 1);
-        wait(190);
-        compare(overlay.contentTransitionRunning, false);
-        compare(overlay.contentLayerOpacity, 1);
-
-        // The settled compact capsule still routes its center to handleChipClick.
+        // After the crossfade + geometry morph, the settled compact capsule
+        // still routes its center to handleChipClick.
+        wait(360);
         clickAt(Qt.point(400, 20));
         compare(capsuleClicks, 1);
     }

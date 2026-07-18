@@ -2,9 +2,12 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import "DynamicIslandMotion.js" as IslandMotion
+import "Motion.js" as Motion
 
 // V2 notification scene (T14 compact + T15 expand/actions).
 // Body click → default action (T14 freeze). Chevron-only expand toggle.
+// R07: compact↔expanded crossfade in place (no visible hard switch) and
+// finger-following horizontal swipe-to-dismiss with fly-out / settle-back.
 Item {
     id: root
 
@@ -23,9 +26,16 @@ Item {
     property color criticalColor: "#ff453a"
     property color iconFallbackFill: "#28ffffff"
     property color controlFill: "#20ffffff"
+    property var settingsService
+    // Spring settle only behind the useSpring gate (content transform, no glass).
+    property bool useSpring: false
+    // Finger-following horizontal offset for compact swipe-to-dismiss.
+    property real swipeOffsetX: 0
 
     readonly property bool critical: String(root.urgency) === "critical"
     readonly property int actionCount: root.actions && root.actions.length ? root.actions.length : 0
+    readonly property int layoutFadeInMs: IslandMotion.contentEnterMs(root.settingsService)
+    readonly property int layoutFadeOutMs: IslandMotion.contentExitMs(root.settingsService)
 
     signal bodyClicked()
     signal dismissRequested()
@@ -33,6 +43,54 @@ Item {
     signal actionInvoked(string actionId)
     signal interactionBegan()
     signal interactionEnded()
+
+    function settleSwipeBack() {
+        notifFlyOut.stop();
+        if (root.useSpring)
+            settleSpring.restart();
+        else
+            settleEase.restart();
+    }
+
+    function flyOutAndDismiss(direction) {
+        settleSpring.stop();
+        settleEase.stop();
+        flyOutX.to = direction * Math.max(root.width, 200);
+        notifFlyOut.restart();
+    }
+
+    NumberAnimation {
+        id: settleEase
+        target: root
+        property: "swipeOffsetX"
+        to: 0
+        duration: IslandMotion.swipeSettleDuration
+        easing.type: IslandMotion.swipeSettleEasing
+    }
+
+    SpringAnimation {
+        id: settleSpring
+        target: root
+        property: "swipeOffsetX"
+        to: 0
+        spring: Motion.springSnappy.spring
+        damping: Motion.springSnappy.damping
+        epsilon: 0.5
+    }
+
+    SequentialAnimation {
+        id: notifFlyOut
+        NumberAnimation {
+            id: flyOutX
+            target: root
+            property: "swipeOffsetX"
+            duration: IslandMotion.notificationFlyOutMs
+            easing.type: IslandMotion.v2ContentEasing
+        }
+        ScriptAction {
+            script: root.dismissRequested()
+        }
+    }
 
     // Critical accent edge.
     Rectangle {
@@ -49,7 +107,17 @@ Item {
     // ---- Compact layout ----
     Row {
         id: compactRow
-        visible: !root.expanded
+        // R07 crossfade: opacity swap with the expanded layout, no hard switch.
+        opacity: root.expanded ? 0 : 1
+        visible: opacity > 0.01
+        enabled: !root.expanded
+        transform: Translate { x: root.swipeOffsetX }
+        Behavior on opacity {
+            NumberAnimation {
+                duration: root.expanded ? root.layoutFadeOutMs : root.layoutFadeInMs
+                easing.type: IslandMotion.v2ContentEasing
+            }
+        }
         anchors.fill: parent
         anchors.leftMargin: root.critical ? 16 : 12
         // No trailing margin: chevron owns the full 44px trailing strip.
@@ -187,7 +255,25 @@ Item {
     // ---- Expanded layout ----
     Column {
         id: expandedColumn
-        visible: root.expanded
+        // R07 crossfade + slight settle-down travel while the capsule grows.
+        opacity: root.expanded ? 1 : 0
+        visible: opacity > 0.01
+        enabled: root.expanded
+        transform: Translate {
+            y: root.expanded ? 0 : -IslandMotion.contentTravelPx(root.settingsService)
+            Behavior on y {
+                NumberAnimation {
+                    duration: root.expanded ? root.layoutFadeInMs : root.layoutFadeOutMs
+                    easing.type: IslandMotion.v2ContentEasing
+                }
+            }
+        }
+        Behavior on opacity {
+            NumberAnimation {
+                duration: root.expanded ? root.layoutFadeInMs : root.layoutFadeOutMs
+                easing.type: IslandMotion.v2ContentEasing
+            }
+        }
         anchors.fill: parent
         anchors.margins: 14
         spacing: 10
@@ -376,6 +462,8 @@ Item {
             pressY = mouse.y;
             moved = false;
             dismissed = false;
+            settleEase.stop();
+            settleSpring.stop();
         }
         onPositionChanged: function(mouse) {
             if (!pressed || dismissed)
@@ -385,10 +473,20 @@ Item {
             if (Math.abs(dx) >= IslandMotion.swipeArmThresholdPx
                     && Math.abs(dx) > Math.abs(dy))
                 moved = true;
-            if (Math.abs(dx) >= IslandMotion.swipeArmThresholdPx * 2
-                    && Math.abs(dx) > Math.abs(dy)) {
+            // Finger-following: content tracks the pointer once armed.
+            if (moved)
+                root.swipeOffsetX = dx;
+        }
+        onReleased: {
+            if (!moved || dismissed)
+                return;
+            if (Math.abs(root.swipeOffsetX) >= IslandMotion.notificationDismissThresholdPx) {
+                // Past threshold: fly out, then dismiss.
                 dismissed = true;
-                root.dismissRequested();
+                root.flyOutAndDismiss(root.swipeOffsetX >= 0 ? 1 : -1);
+            } else {
+                // Under threshold: settle back (spring behind useSpring gate).
+                root.settleSwipeBack();
             }
         }
         onClicked: function(mouse) {
@@ -399,6 +497,7 @@ Item {
         onCanceled: {
             moved = false;
             dismissed = false;
+            root.settleSwipeBack();
         }
     }
 

@@ -38,9 +38,28 @@ var hoverCollapseDelayMs = 250;
 var v2CompactToTransientMs = 240;
 var v2CompactToExpandedMs = 280;
 var v2ExpandedToCompactMs = 240;
-// OSD: first frame immediate; exit soft.
-var v2OsdEnterMs = 0;
+// OSD geometry: fast eased expansion on first appearance (R08 #23 — content
+// still owns the first frame; geometry no longer 0ms hard-cuts). Exit soft.
+var v2OsdEnterMs = 80;
 var v2OsdExitMs = 110;
+
+// R08 geometry driver pipeline: springs drive island driver values only —
+// the surface binds clamp(driver, min, max) and the TahoeGlass region submits
+// quantized clamped values, so the region can never leave the layer surface
+// even at full overshoot (guardrail 0704ea4 satisfied by construction).
+// Feel token: Motion.springBouncy is documented for "dynamic island morph".
+var v2GeometrySpring = Motion.springBouncy;
+// Stop the spring tail early so the settled snap engages promptly (protocol
+// settle threshold in the overlay is 0.6 > this epsilon).
+var v2GeometrySpringEpsilon = 0.25;
+
+// Protocol quantization during morph (R08 #22). Width/height floor to the
+// quantum so the glass region never overhangs the painted capsule (the old
+// round-to-nearest-8 lifted a 36px collapse target to a 40px region — a raw
+// glass bar flashing under the capsule bottom edge); radius ceils so glass
+// corners recede inside the painted corner instead of protruding.
+var v2ProtocolSizeQuantumPx = 2;
+var v2ProtocolRadiusQuantumPx = 2;
 
 // Content exit 100-120, enter 160-180, travel <= 6px.
 var v2ContentExitMs = 110;
@@ -75,6 +94,12 @@ function contentEnterMs(settingsService) {
 
 function contentTravelPx(settingsService) {
     return Motion.reducedMotion(settingsService) ? 0 : v2ContentMaxTravelPx;
+}
+
+// R08: geometry springs are allowed only behind the shell useSpring gate and
+// degrade to eased NumberAnimation under reduced motion.
+function geometrySpringEnabled(settingsService, useSpring) {
+    return !!useSpring && !Motion.reducedMotion(settingsService);
 }
 
 // V2 radius caps (roadmap §9.3).

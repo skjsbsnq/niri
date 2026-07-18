@@ -19,7 +19,7 @@
 | R05 | 剪贴板弹窗稳定列表与动画（点名①） | #1 #2 #3 #4 #5(部分) | M | DONE | [R05](acceptance/R05-clipboard-stable-list-2026-07-18.md)：终审 FINAL PASS，762 tests 全绿，宿主/嵌套验收通过 |
 | R06 | 菜单时序重排（点名③） | #13 #14 #15 #16 #17 #19 | M | DONE | [R06](acceptance/R06-menu-timing-2026-07-18.md)：终审 FINAL PASS，764 tests 全绿，flashHold 门控幽灵点击/陈旧 close，宿主部署 parity OK |
 | R07 | 灵动岛换场重构（点名④a） | #20 #24 #25 #26 #27 #28 #29 | L | DONE | [R07](acceptance/R07-island-crossfade-2026-07-18.md)：764 tests 全绿，crossfade 架构落地，独立审查与手测矩阵待补（见 acceptance） |
-| R08 | 灵动岛几何手感 + OSD 进场（点名④b） | #21 #22 #23 | M | PENDING | |
+| R08 | 灵动岛几何手感 + OSD 进场（点名④b） | #21 #22 #23 | M | DONE | [R08](acceptance/R08-island-geometry-osd-2026-07-18.md)：独立审查 CLEAN（a–i 全 PASS），766 tests 全绿，白条 bug（媒体态收起底部亮条）随 #22 floor 量化根治，嵌套冒烟过；R07 补审出 1 高危另立 follow-up |
 | R09 | Toast 栈重构与退出统一 | #31 #32 #33 #34 | M–L | PENDING | |
 | R10 | 通知中心稳定列表与入场 | #35 #36 | M | PENDING | |
 | R11 | 侧栏系统页（进程表/活动环/morph） | #55 #56 #57 #58 #59 | M | PENDING | |

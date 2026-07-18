@@ -37,6 +37,16 @@
 - 主会话人工逐段自查：Overlay 无残留 swap 标识符（grep contentState/contentLayerOpacity/... 为零）；glass region 路径零 diff；场景 enabled 门（opacity>0.5）覆盖 notification/media/timer；useSpring 仅用于通知回弹 SpringAnimation（内容 transform，非 region）。
 - 独立 /code-review 因基础设施故障（权限分类器长时间不可用）未能在 commit 前运行，用户明令直接 commit push。**待补：R08 开始前补跑一次针对本 diff 的独立审查。**
 
+### 补跑独立审查（2026-07-18，R08 开始前）
+
+针对已提交 cdafadd 的独立 agent 审查完成。逐项：a 玻璃 region 红线 PASS（只删 staged-swap 状态机 + contentState→effectiveContentState，未碰几何/region*/mask/protocol*；新增唯一 SpringAnimation 是 NotificationView settleSpring 驱动 swipeOffsetX 内容位移，非几何）、b 双驱动 PASS、c Loader hold/release 竞态 PASS（stop() + onTriggered `if(!active)` 守卫；无常驻泄漏）、d 输入门 PASS、e latch 清零 PASS（reduced/useSpring=false/OSD 均可达）、f OSD 状态机 PASS（R07 未改此段）、g 无藏匿 PASS。
+
+**FINDING 1【高危】swipe 飞出后 swipeOffsetX 不复位 → 复用视图渲染到屏外空胶囊、中心可误触默认动作**。主会话已对现网代码独立复核确认为真：`DynamicIslandNotificationView.qml:55 flyOutAndDismiss` 把 swipeOffsetX 动画到 ±max(width,200)≈±432，`notifFlyOut`(:81-93) 只发 `dismissRequested()` 不复位；服务在同一同步栈 `dismissDisplayedNotification`(DynamicIsland.qml:1902)→`restoreAfterTransient`(:1917)→`maybeShowPendingNotification`(:2159)→`presentNotificationEntry`(:2200) 立即呈现队列下一条，notification Loader 150ms hold 保活同一 NotificationView 实例 → 新通知 compactRow(:114 `Translate{x:swipeOffsetX}`) 被平移出胶囊遭 clip（空胶囊），居中 bodyClick(:446) 不随动仍触发默认动作。是 R07 交付项 #25 回归，测试无 swipe→再呈现 覆盖。
+
+**处置**：独立 "R07 follow-up" 提交修复（不并入 R08，文件不重叠）。修法=线程稳定通知标识、onChanged 归零 swipeOffsetX（in-place 文本更新不带 id 变化，不打断进行中滑动）+ onPressed stop notifFlyOut（低危争抢）+ 补 swipe→再呈现 回归测试。
+
+流程留痕：本次补审进行时工作区已被 R08 实施改脏（Overlay/Motion.js），审查者结论基于已提交 cdafadd 且其引用文件（NotificationView/Content/service）当时仍干净，结论有效；后续严格串行。
+
 ## 验收
 
 - `pytest tests/ -q` → **764 passed, 217 subtests passed in 29.27s**（全绿）。

@@ -289,18 +289,19 @@ class MotionTokenConvergenceTests(unittest.TestCase):
         # V2: whole-scene contentScale 0.9→1 removed (sinking text on collapse).
         self.assertNotIn("contentScaleSpring", overlay)
         self.assertIn("scale: 1.0", overlay)
-        # No SpringAnimation instances on island geometry/content (comment may mention ban).
-        self.assertEqual(overlay.count("SpringAnimation {"), 0)
+        # R08: island geometry springs exist only as clamped driver animations
+        # (width/height); the glass region reads quantized clamped output.
+        self.assertEqual(overlay.count("SpringAnimation {"), 2)
         # Swipe IPC path still wired (debug + settle).
         self.assertIn("beginSwipe", overlay)
         self.assertIn("advanceSwipe", overlay)
         self.assertIn("resolveSwipe", overlay)
         self.assertIn("cancelSwipe", overlay)
 
-        # Glass geometry: no SpringAnimation on islandSurface width/height/x/radius.
-        # Explicit comment guard for glass region.
+        # Glass geometry: springs never target islandSurface channels directly;
+        # region submission is clamped + floor-quantized (R08 pipeline).
         self.assertIn("Geometry → TahoeGlassRegion", overlay)
-        self.assertIn("eased NumberAnimation only", overlay)
+        self.assertIn("clamped + floor-quantized", overlay)
         # V2 surface fill/stroke from SettingsTheme; single pill region.
         self.assertIn("Theme.islandSurfaceFill", overlay)
         self.assertIn("strokeWidth: 1", overlay)

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import math
 import re
 import unittest
 from pathlib import Path
@@ -240,48 +241,111 @@ class DynamicIslandV2SurfaceTests(unittest.TestCase):
         self.assertIn("y: root.capsuleTargetTop", self.overlay)
         self.assertIn("useItemRegion: false", self.overlay)
         self.assertIn("protocolCapsuleWidth", self.overlay)
-        self.assertIn("quantizeProtocolGeometry(islandSurface.width, 8)", self.overlay)
-        self.assertIn("quantizeProtocolGeometry(islandSurface.height, 8)", self.overlay)
-        self.assertIn("quantizeProtocolGeometry(islandSurface.radius, 4)", self.overlay)
+        # R08 #22: 2px quantum with floor semantics for size (region never
+        # overhangs the painted capsule) and ceil for radius (glass corners
+        # recede inside the painted corner).
+        self.assertIn("var v2ProtocolSizeQuantumPx = 2", self.motion)
+        self.assertIn("var v2ProtocolRadiusQuantumPx = 2", self.motion)
+        self.assertIn(
+            "quantizeProtocolFloor(islandSurface.width, IslandMotion.v2ProtocolSizeQuantumPx)",
+            self.overlay,
+        )
+        self.assertIn(
+            "quantizeProtocolFloor(islandSurface.height, IslandMotion.v2ProtocolSizeQuantumPx)",
+            self.overlay,
+        )
+        self.assertIn(
+            "quantizeProtocolCeil(islandSurface.radius, IslandMotion.v2ProtocolRadiusQuantumPx)",
+            self.overlay,
+        )
+        self.assertNotIn("quantizeProtocolGeometry", self.overlay)
         self.assertIn("protocolGeometrySettled", self.overlay)
 
+    def _quantize_floor(self, value: float, quantum: int) -> int:
+        return max(0, math.floor(value / quantum) * quantum)
+
+    def _quantize_ceil(self, value: float, quantum: int) -> int:
+        return max(0, math.ceil(value / quantum) * quantum)
+
+    def test_floor_quantization_never_overhangs_painted_capsule(self) -> None:
+        # The white-bar regression (R08 / user report): collapsing to compact
+        # media (height 36) with round-to-nearest-8 held the region at 40 for
+        # the whole animation tail — a 4px band of raw glass under the painted
+        # bottom edge, snapping away at settle. Floor quantization keeps the
+        # region inside the painted rect at every animated height.
+        legacy_round8 = round(36.01 / 8) * 8
+        self.assertEqual(legacy_round8, 40)  # the old overhang
+        for height in (36.01, 39.9, 44.0, 165.9, 76.3):
+            proto = self._quantize_floor(height, 2)
+            self.assertLessEqual(proto, height)
+        # Radius ceils but is re-clamped to the submitted size.
+        for radius, proto_w, proto_h in ((17.2, 200, 34), (29.8, 416, 164)):
+            proto_r = min(
+                self._quantize_ceil(radius, 2), proto_w // 2, proto_h // 2
+            )
+            self.assertGreaterEqual(proto_r, 0)
+            self.assertLessEqual(proto_r, proto_h / 2)
+
     def test_protocol_geometry_quantization_reduces_240hz_commits(self) -> None:
+        # Deceleration tail is where 240Hz commit spam lived: sub-quantum
+        # movement per frame must dedupe. Simulate an OutCubic morph.
         samples = 54
         raw = []
         quantized = []
         for index in range(samples):
-            progress = index / (samples - 1)
+            t = index / (samples - 1)
+            progress = 1 - (1 - t) ** 3
             width = 224 + (440 - 224) * progress
-            height = 40 + (220 - 40) * progress
+            height = 40 + (176 - 40) * progress
             radius = 20 + (32 - 20) * progress
             raw.append((round(width), round(height), round(radius)))
             if index == samples - 1:
-                quantized.append((440, 220, 32))
+                quantized.append((440, 176, 32))
             else:
                 quantized.append(
-                    (round(width / 8) * 8, round(height / 8) * 8, round(radius / 4) * 4)
+                    (
+                        self._quantize_floor(width, 2),
+                        self._quantize_floor(height, 2),
+                        self._quantize_ceil(radius, 2),
+                    )
                 )
 
         def commit_count(values: list[tuple[int, int, int]]) -> int:
             return 1 + sum(before != after for before, after in zip(values, values[1:]))
 
-        self.assertLess(commit_count(quantized), commit_count(raw) * 0.8)
+        self.assertLess(commit_count(quantized), commit_count(raw))
 
-    def test_glass_geometry_no_spring(self) -> None:
-        # V2: no whole-scene contentScale spring (collapse looked like sinking text).
-        # Glass region geometry stays NumberAnimation only.
-        self.assertEqual(self.overlay.count("SpringAnimation {"), 0)
-        self.assertNotIn("contentScaleSpring", self.overlay)
-        self.assertIn("scale: 1.0", self.overlay)
-        self.assertIn("Geometry → TahoeGlassRegion", self.overlay)
-        self.assertIn("eased NumberAnimation only", self.overlay)
-        # Behaviors on islandSurface geometry channels.
+    def test_glass_geometry_spring_is_clamped_driver_only(self) -> None:
+        # R08: springs drive island driver values only; the surface binds
+        # clamp(driver, min, max) and the region submits quantized clamped
+        # values, so the region cannot leave the layer surface at overshoot.
+        self.assertEqual(self.overlay.count("SpringAnimation {"), 2)
+        self.assertIn("property real islandDriverWidth", self.overlay)
+        self.assertIn("property real islandDriverHeight", self.overlay)
+        self.assertIn("property real islandDriverRadius", self.overlay)
+        self.assertIn(
+            "Math.min(root.islandDriverWidth, root.maxCapsuleWidth)", self.overlay
+        )
+        self.assertIn(
+            "Math.min(root.islandDriverHeight, root.driverHeightMax)", self.overlay
+        )
+        # Height clamp is bounded by the layer surface below the top inset.
+        self.assertIn("root.capsuleTargetTop))", self.overlay)
+        self.assertIn("width: root.islandAnimatedWidth", self.overlay)
+        self.assertIn("height: root.islandAnimatedHeight", self.overlay)
+        self.assertIn("root.islandAnimatedRadius", self.overlay)
+        # x derives from the live width (centered under spring and swipe alike).
+        self.assertIn("x: (root.screenWidth - width) / 2", self.overlay)
+        # No Behavior may animate the surface geometry channels themselves.
         for prop in ("x", "y", "width", "height", "radius"):
-            self.assertRegex(
-                self.overlay,
-                rf"Behavior on {prop}\s*\{{(?:\s*\n\s*enabled:[^\n]+)?\s*\n\s*NumberAnimation",
-            )
-        self.assertIn("enabled: !root.osdImmediateGeometry", self.overlay)
+            self.assertNotRegex(self.overlay, rf"Behavior on {prop}\b")
+        self.assertIn("Behavior on fillColor", self.overlay)
+        self.assertIn("Behavior on opacity", self.overlay)
+        # Region submission marker.
+        self.assertIn("clamped + floor-quantized", self.overlay)
+        self.assertIn("scale: 1.0", self.overlay)
+        # No contentScale spring revival.
+        self.assertNotIn("contentScaleSpring", self.overlay)
 
     def test_content_loader_scene_host(self) -> None:
         self.assertIn("id: mediaLoader", self.content)
@@ -319,7 +383,8 @@ class DynamicIslandV2SurfaceTests(unittest.TestCase):
     def test_governance_documents_island_recipe(self) -> None:
         self.assertIn("DynamicIsland", self.gov)
         self.assertRegex(self.gov, r"DynamicIsland\s*\|\s*1\s*\|\s*`pill`")
-        self.assertIn("禁止 Spring", self.gov)
+        self.assertIn("禁止 Spring 直接驱动 region 通道", self.gov)
+        self.assertIn("islandDriver*", self.gov)
         self.assertIn("SettingsTheme island tokens", self.gov)
         self.assertIn("Loader", self.gov)
 

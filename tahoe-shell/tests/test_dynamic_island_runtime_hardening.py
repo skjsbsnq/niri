@@ -91,7 +91,11 @@ class DynamicIslandRuntimeHardeningTests(unittest.TestCase):
     def test_single_surface_and_governed_region(self) -> None:
         self.assertEqual(self.overlay.count("PanelWindow {"), 1)
         self.assertIn("TahoeGlass.regions: [islandSurface.region]", self.overlay)
-        self.assertEqual(self.overlay.count("SpringAnimation {"), 0)
+        # R08: exactly the two geometry driver springs; region reads clamped
+        # quantized driver output, never a SpringAnimation directly.
+        self.assertEqual(self.overlay.count("SpringAnimation {"), 2)
+        self.assertIn("islandDriverWidth", self.overlay)
+        self.assertIn("islandDriverHeight", self.overlay)
         self.assertIn("exclusiveZone: 0", self.overlay)
 
     def test_real_qml_loader_lifecycle(self) -> None:

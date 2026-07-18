@@ -169,8 +169,11 @@ class DynamicIslandOsdSceneTests(unittest.TestCase):
         self.assertIn(": root.textPrimary", self.osd)
         self.assertIn('"#70000000"', self.osd)
 
-    def test_osd_entry_is_immediate_and_exit_is_retained(self) -> None:
-        self.assertIn("var v2OsdEnterMs = 0", self.motion)
+    def test_osd_entry_is_fast_eased_and_exit_is_retained(self) -> None:
+        # R08 #23: OSD geometry expands quickly (~80ms) on first appearance —
+        # content still owns the first frame (osd layer opacity syncs
+        # immediately); exit keeps the retained-content design.
+        self.assertIn("var v2OsdEnterMs = 80", self.motion)
         self.assertIn("var v2OsdExitMs = 110", self.motion)
         self.assertIn("osdImmediateGeometry", self.overlay)
         self.assertIn("transientOsdImmediate", self.island)

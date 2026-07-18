@@ -14,8 +14,9 @@ PanelWindow {
     property var dynamicIslandService
     property var settingsService
     property bool fullscreenActive: false
-    // useSpring dual-branch for content-scale only. Glass region geometry
-    // (islandSurface x/width/height/radius) must never use SpringAnimation.
+    // useSpring gates the R08 geometry driver springs (and content-transform
+    // springs downstream). Glass region submission reads clamped + quantized
+    // driver output only — never a SpringAnimation directly.
     property bool useSpring: false
     property bool darkMode: false
     readonly property string islandState: dynamicIslandService ? String(dynamicIslandService.presentation || "resting_time") : "resting_time"
@@ -127,7 +128,6 @@ PanelWindow {
         : widthForState(effectiveGeometryState)
     readonly property int capsuleTargetWidth: clampInt(requestedCapsuleWidth, 1, maxCapsuleWidth)
     // Geometry duration uses V2 morph tokens (T19); swipe settle keeps own token.
-    // Non-swipe x/width share the same duration owner as y/height/radius (geometryMorphMs).
     readonly property string geometryMorphKind: {
         if (root.effectiveGeometryState.indexOf("expanded_") === 0
                 || root.geometryState.indexOf("expanded_") === 0)
@@ -136,20 +136,161 @@ PanelWindow {
             return "transient";
         return "collapse";
     }
-    readonly property int geometryMorphMsRoot: {
+    // R08 geometry driver pipeline. Springs drive the island driver values
+    // only; islandSurface binds clamp(driver, min, max) and the TahoeGlass
+    // region submits quantized clamped values — the region can never leave
+    // the layer surface even at full spring overshoot (guardrail 0704ea4
+    // satisfied by construction). useSpring=false and reduced motion fall
+    // back to eased NumberAnimation on the same drivers.
+    property bool geometryDriversReady: false
+    property real islandDriverWidth: 1
+    property real islandDriverHeight: 1
+    property real islandDriverRadius: 1
+    // Hard clamp bounds: width within screen margins; height must also fit the
+    // layer surface below the top inset so overshoot can never push the glass
+    // region past the window bounds.
+    readonly property int driverHeightMax: Math.max(2, Math.min(
+        root.maxCapsuleHeight,
+        (root.height > 0 ? root.height : root.implicitHeight) - root.capsuleTargetTop))
+    readonly property real islandAnimatedWidth: Math.max(2, Math.min(root.islandDriverWidth, root.maxCapsuleWidth))
+    readonly property real islandAnimatedHeight: Math.max(2, Math.min(root.islandDriverHeight, root.driverHeightMax))
+    // Radius validity is enforced per-frame against the clamped animated size
+    // (spring undershoot on height must never yield radius > height/2).
+    readonly property real islandAnimatedRadius: Math.max(0, Math.min(
+        root.islandDriverRadius,
+        root.islandAnimatedWidth / 2,
+        root.islandAnimatedHeight / 2))
+
+    function geometryEaseDurationMs() {
+        // OSD entry: fast eased expansion (R08 #23). While OSD stays active,
+        // targets do not change between ticks, so nothing re-animates.
         if (root.osdImmediateGeometry)
             return IslandMotion.v2OsdEnterMs;
         return IslandMotion.geometryDurationMs(root.settingsService, root.geometryMorphKind);
     }
-    readonly property int swipeWidthDuration: swipeInteractive
-        ? 0
-        : (swipeSettling
-            ? IslandMotion.swipeSettleDuration
-            : root.geometryMorphMsRoot)
-    readonly property int swipeWidthEasing: swipeInteractive
-        ? IslandMotion.overlayColorEasing
-        : (swipeSettling ? IslandMotion.swipeSettleEasing : IslandMotion.v2GeometryEasing)
-    readonly property int capsuleTargetHeight: clampInt(heightForState(effectiveGeometryState), 1, maxCapsuleHeight)
+
+    function retargetWidthDriver() {
+        if (!root.geometryDriversReady) {
+            root.islandDriverWidth = root.capsuleTargetWidth;
+            return;
+        }
+        driverWidthSpring.stop();
+        driverWidthEase.stop();
+        // Swipe drag: width follows the pointer 1:1 (no animation lag).
+        if (root.swipeInteractive) {
+            root.islandDriverWidth = root.capsuleTargetWidth;
+            return;
+        }
+        if (root.swipeSettling) {
+            driverWidthEase.duration = IslandMotion.swipeSettleDuration;
+            driverWidthEase.easing.type = IslandMotion.swipeSettleEasing;
+            driverWidthEase.to = root.capsuleTargetWidth;
+            driverWidthEase.restart();
+            return;
+        }
+        if (!root.osdImmediateGeometry
+                && IslandMotion.geometrySpringEnabled(root.settingsService, root.useSpring)) {
+            driverWidthSpring.to = root.capsuleTargetWidth;
+            driverWidthSpring.restart();
+            return;
+        }
+        driverWidthEase.duration = root.geometryEaseDurationMs();
+        driverWidthEase.easing.type = IslandMotion.v2GeometryEasing;
+        driverWidthEase.to = root.capsuleTargetWidth;
+        driverWidthEase.restart();
+    }
+
+    function retargetHeightDriver() {
+        if (!root.geometryDriversReady) {
+            root.islandDriverHeight = root.capsuleTargetHeight;
+            return;
+        }
+        driverHeightSpring.stop();
+        driverHeightEase.stop();
+        if (!root.osdImmediateGeometry
+                && IslandMotion.geometrySpringEnabled(root.settingsService, root.useSpring)) {
+            driverHeightSpring.to = root.capsuleTargetHeight;
+            driverHeightSpring.restart();
+            return;
+        }
+        driverHeightEase.duration = root.geometryEaseDurationMs();
+        driverHeightEase.to = root.capsuleTargetHeight;
+        driverHeightEase.restart();
+    }
+
+    function retargetRadiusDriver() {
+        // Radius stays eased (compact pills read radius = height/2 through the
+        // per-frame clamp; a springing radius would make corners breathe).
+        if (!root.geometryDriversReady) {
+            root.islandDriverRadius = root.capsuleTargetRadius;
+            return;
+        }
+        driverRadiusEase.stop();
+        driverRadiusEase.duration = root.geometryEaseDurationMs();
+        driverRadiusEase.to = root.capsuleTargetRadius;
+        driverRadiusEase.restart();
+    }
+
+    function syncGeometryDriversImmediately() {
+        driverWidthSpring.stop();
+        driverWidthEase.stop();
+        driverHeightSpring.stop();
+        driverHeightEase.stop();
+        driverRadiusEase.stop();
+        root.islandDriverWidth = root.capsuleTargetWidth;
+        root.islandDriverHeight = root.capsuleTargetHeight;
+        root.islandDriverRadius = root.capsuleTargetRadius;
+    }
+
+    onCapsuleTargetWidthChanged: retargetWidthDriver()
+    onCapsuleTargetHeightChanged: retargetHeightDriver()
+    onCapsuleTargetRadiusChanged: retargetRadiusDriver()
+
+    Component.onCompleted: {
+        root.syncGeometryDriversImmediately();
+        root.geometryDriversReady = true;
+    }
+
+    SpringAnimation {
+        id: driverWidthSpring
+        target: root
+        property: "islandDriverWidth"
+        spring: IslandMotion.v2GeometrySpring.spring
+        damping: IslandMotion.v2GeometrySpring.damping
+        epsilon: IslandMotion.v2GeometrySpringEpsilon
+    }
+
+    NumberAnimation {
+        id: driverWidthEase
+        target: root
+        property: "islandDriverWidth"
+        easing.type: IslandMotion.v2GeometryEasing
+    }
+
+    SpringAnimation {
+        id: driverHeightSpring
+        target: root
+        property: "islandDriverHeight"
+        spring: IslandMotion.v2GeometrySpring.spring
+        damping: IslandMotion.v2GeometrySpring.damping
+        epsilon: IslandMotion.v2GeometrySpringEpsilon
+    }
+
+    NumberAnimation {
+        id: driverHeightEase
+        target: root
+        property: "islandDriverHeight"
+        easing.type: IslandMotion.v2GeometryEasing
+    }
+
+    NumberAnimation {
+        id: driverRadiusEase
+        target: root
+        property: "islandDriverRadius"
+        easing.type: IslandMotion.v2GeometryEasing
+    }
+
+    readonly property int capsuleTargetHeight: clampInt(heightForState(effectiveGeometryState), 1, driverHeightMax)
     readonly property int capsuleTargetLeft: clampInt(Math.round((screenWidth - capsuleTargetWidth) / 2), 0, Math.max(0, screenWidth - capsuleTargetWidth))
     // Align compact top inset with TopBar floating inner surface (topMargin 4).
     readonly property int capsuleTargetTop: IslandMotion.v2CompactTopInset
@@ -157,18 +298,31 @@ PanelWindow {
         radiusForState(effectiveGeometryState, capsuleTargetHeight),
         capsuleTargetWidth / 2,
         capsuleTargetHeight / 2)
-    readonly property bool protocolGeometrySettled: Math.abs(islandSurface.width - capsuleTargetWidth) < 0.01
-        && Math.abs(islandSurface.height - capsuleTargetHeight) < 0.01
-        && Math.abs(islandSurface.radius - capsuleTargetRadius) < 0.01
+    // Settled: snap the protocol region to the exact target. Threshold sits
+    // above the spring epsilon (0.25) so the latch is stable once the driver
+    // animation stops; the snap lands within 0.6px of the painted edge —
+    // sub-pixel against the ~80%-opaque dark fill — while floor quantization
+    // keeps the morph-time region inside the painted rect.
+    readonly property bool protocolGeometrySettled: Math.abs(islandSurface.width - capsuleTargetWidth) < 0.6
+        && Math.abs(islandSurface.height - capsuleTargetHeight) < 0.6
+        && Math.abs(islandSurface.radius - capsuleTargetRadius) < 0.6
+    // Morphing region submission (R08 #22): width/height floor-quantize so the
+    // glass region never overhangs the painted capsule (an overhang renders raw
+    // glass — a bright bar under the capsule bottom edge); radius ceil-quantizes
+    // so glass corners recede inside the painted corner, and is re-clamped to
+    // the submitted size so it stays a valid rounded rect.
     readonly property int protocolCapsuleWidth: protocolGeometrySettled
         ? Math.round(capsuleTargetWidth)
-        : quantizeProtocolGeometry(islandSurface.width, 8)
+        : quantizeProtocolFloor(islandSurface.width, IslandMotion.v2ProtocolSizeQuantumPx)
     readonly property int protocolCapsuleHeight: protocolGeometrySettled
         ? Math.round(capsuleTargetHeight)
-        : quantizeProtocolGeometry(islandSurface.height, 8)
+        : quantizeProtocolFloor(islandSurface.height, IslandMotion.v2ProtocolSizeQuantumPx)
     readonly property int protocolCapsuleRadius: protocolGeometrySettled
         ? Math.round(capsuleTargetRadius)
-        : quantizeProtocolGeometry(islandSurface.radius, 4)
+        : Math.min(
+            quantizeProtocolCeil(islandSurface.radius, IslandMotion.v2ProtocolRadiusQuantumPx),
+            Math.floor(protocolCapsuleWidth / 2),
+            Math.floor(protocolCapsuleHeight / 2))
     readonly property bool compactResting: effectiveContentState === "resting_time" || effectiveContentState === "resting_media" || effectiveContentState === "resting_timer"
     readonly property bool compactContentVisible: compactResting && capsuleShown
     // Expanded media only on the owner screen.
@@ -259,9 +413,14 @@ PanelWindow {
         }
     }
 
-    function quantizeProtocolGeometry(value, quantum) {
+    function quantizeProtocolFloor(value, quantum) {
         var step = Math.max(1, Math.round(Number(quantum) || 1));
-        return Math.max(0, Math.round(Number(value) / step) * step);
+        return Math.max(0, Math.floor(Number(value) / step) * step);
+    }
+
+    function quantizeProtocolCeil(value, quantum) {
+        var step = Math.max(1, Math.round(Number(quantum) || 1));
+        return Math.max(0, Math.ceil(Number(value) / step) * step);
     }
 
     function restingClockTargetWidth() {
@@ -427,15 +586,20 @@ PanelWindow {
     GlassPanel {
         id: islandSurface
 
-        x: root.capsuleTargetLeft
+        // R08: geometry reads the clamped driver values (spring lives on the
+        // drivers only). x derives from the live width so the capsule stays
+        // perfectly centered through spring overshoot and swipe alike; y is
+        // the fixed top inset.
+        x: (root.screenWidth - width) / 2
         y: root.capsuleTargetTop
-        width: root.capsuleTargetWidth
-        height: root.capsuleTargetHeight
+        width: root.islandAnimatedWidth
+        height: root.islandAnimatedHeight
         material: GlassStyle.MaterialPill
         // V2 surface radius is authoritative. Keep GlassStyle.RadiusPill in the
         // expression so glass guardrails still see a governed radius token; the
-        // arithmetic equals capsuleTargetRadius (no pill half-height override).
-        radius: GlassStyle.RadiusPill + (root.capsuleTargetRadius - GlassStyle.RadiusPill)
+        // arithmetic equals the clamped animated radius (no pill half-height
+        // override).
+        radius: GlassStyle.RadiusPill + (root.islandAnimatedRadius - GlassStyle.RadiusPill)
         clip: true
         fillColor: root.glassFill
         strokeColor: root.glassStroke
@@ -451,38 +615,9 @@ PanelWindow {
         regionRadius: root.protocolCapsuleRadius
         opacity: root.capsuleShown ? 1 : 0
 
-        // Geometry → TahoeGlassRegion: eased NumberAnimation only (no Spring).
-        // Use V2 compact↔expanded timings (shorter than legacy 380ms) so content
-        // does not feel like it is sliding/sinking during click expand/collapse.
-        readonly property int geometryMorphMs: root.geometryMorphMsRoot
-
-        Behavior on x {
-            enabled: !root.osdImmediateGeometry
-            NumberAnimation { duration: root.swipeWidthDuration; easing.type: root.swipeWidthEasing }
-        }
-
-        Behavior on y {
-            enabled: !root.osdImmediateGeometry
-            NumberAnimation { duration: islandSurface.geometryMorphMs; easing.type: IslandMotion.v2GeometryEasing }
-        }
-
-        Behavior on width {
-            enabled: !root.osdImmediateGeometry
-            NumberAnimation {
-                duration: root.swipeInteractive ? 0 : (root.swipeSettling ? IslandMotion.swipeSettleDuration : islandSurface.geometryMorphMs)
-                easing.type: root.swipeInteractive ? IslandMotion.overlayColorEasing : (root.swipeSettling ? IslandMotion.swipeSettleEasing : IslandMotion.v2GeometryEasing)
-            }
-        }
-
-        Behavior on height {
-            enabled: !root.osdImmediateGeometry
-            NumberAnimation { duration: islandSurface.geometryMorphMs; easing.type: IslandMotion.v2GeometryEasing }
-        }
-
-        Behavior on radius {
-            enabled: !root.osdImmediateGeometry
-            NumberAnimation { duration: islandSurface.geometryMorphMs; easing.type: IslandMotion.v2GeometryEasing }
-        }
+        // Geometry → TahoeGlassRegion: submission is clamped + floor-quantized;
+        // no Behavior animates the surface geometry channels (all motion lives
+        // in the root driver pipeline), so the region is bounded by design.
 
         Behavior on fillColor {
             ColorAnimation { duration: IslandMotion.overlayColorDuration; easing.type: IslandMotion.overlayColorEasing }

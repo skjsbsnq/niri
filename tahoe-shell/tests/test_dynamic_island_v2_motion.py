@@ -57,10 +57,19 @@ class DynamicIslandV2MotionTests(unittest.TestCase):
 
     def test_overlay_geometry_uses_v2_not_legacy_380(self) -> None:
         self.assertIn("geometryDurationMs", self.overlay)
-        self.assertIn("geometryMorphMsRoot", self.overlay)
+        self.assertIn("geometryEaseDurationMs", self.overlay)
         self.assertIn("geometryMorphKind", self.overlay)
-        # No SpringAnimation instances on glass geometry (comments may mention ban).
-        self.assertEqual(self.overlay.count("SpringAnimation {"), 0)
+        # R08: springs exist only as geometry driver animations (width/height);
+        # the surface/region read clamped driver output.
+        self.assertEqual(self.overlay.count("SpringAnimation {"), 2)
+        self.assertRegex(
+            self.overlay,
+            r"SpringAnimation \{\s*\n\s*id: driverWidthSpring\s*\n\s*target: root\s*\n\s*property: \"islandDriverWidth\"",
+        )
+        self.assertRegex(
+            self.overlay,
+            r"SpringAnimation \{\s*\n\s*id: driverHeightSpring\s*\n\s*target: root\s*\n\s*property: \"islandDriverHeight\"",
+        )
         self.assertIn("scale: 1.0", self.overlay)
 
     def test_content_uses_v2_content_tokens(self) -> None:
@@ -110,12 +119,29 @@ class DynamicIslandV2MotionTests(unittest.TestCase):
 
 
     def test_geometry_axes_share_duration_owner(self) -> None:
-        self.assertIn("geometryMorphMsRoot", self.overlay)
+        # R08 driver pipeline: one eased-duration owner for all axes, swipe
+        # handled inside the width dispatch (drag 1:1, settle keeps its token).
+        self.assertIn("function geometryEaseDurationMs", self.overlay)
         self.assertIn("geometryDurationMs", self.overlay)
-        self.assertIn("swipeWidthDuration", self.overlay)
-        # Non-swipe width/x use geometryMorphMsRoot (not bare v2CompactToExpandedMs).
-        self.assertIn("root.geometryMorphMsRoot", self.overlay)
-        self.assertIn("geometryMorphMs: root.geometryMorphMsRoot", self.overlay)
+        self.assertIn("onCapsuleTargetWidthChanged: retargetWidthDriver()", self.overlay)
+        self.assertIn("onCapsuleTargetHeightChanged: retargetHeightDriver()", self.overlay)
+        self.assertIn("onCapsuleTargetRadiusChanged: retargetRadiusDriver()", self.overlay)
+        self.assertIn("IslandMotion.swipeSettleDuration", self.overlay)
+        self.assertIn("if (root.swipeInteractive)", self.overlay)
+        # Spring gating: useSpring + reduced-motion aware, OSD entry stays eased.
+        self.assertIn("geometrySpringEnabled(root.settingsService, root.useSpring)", self.overlay)
+        self.assertIn("function geometrySpringEnabled", self.motion)
+
+    def test_osd_entry_geometry_is_fast_eased_not_hard_cut(self) -> None:
+        # R08 #23: OSD first appearance expands over v2OsdEnterMs (~80ms)
+        # instead of a 0ms hard cut; OSD→OSD ticks do not retarget geometry.
+        self.assertIn("var v2OsdEnterMs = 80", self.motion)
+        self.assertRegex(
+            self.overlay,
+            r"if \(root\.osdImmediateGeometry\)\s*\n\s*return IslandMotion\.v2OsdEnterMs;",
+        )
+        # The immediate flag must not disable geometry animation wholesale.
+        self.assertNotIn("enabled: !root.osdImmediateGeometry", self.overlay)
 
     def test_workspace_travel_uses_content_travel_helper(self) -> None:
         self.assertIn("contentTravelPx", self.content)

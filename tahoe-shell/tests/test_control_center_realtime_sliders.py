@@ -26,6 +26,25 @@ class ControlCenterRealtimeSliderTests(unittest.TestCase):
         self.assertIn("gs.userPreview(v)", self.control_center)
         self.assertIn("gs.userCommit(value)", self.control_center)
 
+    def test_external_value_follow_animates_without_drag_lag(self) -> None:
+        slider = self.control_center.split("component GlassSlider: Item", 1)[1].split(
+            "component UtilityButton: Item", 1
+        )[0]
+        fill = slider.split("id: sliderFillBar", 1)[1].split("TahoeSymbol {", 1)[0]
+        shadow = slider.split("id: knobShadow", 1)[1].split("\n                    Rectangle {\n                        id: knob\n", 1)[0]
+
+        for block, behavior in ((fill, "Behavior on width"), (shadow, "Behavior on x")):
+            self.assertIn(behavior, block)
+            self.assertIn("enabled: !dragArea.pressed && !gs.userDragging", block)
+            self.assertIn("Motion.elementMove(root.settingsService)", block)
+            self.assertIn("Motion.emphasizedDecel", block)
+
+        self.assertIn("x: knobShadow.x", slider)
+        self.assertIn("fillFollowAnimation.stop();", slider)
+        self.assertIn("knobFollowAnimation.stop();", slider)
+        self.assertLess(slider.index("fillFollowAnimation.stop();"), slider.index("gs.userDragging = true;"))
+        self.assertLess(slider.index("knobFollowAnimation.stop();"), slider.index("gs.userDragging = true;"))
+
     def test_brightness_uses_preview_and_release_commit(self) -> None:
         self.assertIn("root.controlsService.previewBrightness(v)", self.control_center)
         self.assertIn("root.controlsService.commitBrightness(v)", self.control_center)

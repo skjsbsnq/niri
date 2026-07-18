@@ -23,7 +23,7 @@
 | R09 | Toast 栈重构与退出统一 | #31 #32 #33 #34 | M–L | DONE | [R09](acceptance/R09-toast-stack-2026-07-18.md)：稳定 id 栈与三路统一退出，770 tests 全绿，guardrail/validate/嵌套冒烟/部署 parity 通过 |
 | R10 | 通知中心稳定列表与入场 | #35 #36 | M | DONE | [R10](acceptance/R10-notification-center-stable-history-2026-07-18.md)：entry/group 双层稳定 identity，新增行入场与单删两阶段退出，776 tests 全绿，三路终审 CLEAN |
 | R11 | 侧栏系统页（进程表/活动环/morph） | #55 #56 #57 #58 #59 | M | DONE | [R11](acceptance/R11-left-sidebar-system-motion-2026-07-18.md)：pid+starttime 稳定 identity，780 tests 全绿，三路终审 CLEAN，宿主 32s 观测/嵌套/部署 parity 通过 |
-| R12 | 控制中心收尾（滑块插值/模块列表） | #47 #48 #49 #50 | S–M | PENDING | |
+| R12 | 控制中心收尾（滑块插值/模块列表） | #47 #48 #49 #50 | S–M | DONE | [R12](acceptance/R12-control-center-motion-2026-07-19.md)：滑块外部 follow/拖拽直跟，WiFi/蓝牙稳定列表与 PSK 动画，784 tests 全绿，双终审 CLEAN，用户宿主截图确认正常 |
 | R13 | 弹窗控件合并统一（防腐化） | #5(余) #11 #12 #18 #40 #66 #67 #68 #69 + S4/S5 | M–L | PENDING | |
 | R14 | 锁屏动效包 | #38 #39 #40(余) | S–M | PENDING | |
 | R15 | KDL 参数修正包 | #6 #89 #95 #96 #97 #100 | S | PENDING | |

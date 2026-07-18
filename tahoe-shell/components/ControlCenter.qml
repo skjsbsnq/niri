@@ -81,6 +81,63 @@ PanelWindow {
         root.expandedModule = "";
     }
 
+    function bluetoothModuleRows(entries) {
+        var input = entries || [];
+        var out = [];
+        var fallbackCounts = Object.create(null);
+
+        for (var i = 0; i < input.length; i++) {
+            var entry = input[i];
+            if (!entry)
+                continue;
+
+            var address = String(entry.address || "").trim();
+            var dbusPath = String(entry.dbusPath || "").trim();
+            var key = null;
+            if (address.length > 0)
+                key = "bluetooth-address:" + address;
+            else if (dbusPath.length > 0)
+                key = "bluetooth-path:" + dbusPath;
+            else if (entry.device)
+                key = entry.device;
+            else {
+                // Last-resort uniqueness for backend entries that expose no
+                // address, D-Bus path or device object. Normal devices never
+                // take this branch.
+                var base = String(entry.name || "unnamed") + ":" + String(entry.icon || "");
+                var ordinal = Number(fallbackCounts[base]) || 0;
+                fallbackCounts[base] = ordinal + 1;
+                key = "bluetooth-fallback:" + base + ":" + String(ordinal);
+            }
+
+            var duplicate = false;
+            for (var j = 0; j < out.length; j++) {
+                if (out[j].modelKey === key) {
+                    duplicate = true;
+                    break;
+                }
+            }
+            if (duplicate)
+                continue;
+
+            var decorated = Object.assign({}, entry);
+            decorated.modelKey = key;
+            out.push(decorated);
+        }
+
+        return out;
+    }
+
+    function bluetoothModuleRowForKey(rows, key) {
+        var input = rows || [];
+        for (var i = 0; i < input.length; i++) {
+            var entry = input[i];
+            if (entry && entry.modelKey === key)
+                return entry;
+        }
+        return null;
+    }
+
     onOpenChanged: {
         if (!open) {
             if (root.controlsService)
@@ -657,16 +714,60 @@ PanelWindow {
 
         readonly property bool isWifi: moduleName === "wifi"
         readonly property bool isBluetooth: moduleName === "bluetooth"
-        readonly property var listModel: {
+        readonly property var bluetoothRows: mp.isBluetooth
+            ? root.bluetoothModuleRows(root.bluetoothDevices)
+            : []
+        readonly property int listCount: mp.isWifi
+            ? root.wifiNetworks.length
+            : (mp.isBluetooth ? mp.bluetoothRows.length : 0)
+        readonly property bool listEnabled: {
             if (mp.isWifi)
-                return root.wifiNetworks;
+                return !!mp.controls && !!mp.controls.wifiEnabled;
             if (mp.isBluetooth)
-                return root.bluetoothDevices;
-            return [];
+                return !!mp.controls && !!mp.controls.bluetoothEnabled && !!mp.controls.bluetoothAvailable;
+            return false;
         }
+        readonly property bool showList: mp.listEnabled && (mp.listCount > 0 || mp.listRetiring)
         property string expandedSsid: ""
+        property int previousListCount: 0
+        property bool listRetiring: false
 
         onModuleNameChanged: expandedSsid = ""
+        onListCountChanged: {
+            var previous = mp.previousListCount;
+            mp.previousListCount = mp.listCount;
+            if (mp.listCount > 0) {
+                listRetireTimer.stop();
+                mp.listRetiring = false;
+            } else if (previous > 0 && (mp.isWifi || mp.isBluetooth)) {
+                mp.listRetiring = true;
+                listRetireTimer.interval = Math.max(1, Motion.fadeFast(root.settingsService) + 16);
+                listRetireTimer.restart();
+            } else {
+                listRetireTimer.stop();
+                mp.listRetiring = false;
+            }
+        }
+
+        Component.onCompleted: mp.previousListCount = mp.listCount
+
+        Timer {
+            id: listRetireTimer
+            repeat: false
+            onTriggered: mp.listRetiring = false
+        }
+
+        ScriptModel {
+            id: wifiModuleModel
+            objectProp: "name"
+            values: mp.isWifi ? root.wifiNetworks : []
+        }
+
+        ScriptModel {
+            id: bluetoothModuleModel
+            objectProp: "modelKey"
+            values: mp.bluetoothRows
+        }
 
         Rectangle {
             anchors.fill: parent
@@ -790,23 +891,7 @@ PanelWindow {
                     Layout.fillHeight: true
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
-                    visible: {
-                        if (mp.isWifi) {
-                            if (!mp.controls)
-                                return true;
-                            if (!mp.controls.wifiEnabled)
-                                return true;
-                            return root.wifiNetworks.length === 0;
-                        }
-                        if (mp.isBluetooth) {
-                            if (!mp.controls || !mp.controls.bluetoothAvailable)
-                                return true;
-                            if (!mp.controls.bluetoothEnabled)
-                                return true;
-                            return root.bluetoothDevices.length === 0;
-                        }
-                        return true;
-                    }
+                    visible: !mp.showList
                     text: {
                         if (mp.isWifi) {
                             if (!mp.controls)
@@ -836,14 +921,43 @@ PanelWindow {
                     clip: true
                     spacing: 4
                     boundsBehavior: Flickable.StopAtBounds
-                    model: mp.listModel
-                    visible: {
-                        if (mp.isWifi)
-                            return !!mp.controls && mp.controls.wifiEnabled && root.wifiNetworks.length > 0;
-                        if (mp.isBluetooth)
-                            return !!mp.controls && mp.controls.bluetoothEnabled
-                                && mp.controls.bluetoothAvailable && root.bluetoothDevices.length > 0;
-                        return false;
+                    model: mp.isWifi ? wifiModuleModel : (mp.isBluetooth ? bluetoothModuleModel : null)
+                    visible: mp.showList
+
+                    add: Transition {
+                        NumberAnimation {
+                            property: "opacity"
+                            from: 0
+                            to: 1
+                            duration: Motion.fadeFast(root.settingsService)
+                            easing.type: Motion.standardDecel
+                        }
+                    }
+
+                    remove: Transition {
+                        NumberAnimation {
+                            property: "opacity"
+                            from: 1
+                            to: 0
+                            duration: Motion.fadeFast(root.settingsService)
+                            easing.type: Motion.standardDecel
+                        }
+                    }
+
+                    move: Transition {
+                        NumberAnimation {
+                            properties: "x,y"
+                            duration: Motion.elementMove(root.settingsService)
+                            easing.type: Motion.emphasizedDecel
+                        }
+                    }
+
+                    displaced: Transition {
+                        NumberAnimation {
+                            properties: "x,y"
+                            duration: Motion.elementMove(root.settingsService)
+                            easing.type: Motion.emphasizedDecel
+                        }
                     }
 
                     delegate: Item {
@@ -853,47 +967,52 @@ PanelWindow {
                         height: rowFrame.implicitHeight
 
                         readonly property bool isWifiRow: mp.isWifi
+                        readonly property var stableKey: row.modelData ? row.modelData.modelKey : null
+                        // ScriptModel preserves a moved delegate's original
+                        // map. Resolve Bluetooth rows by key so display/action
+                        // data always comes from the newest sorted snapshot.
+                        readonly property var entry: row.isWifiRow
+                            ? row.modelData
+                            : (root.bluetoothModuleRowForKey(mp.bluetoothRows, row.stableKey) || row.modelData)
                         readonly property bool connected: {
-                            if (!row.modelData)
+                            if (!row.entry)
                                 return false;
-                            if (row.isWifiRow)
-                                return !!row.modelData.connected;
-                            return !!row.modelData.connected;
+                            return !!row.entry.connected;
                         }
                         readonly property string primaryLabel: {
-                            if (!row.modelData)
+                            if (!row.entry)
                                 return "";
                             if (row.isWifiRow)
-                                return String(row.modelData.name || "");
-                            return String(row.modelData.name || "未命名设备");
+                                return String(row.entry.name || "");
+                            return String(row.entry.name || "未命名设备");
                         }
                         readonly property string secondaryLabel: {
-                            if (!row.modelData)
+                            if (!row.entry)
                                 return "";
                             if (row.isWifiRow) {
                                 var parts = [];
-                                if (row.modelData.known)
+                                if (row.entry.known)
                                     parts.push("已保存");
-                                parts.push(String(row.modelData.signalPercent || 0) + "%");
+                                parts.push(String(row.entry.signalPercent || 0) + "%");
                                 return parts.join(" · ");
                             }
                             var bits = [];
-                            if (row.modelData.connected)
+                            if (row.entry.connected)
                                 bits.push("已连接");
-                            else if (row.modelData.paired)
+                            else if (row.entry.paired)
                                 bits.push("已配对");
                             else
                                 bits.push("附近");
-                            if (row.modelData.batteryAvailable)
-                                bits.push(String(row.modelData.batteryPercent) + "%");
+                            if (row.entry.batteryAvailable)
+                                bits.push(String(row.entry.batteryPercent) + "%");
                             return bits.join(" · ");
                         }
                         readonly property bool showPsk: row.isWifiRow
                             && mp.expandedSsid === primaryLabel
-                            && row.modelData
-                            && row.modelData.secured
-                            && !row.modelData.known
-                            && !row.modelData.connected
+                            && row.entry
+                            && row.entry.secured
+                            && !row.entry.known
+                            && !row.entry.connected
 
                         Rectangle {
                             id: rowFrame
@@ -901,11 +1020,18 @@ PanelWindow {
                             implicitHeight: rowContent.implicitHeight + 12
                             height: implicitHeight
                             radius: 12
-                            color: row.connected
-                                ? (root.darkMode ? "#403a7ab5" : "#5ad7f0ff")
-                                : (rowMouse.containsMouse ? "#40ffffff" : "#28ffffff")
+                            color: rowMouse.containsMouse
+                                ? root.tileFillHover
+                                : (row.connected ? root.tileFillActive : root.tileFill)
                             border.color: row.connected ? root.accentActive : "#34ffffff"
                             border.width: 1
+
+                            Behavior on color {
+                                ColorAnimation {
+                                    duration: Motion.fadeFast(root.settingsService)
+                                    easing.type: Motion.standardDecel
+                                }
+                            }
 
                             ColumnLayout {
                                 id: rowContent
@@ -927,7 +1053,7 @@ PanelWindow {
                                             Layout.preferredWidth: 20
                                             name: {
                                                 if (row.isWifiRow)
-                                                    return row.connected ? "\ue5ca" : (row.modelData && row.modelData.secured ? "\ue897" : "\ue63e");
+                                                    return row.connected ? "\ue5ca" : (row.entry && row.entry.secured ? "\ue897" : "\ue63e");
                                                 return row.connected ? "\ue5ca" : "\ue1a7";
                                             }
                                             color: row.connected ? root.accentActive : root.textTertiary
@@ -964,28 +1090,28 @@ PanelWindow {
                                         hoverEnabled: true
                                         cursorShape: Qt.PointingHandCursor
                                         onClicked: {
-                                            if (!row.modelData || !mp.controls)
+                                            if (!row.entry || !mp.controls)
                                                 return;
                                             if (row.isWifiRow) {
-                                                if (row.modelData.connected) {
+                                                if (row.entry.connected) {
                                                     mp.controls.disconnectWifi();
                                                     return;
                                                 }
-                                                if (row.modelData.secured && !row.modelData.known) {
+                                                if (row.entry.secured && !row.entry.known) {
                                                     mp.expandedSsid = mp.expandedSsid === row.primaryLabel ? "" : row.primaryLabel;
                                                     return;
                                                 }
-                                                mp.controls.connectWifi(row.modelData, "");
+                                                mp.controls.connectWifi(row.entry, "");
                                                 mp.expandedSsid = "";
                                                 return;
                                             }
                                             // Bluetooth
-                                            if (row.modelData.connected)
-                                                mp.controls.disconnectBluetoothDevice(row.modelData);
-                                            else if (row.modelData.paired || row.modelData.bonded)
-                                                mp.controls.connectBluetoothDevice(row.modelData);
+                                            if (row.entry.connected)
+                                                mp.controls.disconnectBluetoothDevice(row.entry);
+                                            else if (row.entry.paired || row.entry.bonded)
+                                                mp.controls.connectBluetoothDevice(row.entry);
                                             else
-                                                mp.controls.pairBluetoothDevice(row.modelData);
+                                                mp.controls.pairBluetoothDevice(row.entry);
                                         }
                                     }
                                 }
@@ -994,12 +1120,27 @@ PanelWindow {
                                 Rectangle {
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: row.showPsk ? 36 : 0
+                                    opacity: row.showPsk ? 1 : 0
                                     radius: 10
                                     color: "#24ffffff"
                                     border.color: "#3cffffff"
                                     border.width: 1
-                                    visible: row.showPsk
+                                    visible: row.showPsk || opacity > 0.01 || Layout.preferredHeight > 0.5
                                     clip: true
+
+                                    Behavior on Layout.preferredHeight {
+                                        NumberAnimation {
+                                            duration: Motion.elementResize(root.settingsService)
+                                            easing.type: Motion.emphasizedDecel
+                                        }
+                                    }
+
+                                    Behavior on opacity {
+                                        NumberAnimation {
+                                            duration: Motion.fadeFast(root.settingsService)
+                                            easing.type: Motion.standardDecel
+                                        }
+                                    }
 
                                     RowLayout {
                                         anchors.fill: parent
@@ -1015,12 +1156,13 @@ PanelWindow {
                                             selectedTextColor: "#ffffff"
                                             font.pixelSize: 13
                                             echoMode: TextInput.Password
+                                            focus: row.showPsk
                                             clip: true
                                             selectByMouse: true
                                             verticalAlignment: TextInput.AlignVCenter
                                             Keys.onReturnPressed: {
                                                 if (mp.controls)
-                                                    mp.controls.connectWifi(row.modelData, pskInput.text);
+                                                    mp.controls.connectWifi(row.entry, pskInput.text);
                                                 pskInput.text = "";
                                                 mp.expandedSsid = "";
                                             }
@@ -1049,7 +1191,7 @@ PanelWindow {
                                                 cursorShape: Qt.PointingHandCursor
                                                 onClicked: {
                                                     if (mp.controls)
-                                                        mp.controls.connectWifi(row.modelData, pskInput.text);
+                                                        mp.controls.connectWifi(row.entry, pskInput.text);
                                                     pskInput.text = "";
                                                     mp.expandedSsid = "";
                                                 }
@@ -1375,12 +1517,22 @@ PanelWindow {
                         clip: true
 
                         Rectangle {
+                            id: sliderFillBar
                             x: 0
                             y: 0
                             height: parent.height
                             width: parent.width * gs.clampedValue
                             radius: parent.radius
                             color: root.sliderFill
+
+                            Behavior on width {
+                                enabled: !dragArea.pressed && !gs.userDragging
+                                NumberAnimation {
+                                    id: fillFollowAnimation
+                                    duration: Motion.elementMove(root.settingsService)
+                                    easing.type: Motion.emphasizedDecel
+                                }
+                            }
                         }
 
                         TahoeSymbol {
@@ -1404,6 +1556,15 @@ PanelWindow {
                         anchors.verticalCenterOffset: 1
                         scale: knob.scale
                         z: 6
+
+                        Behavior on x {
+                            enabled: !dragArea.pressed && !gs.userDragging
+                            NumberAnimation {
+                                id: knobFollowAnimation
+                                duration: Motion.elementMove(root.settingsService)
+                                easing.type: Motion.emphasizedDecel
+                            }
+                        }
                     }
 
                     Rectangle {
@@ -1449,6 +1610,8 @@ PanelWindow {
                         }
 
                         onPressed: function(mouse) {
+                            fillFollowAnimation.stop();
+                            knobFollowAnimation.stop();
                             gs.userDragging = true;
                             dragArea.applyValue(mouse.x);
                         }

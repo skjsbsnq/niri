@@ -6,6 +6,39 @@ settings_file="$state_dir/desktop-settings.json"
 pid_file="$state_dir/wallpaper-prestart.pids"
 
 mkdir -p "$state_dir"
+
+terminate_recorded_wallpapers() {
+  [[ -f "$pid_file" ]] || return 0
+
+  local -a pids=()
+  local pid
+  while IFS= read -r pid; do
+    [[ "$pid" =~ ^[0-9]+$ ]] || continue
+    pids+=("$pid")
+    kill -TERM -- "-$pid" 2>/dev/null || kill "$pid" 2>/dev/null || true
+  done <"$pid_file"
+
+  local attempt
+  for attempt in {1..20}; do
+    local alive=false
+    for pid in "${pids[@]}"; do
+      if kill -0 "$pid" 2>/dev/null; then
+        alive=true
+        break
+      fi
+    done
+    [[ "$alive" == false ]] && break
+    sleep 0.05
+  done
+
+  for pid in "${pids[@]}"; do
+    if kill -0 "$pid" 2>/dev/null; then
+      kill -KILL -- "-$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null || true
+    fi
+  done
+}
+
+terminate_recorded_wallpapers
 : >"$pid_file"
 
 command -v python3 >/dev/null 2>&1 || exit 0

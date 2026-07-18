@@ -27,8 +27,8 @@ Item {
     readonly property string dynamicWallpaperCommand: settingsAdapter.dynamicWallpaperCommand
     readonly property string effectiveDynamicWallpaperCommand: String(dynamicWallpaperCommand || "").trim()
     readonly property string dynamicWallpaperExampleCommand: "linux-wallpaperengine --screen-root {output} --assets-dir \"$HOME/.local/share/Steam/steamapps/workshop/content/431960\" WALLPAPER_ID"
-    // Live wallpaper engine budget. Active fps is capped low so glass sampling
-    // is not forced to full-screen damage at 30Hz; idle drops further (or pauses).
+    // Live wallpaper engine budget. Active fps is capped low so glass sampling is not forced to
+    // full-screen damage at 30Hz; the lower budget applies on the next safe process start.
     readonly property int wallpaperEngineFps: settingsAdapter.wallpaperEngineFps
     readonly property int wallpaperEngineIdleFps: settingsAdapter.wallpaperEngineIdleFps
     readonly property int wallpaperEngineIdleSeconds: settingsAdapter.wallpaperEngineIdleSeconds

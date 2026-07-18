@@ -31,11 +31,42 @@ class WallpaperIdleBudgetTests(unittest.TestCase):
         self.assertIn("wallpaperIdleMonitor", text)
         self.assertIn("property bool sessionIdle:", text)
         self.assertIn("effectiveWallpaperFps", text)
+        self.assertIn("property int appliedWallpaperFps:", text)
         self.assertIn("liveWallpaperAllowed", text)
         self.assertIn("function applyWallpaperFpsBudget(", text)
+        self.assertIn("function prepareWallpaperProcessStart(", text)
         self.assertIn("wallpaperPauseWhenIdle", text)
+        self.assertIn("liveWallpaperReadyTimer", text)
+        self.assertIn("prestartedWallpaperTakeoverTimer", text)
+        self.assertIn("function takeOverPrestartedWallpaper(", text)
+        self.assertIn("kill -KILL", text)
+        self.assertNotIn("onSessionIdleChanged:", text)
+        self.assertNotIn("onEffectiveWallpaperFpsChanged:", text)
+        self.assertIn("root.appliedWallpaperFps", text)
         # Idle path must stop live engine when pause is enabled.
         self.assertIn("&& liveWallpaperAllowed", text)
+
+    def test_live_wallpaper_startup_never_reveals_static_fallback(self) -> None:
+        text = WALLPAPER.read_text(encoding="utf-8")
+        dynamic_suppression = re.search(
+            r"readonly property bool dynamicSuppressesStatic:(.*?)"
+            r"readonly property bool externalSuppressesStatic:",
+            text,
+            re.S,
+        )
+        external_suppression = re.search(
+            r"readonly property bool externalSuppressesStatic:(.*?)"
+            r"readonly property bool showStaticWallpaper:",
+            text,
+            re.S,
+        )
+
+        self.assertIsNotNone(dynamic_suppression)
+        self.assertIsNotNone(external_suppression)
+        self.assertNotIn("dynamicActive", dynamic_suppression.group(1))
+        self.assertNotIn("dynamicActive", external_suppression.group(1))
+        self.assertIn("!dynamicLaunchFailed", dynamic_suppression.group(1))
+        self.assertIn("!externalLaunchFailed", external_suppression.group(1))
 
     def test_wallpaper_page_exposes_budget_controls(self) -> None:
         text = PAGE.read_text(encoding="utf-8")
@@ -52,6 +83,8 @@ class WallpaperIdleBudgetTests(unittest.TestCase):
         self.assertIn("wallpaperEngineFps", text)
         self.assertIn("inject_fps", text)
         self.assertIn("settings_fps_budget", text)
+        self.assertIn("terminate_recorded_wallpapers", text)
+        self.assertIn("kill -KILL", text)
         self.assertRegex(text, r"min\(20")
 
 

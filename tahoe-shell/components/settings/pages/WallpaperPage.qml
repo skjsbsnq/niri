@@ -175,10 +175,10 @@ Flickable {
                 label: "空闲帧率"
                 detail: {
                     if (!page.panel || !page.panel.settingsService)
-                        return "空闲后自动降低动态壁纸帧率";
+                        return "空闲后的下次安全启动使用较低帧率";
                     var sec = page.panel.settingsService.wallpaperEngineIdleSeconds;
                     var fps = page.panel.settingsService.wallpaperEngineIdleFps;
-                    return "无输入 " + sec + "s 后降到 " + fps + " fps（仍低于活动上限）";
+                    return "无输入 " + sec + "s 后，下次启动使用 " + fps + " fps；不会为调速打断当前画面";
                 }
                 iconCode: "\ue192"
                 enabled: !!(page.panel && page.panel.settingsService

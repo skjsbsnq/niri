@@ -17,7 +17,7 @@ PanelWindow {
     property bool onBattery: false
 
     readonly property bool settingsReady: settingsService && settingsService.loaded
-    // Idle budget for live wallpaperengine (ext-idle-notify). Short of lock timeout.
+    // Idle state for the next safe wallpaperengine start (or optional pause), short of lock timeout.
     readonly property int wallpaperIdleSeconds: settingsService
         ? Math.max(15, Number(settingsService.wallpaperEngineIdleSeconds) || 60)
         : 60
@@ -32,6 +32,9 @@ PanelWindow {
     readonly property int effectiveWallpaperFps: (sessionIdle || onBattery)
         ? wallpaperIdleFps
         : wallpaperActiveFps
+    // --fps is a process-start option. Keep the running budget stable so an idle transition does
+    // not tear down and recreate the wallpaper layer on the first pointer event.
+    property int appliedWallpaperFps: 15
     readonly property bool liveWallpaperAllowed: !fullscreenActive
         && (!sessionIdle || !wallpaperPauseWhenIdle)
 
@@ -40,7 +43,7 @@ PanelWindow {
         && settingsService.effectiveDynamicWallpaperCommand.length > 0
         && liveWallpaperAllowed
     readonly property string dynamicCommand: dynamicDesired
-        ? applyWallpaperFpsBudget(resolveDynamicCommand(settingsService.effectiveDynamicWallpaperCommand), effectiveWallpaperFps)
+        ? applyWallpaperFpsBudget(resolveDynamicCommand(settingsService.effectiveDynamicWallpaperCommand), appliedWallpaperFps)
         : ""
     readonly property bool externalDesired: settingsReady
         && settingsService.wallpaperMode === "external"
@@ -156,7 +159,7 @@ PanelWindow {
 
         // Budget from DesktopSettings (active/idle). Hard cap 20 for background.
         var fps = Math.max(1, Math.min(20, Math.round(numberValue(entry.fps, root.wallpaperActiveFps))));
-        fps = Math.min(fps, root.effectiveWallpaperFps);
+        fps = Math.min(fps, root.appliedWallpaperFps);
         parts.push("--fps", String(fps));
 
         if (entry.silent) {
@@ -231,14 +234,14 @@ PanelWindow {
             : "";
     }
 
-    function handleSessionIdleChanged() {
-        // Idle: lower fps (restart engine) or pause to static fallback.
-        // Resume: restore active budget.
-        dynamicLaunchFailed = false;
-        externalLaunchFailed = false;
+    function prepareWallpaperProcessStart() {
+        var next = Math.max(1, Math.min(20, root.effectiveWallpaperFps));
+        if (root.appliedWallpaperFps === next)
+            return false;
+
+        root.appliedWallpaperFps = next;
         refreshExternalCommand();
-        syncDynamicProcess();
-        syncExternalProcess();
+        return true;
     }
 
     function stopPrestartedWallpaper() {
@@ -247,10 +250,18 @@ PanelWindow {
                 "sh",
                 "-lc",
                 "pidfile=\"$1\"; [ -f \"$pidfile\" ] || exit 0; " +
+                "pids=''; " +
                 "while IFS= read -r pid; do " +
                 "case \"$pid\" in ''|*[!0-9]*) continue ;; esac; " +
+                "pids=\"$pids $pid\"; " +
                 "kill -TERM -- -\"$pid\" 2>/dev/null || kill \"$pid\" 2>/dev/null || true; " +
-                "done < \"$pidfile\"; rm -f \"$pidfile\"",
+                "done < \"$pidfile\"; " +
+                "i=0; while [ \"$i\" -lt 20 ]; do alive=0; " +
+                "for pid in $pids; do kill -0 \"$pid\" 2>/dev/null && alive=1; done; " +
+                "[ \"$alive\" -eq 0 ] && break; sleep 0.05; i=$((i + 1)); done; " +
+                "for pid in $pids; do if kill -0 \"$pid\" 2>/dev/null; then " +
+                "kill -KILL -- -\"$pid\" 2>/dev/null || kill -KILL \"$pid\" 2>/dev/null || true; " +
+                "fi; done; rm -f \"$pidfile\"",
                 "sh",
                 prestartedWallpaperPidFile
             ],
@@ -292,7 +303,10 @@ PanelWindow {
         prestartedWallpaperAdopted = true;
         prestartedWallpaperMode = mode;
         adoptedDynamicCommand = mode === "dynamic" ? dynamicCommand : "";
-        dynamicActive = true;
+        // A prestarted process only bridges shell startup. Start a managed process on the next
+        // event-loop turn, then clean up the bridge after the managed surface has settled.
+        dynamicActive = false;
+        prestartedWallpaperTakeoverTimer.restart();
         return true;
     }
 
@@ -300,11 +314,24 @@ PanelWindow {
         if (!prestartedWallpaperAdopted)
             return;
 
+        prestartedWallpaperTakeoverTimer.stop();
         prestartedWallpaperAdopted = false;
         prestartedWallpaperReleased = true;
         prestartedWallpaperMode = "";
         adoptedDynamicCommand = "";
         stopPrestartedWallpaper();
+    }
+
+    function takeOverPrestartedWallpaper() {
+        if (!prestartedWallpaperAdopted)
+            return;
+
+        prestartedWallpaperAdopted = false;
+        prestartedWallpaperReleased = true;
+        prestartedWallpaperMode = "";
+        adoptedDynamicCommand = "";
+        syncDynamicProcess();
+        syncExternalProcess();
     }
 
     function syncDynamicProcess() {
@@ -322,6 +349,11 @@ PanelWindow {
             return;
         }
 
+        if (!dynamicProcess.running
+                && !prestartedWallpaperAdopted
+                && prepareWallpaperProcessStart())
+            return;
+
         if (prestartedWallpaperMode === "dynamic"
                 && prestartedWallpaperAdopted
                 && adoptedDynamicCommand !== dynamicCommand)
@@ -329,7 +361,6 @@ PanelWindow {
 
         if (tryAdoptPrestartedWallpaper("dynamic")) {
             dynamicLaunchFailed = false;
-            dynamicActive = true;
             return;
         }
 
@@ -359,9 +390,13 @@ PanelWindow {
             return;
         }
 
+        if (!externalProcess.running
+                && !prestartedWallpaperAdopted
+                && prepareWallpaperProcessStart())
+            return;
+
         if (tryAdoptPrestartedWallpaper("external")) {
             externalLaunchFailed = false;
-            dynamicActive = true;
             return;
         }
 
@@ -393,15 +428,6 @@ PanelWindow {
         externalLaunchFailed = false;
         syncExternalProcess();
     }
-    onSessionIdleChanged: root.handleSessionIdleChanged()
-    onEffectiveWallpaperFpsChanged: {
-        if (!root.completed || (root.sessionIdle && root.wallpaperPauseWhenIdle))
-            return;
-        // Active/idle budget changed while engine should run — rebuild command.
-        root.refreshExternalCommand();
-        root.syncDynamicProcess();
-        root.syncExternalProcess();
-    }
     onLiveWallpaperAllowedChanged: {
         if (!root.completed)
             return;
@@ -410,6 +436,7 @@ PanelWindow {
         root.syncExternalProcess();
     }
     Component.onCompleted: {
+        appliedWallpaperFps = effectiveWallpaperFps;
         completed = true;
         prestartedWallpaperFile.reload();
         activeWallpaperFile.reload();
@@ -417,8 +444,8 @@ PanelWindow {
         syncExternalProcess();
     }
 
-    // Separate from lock IdleMonitor: shorter timeout so live wallpaper
-    // drops fps (or pauses) before the session locks.
+    // Separate from lock IdleMonitor: tracks the lower next-start budget or optional pause before
+    // the session locks, without restarting a running wallpaper surface.
     IdleMonitor {
         id: wallpaperIdleMonitor
         enabled: root.settingsReady
@@ -432,8 +459,16 @@ PanelWindow {
     Item {
         id: staticLayer
         anchors.fill: parent
-        visible: root.showStaticWallpaper
+        visible: root.settingsReady
+        opacity: root.showStaticWallpaper ? 1.0 : 0.0
         clip: true
+
+        Behavior on opacity {
+            NumberAnimation {
+                duration: 160
+                easing.type: Motion.emphasizedDecel
+            }
+        }
 
         readonly property real zoom: root.launchpadOpen ? Motion.launchpadWallpaperScale : 1.0
         readonly property real dimOpacity: root.launchpadOpen ? Motion.launchpadWallpaperDim : 0.0
@@ -483,8 +518,8 @@ PanelWindow {
         running: false
         command: ["sh", "-lc", root.dynamicCommand]
         onStarted: {
-            root.dynamicActive = true;
             root.dynamicLaunchFailed = false;
+            liveWallpaperReadyTimer.restart();
             root.schedulePrestartedWallpaperCleanup();
         }
         onRunningChanged: {
@@ -494,8 +529,10 @@ PanelWindow {
         onExited: function(code, exitStatus) {
             if (root.dynamicDesired && root.dynamicCommand.length > 0 && !root.dynamicRestartPending)
                 root.dynamicLaunchFailed = true;
-            if (!externalProcess.running)
+            if (!externalProcess.running) {
+                liveWallpaperReadyTimer.stop();
                 root.dynamicActive = false;
+            }
         }
     }
 
@@ -504,8 +541,8 @@ PanelWindow {
         running: false
         command: ["sh", "-lc", root.externalCommand]
         onStarted: {
-            root.dynamicActive = true;
             root.externalLaunchFailed = false;
+            liveWallpaperReadyTimer.restart();
             root.schedulePrestartedWallpaperCleanup();
         }
         onRunningChanged: {
@@ -515,9 +552,28 @@ PanelWindow {
         onExited: function(code, exitStatus) {
             if (root.externalDesired && root.externalCommand.length > 0 && !root.externalRestartPending)
                 root.externalLaunchFailed = true;
-            if (!dynamicProcess.running)
+            if (!dynamicProcess.running) {
+                liveWallpaperReadyTimer.stop();
                 root.dynamicActive = false;
+            }
         }
+    }
+
+    Timer {
+        id: liveWallpaperReadyTimer
+        interval: 1000
+        repeat: false
+        onTriggered: {
+            if (dynamicProcess.running || externalProcess.running)
+                root.dynamicActive = true;
+        }
+    }
+
+    Timer {
+        id: prestartedWallpaperTakeoverTimer
+        interval: 50
+        repeat: false
+        onTriggered: root.takeOverPrestartedWallpaper()
     }
 
     Timer {

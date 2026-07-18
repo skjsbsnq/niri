@@ -444,13 +444,9 @@ assert_niri_config_vrr_policy() {
 
   [[ -f "$config" ]] || return
 
-  local enabled
-  enabled="$(grep -Ec '^[[:space:]]*variable-refresh-rate[[:space:]]*(//.*)?$' "$config" || true)"
-  if [[ "$enabled" -ne 1 ]]; then
-    die "niri config must contain exactly one always-on variable-refresh-rate policy: $config"
-  fi
-  if grep -nE '^[[:space:]]*variable-refresh-rate[[:space:]]+on-demand=' "$config"; then
-    die "niri config must use always-on variable-refresh-rate, not on-demand: $config"
+  # Active (uncommented) VRR must stay off; on-demand is also rejected.
+  if grep -nE '^[[:space:]]*variable-refresh-rate([[:space:]]|//|$)' "$config"; then
+    die "niri config must keep variable-refresh-rate disabled (commented out or absent): $config"
   fi
 }
 

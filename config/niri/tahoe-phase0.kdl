@@ -23,9 +23,9 @@ output "eDP-2" {
     scale 1.25
     transform "normal"
     position x=0 y=0
-    // Keep the panel at its native 239.998 Hz ceiling while allowing it to
-    // self-refresh below that ceiling when the compositor has no new frame.
-    variable-refresh-rate
+    // Keep the panel at its native 239.998 Hz fixed refresh.
+    // VRR is intentionally off (variable-refresh-rate disabled).
+    // variable-refresh-rate
 }
 
 // tahoe-managed: begin layout

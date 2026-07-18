@@ -177,14 +177,11 @@ check_niri_vrr_policy() {
     return
   fi
 
-  local enabled
-  enabled="$(grep -Ec '^[[:space:]]*variable-refresh-rate[[:space:]]*(//.*)?$' "$NIRI_CONFIG_SRC" || true)"
-  if [[ "$enabled" -ne 1 ]]; then
-    fail "niri Tahoe config must contain exactly one always-on variable-refresh-rate policy"
-  elif grep -nE '^[[:space:]]*variable-refresh-rate[[:space:]]+on-demand=' "$NIRI_CONFIG_SRC"; then
-    fail "niri Tahoe config must use the always-on VRR policy, not on-demand"
+  # Active (uncommented) VRR must stay off; on-demand is also rejected.
+  if grep -nE '^[[:space:]]*variable-refresh-rate([[:space:]]|//|$)' "$NIRI_CONFIG_SRC"; then
+    fail "niri Tahoe config must keep variable-refresh-rate disabled (commented out or absent)"
   else
-    log "niri config enables the always-on VRR policy"
+    log "niri config keeps variable-refresh-rate disabled"
   fi
 }
 

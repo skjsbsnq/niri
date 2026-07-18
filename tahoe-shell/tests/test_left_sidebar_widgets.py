@@ -68,6 +68,145 @@ class LeftSidebarWidgetTests(unittest.TestCase):
         # No card stroke.
         self.assertNotIn("border.width: 1", text)
 
+    def test_system_process_rows_use_stable_pid_model_and_transitions(self) -> None:
+        view = SYSTEM.read_text(encoding="utf-8")
+        service = SYSTEM_STATS.read_text(encoding="utf-8")
+
+        # R11 service contract: one long-lived QObject per live PID, with
+        # fields updated in place and retired after the remove transition.
+        for marker in (
+            "id: processState",
+            "id: processEntryFactory",
+            "readonly property var processes: processState.entries",
+            "function mergeProcessSnapshot(value)",
+            "var cache = processState.cache || Object.create(null)",
+            '"modelKey": String(pid) + ":"',
+            "property string startTime",
+            "processState.entries = next",
+            "removedEntry.destroy(1000)",
+            "mergeProcessSnapshot(packet.processes)",
+        ):
+            self.assertIn(marker, service)
+        self.assertNotIn('setValue("processes"', service)
+
+        # The view may rebuild its ordered array, but ScriptModel must preserve
+        # surviving process-instance delegates and surface structural changes
+        # as motion. PID remains the display/operation field; /proc starttime
+        # prevents an intervening PID reuse from inheriting the old delegate.
+        self.assertIn('objectProp: "modelKey"', view)
+        self.assertIn("values: root.visibleProcessList", view)
+        self.assertIn("add: Transition", view)
+        self.assertIn("remove: Transition", view)
+        self.assertIn("move: Transition", view)
+        self.assertIn("displaced: Transition", view)
+        self.assertIn("Motion.elementMove(root.settingsService)", view)
+        self.assertIn("Motion.fadeFast(root.settingsService)", view)
+        self.assertIn("return Number(a.pid) - Number(b.pid);", view)
+        self.assertIn('"startTime": String(proc.startTime || "")', view)
+        self.assertIn("root.openProcessMenu(menuProc, anchorRect)", view)
+        self.assertNotIn("model: root.visibleProcessList", view)
+
+        fast_handler = re.search(
+            r"function onFastDataChanged\(\) \{(?P<body>[\s\S]*?)\n        \}",
+            view,
+        )
+        self.assertIsNotNone(fast_handler)
+        assert fast_handler
+        self.assertNotIn("refreshProcessLists", fast_handler.group("body"))
+
+        medium_handler = re.search(
+            r"function onMediumDataChanged\(\) \{(?P<body>[\s\S]*?)\n        \}",
+            view,
+        )
+        self.assertIsNotNone(medium_handler)
+        assert medium_handler
+        self.assertIn("root.refreshProcessLists();", medium_handler.group("body"))
+        self.assertNotIn("processMenuOpen", medium_handler.group("body"))
+
+    def test_system_motion_polish_is_reduced_safe_and_eased(self) -> None:
+        text = SYSTEM.read_text(encoding="utf-8")
+
+        # Activity arcs interpolate their display value; Canvas repaint follows
+        # the animated value rather than the raw 1-2 second sample.
+        ring = re.search(
+            r"component ActivityRing: Item \{(?P<body>[\s\S]*?)"
+            r"\n    component StatCell:",
+            text,
+        )
+        self.assertIsNotNone(ring)
+        assert ring
+        ring_body = ring.group("body")
+        for marker in (
+            "property real displayProgress: progressTarget",
+            "Behavior on displayProgress",
+            "enabled: !Motion.reducedMotion(root.settingsService)",
+            "SmoothedAnimation",
+            "duration: 500",
+            "property real p: ring.displayProgress",
+            "ringCanvas.p",
+            "onRingColorChanged: ringCanvas.requestPaint()",
+        ):
+            self.assertIn(marker, ring_body)
+        self.assertNotIn("SpringAnimation", ring_body)
+
+        # Expanded process chrome/list and the card geometry share ccMorph;
+        # reduced profile collapses the duration to zero.
+        process_block = re.search(
+            r"id: procCard(?P<body>[\s\S]*?)\n    // --- components ---",
+            text,
+        )
+        self.assertIsNotNone(process_block)
+        assert process_block
+        process_body = process_block.group("body")
+        for marker in (
+            "processChromeProgress",
+            "8 * root.processChromeProgress",
+            "Behavior on height",
+            'objectProp: "modelKey"',
+            "Behavior on color",
+        ):
+            self.assertIn(marker, process_body)
+        self.assertIn("Motion.ccMorphDurationMs", text)
+        self.assertIn("Motion.reducedMotion(settingsService) ? 0", text)
+        self.assertIn("Behavior on processChromeProgress", text)
+
+        tabs_block = text.split("// Expanded chrome: tabs + search", 1)[1].split(
+            "// Sort headers when expanded", 1
+        )[0]
+        self.assertIn("height: 26 * root.processChromeProgress", tabs_block)
+        self.assertIn("opacity: root.processChromeProgress", tabs_block)
+        self.assertIn("enabled: root.processesExpanded", tabs_block)
+
+        sort_block = text.split("// Sort headers when expanded", 1)[1].split(
+            "id: procListHost", 1
+        )[0]
+        self.assertIn("height: 22 * root.processChromeProgress", sort_block)
+        self.assertIn("opacity: root.processChromeProgress", sort_block)
+        self.assertIn("enabled: root.processesExpanded", sort_block)
+
+        list_host = text.split("id: procListHost", 1)[1].split(
+            "ListView {", 1
+        )[0]
+        self.assertIn("processList.contentHeight", list_host)
+        self.assertIn("Behavior on height", list_host)
+        self.assertIn("duration: root.processMorphDuration", list_host)
+
+        # Disk/battery fill and interactive colors use eased/tokenized paths.
+        disk = text.split("// Disk", 1)[1].split("// Battery", 1)[0]
+        battery = text.split("// Battery", 1)[1].split("// --- Processes", 1)[0]
+        for block in (disk, battery):
+            self.assertIn("Behavior on width", block)
+            self.assertIn("Motion.elementResize(root.settingsService)", block)
+            self.assertNotIn("SpringAnimation", block)
+
+        seg_tab = text.split("component SegTab: Rectangle", 1)[1].split(
+            "component SortHeader: Rectangle", 1
+        )[0]
+        sort_header = text.split("component SortHeader: Rectangle", 1)[1]
+        self.assertGreaterEqual(seg_tab.count("ColorAnimation"), 2)
+        self.assertGreaterEqual(sort_header.count("ColorAnimation"), 2)
+        self.assertIn("root.rowActive", sort_header)
+
     def test_process_menu_shell_path_untouched(self) -> None:
         text = SHELL_QML.read_text(encoding="utf-8")
         self.assertIn("prepareProcessMenu", text)

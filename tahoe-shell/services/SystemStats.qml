@@ -45,7 +45,33 @@ Item {
     property real diskUsedGB: 0
     property real diskTotalGB: 0
     property string uptimeText: ""
-    property var processes: []
+
+    // R11: keep one QObject per live PID so ScriptModel can preserve the
+    // delegate while fields and sort order change on each medium tick.
+    QtObject {
+        id: processState
+
+        property var entries: []
+        property var cache: Object.create(null)
+    }
+
+    Component {
+        id: processEntryFactory
+
+        QtObject {
+            property string modelKey: ""
+            property int pid: 0
+            property string startTime: ""
+            property string user: ""
+            property int uid: -1
+            property string name: "process"
+            property real cpuPercent: 0
+            property int memKB: 0
+            property string cmdline: "process"
+        }
+    }
+
+    readonly property var processes: processState.entries
 
     signal fastDataChanged()
     signal mediumDataChanged()
@@ -98,9 +124,12 @@ Item {
             var pid = finiteInt(item.pid, 0, 1);
             if (pid <= 0)
                 continue;
+            var startTime = textValue(item.startTime, "");
 
             result.push({
+                "modelKey": String(pid) + ":" + (startTime.length > 0 ? startTime : "unknown"),
                 "pid": pid,
+                "startTime": startTime,
                 "user": textValue(item.user, ""),
                 "uid": finiteInt(item.uid, -1, -1),
                 "name": textValue(item.name, "process"),
@@ -110,6 +139,62 @@ Item {
             });
         }
         return result;
+    }
+
+    function mergeProcessSnapshot(value) {
+        var incoming = sanitizeProcesses(value);
+        var cache = processState.cache || Object.create(null);
+        var activeKeys = Object.create(null);
+        var seenPids = Object.create(null);
+        var next = [];
+
+        for (var i = 0; i < incoming.length; i++) {
+            var candidate = incoming[i];
+            if (!candidate)
+                continue;
+
+            var pid = finiteInt(candidate.pid, 0, 1);
+            var pidKey = String(pid);
+            var key = textValue(candidate.modelKey, pidKey + ":unknown");
+            if (pid <= 0 || seenPids[pidKey] || activeKeys[key])
+                continue;
+
+            var entry = cache[key];
+            if (!entry) {
+                entry = processEntryFactory.createObject(root);
+                if (!entry)
+                    continue;
+                cache[key] = entry;
+            }
+
+            entry.modelKey = key;
+            entry.pid = pid;
+            entry.startTime = candidate.startTime;
+            entry.user = candidate.user;
+            entry.uid = candidate.uid;
+            entry.name = candidate.name;
+            entry.cpuPercent = candidate.cpuPercent;
+            entry.memKB = candidate.memKB;
+            entry.cmdline = candidate.cmdline;
+            seenPids[pidKey] = true;
+            activeKeys[key] = true;
+            next.push(entry);
+        }
+
+        for (var cachedKey in cache) {
+            if (activeKeys[cachedKey])
+                continue;
+            var removedEntry = cache[cachedKey];
+            delete cache[cachedKey];
+            // Keep the retired wrapper alive while ListView runs its remove
+            // transition; it is no longer reachable from the public model.
+            if (removedEntry && removedEntry.destroy)
+                removedEntry.destroy(1000);
+        }
+
+        processState.cache = cache;
+        processState.entries = next;
+        return next;
     }
 
     function parseStatsLine(line) {
@@ -151,7 +236,7 @@ Item {
             setValue("cpuFrequencyGHz", finiteNumber(packet.cpuFrequencyGHz, 0, 0));
             setValue("gpuTempC", finiteNumber(packet.gpuTempC, 0, 0));
             setValue("gpuUsage", finiteNumber(packet.gpuUsage, 0, 0, 100));
-            setValue("processes", sanitizeProcesses(packet.processes));
+            mergeProcessSnapshot(packet.processes);
             if (!root.hasMediumData)
                 root.hasMediumData = true;
             root.mediumDataChanged();
@@ -322,8 +407,13 @@ Item {
             "  if (cmd == \"\") cmd=comm;",
             "  if (comm == \"\") comm=cmd;",
             "  if (pid <= 0) next;",
+            "  start_time=\"\"; stat_path=\"/proc/\" pid \"/stat\";",
+            "  if ((getline stat_line < stat_path) > 0) {",
+            "    close(stat_path); sub(/^.*\\) /, \"\", stat_line);",
+            "    split(stat_line, stat_fields, /[[:space:]]+/); start_time=stat_fields[20];",
+            "  } else close(stat_path);",
             "  if (count > 0) printf \",\";",
-            "  printf \"{\\\"pid\\\":%d,\\\"user\\\":\\\"%s\\\",\\\"uid\\\":%d,\\\"name\\\":\\\"%s\\\",\\\"cpuPercent\\\":%.1f,\\\"memKB\\\":%d,\\\"cmdline\\\":\\\"%s\\\"}\", pid, esc(user), uid, esc(comm), cpu, rss, esc(cmd);",
+            "  printf \"{\\\"pid\\\":%d,\\\"startTime\\\":\\\"%s\\\",\\\"user\\\":\\\"%s\\\",\\\"uid\\\":%d,\\\"name\\\":\\\"%s\\\",\\\"cpuPercent\\\":%.1f,\\\"memKB\\\":%d,\\\"cmdline\\\":\\\"%s\\\"}\", pid, esc(start_time), esc(user), uid, esc(comm), cpu, rss, esc(cmd);",
             "  count++;",
             "}",
             "END { printf \"]\" }'",

@@ -2,6 +2,7 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import QtQuick.Layouts
+import Quickshell
 import "Motion.js" as Motion
 import "settings/SettingsTheme.js" as Theme
 
@@ -43,6 +44,8 @@ Item {
     readonly property color dangerRed: Theme.danger(darkMode)
     readonly property color colorNetDown: darkMode ? "#0a84ff" : "#007aff"
     readonly property color colorNetUp: darkMode ? "#ff9f0a" : "#ff9500"
+    readonly property color rowActive: Qt.rgba(accentBlue.r, accentBlue.g, accentBlue.b, darkMode ? 0.24 : 0.16)
+    readonly property int processMorphDuration: Motion.reducedMotion(settingsService) ? 0 : Motion.ccMorphDurationMs
 
     readonly property int processRowHeight: 36
     readonly property int processLimit: 50
@@ -80,9 +83,17 @@ Item {
     property bool sortAsc: false
     property string searchText: ""
     property var filteredList: []
-    // Cached visible rows so Repeater gets a stable JS-array model (not a
-    // function call that re-allocates every binding re-eval).
+    // Ordered arrays are rebuilt as filters/sorts change, but every element is
+    // a stable SystemStats QObject keyed by PID. ScriptModel keeps delegates.
     property var visibleProcessList: []
+    property real processChromeProgress: processesExpanded ? 1 : 0
+
+    Behavior on processChromeProgress {
+        NumberAnimation {
+            duration: root.processMorphDuration
+            easing.type: Motion.emphasizedDecel
+        }
+    }
 
     onProcTabIdxChanged: refreshProcessLists()
     onSortColChanged: refreshProcessLists()
@@ -137,13 +148,13 @@ Item {
             root.smoothMaxNet = rawNetMax > 0 ? rawNetMax : 1024;
             slideAnim.duration = 1000;
             slideAnim.restart();
-            if (!root.processMenuOpen)
-                root.refreshProcessLists();
         }
 
         function onMediumDataChanged() {
-            if (!root.processMenuOpen)
-                root.refreshProcessLists();
+            // ProcessMenu owns a detached snapshot, so the visible model can
+            // keep reconciling. This ensures retired wrappers leave every
+            // ScriptModel before SystemStats destroys them.
+            root.refreshProcessLists();
         }
     }
 
@@ -201,6 +212,20 @@ Item {
         var proc = delegateItem ? delegateItem.proc : null;
         if (!proc || !proc.pid)
             return;
+        // Do not leak the live cache QObject into a menu that can outlive the
+        // next stats tick. Keep the clicked row's display/action fields stable;
+        // destructive PID/starttime revalidation belongs to ProcessMenu.
+        var menuProc = {
+            "modelKey": String(proc.modelKey || ""),
+            "pid": Number(proc.pid) || 0,
+            "startTime": String(proc.startTime || ""),
+            "user": String(proc.user || ""),
+            "uid": Number(proc.uid),
+            "name": String(proc.name || "process"),
+            "cpuPercent": Number(proc.cpuPercent) || 0,
+            "memKB": Number(proc.memKB) || 0,
+            "cmdline": String(proc.cmdline || proc.name || "process")
+        };
         var rect = null;
         if (root.sidebarPanel && delegateItem) {
             try {
@@ -218,7 +243,7 @@ Item {
                 "height": Math.round(Number(rect.height) || 0)
             };
         }
-        root.openProcessMenu(proc, anchorRect);
+        root.openProcessMenu(menuProc, anchorRect);
     }
 
     function getFilteredProcesses() {
@@ -262,7 +287,10 @@ Item {
                 va = a.pid;
                 vb = b.pid;
             }
-            return asc ? (va - vb) : (vb - va);
+            var delta = Number(va) - Number(vb);
+            if (delta === 0)
+                return Number(a.pid) - Number(b.pid);
+            return asc ? delta : -delta;
         });
         return result;
     }
@@ -505,9 +533,16 @@ Item {
                     anchors.left: parent.left
                     anchors.top: parent.top
                     anchors.bottom: parent.bottom
-                    width: parent.width * parent.perc
+                    width: parent.width * Math.max(0, Math.min(1, parent.perc))
                     radius: 18
                     color: Qt.rgba(root.colorDisk.r, root.colorDisk.g, root.colorDisk.b, 0.16)
+
+                    Behavior on width {
+                        NumberAnimation {
+                            duration: Motion.elementResize(root.settingsService)
+                            easing.type: Motion.emphasizedDecel
+                        }
+                    }
                 }
 
                 Row {
@@ -556,9 +591,16 @@ Item {
                     anchors.left: parent.left
                     anchors.top: parent.top
                     anchors.bottom: parent.bottom
-                    width: parent.width * parent.perc
+                    width: parent.width * Math.max(0, Math.min(1, parent.perc))
                     radius: 18
                     color: Qt.rgba(root.colorBattery.r, root.colorBattery.g, root.colorBattery.b, 0.16)
+
+                    Behavior on width {
+                        NumberAnimation {
+                            duration: Motion.elementResize(root.settingsService)
+                            easing.type: Motion.emphasizedDecel
+                        }
+                    }
                 }
 
                 Row {
@@ -596,8 +638,12 @@ Item {
             SoftCard {
                 id: procCard
                 width: parent.width
+                // The chrome and list hosts animate their own heights with the
+                // ccMorph token; this binding makes the card morph with them
+                // without a second interceptor on the same geometry path.
                 height: procInner.implicitHeight + 20
                 cardIndex: 5
+                clip: true
 
                 Column {
                     id: procInner
@@ -605,7 +651,7 @@ Item {
                     anchors.right: parent.right
                     anchors.top: parent.top
                     anchors.margins: 10
-                    spacing: 8
+                    spacing: 0
 
                     Row {
                         width: parent.width
@@ -638,11 +684,16 @@ Item {
                         Item { width: parent.width; height: 1 } // spacer noop
                     }
 
+                    Item { width: 1; height: 8 }
+
                     // Expanded chrome: tabs + search
                     Row {
                         width: parent.width
                         spacing: 6
-                        visible: root.processesExpanded
+                        height: 26 * root.processChromeProgress
+                        opacity: root.processChromeProgress
+                        enabled: root.processesExpanded
+                        clip: true
 
                         SegTab {
                             label: "全部"
@@ -693,11 +744,15 @@ Item {
                         }
                     }
 
+                    Item { width: 1; height: 8 * root.processChromeProgress }
+
                     // Sort headers when expanded
                     Row {
                         width: parent.width
-                        height: 22
-                        visible: root.processesExpanded
+                        height: 22 * root.processChromeProgress
+                        opacity: root.processChromeProgress
+                        enabled: root.processesExpanded
+                        clip: true
                         spacing: 6
                         Text {
                             width: parent.width - 200
@@ -711,26 +766,91 @@ Item {
                         SortHeader { title: "PID"; colIdx: 2; width: 48 }
                     }
 
-                    Column {
-                        id: procListCol
-                        width: parent.width
-                        spacing: 2
+                    Item { width: 1; height: 8 * root.processChromeProgress }
 
-                        Repeater {
-                            // JS array model (same pattern as pre-T19 process list).
-                            model: root.visibleProcessList
+                    Item {
+                        id: procListHost
+                        width: parent.width
+                        height: root.visibleProcessList.length > 0 ? processList.contentHeight : 36
+                        clip: true
+
+                        Behavior on height {
+                            NumberAnimation {
+                                duration: root.processMorphDuration
+                                easing.type: Motion.emphasizedDecel
+                            }
+                        }
+
+                        ListView {
+                            id: processList
+
+                            anchors.fill: parent
+                            interactive: false
+                            boundsBehavior: Flickable.StopAtBounds
+                            spacing: 2
+                            cacheBuffer: (root.processRowHeight + spacing) * root.processLimit
+                            model: ScriptModel {
+                                objectProp: "modelKey"
+                                values: root.visibleProcessList
+                            }
+
+                            add: Transition {
+                                NumberAnimation {
+                                    property: "opacity"
+                                    from: 0
+                                    to: 1
+                                    duration: Motion.fadeFast(root.settingsService)
+                                    easing.type: Motion.standardDecel
+                                }
+                            }
+
+                            remove: Transition {
+                                NumberAnimation {
+                                    property: "opacity"
+                                    from: 1
+                                    to: 0
+                                    duration: Motion.fadeFast(root.settingsService)
+                                    easing.type: Motion.standardDecel
+                                }
+                            }
+
+                            move: Transition {
+                                NumberAnimation {
+                                    properties: "x,y"
+                                    duration: Motion.elementMove(root.settingsService)
+                                    easing.type: Motion.emphasizedDecel
+                                }
+                            }
+
+                            displaced: Transition {
+                                NumberAnimation {
+                                    properties: "x,y"
+                                    duration: Motion.elementMove(root.settingsService)
+                                    easing.type: Motion.emphasizedDecel
+                                }
+                            }
 
                             delegate: Rectangle {
                                 id: procDelegate
                                 required property var modelData
-                                width: procListCol.width
+                                width: processList.width
                                 height: root.processRowHeight
                                 radius: 8
-                                color: procMouse.containsMouse ? root.rowHover : "transparent"
+                                color: procMouse.pressed
+                                    ? root.rowActive
+                                    : (procMouse.containsMouse ? root.rowHover : "transparent")
+                                objectName: "process-row-" + String(processPid)
 
                                 property var proc: procDelegate.modelData || ({})
+                                readonly property int processPid: Number(proc && proc.pid) || 0
                                 property bool cpuHigh: (proc && proc.cpuPercent ? proc.cpuPercent : 0) > root.highCpuThreshold
                                 property bool ramHigh: (proc && proc.memKB ? proc.memKB : 0) > root.highRamThresholdKB
+
+                                Behavior on color {
+                                    ColorAnimation {
+                                        duration: Motion.fadeFast(root.settingsService)
+                                    }
+                                }
 
                                 Row {
                                     anchors.fill: parent
@@ -792,8 +912,7 @@ Item {
                         }
 
                         Text {
-                            width: parent.width
-                            height: 36
+                            anchors.fill: parent
                             visible: root.visibleProcessList.length === 0
                             text: root.systemStats && root.systemStats.available ? "无匹配进程" : "系统数据准备中"
                             color: root.textTertiary
@@ -910,11 +1029,24 @@ Item {
         property string centerValue: ""
         property string centerLabel: ""
         property string subLabel: ""
+        readonly property real progressTarget: Math.max(0, Math.min(1, Number(progress) || 0))
+        property real displayProgress: progressTarget
+
+        Behavior on displayProgress {
+            enabled: !Motion.reducedMotion(root.settingsService)
+            SmoothedAnimation {
+                duration: 500
+                velocity: -1
+                easing.type: Easing.InOutQuad
+            }
+        }
+
+        onRingColorChanged: ringCanvas.requestPaint()
 
         Canvas {
             id: ringCanvas
             anchors.fill: parent
-            property real p: ring.progress
+            property real p: ring.displayProgress
             onPChanged: requestPaint()
             onPaint: {
                 var ctx = getContext("2d");
@@ -932,7 +1064,7 @@ Item {
                 ctx.strokeStyle = Qt.rgba(ring.ringColor.r, ring.ringColor.g, ring.ringColor.b, 0.14);
                 ctx.stroke();
                 // Progress
-                var prog = Math.max(0, Math.min(1, ring.progress));
+                var prog = Math.max(0, Math.min(1, ringCanvas.p));
                 if (prog > 0) {
                     ctx.beginPath();
                     ctx.arc(cx, cy, r, start, start + prog * 2 * pi, false);
@@ -1001,6 +1133,11 @@ Item {
         color: active
             ? (root.darkMode ? "#344b62cc" : "#d8ecff")
             : (tabMouse.containsMouse ? root.rowHover : "transparent")
+
+        Behavior on color {
+            ColorAnimation { duration: Motion.fadeFast(root.settingsService) }
+        }
+
         Text {
             id: labelText
             anchors.centerIn: parent
@@ -1008,6 +1145,10 @@ Item {
             color: tab.active ? root.accentBlue : root.textSecondary
             font.pixelSize: 11
             font.weight: tab.active ? Font.DemiBold : Font.Medium
+
+            Behavior on color {
+                ColorAnimation { duration: Motion.fadeFast(root.settingsService) }
+            }
         }
         MouseArea {
             id: tabMouse
@@ -1018,20 +1159,36 @@ Item {
         }
     }
 
-    component SortHeader: Item {
+    component SortHeader: Rectangle {
+        id: header
         property string title: ""
         property int colIdx: 0
         property bool isActive: root.sortCol === colIdx
         height: 22
+        radius: 8
+        color: isActive
+            ? root.rowActive
+            : (sortMouse.containsMouse ? root.rowHover : "transparent")
+
+        Behavior on color {
+            ColorAnimation { duration: Motion.fadeFast(root.settingsService) }
+        }
+
         Text {
             anchors.centerIn: parent
-            text: parent.title + (parent.isActive ? (root.sortAsc ? " ↑" : " ↓") : "")
-            color: parent.isActive ? root.accentBlue : root.textTertiary
+            text: header.title + (header.isActive ? (root.sortAsc ? " ↑" : " ↓") : "")
+            color: header.isActive ? root.accentBlue : root.textTertiary
             font.pixelSize: 11
-            font.weight: parent.isActive ? Font.DemiBold : Font.Medium
+            font.weight: header.isActive ? Font.DemiBold : Font.Medium
+
+            Behavior on color {
+                ColorAnimation { duration: Motion.fadeFast(root.settingsService) }
+            }
         }
         MouseArea {
+            id: sortMouse
             anchors.fill: parent
+            hoverEnabled: true
             cursorShape: Qt.PointingHandCursor
             onClicked: {
                 if (root.sortCol === colIdx)

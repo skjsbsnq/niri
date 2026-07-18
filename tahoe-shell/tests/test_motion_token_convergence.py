@@ -611,17 +611,19 @@ class MotionTokenConvergenceTests(unittest.TestCase):
         motion = MOTION_JS.read_text(encoding="utf-8")
 
         self.assertIn("var menuFlashInterval = 55;", motion)
-        # Single eased driver for panel + confirm slot (not Layout.* Behavior).
+        # Fixed panel height + overlay confirm (no layer/glass resize mid-open).
+        self.assertIn("implicitHeight: 300", menu)
         self.assertIn("Behavior on confirmReveal", menu)
         self.assertIn("Motion.elementResize", menu)
         self.assertIn("confirmHost", menu)
-        self.assertIn("slotHeight", menu)
+        self.assertIn("confirmScrim", menu)
         self.assertIn("toggleWindowOverview", menu)
         self.assertIn("activateFocusedWindow", menu)
         self.assertIn("appMenuService", menu)
         self.assertIn("shellBridge", menu)
-        # Glass height path is eased NumberAnimation only — no spring.
+        # Glass height path is eased NumberAnimation only — no spring; panel height fixed.
         self.assertNotIn("SpringAnimation", menu)
+        self.assertNotIn("slotHeight", menu)
         self.assertIn("onFlashFinished:", menu)
         self.assertIn("armFlashHold", menu)
         self.assertIn("finishRowFlash", menu)

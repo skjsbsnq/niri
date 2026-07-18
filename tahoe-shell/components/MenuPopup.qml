@@ -47,10 +47,12 @@ PanelWindow {
     aboveWindows: true
     exclusionMode: ExclusionMode.Ignore
     implicitWidth: 218
-    // Base menu content is fixed. confirmReveal is the single eased driver for
-    // both the glass panel height and the confirm card slot (no Layout.* Behavior).
+    // Fixed surface height. Confirm UI overlays inside the glass panel so the
+    // layer shell / TahoeGlass region never resizes mid-open (that resize was
+    // the whole-card flash when restart/shutdown expanded the menu).
+    // confirmReveal is 0..1: opacity + short upward slide of the overlay card.
     property real confirmReveal: 0
-    implicitHeight: 300 + confirmReveal
+    implicitHeight: 300
     color: "transparent"
     WlrLayershell.namespace: "tahoe-menu-popup"
 
@@ -72,7 +74,7 @@ PanelWindow {
     }
 
     onConfirmOpenChanged: {
-        confirmReveal = confirmOpen ? (confirmCardHeight + 2) : 0;
+        confirmReveal = confirmOpen ? 1 : 0;
     }
 
     onOpenChanged: {
@@ -266,91 +268,105 @@ PanelWindow {
             }
 
             Item {
-                id: confirmHost
-
-                // Slot height tracks confirmReveal (minus column spacing baked into reveal).
-                // Real property + Behavior is reliable; Layout.preferredHeight Behaviors often no-op.
-                readonly property real slotHeight: Math.max(0, root.confirmReveal - 2)
-                Layout.fillWidth: true
-                Layout.preferredHeight: slotHeight
-                clip: true
-                // Opacity follows confirm intent immediately; height follows confirmReveal.
-                opacity: root.confirmOpen ? 1 : 0
-                visible: slotHeight > 0.5 || opacity > 0.01
-
-                Behavior on opacity {
-                    NumberAnimation {
-                        duration: root.confirmOpen
-                            ? Motion.elementResize(root.settingsService)
-                            : Motion.panelExit(root.settingsService)
-                        easing.type: root.confirmOpen
-                            ? Motion.emphasizedDecel
-                            : Motion.emphasizedAccel
-                    }
-                }
-
-                Rectangle {
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    anchors.top: parent.top
-                    height: root.confirmCardHeight
-                    radius: 12
-                    color: root.darkMode ? "#5c2c2c2e" : "#5cffffff"
-                    border.color: root.darkMode ? "#40ffffff" : "#50ffffff"
-
-                    ColumnLayout {
-                        anchors.fill: parent
-                        anchors.margins: 10
-                        spacing: 7
-
-                        Text {
-                            text: root.powerService ? root.powerService.pendingTitle : ""
-                            color: root.darkMode ? "#f5f7fb" : "#1d1d1f"
-                            font.pixelSize: 12
-                            font.weight: Font.DemiBold
-                            Layout.fillWidth: true
-                        }
-
-                        Text {
-                            text: root.powerService ? root.powerService.pendingMessage : ""
-                            color: root.darkMode ? "#94a0ad" : "#991d1d1f"
-                            font.pixelSize: 11
-                            wrapMode: Text.WordWrap
-                            Layout.fillWidth: true
-                        }
-
-                        RowLayout {
-                            Layout.fillWidth: true
-                            spacing: 8
-
-                            ConfirmButton {
-                                text: "取消"
-                                onActivated: {
-                                    if (root.powerService)
-                                        root.powerService.cancelPending();
-                                }
-                            }
-
-                            ConfirmButton {
-                                text: root.powerService ? root.powerService.pendingTitle : "确认"
-                                primary: true
-                                onActivated: {
-                                    if (root.powerService)
-                                        root.powerService.confirmPending();
-                                    root.closeRequested();
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            Item {
                 Layout.fillHeight: true
             }
         }
 
+        // Dim scrim + confirm card overlay. Pure content transform — no panel
+        // height / glass region geometry change.
+        Rectangle {
+            id: confirmScrim
+
+            anchors.fill: parent
+            z: 1
+            color: root.darkMode ? "#66000000" : "#33000000"
+            opacity: root.confirmReveal * 0.85
+            visible: opacity > 0.01
+
+
+            MouseArea {
+                anchors.fill: parent
+                enabled: root.confirmOpen
+                // Swallow clicks so menu rows under the scrim cannot re-fire.
+                onClicked: {
+                    if (root.powerService)
+                        root.powerService.cancelPending();
+                }
+            }
+        }
+
+        Item {
+            id: confirmHost
+
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            anchors.margins: 8
+            height: root.confirmCardHeight
+            z: 2
+            opacity: root.confirmReveal
+            // Short rise into place (px). Does not affect glass geometry.
+            transform: Translate {
+                y: (1 - root.confirmReveal) * 14
+            }
+            visible: root.confirmReveal > 0.01
+            enabled: root.confirmOpen
+
+
+            Rectangle {
+                anchors.fill: parent
+                radius: 12
+                color: root.darkMode ? "#cc2c2c2e" : "#e6ffffff"
+                border.color: root.darkMode ? "#40ffffff" : "#50ffffff"
+
+                ColumnLayout {
+                    anchors.fill: parent
+                    anchors.margins: 10
+                    spacing: 7
+
+                    Text {
+                        text: root.powerService ? root.powerService.pendingTitle : ""
+                        color: root.darkMode ? "#f5f7fb" : "#1d1d1f"
+                        font.pixelSize: 12
+                        font.weight: Font.DemiBold
+                        Layout.fillWidth: true
+                    }
+
+                    Text {
+                        text: root.powerService ? root.powerService.pendingMessage : ""
+                        color: root.darkMode ? "#94a0ad" : "#991d1d1f"
+                        font.pixelSize: 11
+                        wrapMode: Text.WordWrap
+                        Layout.fillWidth: true
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 8
+
+                        ConfirmButton {
+                            text: "取消"
+                            onActivated: {
+                                if (root.powerService)
+                                    root.powerService.cancelPending();
+                            }
+                        }
+
+                        ConfirmButton {
+                            text: root.powerService ? root.powerService.pendingTitle : "确认"
+                            primary: true
+                            onActivated: {
+                                if (root.powerService)
+                                    root.powerService.confirmPending();
+                                root.closeRequested();
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
+
 
     component ConfirmButton: Item {
         id: button

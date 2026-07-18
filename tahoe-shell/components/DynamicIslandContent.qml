@@ -33,6 +33,9 @@ Item {
     property bool notificationHasOverflow: false
     property bool notificationExpanded: false
     property var notificationActions: []
+    // Fresh-lease counter from the service (via Overlay); the notification
+    // view resets swipe state when it changes.
+    property int notificationEpoch: 0
     property bool compactResting: true
     signal notificationBodyClicked()
     signal notificationDismissRequested()
@@ -376,6 +379,7 @@ Item {
             hasOverflow: root.notificationHasOverflow
             expanded: root.notificationExpanded
             actions: root.notificationActions
+            notificationEpoch: root.notificationEpoch
             textPrimary: root.textPrimary
             textSecondary: root.textSecondary
             settingsService: root.settingsService

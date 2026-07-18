@@ -31,6 +31,13 @@ Item {
     property bool useSpring: false
     // Finger-following horizontal offset for compact swipe-to-dismiss.
     property real swipeOffsetX: 0
+    // Bumps once per fresh notification lease (service presentation epoch). A
+    // reused view instance (dismiss → next queued notif in the same stack,
+    // within the Loader hold window) must reset leftover swipe offset so the
+    // new notification renders centered instead of flown-out / off-capsule.
+    property int notificationEpoch: 0
+
+    onNotificationEpochChanged: resetSwipeState()
 
     readonly property bool critical: String(root.urgency) === "critical"
     readonly property int actionCount: root.actions && root.actions.length ? root.actions.length : 0
@@ -57,6 +64,20 @@ Item {
         settleEase.stop();
         flyOutX.to = direction * Math.max(root.width, 200);
         notifFlyOut.restart();
+    }
+
+    function resetSwipeState() {
+        // New lease on a reused instance: stop every swipe animation before
+        // its side effects can leak into the new notification (a still-running
+        // notifFlyOut ScriptAction would dismiss the *new* lease), zero the
+        // offset, and clear the click-phase flags so the first tap is not
+        // eaten by a stale `dismissed`.
+        notifFlyOut.stop();
+        settleSpring.stop();
+        settleEase.stop();
+        root.swipeOffsetX = 0;
+        bodyClick.moved = false;
+        bodyClick.dismissed = false;
     }
 
     NumberAnimation {
@@ -462,6 +483,9 @@ Item {
             pressY = mouse.y;
             moved = false;
             dismissed = false;
+            // Also stop an in-flight fly-out: the finger owns the offset now
+            // (otherwise flyOutX and positionChanged fight over swipeOffsetX).
+            notifFlyOut.stop();
             settleEase.stop();
             settleSpring.stop();
         }

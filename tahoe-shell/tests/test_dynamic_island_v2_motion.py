@@ -117,6 +117,34 @@ class DynamicIslandV2MotionTests(unittest.TestCase):
                 offenders.append(path.name)
         self.assertEqual(offenders, [])
 
+    def test_notification_swipe_state_resets_per_lease(self) -> None:
+        # R07 follow-up: a reused NotificationView (dismiss → queued notif in
+        # the same stack, within the Loader hold window) must not keep the
+        # previous notification's fly-out offset or click-phase flags.
+        view = _read(COMPONENTS / "DynamicIslandNotificationView.qml")
+        self.assertIn("property int notificationEpoch", view)
+        self.assertIn("onNotificationEpochChanged: resetSwipeState()", view)
+        self.assertIn("function resetSwipeState", view)
+        self.assertIn("root.swipeOffsetX = 0", view)
+        self.assertIn("bodyClick.dismissed = false", view)
+        # Press during an in-flight fly-out takes ownership of the offset.
+        self.assertRegex(view, r"onPressed:[^}]*notifFlyOut\.stop\(\)")
+        # Epoch is plumbed service → overlay → content → view.
+        island = _read(SHELL / "services" / "DynamicIsland.qml")
+        self.assertIn("property int notificationPresentationEpoch", island)
+        self.assertIn("root.notificationPresentationEpoch += 1", island)
+        self.assertIn("contentNotificationEpoch", self.overlay)
+        self.assertIn("notificationEpoch: root.contentNotificationEpoch", self.overlay)
+        self.assertIn("notificationEpoch: root.notificationEpoch", self.content)
+        # In-place replace-id text refresh must NOT bump the epoch.
+        m = re.search(
+            r"function applyNotificationEntryText\(entry\)\s*\{(.*?)\n    \}",
+            island,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(m)
+        self.assertNotIn("notificationPresentationEpoch", m.group(1))
+
 
     def test_geometry_axes_share_duration_owner(self) -> None:
         # R08 driver pipeline: one eased-duration owner for all axes, swipe

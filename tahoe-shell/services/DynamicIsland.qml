@@ -86,6 +86,14 @@ Item {
     property var completedNotificationIds: ({})
     property var pendingNotificationIds: []
     property int displayingNotificationId: -1
+    // Monotonic lease counter — bumps once per fresh notification presentation
+    // (never on in-place replace-id text refresh). Views key swipe-state reset
+    // on this so a reused NotificationView instance (dismiss → queued notif in
+    // the same synchronous stack, within the Loader hold window) starts the new
+    // notification centered even after the previous one flew out. Distinguishes
+    // consecutive manual (id=-1) notifications, which displayingNotificationId
+    // cannot.
+    property int notificationPresentationEpoch: 0
     property real lastVolume: 0
     property bool lastMuted: false
     // False while PipeWire sink is absent/unready so the first live sample
@@ -1798,6 +1806,9 @@ Item {
             root.transientNotificationExpanded = false;
 
         if (restartTimer) {
+            // Fresh lease: bump the presentation epoch so a reused view resets
+            // any leftover swipe offset before rendering this notification.
+            root.notificationPresentationEpoch += 1;
             if (root.presentation !== "transient_notification")
                 root.clearEventOwnerOutput();
             root.captureEventOwnerOutput();

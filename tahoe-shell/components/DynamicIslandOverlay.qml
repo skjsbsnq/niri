@@ -111,6 +111,12 @@ PanelWindow {
     readonly property var contentNotificationActions: (!!screenRole && screenRole.showActivity && dynamicIslandService)
         ? (dynamicIslandService.transientNotificationActions || [])
         : []
+    // Fresh-lease counter: bumps once per new notification (not on in-place
+    // text refresh). The notification view resets leftover swipe offset when
+    // this changes so a reused instance renders the next notification centered.
+    readonly property int contentNotificationEpoch: dynamicIslandService
+        ? Number(dynamicIslandService.notificationPresentationEpoch) || 0
+        : 0
     readonly property int screenWidth: Math.max(1, Number(root.screen && root.screen.width) || root.width)
     readonly property int screenHeight: Math.max(1, Number(root.screen && root.screen.height) || root.height)
     readonly property real swipePreviewWidth: dynamicIslandService ? Number(dynamicIslandService.swipePreviewWidth) : -1
@@ -661,6 +667,7 @@ PanelWindow {
                 notificationHasOverflow: root.contentNotificationHasOverflow
                 notificationExpanded: root.contentNotificationExpanded
                 notificationActions: root.contentNotificationActions
+                notificationEpoch: root.contentNotificationEpoch
                 compactResting: root.compactResting
                 compactContentVisible: root.compactContentVisible
                 mediaExpandedContentVisible: root.mediaContentVisible

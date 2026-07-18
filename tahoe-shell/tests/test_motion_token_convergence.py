@@ -168,7 +168,8 @@ class MotionTokenConvergenceTests(unittest.TestCase):
 
         # Service: multi-card stack + visible-only expire + grouping.
         self.assertIn("function visibleStack(maxCount)", service)
-        self.assertIn("function groupedHistory()", service)
+        self.assertIn("property var groupedHistoryModel", service)
+        self.assertIn("function rebuildGroupedHistory()", service)
         self.assertIn("property var expireMap", service)
         self.assertIn("function armSoonestExpire()", service)
         self.assertIn("function rearmVisibleExpires()", service)

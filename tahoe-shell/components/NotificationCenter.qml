@@ -18,14 +18,8 @@ PanelWindow {
 
     readonly property var history: notificationsService ? notificationsService.historyModel : []
     readonly property int historyCount: history.length
-    // Re-group whenever history model is replaced (length or identity).
-    readonly property var groupedHistory: {
-        var _count = root.historyCount;
-        var _model = root.history;
-        if (!notificationsService || _count <= 0 || !_model)
-            return [];
-        return notificationsService.groupedHistory();
-    }
+    readonly property var groupedHistory: notificationsService
+        ? notificationsService.groupedHistoryModel : []
     readonly property bool dndEnabled: notificationsService ? notificationsService.dndEnabled : false
     readonly property int edgePadding: 8
     readonly property int fallbackRight: 56
@@ -41,6 +35,9 @@ PanelWindow {
     property bool clearing: false
     property int clearTotal: 0
     property int clearTick: 0
+    property var pendingHistoryRemovals: Object.create(null)
+    property var knownHistoryIds: Object.create(null)
+    property bool historyEntryTrackingReady: false
 
     visible: open
     aboveWindows: true
@@ -65,6 +62,7 @@ PanelWindow {
     function startClearAll() {
         if (!notificationsService || root.clearing)
             return;
+        root.flushPendingHistoryRemovals();
         if (root.historyCount === 0 && notificationsService.activeCount === 0) {
             notificationsService.clearEverything();
             return;
@@ -86,11 +84,105 @@ PanelWindow {
     function finishClearAll() {
         clearStaggerTimer.stop();
         clearFinishHold.stop();
+        root.pendingHistoryRemovals = Object.create(null);
         root.clearing = false;
         root.clearTick = 0;
         root.clearTotal = 0;
         if (root.notificationsService)
             root.notificationsService.clearEverything();
+    }
+
+    function historyRemovalPending(id) {
+        var key = String(Number(id));
+        return (root.pendingHistoryRemovals || Object.create(null))[key] === true;
+    }
+
+    function markHistoryRemoval(id) {
+        var value = Number(id);
+        if (!isFinite(value) || value < 0 || root.clearing)
+            return false;
+        var key = String(value);
+        if (root.historyRemovalPending(value))
+            return false;
+        var next = Object.create(null);
+        var current = root.pendingHistoryRemovals || Object.create(null);
+        for (var existing in current) {
+            if (Object.prototype.hasOwnProperty.call(current, existing))
+                next[existing] = current[existing];
+        }
+        next[key] = true;
+        root.pendingHistoryRemovals = next;
+        return true;
+    }
+
+    function completeHistoryRemoval(id) {
+        var value = Number(id);
+        if (!isFinite(value) || value < 0 || !root.historyRemovalPending(value))
+            return;
+        var key = String(value);
+        var next = Object.create(null);
+        var current = root.pendingHistoryRemovals || Object.create(null);
+        for (var existing in current) {
+            if (Object.prototype.hasOwnProperty.call(current, existing) && existing !== key)
+                next[existing] = current[existing];
+        }
+        root.pendingHistoryRemovals = next;
+        if (root.notificationsService)
+            root.notificationsService.removeHistoryItem(value);
+    }
+
+    function flushPendingHistoryRemovals() {
+        var current = root.pendingHistoryRemovals || Object.create(null);
+        var ids = [];
+        for (var key in current) {
+            if (Object.prototype.hasOwnProperty.call(current, key) && current[key] === true)
+                ids.push(Number(key));
+        }
+        root.pendingHistoryRemovals = Object.create(null);
+        if (!root.notificationsService)
+            return;
+        for (var i = 0; i < ids.length; i++)
+            root.notificationsService.removeHistoryItem(ids[i]);
+    }
+
+    function currentHistoryIdSet() {
+        var ids = Object.create(null);
+        var list = root.history || [];
+        for (var i = 0; i < list.length; i++) {
+            if (!list[i])
+                continue;
+            var id = Number(list[i].id);
+            if (isFinite(id) && id >= 0)
+                ids[String(id)] = true;
+        }
+        return ids;
+    }
+
+    function primeKnownHistoryIds() {
+        root.knownHistoryIds = root.currentHistoryIdSet();
+    }
+
+    function pruneKnownHistoryIds() {
+        var current = root.currentHistoryIdSet();
+        var known = root.knownHistoryIds || Object.create(null);
+        var next = Object.create(null);
+        for (var key in known) {
+            if (Object.prototype.hasOwnProperty.call(known, key) && current[key])
+                next[key] = true;
+        }
+        root.knownHistoryIds = next;
+    }
+
+    function claimHistoryEntryAnimation(id) {
+        var value = Number(id);
+        if (!isFinite(value) || value < 0)
+            return false;
+        var key = String(value);
+        var known = root.knownHistoryIds || Object.create(null);
+        var animate = root.historyEntryTrackingReady && root.open && known[key] !== true;
+        known[key] = true;
+        root.knownHistoryIds = known;
+        return animate;
     }
 
     Timer {
@@ -118,8 +210,24 @@ PanelWindow {
     }
 
     onOpenChanged: {
-        if (!open && root.clearing)
-            root.finishClearAll();
+        if (open) {
+            root.primeKnownHistoryIds();
+        } else {
+            if (root.clearing)
+                root.finishClearAll();
+            else
+                root.flushPendingHistoryRemovals();
+        }
+    }
+    onHistoryChanged: {
+        if (root.open)
+            root.pruneKnownHistoryIds();
+        else
+            root.primeKnownHistoryIds();
+    }
+    Component.onCompleted: {
+        root.primeKnownHistoryIds();
+        root.historyEntryTrackingReady = true;
     }
 
     Loader {
@@ -313,7 +421,10 @@ PanelWindow {
                     spacing: 12
 
                     Repeater {
-                        model: root.groupedHistory
+                        model: ScriptModel {
+                            objectProp: "modelKey"
+                            values: root.groupedHistory
+                        }
 
                         delegate: AppGroup {
                             required property var modelData
@@ -381,7 +492,10 @@ PanelWindow {
             spacing: 8
 
             Repeater {
-                model: groupRoot.items
+                model: ScriptModel {
+                    objectProp: "modelKey"
+                    values: groupRoot.items
+                }
 
                 delegate: NotificationRow {
                     required property var modelData
@@ -409,19 +523,28 @@ PanelWindow {
         property var entry
         property int rowIndex: 0
         property bool collapsedHidden: false
+        property bool enterComplete: false
+        property bool entryAnimationPlayed: false
+        property bool motionReady: false
+        property bool removing: false
+        property bool collapsing: false
         readonly property string iconUrl: root.notificationsService
             ? root.notificationsService.iconUrlForHistory(entry)
             : ""
-        readonly property bool flyOut: root.clearing && rowIndex < root.clearTick
+        readonly property bool flyOut: row.removing
+            || (root.clearing && rowIndex < root.clearTick)
+        readonly property real motionX: row.flyOut ? 80
+            : (row.enterComplete ? 0 : Motion.toastEnterOffsetPx)
 
-        height: collapsedHidden ? 0 : card.implicitHeight
-        visible: !collapsedHidden || root.clearing
+        height: collapsedHidden || collapsing ? 0 : card.implicitHeight
+        visible: !collapsedHidden || root.clearing || row.removing || row.collapsing
         clip: true
-        opacity: flyOut ? 0 : 1
+        opacity: row.enterComplete && !flyOut ? 1 : 0
 
         transform: Translate {
-            x: row.flyOut ? 80 : 0
+            x: row.motionX
             Behavior on x {
+                enabled: row.motionReady
                 NumberAnimation {
                     duration: Motion.elementMove(root.settingsService)
                     easing.type: Motion.emphasizedAccel
@@ -430,6 +553,7 @@ PanelWindow {
         }
 
         Behavior on opacity {
+            enabled: row.motionReady
             NumberAnimation {
                 duration: Motion.fadeFast(root.settingsService)
                 easing.type: Motion.standardDecel
@@ -437,10 +561,58 @@ PanelWindow {
         }
 
         Behavior on height {
-            enabled: row.collapsedHidden || (!row.collapsedHidden && height > 0)
+            enabled: row.collapsedHidden || row.collapsing
+                || (!row.collapsedHidden && height > 0)
             NumberAnimation {
                 duration: Motion.elementResize(root.settingsService)
                 easing.type: Motion.emphasizedDecel
+            }
+        }
+
+        function beginRemoval() {
+            if (!row.entry || row.removing || root.clearing)
+                return;
+            if (!root.markHistoryRemoval(row.entry.id))
+                return;
+            row.removing = true;
+            removalExitTimer.restart();
+        }
+
+        Component.onCompleted: {
+            row.entryAnimationPlayed = row.entry
+                && root.claimHistoryEntryAnimation(row.entry.id);
+            if (row.entryAnimationPlayed) {
+                row.motionReady = true;
+                Qt.callLater(function() {
+                    row.enterComplete = true;
+                });
+            } else {
+                row.enterComplete = true;
+                Qt.callLater(function() {
+                    row.motionReady = true;
+                });
+            }
+        }
+
+        Timer {
+            id: removalExitTimer
+            interval: Math.max(1, Math.max(
+                Motion.elementMove(root.settingsService),
+                Motion.fadeFast(root.settingsService)))
+            repeat: false
+            onTriggered: {
+                row.collapsing = true;
+                removalCollapseTimer.restart();
+            }
+        }
+
+        Timer {
+            id: removalCollapseTimer
+            interval: Math.max(1, Motion.elementResize(root.settingsService))
+            repeat: false
+            onTriggered: {
+                if (row.entry)
+                    root.completeHistoryRemoval(row.entry.id);
             }
         }
 
@@ -564,12 +736,10 @@ PanelWindow {
                     MouseArea {
                         id: closeMouse
                         anchors.fill: parent
+                        enabled: !row.removing && !root.clearing
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: {
-                            if (root.notificationsService && row.entry)
-                                root.notificationsService.removeHistoryItem(row.entry.id);
-                        }
+                        onClicked: row.beginRemoval()
                     }
                 }
             }

@@ -217,7 +217,7 @@ def extract_contract(island_src: str, notifications_src: str) -> NotificationIde
     )
 
     has_notification_updated_signal = bool(
-        re.search(r"signal\s+notificationUpdated\s*\(\s*int\s+id\s*\)", notifications_src)
+        re.search(r"signal\s+notificationUpdated\s*\(\s*real\s+id\s*\)", notifications_src)
     )
     wires_live_property_updates = bool(
         wire.strip()

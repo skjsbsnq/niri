@@ -75,6 +75,10 @@ Item {
     // Head of FIFO (oldest waiting). Kept for callers that only need "the" toast.
     readonly property var current: activeModel.length > 0 ? activeModel[0] : null
     property var historyModel: []
+    property var groupedHistoryModel: []
+    property var historyEntryCache: Object.create(null)
+    property var historyGroupCache: Object.create(null)
+    property bool reconcilingHistoryModel: false
     property bool dndEnabled: false
     property var soundService: null
     readonly property int historyCount: historyModel.length
@@ -90,6 +94,36 @@ Item {
     // Narrow identity signal for consumers (Dynamic Island); carries only the
     // stable id — never a second snapshot or copied model.
     signal notificationUpdated(real id)
+
+    Component {
+        id: historyEntryFactory
+
+        QtObject {
+            property real id: -1
+            property string modelKey: ""
+            property string appName: "应用"
+            property string summary: "通知"
+            property string body: ""
+            property string appIcon: ""
+            property string desktopEntry: ""
+            property string image: ""
+            property int urgency: 0
+            property date time: new Date(0)
+        }
+    }
+
+    Component {
+        id: historyGroupFactory
+
+        QtObject {
+            property string modelKey: ""
+            property string appName: "应用"
+            property var items: []
+            property int count: 0
+        }
+    }
+
+    onHistoryModelChanged: root.reconcileHistoryCaches()
 
     FileView {
         id: notificationStateFile
@@ -305,29 +339,125 @@ Item {
 
     // Group history by appName, newest group first (first-seen order of apps
     // following history order which is already newest-first).
-    function groupedHistory() {
-        var groups = [];
-        var indexByApp = {};
-        var list = root.historyModel;
+    function rebuildGroupedHistory() {
+        var itemLists = Object.create(null);
+        var appOrder = [];
+        var list = root.historyModel || [];
         for (var i = 0; i < list.length; i++) {
             var entry = list[i];
             if (!entry)
                 continue;
             var app = String(entry.appName || "应用");
-            if (indexByApp[app] === undefined) {
-                indexByApp[app] = groups.length;
-                groups.push({
-                    "appName": app,
-                    "items": [entry],
-                    "count": 1
+            if (!Object.prototype.hasOwnProperty.call(itemLists, app)) {
+                itemLists[app] = [];
+                appOrder.push(app);
+            }
+            itemLists[app].push(entry);
+        }
+
+        var cache = root.historyGroupCache || Object.create(null);
+        var retained = Object.create(null);
+        var nextGroups = [];
+        for (var g = 0; g < appOrder.length; g++) {
+            var appName = appOrder[g];
+            retained[appName] = true;
+            var group = cache[appName];
+            if (!group) {
+                group = historyGroupFactory.createObject(root, {
+                    "modelKey": "history-group:" + appName,
+                    "appName": appName
                 });
-            } else {
-                var g = groups[indexByApp[app]];
-                g.items.push(entry);
-                g.count = g.items.length;
+                if (!group)
+                    continue;
+                cache[appName] = group;
+            }
+            group.items = itemLists[appName];
+            group.count = group.items.length;
+            nextGroups.push(group);
+        }
+
+        var retired = [];
+        for (var key in cache) {
+            if (!Object.prototype.hasOwnProperty.call(cache, key) || retained[key])
+                continue;
+            retired.push(cache[key]);
+            delete cache[key];
+        }
+        root.historyGroupCache = cache;
+        root.groupedHistoryModel = nextGroups;
+        for (var r = 0; r < retired.length; r++) {
+            if (retired[r] && retired[r].destroy)
+                retired[r].destroy(1000);
+        }
+    }
+
+    function reconcileHistoryCaches() {
+        if (root.reconcilingHistoryModel)
+            return;
+
+        var cache = root.historyEntryCache || Object.create(null);
+        var list = root.historyModel || [];
+        var canonical = [];
+        var retained = Object.create(null);
+        var normalized = false;
+        for (var i = 0; i < list.length; i++) {
+            var source = list[i];
+            if (!source)
+                continue;
+            var id = Number(source.id);
+            if (!isFinite(id) || id < 0) {
+                normalized = true;
+                continue;
+            }
+            var key = String(id);
+            if (retained[key]) {
+                normalized = true;
+                continue;
+            }
+            retained[key] = true;
+
+            var entry = cache[key];
+            if (!entry) {
+                entry = historyEntryFactory.createObject(root, {
+                    "id": id,
+                    "modelKey": "history:" + key
+                });
+                if (!entry) {
+                    normalized = true;
+                    continue;
+                }
+                cache[key] = entry;
+            }
+            if (entry !== source) {
+                root.updateHistoryEntry(entry, source, false);
+                normalized = true;
+            }
+            canonical.push(entry);
+            if (canonical.length >= root.maxHistory) {
+                if (i + 1 < list.length)
+                    normalized = true;
+                break;
             }
         }
-        return groups;
+
+        var retired = [];
+        for (var key in cache) {
+            if (!Object.prototype.hasOwnProperty.call(cache, key) || retained[key])
+                continue;
+            retired.push(cache[key]);
+            delete cache[key];
+        }
+        root.historyEntryCache = cache;
+        if (normalized || canonical.length !== list.length) {
+            root.reconcilingHistoryModel = true;
+            root.historyModel = canonical;
+            root.reconcilingHistoryModel = false;
+        }
+        root.rebuildGroupedHistory();
+        for (var r = 0; r < retired.length; r++) {
+            if (retired[r] && retired[r].destroy)
+                retired[r].destroy(1000);
+        }
     }
 
     // Island presentation lease helpers (T07). Island must not copy the FIFO;
@@ -416,34 +546,63 @@ Item {
     }
 
     function pushHistory(notification) {
-        var entry = snapshot(notification);
+        var entry = root.historyEntryFor(notification);
         if (!entry)
             return;
 
         var next = [entry];
-        var list = root.historyModel;
+        var list = root.historyModel || [];
         for (var i = 0; i < list.length && next.length < root.maxHistory; i++) {
-            if (list[i] && list[i].id !== entry.id)
+            if (list[i] && Number(list[i].id) !== entry.id)
                 next.push(list[i]);
         }
         root.historyModel = next;
     }
 
-    function snapshot(notification) {
+    function historyEntryFor(notification) {
         if (!notification)
             return null;
 
-        return {
-            "id": notification.id,
-            "appName": safeString(notification.appName, "应用"),
-            "summary": safeString(notification.summary, "通知"),
-            "body": safeString(notification.body, ""),
-            "appIcon": safeString(notification.appIcon, ""),
-            "desktopEntry": safeString(notification.desktopEntry, ""),
-            "image": safeString(notification.image, ""),
-            "urgency": Number(notification.urgency) || 0,
-            "time": new Date()
-        };
+        var id = Number(notification.id);
+        if (!isFinite(id) || id < 0)
+            return null;
+        var key = String(id);
+        var cache = root.historyEntryCache || Object.create(null);
+        var entry = cache[key];
+        if (!entry) {
+            entry = historyEntryFactory.createObject(root, {
+                "id": id,
+                "modelKey": "history:" + key
+            });
+            if (!entry)
+                return null;
+            cache[key] = entry;
+            root.historyEntryCache = cache;
+        }
+        root.updateHistoryEntry(entry, notification, true);
+        return entry;
+    }
+
+    function updateHistoryEntry(entry, source, stampNow) {
+        if (!entry || !source)
+            return;
+        entry.appName = root.safeString(source.appName, "应用");
+        entry.summary = root.safeString(source.summary, "通知");
+        entry.body = root.safeString(source.body, "");
+        entry.appIcon = root.safeString(source.appIcon, "");
+        entry.desktopEntry = root.safeString(source.desktopEntry, "");
+        entry.image = root.safeString(source.image, "");
+        entry.urgency = Number(source.urgency) || 0;
+        if (stampNow) {
+            entry.time = new Date();
+            return;
+        }
+        try {
+            var sourceTime = new Date(source.time);
+            entry.time = isNaN(sourceTime.getTime()) ? new Date() : sourceTime;
+        } catch (e) {
+            entry.time = new Date();
+        }
     }
 
     function safeString(value, fallback) {
@@ -456,10 +615,13 @@ Item {
     }
 
     function removeHistoryItem(id) {
+        var targetId = Number(id);
+        if (!isFinite(targetId) || targetId < 0)
+            return;
         var next = [];
-        var list = root.historyModel;
+        var list = root.historyModel || [];
         for (var i = 0; i < list.length; i++) {
-            if (list[i] && list[i].id !== id)
+            if (list[i] && Number(list[i].id) !== targetId)
                 next.push(list[i]);
         }
         root.historyModel = next;

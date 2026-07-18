@@ -46,15 +46,46 @@ PanelWindow {
         return notificationsService.visibleStack(root.stackMax);
     }
     readonly property int stackCount: stackItems.length
-    readonly property bool shouldShowToast: stackCount > 0
+    readonly property int maxRetainedExits: stackMax
+    // Stable QObject wrappers outlive service removal until their exit finishes.
+    // This keeps the surface mapped for timeout/client-close animations and lets
+    // cards move between stack slots without rebinding a fixed delegate.
+    property var displayItems: []
+    property var displayItemCache: Object.create(null)
+    property var cardRegions: []
+    readonly property int displayCount: displayItems.length
+    readonly property bool shouldShowToast: !root.suppressedByDynamicIsland && displayCount > 0
     // Kept for shell.qml compatibility. Glass geometry never uses Spring.
     property bool useSpring: false
     readonly property int screenWidth: Math.max(1, root.numberOr(root.screen && root.screen.width, 1))
     readonly property int toastLeftMargin: Math.round(Math.max(8, root.screenWidth - root.implicitWidth - 16))
     readonly property int cardBaseHeight: 86
     property int measuredStackHeight: cardBaseHeight
-    // Previous frame's visible ids — used so promote/demote does not re-enter.
+    // Previous visible ids are used so promote/demote does not replay enter.
     property var prevStackIds: []
+
+    Component {
+        id: toastEntryFactory
+
+        QtObject {
+            property string modelKey: ""
+            property int notificationId: -1
+            property int stackIndex: -1
+            property bool present: false
+            property bool exiting: false
+            property bool exitAnimationDone: false
+            property bool dismissRequested: false
+            property int exitDirection: 1
+            property int enterSerial: 0
+            property var notification: null
+            property string appName: "Notification"
+            property string summary: ""
+            property string body: ""
+            property string iconUrl: ""
+            property int urgency: 0
+            property var actions: []
+        }
+    }
 
     function numberOr(value, fallback) {
         var number = Number(value);
@@ -73,21 +104,259 @@ PanelWindow {
         return true;
     }
 
-    function commitPrevStackIds() {
-        var ids = [];
-        var items = root.stackItems || [];
-        for (var i = 0; i < items.length; i++) {
-            if (items[i])
-                ids.push(Number(items[i].id));
+    function notificationId(notification) {
+        if (!notification)
+            return -1;
+        try {
+            var id = Number(notification.id);
+            return isFinite(id) && id >= 0 ? id : -1;
+        } catch (e) {
+            return -1;
         }
-        root.prevStackIds = ids;
     }
 
-    function accentFor(notification) {
+    function textOr(value, fallback) {
+        try {
+            var text = String(value || "").trim();
+            return text.length > 0 ? text : fallback;
+        } catch (e) {
+            return fallback;
+        }
+    }
+
+    function actionSnapshots(notification) {
+        var result = [];
         if (!notification)
+            return result;
+        try {
+            var actions = notification.actions || [];
+            for (var i = 0; i < actions.length; i++) {
+                var action = actions[i];
+                if (!action)
+                    continue;
+                result.push({
+                    "identifier": String(action.identifier || ""),
+                    "text": String(action.text || "")
+                });
+            }
+        } catch (e) {}
+        return result;
+    }
+
+    function updateDisplayEntry(entry, notification) {
+        if (!entry || !notification)
+            return;
+        entry.notification = notification;
+        entry.appName = root.textOr(notification.appName, "Notification");
+        entry.summary = root.textOr(notification.summary, "");
+        entry.body = root.textOr(notification.body, "");
+        entry.iconUrl = root.iconUrlFor(notification);
+        try {
+            entry.urgency = Number(notification.urgency) || 0;
+        } catch (e) {
+            entry.urgency = 0;
+        }
+        entry.actions = root.actionSnapshots(notification);
+    }
+
+    function stackContainsId(id) {
+        var items = root.stackItems || [];
+        for (var i = 0; i < items.length; i++) {
+            if (root.notificationId(items[i]) === id)
+                return true;
+        }
+        return false;
+    }
+
+    function reconcileStack() {
+        var items = root.stackItems || [];
+        var cache = root.displayItemCache || Object.create(null);
+        var activeIds = Object.create(null);
+        var next = [];
+        var nextIds = [];
+        var nextStackIndex = 0;
+        var overflow = [];
+
+        for (var i = 0; i < items.length; i++) {
+            var notification = items[i];
+            var id = root.notificationId(notification);
+            if (id < 0)
+                continue;
+            var key = String(id);
+            if (activeIds[key])
+                continue;
+            activeIds[key] = true;
+            nextIds.push(id);
+
+            var entry = cache[key];
+            var created = !entry;
+            if (!entry) {
+                entry = toastEntryFactory.createObject(root, {
+                    "modelKey": "notification:" + key,
+                    "notificationId": id
+                });
+                if (!entry)
+                    continue;
+                cache[key] = entry;
+            }
+
+            root.updateDisplayEntry(entry, notification);
+            if (entry.exiting && !entry.dismissRequested) {
+                entry.exiting = false;
+                entry.exitAnimationDone = false;
+                entry.exitDirection = 1;
+            }
+
+            // A locally dismissed card remains in the service briefly while its
+            // exit runs. Remove it from slot accounting immediately so the same
+            // lower-card delegates can move up and grow during the exit.
+            if (entry.exiting && entry.dismissRequested) {
+                entry.present = false;
+            } else {
+                entry.present = true;
+                entry.stackIndex = nextStackIndex;
+                nextStackIndex += 1;
+                if (created && entry.stackIndex === 0 && root.isNewlyAppearedId(id))
+                    entry.enterSerial += 1;
+            }
+            next.push(entry);
+        }
+
+        var previous = root.displayItems || [];
+        for (var p = 0; p < previous.length; p++) {
+            var retained = previous[p];
+            if (!retained)
+                continue;
+            var retainedKey = String(retained.notificationId);
+            if (activeIds[retainedKey])
+                continue;
+            // closed() is emitted before the retained live object is destroyed.
+            // Freeze its final fields for the retained exit delegate, then drop
+            // the live reference so no binding reads a destroyed notification.
+            if (retained.notification)
+                root.updateDisplayEntry(retained, retained.notification);
+            retained.notification = null;
+            retained.present = false;
+            if (!retained.exiting) {
+                retained.exitDirection = 1;
+                retained.exitAnimationDone = false;
+                retained.dismissRequested = false;
+                retained.exiting = true;
+            }
+            next.push(retained);
+        }
+
+        // A notification storm can otherwise retain one exiting glass region
+        // per arrival for panelExit milliseconds. Keep at most one stack depth
+        // of exits, so active + exiting regions are bounded to six.
+        var bounded = [];
+        var retainedExitCount = 0;
+        for (var b = 0; b < next.length; b++) {
+            var candidate = next[b];
+            if (candidate && candidate.exiting) {
+                retainedExitCount += 1;
+                if (retainedExitCount > root.maxRetainedExits) {
+                    delete cache[String(candidate.notificationId)];
+                    overflow.push(candidate);
+                    continue;
+                }
+            }
+            if (candidate)
+                bounded.push(candidate);
+        }
+
+        root.displayItemCache = cache;
+        root.displayItems = bounded;
+        root.prevStackIds = nextIds;
+        for (var o = 0; o < overflow.length; o++) {
+            if (overflow[o] && overflow[o].destroy)
+                overflow[o].destroy(1000);
+        }
+        Qt.callLater(root.recomputeStackHeight);
+        Qt.callLater(root.retireCompletedEntries);
+    }
+
+    function refreshDisplayEntry(id) {
+        var key = String(Number(id));
+        var entry = (root.displayItemCache || Object.create(null))[key];
+        if (!entry)
+            return;
+        var notification = entry.notification;
+        if (!notification && root.notificationsService && root.notificationsService.findActiveById)
+            notification = root.notificationsService.findActiveById(Number(id));
+        root.updateDisplayEntry(entry, notification);
+    }
+
+    function requestEntryExit(entry, direction, dismissRequested) {
+        if (!entry)
+            return;
+        if (dismissRequested)
+            entry.dismissRequested = true;
+        entry.exitDirection = Number(direction) < 0 ? -1 : 1;
+        entry.exitAnimationDone = false;
+        entry.present = false;
+        if (!entry.exiting)
+            entry.exiting = true;
+        root.reconcileStack();
+    }
+
+    function completeEntryExit(id) {
+        var key = String(Number(id));
+        var entry = (root.displayItemCache || Object.create(null))[key];
+        if (!entry)
+            return;
+        entry.exitAnimationDone = true;
+        if (entry.dismissRequested)
+            root.dismissNotificationId(entry.notificationId);
+        Qt.callLater(root.retireCompletedEntries);
+    }
+
+    function retireCompletedEntries() {
+        var current = root.displayItems || [];
+        var cache = root.displayItemCache || Object.create(null);
+        var next = [];
+        var retired = [];
+        for (var i = 0; i < current.length; i++) {
+            var entry = current[i];
+            if (entry && entry.exiting && entry.exitAnimationDone
+                    && !root.stackContainsId(entry.notificationId)) {
+                delete cache[String(entry.notificationId)];
+                retired.push(entry);
+            } else if (entry) {
+                next.push(entry);
+            }
+        }
+        if (retired.length === 0)
+            return;
+        root.displayItemCache = cache;
+        root.displayItems = next;
+        for (var r = 0; r < retired.length; r++) {
+            if (retired[r] && retired[r].destroy)
+                retired[r].destroy(1000);
+        }
+        Qt.callLater(root.recomputeStackHeight);
+    }
+
+    function registerCardRegion(region) {
+        if (!region || root.cardRegions.indexOf(region) >= 0)
+            return;
+        root.cardRegions = root.cardRegions.concat([region]);
+    }
+
+    function unregisterCardRegion(region) {
+        var next = [];
+        for (var i = 0; i < root.cardRegions.length; i++) {
+            if (root.cardRegions[i] !== region)
+                next.push(root.cardRegions[i]);
+        }
+        root.cardRegions = next;
+    }
+
+    function accentFor(entry) {
+        if (!entry)
             return GlassStyle.StrokeToast;
         try {
-            return Number(notification.urgency) === 2 ? "#ccff453a" : GlassStyle.StrokeToast;
+            return Number(entry.urgency) === 2 ? "#ccff453a" : GlassStyle.StrokeToast;
         } catch (e) {
             return GlassStyle.StrokeToast;
         }
@@ -99,10 +368,10 @@ PanelWindow {
         return notificationsService.iconUrlFor(notification);
     }
 
-    function dismissNotification(notification) {
-        if (!notificationsService || !notification)
+    function dismissNotification(entry) {
+        if (!notificationsService || !entry)
             return;
-        root.dismissNotificationId(notification.id);
+        root.requestEntryExit(entry, 1, true);
     }
 
     // Swipe-dismiss Timer must use the id captured at gesture commit time.
@@ -116,17 +385,16 @@ PanelWindow {
         notificationsService.dismissId(n, "dismiss");
     }
 
-    function invokeAction(notification, identifier) {
-        if (!notificationsService || !notification)
+    function invokeAction(entry, identifier) {
+        if (!notificationsService || !entry)
             return;
-        notificationsService.invokeAction(notification.id, identifier);
+        notificationsService.invokeAction(entry.notificationId, identifier);
     }
 
     function recomputeStackHeight() {
         var h = root.cardBaseHeight;
-        var slots = [stackSlot0, stackSlot1, stackSlot2];
-        for (var i = 0; i < slots.length; i++) {
-            var item = slots[i];
+        for (var i = 0; i < toastRepeater.count; i++) {
+            var item = toastRepeater.itemAt(i);
             if (!item || !item.active)
                 continue;
             var bottom = item.y + item.height;
@@ -163,46 +431,72 @@ PanelWindow {
         }
     }
 
-    TahoeGlass.regions: [
-        stackSlot0.cardRegion,
-        stackSlot1.cardRegion,
-        stackSlot2.cardRegion
-    ]
+    TahoeGlass.regions: root.cardRegions
 
-    ToastCard {
-        id: stackSlot0
-        stackIndex: 0
-    }
-    ToastCard {
-        id: stackSlot1
-        stackIndex: 1
-    }
-    ToastCard {
-        id: stackSlot2
-        stackIndex: 2
+    Repeater {
+        id: toastRepeater
+
+        model: ScriptModel {
+            objectProp: "modelKey"
+            values: root.displayItems
+        }
+
+        delegate: ToastCard {
+            required property var modelData
+            entry: modelData
+        }
     }
 
     onStackCountChanged: Qt.callLater(recomputeStackHeight)
-    onStackItemsChanged: {
-        Qt.callLater(recomputeStackHeight);
-        // After all slots rebind + syncFromStack, record ids for next change.
-        Qt.callLater(commitPrevStackIds);
+    onStackItemsChanged: root.reconcileStack()
+
+    Connections {
+        target: root.notificationsService
+        ignoreUnknownSignals: true
+
+        function onActiveModelChanged() {
+            root.reconcileStack();
+        }
+
+        function onNotificationUpdated(id) {
+            root.refreshDisplayEntry(id);
+        }
     }
+
+    Component.onCompleted: root.reconcileStack()
 
     component ToastCard: Item {
         id: cardRoot
 
-        property int stackIndex: 0
-        readonly property var notification: {
-            if (stackIndex < 0 || stackIndex >= root.stackItems.length)
-                return null;
-            return root.stackItems[stackIndex];
-        }
-        readonly property bool active: !!notification && stackIndex < root.stackMax
-        readonly property string iconUrl: root.iconUrlFor(notification)
+        property var entry
+        readonly property int stackIndex: entry ? entry.stackIndex : -1
+        readonly property bool active: !!entry
+        readonly property bool interactive: active && entry.present && !entry.exiting
+            && stackIndex === 0
+        readonly property var liveNotification: entry ? entry.notification : null
+        readonly property string iconUrl: liveNotification
+            ? root.iconUrlFor(liveNotification)
+            : (entry ? String(entry.iconUrl || "") : "")
         readonly property bool hasIcon: iconUrl.length > 0
-        readonly property color accentColor: root.accentFor(notification)
-        readonly property int notifId: notification ? Number(notification.id) : -1
+        readonly property color accentColor: root.accentFor(liveNotification || entry)
+        readonly property int notifId: entry ? Number(entry.notificationId) : -1
+        readonly property string displayAppName: liveNotification
+            ? String(liveNotification.appName || "Notification")
+            : (entry ? String(entry.appName || "Notification") : "")
+        readonly property string displaySummary: liveNotification
+            ? String(liveNotification.summary || "")
+            : (entry ? String(entry.summary || "") : "")
+        readonly property string displayBody: liveNotification
+            ? String(liveNotification.body || "")
+            : (entry ? String(entry.body || "") : "")
+        readonly property var actionItems: {
+            if (liveNotification) {
+                try {
+                    return liveNotification.actions || [];
+                } catch (e) {}
+            }
+            return entry && entry.actions ? entry.actions : [];
+        }
 
         // Content-only motion (spring-safe).
         property real enterX: 0
@@ -220,20 +514,24 @@ PanelWindow {
         property real swipeStartX: 0
         property real swipePointerStartX: 0
         property real swipePointerStartY: 0
-        property int boundNotifId: -1
+        property int lastEnterSerial: -1
         property int interactionNotifId: -1
         property bool pointerPressed: false
-        readonly property bool interactionActive: active && stackIndex === 0
-            && (cardHover.hovered || pointerPressed)
+        readonly property bool exitInteractionHold: active && entry.exiting
+            && entry.dismissRequested && interactionNotifId === notifId
+        readonly property bool interactionActive: (interactive
+            && (cardHover.hovered || pointerPressed)) || exitInteractionHold
 
         readonly property alias cardRegion: glass.region
 
         width: root.implicitWidth
         height: Math.max(root.cardBaseHeight, contentColumn.implicitHeight + 28)
+        enabled: interactive
         // Glass-safe: stack offset + hover lift + swipe (all NumberAnimation).
         x: swipeX
         y: stackY - hoverLift
-        z: root.stackMax - stackIndex
+        z: entry && entry.exiting ? 100 + Math.max(0, root.stackMax - stackIndex)
+            : root.stackMax - stackIndex
         visible: active || contentOpacity > 0.01 || Math.abs(swipeX) > 0.5
         opacity: contentOpacity
 
@@ -261,13 +559,12 @@ PanelWindow {
             }
         }
 
-        function syncFromStack() {
+        function syncFromEntry() {
             if (!active) {
                 contentOpacity = 0;
                 hoverLift = 0;
                 if (!swipeDragging && Math.abs(swipeX) < 1)
                     swipeX = 0;
-                boundNotifId = -1;
                 return;
             }
 
@@ -275,25 +572,56 @@ PanelWindow {
             var targetY = Motion.toastStackYForIndex(stackIndex);
             stackY = targetY;
             animateScaleTo(targetScale);
+
+            if (entry.exiting) {
+                syncExitState();
+                return;
+            }
+
+            dismissAfterSwipe.stop();
+            dismissAfterSwipe.pending = false;
+            dismissAfterSwipe.pendingId = -1;
+            swipeDragging = false;
+            swipeX = 0;
             contentOpacity = 1;
 
-            // True new enqueue at top → spring enter. Promote/demote of an
-            // already-visible id (in prevStackIds) → snap enterX (no re-slide).
-            if (boundNotifId !== notifId) {
-                var isNew = root.isNewlyAppearedId(notifId);
-                boundNotifId = notifId;
-                swipeX = 0;
-                swipeDragging = false;
-                if (stackIndex === 0 && isNew) {
+            // Only a truly new top entry increments enterSerial. Stable cards
+            // changing stackIndex keep the same delegate and only move/scale.
+            if (lastEnterSerial !== entry.enterSerial) {
+                lastEnterSerial = entry.enterSerial;
+                if (stackIndex === 0 && entry.enterSerial > 0) {
                     enterX = Motion.toastEnterOffsetPx;
                     Qt.callLater(function () {
-                        if (cardRoot.boundNotifId === cardRoot.notifId && cardRoot.stackIndex === 0)
+                        if (cardRoot.entry && !cardRoot.entry.exiting
+                                && cardRoot.stackIndex === 0)
                             cardRoot.animateEnterTo(0);
                     });
                 } else {
                     enterX = 0;
                 }
             }
+        }
+
+        function syncExitState() {
+            if (!entry || !entry.exiting)
+                return;
+            if (entry.dismissRequested && interactionNotifId < 0 && notifId >= 0
+                    && root.notificationsService
+                    && root.notificationsService.setToastInteraction) {
+                root.notificationsService.setToastInteraction(notifId, true);
+                interactionNotifId = notifId;
+            } else if (!entry.dismissRequested) {
+                releaseToastInteraction();
+            }
+            pointerPressed = false;
+            swipeDragging = false;
+            hoverLift = 0;
+            var direction = entry.exitDirection < 0 ? -1 : 1;
+            dismissAfterSwipe.pending = true;
+            dismissAfterSwipe.pendingId = notifId;
+            swipeX = direction * (Math.max(1, cardRoot.width) + 48);
+            contentOpacity = 0;
+            dismissAfterSwipe.restart();
         }
 
         function releaseToastInteraction() {
@@ -317,13 +645,10 @@ PanelWindow {
         }
 
         onActiveChanged: {
-            syncFromStack();
+            syncFromEntry();
             syncToastInteraction();
         }
-        onNotifIdChanged: {
-            syncFromStack();
-            syncToastInteraction();
-        }
+        onNotifIdChanged: syncToastInteraction()
         onInteractionActiveChanged: syncToastInteraction()
         onStackIndexChanged: {
             if (active) {
@@ -333,11 +658,51 @@ PanelWindow {
             syncToastInteraction();
         }
 
-        Component.onCompleted: {
-            syncFromStack();
+        onEntryChanged: {
+            syncFromEntry();
             syncToastInteraction();
         }
-        Component.onDestruction: releaseToastInteraction()
+
+        Connections {
+            target: cardRoot.entry
+            ignoreUnknownSignals: true
+
+            function onExitingChanged() {
+                if (cardRoot.entry && cardRoot.entry.exiting)
+                    cardRoot.syncExitState();
+                else
+                    cardRoot.syncFromEntry();
+                cardRoot.syncToastInteraction();
+            }
+
+            function onEnterSerialChanged() {
+                cardRoot.syncFromEntry();
+            }
+        }
+
+        Connections {
+            target: cardRoot.entry ? cardRoot.entry.notification : null
+            ignoreUnknownSignals: true
+
+            function onAppNameChanged() { root.refreshDisplayEntry(cardRoot.notifId); }
+            function onSummaryChanged() { root.refreshDisplayEntry(cardRoot.notifId); }
+            function onBodyChanged() { root.refreshDisplayEntry(cardRoot.notifId); }
+            function onImageChanged() { root.refreshDisplayEntry(cardRoot.notifId); }
+            function onAppIconChanged() { root.refreshDisplayEntry(cardRoot.notifId); }
+            function onDesktopEntryChanged() { root.refreshDisplayEntry(cardRoot.notifId); }
+            function onUrgencyChanged() { root.refreshDisplayEntry(cardRoot.notifId); }
+            function onActionsChanged() { root.refreshDisplayEntry(cardRoot.notifId); }
+        }
+
+        Component.onCompleted: {
+            root.registerCardRegion(cardRoot.cardRegion);
+            syncFromEntry();
+            syncToastInteraction();
+        }
+        Component.onDestruction: {
+            releaseToastInteraction();
+            root.unregisterCardRegion(cardRoot.cardRegion);
+        }
 
         function animateEnterTo(value) {
             enterSpring.stop();
@@ -369,14 +734,13 @@ PanelWindow {
         }
 
         function beginSwipe(px, py) {
-            if (!active || stackIndex !== 0)
+            if (!interactive)
                 return;
             swipeDragging = true;
             swipeMoved = false;
             swipeStartX = swipeX;
             swipePointerStartX = px;
             swipePointerStartY = py;
-            swipeAnim.stop();
             // A new press supersedes any prior swipe-dismiss commit.
             cardRoot.clearPendingDismiss();
         }
@@ -405,8 +769,6 @@ PanelWindow {
             var absPx = Math.abs(swipeX);
             var enter = IslandMotion.swipeEnterThreshold;
             if (Math.abs(progress) >= enter || absPx >= Motion.toastSwipeDismissPx) {
-                var target = (swipeX >= 0 ? 1 : -1) * (w + 48);
-                swipeX = target;
                 // Capture stable id at commit time — not at Timer fire.
                 var idAtCommit = cardRoot.notifId;
                 if (idAtCommit < 0) {
@@ -415,7 +777,7 @@ PanelWindow {
                 }
                 dismissAfterSwipe.pending = true;
                 dismissAfterSwipe.pendingId = idAtCommit;
-                dismissAfterSwipe.restart();
+                root.requestEntryExit(cardRoot.entry, swipeX >= 0 ? 1 : -1, true);
             } else {
                 // Snap back: no dismiss; clear any stale pending identity.
                 swipeX = 0;
@@ -447,19 +809,11 @@ PanelWindow {
             easing.type: Motion.emphasizedDecel
         }
 
-        NumberAnimation {
-            id: swipeAnim
-            target: cardRoot
-            property: "swipeX"
-            duration: Motion.panelExit(root.settingsService)
-            easing.type: Motion.emphasizedAccel
-        }
-
         Timer {
             id: dismissAfterSwipe
-            // pendingId is the only identity the delayed dismiss may act on.
-            // Never re-read cardRoot.notification here: stackIndex rebinding
-            // can promote B into this slot while A's exit animation runs.
+            // pendingId is the only identity the delayed exit may act on.
+            // The stable entry remains rendered even if the service has already
+            // removed that id (timeout/client close).
             property bool pending: false
             property int pendingId: -1
             interval: Motion.panelExit(root.settingsService)
@@ -470,14 +824,18 @@ PanelWindow {
                 pending = false;
                 pendingId = -1;
                 if (wasPending && id >= 0)
-                    root.dismissNotificationId(id);
+                    root.completeEntryExit(id);
             }
         }
 
         Behavior on contentOpacity {
             NumberAnimation {
-                duration: Motion.fadeFast(root.settingsService)
-                easing.type: Motion.standardDecel
+                duration: cardRoot.entry && cardRoot.entry.exiting
+                    ? Motion.panelExit(root.settingsService)
+                    : Motion.fadeFast(root.settingsService)
+                easing.type: cardRoot.entry && cardRoot.entry.exiting
+                    ? Motion.emphasizedAccel
+                    : Motion.standardDecel
             }
         }
 
@@ -495,9 +853,10 @@ PanelWindow {
             radius: GlassStyle.RadiusToast
             fillColor: GlassStyle.FillPanelBright
             strokeWidth: 0
-            interaction: cardRoot.contentOpacity * (cardRoot.stackIndex === 0 && cardHover.hovered ? 1 : 0.85)
+            interaction: cardRoot.contentOpacity * (cardRoot.interactive && cardHover.hovered ? 1 : 0.85)
             materialAlpha: cardRoot.contentOpacity
-            regionEnabled: cardRoot.active && root.shouldShowToast
+            regionEnabled: cardRoot.active && root.shouldShowToast && cardRoot.contentOpacity > 0.01
+                && !root.suppressedByDynamicIsland
             opacity: 1
 
             Rectangle {
@@ -571,9 +930,9 @@ PanelWindow {
                             anchors.left: iconBox.right
                             anchors.leftMargin: 10
                             anchors.right: parent.right
-                            anchors.rightMargin: cardRoot.stackIndex === 0 ? 28 : 0
+                            anchors.rightMargin: cardRoot.interactive ? 28 : 0
                             anchors.verticalCenter: iconBox.verticalCenter
-                            text: cardRoot.notification ? String(cardRoot.notification.appName || "Notification") : ""
+                            text: cardRoot.displayAppName
                             color: "#202124"
                             font.pixelSize: 13
                             font.weight: Font.DemiBold
@@ -583,7 +942,7 @@ PanelWindow {
 
                     Text {
                         width: parent.width
-                        text: cardRoot.notification ? String(cardRoot.notification.summary || "") : ""
+                        text: cardRoot.displaySummary
                         color: "#202124"
                         font.pixelSize: 13
                         font.weight: Font.DemiBold
@@ -595,7 +954,7 @@ PanelWindow {
 
                     Text {
                         width: parent.width
-                        text: cardRoot.notification ? String(cardRoot.notification.body || "") : ""
+                        text: cardRoot.displayBody
                         color: "#5f6368"
                         font.pixelSize: 12
                         wrapMode: Text.WordWrap
@@ -608,11 +967,10 @@ PanelWindow {
                         width: parent.width
                         spacing: 8
                         layoutDirection: Qt.RightToLeft
-                        visible: cardRoot.notification && cardRoot.notification.actions
-                                 && cardRoot.notification.actions.length > 0
+                        visible: cardRoot.actionItems.length > 0
 
                         Repeater {
-                            model: cardRoot.notification ? cardRoot.notification.actions : []
+                            model: cardRoot.actionItems
 
                             delegate: Rectangle {
                                 required property var modelData
@@ -646,7 +1004,7 @@ PanelWindow {
                                     onPressed: cardRoot.pointerPressed = true
                                     onReleased: cardRoot.pointerPressed = false
                                     onCanceled: cardRoot.pointerPressed = false
-                                    onClicked: root.invokeAction(cardRoot.notification, modelData.identifier)
+                                    onClicked: root.invokeAction(cardRoot.entry, modelData.identifier)
                                 }
                             }
                         }
@@ -656,7 +1014,7 @@ PanelWindow {
 
             HoverHandler {
                 id: cardHover
-                enabled: cardRoot.active && cardRoot.stackIndex === 0
+                enabled: cardRoot.interactive
                 onHoveredChanged: {
                     if (hovered)
                         cardRoot.hoverLift = Motion.toastHoverLiftPx;
@@ -672,7 +1030,7 @@ PanelWindow {
                 x: 8
                 y: 8
                 z: 5
-                visible: cardRoot.active && cardRoot.stackIndex === 0
+                visible: cardRoot.interactive
                          && (cardHover.hovered || closeMouse.containsMouse)
 
                 Rectangle {
@@ -697,7 +1055,7 @@ PanelWindow {
                     onPressed: cardRoot.pointerPressed = true
                     onReleased: cardRoot.pointerPressed = false
                     onCanceled: cardRoot.pointerPressed = false
-                    onClicked: root.dismissNotification(cardRoot.notification)
+                    onClicked: root.dismissNotification(cardRoot.entry)
                     onContainsMouseChanged: {
                         if (!containsMouse && !cardHover.hovered)
                             cardRoot.hoverLift = 0;
@@ -709,7 +1067,7 @@ PanelWindow {
                 id: swipeArea
                 anchors.fill: parent
                 z: -1
-                enabled: cardRoot.active && cardRoot.stackIndex === 0
+                enabled: cardRoot.interactive
                 cursorShape: Qt.PointingHandCursor
                 preventStealing: true
 
@@ -728,7 +1086,7 @@ PanelWindow {
                     } else {
                         cardRoot.swipeDragging = false;
                         cardRoot.swipeX = 0;
-                        root.dismissNotification(cardRoot.notification);
+                        root.dismissNotification(cardRoot.entry);
                     }
                 }
                 onCanceled: {

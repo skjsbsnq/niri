@@ -1,48 +1,80 @@
-import QtQuick
-import QtQuick.Window
-import QtTest
+pragma ComponentBehavior: Bound
 
-TestCase {
+import QtQuick
+import Quickshell
+
+// Real Tahoe qs probe. qmltestrunner cannot load Quickshell's statically linked
+// ScriptModel plugin, so the Python harness runs this file through qs and injects
+// the production NotificationToast path below.
+ShellRoot {
     id: testCase
-    name: "NotificationSwipeStableIdentity"
-    when: windowShown
 
     property string toastSource: ""
     property var toast: null
+    property var ownedNotifications: []
     property var dismissedIds: []
+    property var stable10: null
+    property var stable20: null
+    property var stable30: null
+    property var stable53: null
+    property var stable54: null
+    property int replacePhase: 0
+    property int stage: 0
 
-    // Minimal Notifications service surface used by production NotificationToast.
     QtObject {
         id: notifService
+
         property var activeModel: []
-        property int activeCount: 0
-        property var current: null
+        property var interactionMap: ({})
+        readonly property int activeCount: activeModel.length
+        readonly property var current: activeModel.length > 0
+            ? activeModel[activeModel.length - 1] : null
+        signal notificationUpdated(int id)
 
         function visibleStack(max) {
-            var n = Math.max(0, Math.min(max, activeModel.length));
-            // Newest-on-top: reverse slice of activeModel (A then B means B on top if append order).
-            // Toast expects visibleStack newest first.
+            var count = Math.max(0, Math.min(max, activeModel.length));
             var out = [];
-            for (var i = activeModel.length - 1; i >= 0 && out.length < n; i--)
+            for (var i = activeModel.length - 1; i >= 0 && out.length < count; i--)
                 out.push(activeModel[i]);
             return out;
         }
 
         function dismissId(id, reason) {
-            testCase.dismissedIds.push(Number(id));
-            // Remove from model (external close simulation also uses this).
+            testCase.dismissedIds = testCase.dismissedIds.concat([Number(id)]);
+            removeWithoutDismiss(id);
+        }
+
+        function removeWithoutDismiss(id) {
             var next = [];
             for (var i = 0; i < activeModel.length; i++) {
                 if (Number(activeModel[i].id) !== Number(id))
                     next.push(activeModel[i]);
             }
             activeModel = next;
-            activeCount = next.length;
-            current = next.length ? next[next.length - 1] : null;
         }
 
-        function iconUrlFor(n) { return ""; }
+        function findActiveById(id) {
+            for (var i = 0; i < activeModel.length; i++) {
+                if (Number(activeModel[i].id) === Number(id))
+                    return activeModel[i];
+            }
+            return null;
+        }
+
+        function iconUrlFor(notification) { return ""; }
         function invokeAction(id, identifier) {}
+        function setToastInteraction(id, active) {
+            var next = {};
+            var key = String(Number(id));
+            for (var existing in interactionMap) {
+                if (Object.prototype.hasOwnProperty.call(interactionMap, existing)
+                        && existing !== key)
+                    next[existing] = interactionMap[existing];
+            }
+            if (active)
+                next[key] = true;
+            interactionMap = next;
+        }
     }
 
     QtObject {
@@ -52,38 +84,91 @@ TestCase {
         property string motionProfile: "normal"
     }
 
-    function makeNotif(id, summary) {
-        return {
-            id: id,
-            summary: summary,
-            body: "body-" + id,
-            appName: "app-" + id,
-            urgency: 1
-        };
+    Component {
+        id: notificationFactory
+
+        QtObject {
+            property int id: -1
+            property string summary: ""
+            property string body: ""
+            property string appName: "Test"
+            property string appIcon: ""
+            property string desktopEntry: ""
+            property string image: ""
+            property int urgency: 1
+            property var actions: []
+        }
     }
 
-    function findTopCard(item) {
-        // Top card is stackIndex 0 and exposes resolveSwipe / dismissAfterSwipe.
+    Timer {
+        id: stepTimer
+        interval: 20
+        repeat: false
+        onTriggered: testCase.advance()
+    }
+
+    function fail(message) {
+        console.error("NOTIFICATION_STACK_FAIL: " + message);
+        cleanupToast();
+        Qt.exit(1);
+    }
+
+    function require(condition, message) {
+        if (!condition) {
+            fail(message);
+            return false;
+        }
+        return true;
+    }
+
+    function schedule(nextStage, delayMs) {
+        stage = nextStage;
+        stepTimer.interval = Math.max(1, delayMs);
+        stepTimer.restart();
+    }
+
+    function makeNotif(id) {
+        var notification = notificationFactory.createObject(testCase, {
+            "id": id,
+            "summary": "summary-" + id,
+            "body": "body-" + id,
+            "appName": "app-" + id
+        });
+        if (!notification) {
+            fail("could not create notification " + id);
+            return null;
+        }
+        ownedNotifications = ownedNotifications.concat([notification]);
+        return notification;
+    }
+
+    function countDismissed(id) {
+        var count = 0;
+        for (var i = 0; i < dismissedIds.length; i++) {
+            if (Number(dismissedIds[i]) === Number(id))
+                count += 1;
+        }
+        return count;
+    }
+
+    function findCard(id) {
+        if (!toast)
+            return null;
         function walk(node) {
             if (!node)
                 return null;
-            if (node.stackIndex === 0 && node.resolveSwipe !== undefined && node.notifId !== undefined)
+            if (node.notifId !== undefined && Number(node.notifId) === Number(id)
+                    && node.resolveSwipe !== undefined)
                 return node;
-            var kids = node.children || [];
-            for (var i = 0; i < kids.length; i++) {
-                var f = walk(kids[i]);
-                if (f)
-                    return f;
-            }
-            var data = node.data || [];
-            for (var j = 0; j < data.length; j++) {
-                var f2 = walk(data[j]);
-                if (f2)
-                    return f2;
+            var children = node.children || [];
+            for (var i = 0; i < children.length; i++) {
+                var found = walk(children[i]);
+                if (found)
+                    return found;
             }
             return null;
         }
-        return walk(item);
+        return walk(toast.contentItem || toast);
     }
 
     function findDismissTimer(card) {
@@ -91,242 +176,264 @@ TestCase {
             return null;
         var data = card.data || [];
         for (var i = 0; i < data.length; i++) {
-            var d = data[i];
-            if (d && d.pendingId !== undefined && d.interval !== undefined)
-                return d;
-        }
-        // Also search children
-        var kids = card.children || [];
-        for (var j = 0; j < kids.length; j++) {
-            if (kids[j] && kids[j].pendingId !== undefined)
-                return kids[j];
+            var item = data[i];
+            if (item && item.pendingId !== undefined && item.interval !== undefined)
+                return item;
         }
         return null;
     }
 
-    function init() {
-        dismissedIds = [];
-        notifService.activeModel = [];
-        notifService.activeCount = 0;
-        notifService.current = null;
+    function cleanupToast() {
+        stepTimer.stop();
         if (toast) {
             toast.destroy();
             toast = null;
-            wait(0);
         }
-        verify(toastSource.length > 0, "harness must set toastSource");
-        var comp = Qt.createComponent("file://" + toastSource);
-        verify(comp.status === Component.Ready, "toast must compile: " + comp.errorString());
-        toast = comp.createObject(null, {
+        for (var i = 0; i < ownedNotifications.length; i++) {
+            if (ownedNotifications[i] && ownedNotifications[i].destroy)
+                ownedNotifications[i].destroy();
+        }
+        ownedNotifications = [];
+    }
+
+    function finish() {
+        console.log("NOTIFICATION_STACK_OK");
+        cleanupToast();
+        Qt.quit();
+    }
+
+    function startProbe() {
+        if (!require(toastSource.length > 0, "toastSource was not injected"))
+            return;
+        var component = Qt.createComponent("file://" + toastSource);
+        if (!require(component.status === Component.Ready,
+                "toast compile: " + component.errorString()))
+            return;
+        toast = component.createObject(null, {
             "notificationsService": notifService,
             "settingsService": settings,
             "dynamicIslandService": null,
-            "width": 360,
-            "height": 200,
-            "visible": true
+            "useSpring": false
         });
-        verify(toast !== null);
-        toast.visible = true;
-        wait(30);
+        if (!require(toast !== null, "toast creation"))
+            return;
+
+        var n10 = makeNotif(10);
+        var n20 = makeNotif(20);
+        var n30 = makeNotif(30);
+        notifService.activeModel = [n10, n20, n30];
+        schedule(1, 180);
     }
 
-    function cleanup() {
-        if (toast) {
-            toast.destroy();
-            toast = null;
+    function advance() {
+        if (stage === 0) {
+            startProbe();
+            return;
         }
-        wait(0);
-    }
 
-    function seedTwo() {
-        notifService.activeModel = [makeNotif(10, "A"), makeNotif(20, "B")];
-        notifService.activeCount = 2;
-        notifService.current = notifService.activeModel[1];
-        wait(80);
-    }
-
-    function countDismissed(id) {
-        var n = 0;
-        for (var i = 0; i < dismissedIds.length; i++) {
-            if (dismissedIds[i] === id)
-                n += 1;
+        if (stage === 1) {
+            stable10 = findCard(10);
+            stable20 = findCard(20);
+            stable30 = findCard(30);
+            if (!require(stable10 && stable20 && stable30, "initial three cards")
+                    || !require(stable30.stackIndex === 0
+                        && stable20.stackIndex === 1 && stable10.stackIndex === 2,
+                        "initial stack order"))
+                return;
+            if (replacePhase === 0) {
+                replacePhase = 1;
+                ownedNotifications[2].summary = "summary-30-updated";
+                ownedNotifications[2].urgency = 2;
+                ownedNotifications[2].actions = [{ "identifier": "open", "text": "Open" }];
+                schedule(1, 40);
+                return;
+            }
+            if (replacePhase === 1) {
+                if (!require(findCard(30) === stable30,
+                        "replace-id mutation preserves delegate")
+                        || !require(stable30.displaySummary === "summary-30-updated",
+                            "live summary mutation reaches stable card")
+                        || !require(stable30.actionItems.length === 1,
+                            "live action mutation reaches stable card"))
+                    return;
+                replacePhase = 2;
+                var replacement30 = makeNotif(30);
+                replacement30.summary = "summary-30-reentered";
+                notifService.activeModel = [
+                    notifService.activeModel[0],
+                    notifService.activeModel[1],
+                    replacement30
+                ];
+                schedule(1, 40);
+                return;
+            }
+            if (!require(findCard(30) === stable30,
+                    "same-id replacement preserves delegate")
+                    || !require(stable30.liveNotification === notifService.activeModel[2],
+                        "same-id replacement updates live object")
+                    || !require(stable30.displaySummary === "summary-30-reentered",
+                        "same-id replacement updates content"))
+                return;
+            notifService.activeModel = notifService.activeModel.concat([makeNotif(40)]);
+            schedule(2, 180);
+            return;
         }
-        return n;
-    }
 
-    function modelHas(id) {
-        for (var i = 0; i < notifService.activeModel.length; i++) {
-            if (Number(notifService.activeModel[i].id) === id)
-                return true;
+        if (stage === 2) {
+            var card40 = findCard(40);
+            if (!require(card40 && card40.stackIndex === 0, "new top card")
+                    || !require(findCard(30) === stable30 && stable30.stackIndex === 1,
+                        "30 delegate must move in place")
+                    || !require(findCard(20) === stable20 && stable20.stackIndex === 2,
+                        "20 delegate must move in place"))
+                return;
+            card40.width = 300;
+            card40.beginSwipe(0, 0);
+            card40.advanceSwipe(400, 0);
+            card40.resolveSwipe();
+            var timer40 = findDismissTimer(card40);
+            if (!require(timer40 && timer40.pending && timer40.pendingId === 40,
+                    "swipe captured id 40"))
+                return;
+            // Canonical race: service removes A while its delayed exit is live.
+            notifService.dismissId(40, "external");
+            schedule(3, 30);
+            return;
         }
-        return false;
+
+        if (stage === 3) {
+            if (!require(findCard(40) !== null, "40 retained through exit")
+                    || !require(findCard(30) === stable30 && stable30.stackIndex === 0,
+                        "30 promoted in place during 40 exit")
+                    || !require(countDismissed(30) === 0,
+                        "40 exit must not dismiss promoted 30")
+                    || !require(notifService.interactionMap["40"] === true,
+                        "local swipe keeps expiration paused through exit"))
+                return;
+            schedule(4, 230);
+            return;
+        }
+
+        if (stage === 4) {
+            if (!require(findCard(40) === null, "40 retired after exit")
+                    || !require(findCard(30) === stable30, "30 identity survived swipe race")
+                    || !require(countDismissed(30) === 0, "30 still not dismissed")
+                    || !require(notifService.interactionMap["40"] === undefined,
+                        "swipe expiration pause released after exit"))
+                return;
+            // Timeout/client-close removes from the service first. The view must
+            // synthesize the same slide+fade and hold the mapped surface.
+            notifService.removeWithoutDismiss(30);
+            schedule(5, 40);
+            return;
+        }
+
+        if (stage === 5) {
+            var exiting30 = findCard(30);
+            if (!require(exiting30 && exiting30.entry.exiting,
+                    "timeout card retained as exiting")
+                    || !require(toast.visible, "surface held during timeout exit")
+                    || !require(findCard(20) === stable20 && stable20.stackIndex === 0,
+                        "20 promoted in place during timeout exit"))
+                return;
+            schedule(6, 230);
+            return;
+        }
+
+        if (stage === 6) {
+            if (!require(findCard(30) === null, "timeout card retired")
+                    || !require(findCard(20) === stable20, "20 identity survived timeout"))
+                return;
+            // 10 may have legitimately retired while it was outside the three-card
+            // visible stack; capture its current stable delegate before promotion.
+            stable10 = findCard(10);
+            if (!require(stable10 !== null, "10 visible before X promotion"))
+                return;
+            // Direct function call is the close-button command path.
+            toast.dismissNotification(stable20.entry);
+            schedule(7, 40);
+            return;
+        }
+
+        if (stage === 7) {
+            if (!require(findCard(20) === stable20 && stable20.entry.exiting,
+                    "X path retains card through exit")
+                    || !require(findCard(10) === stable10 && stable10.stackIndex === 0,
+                        "10 promoted in place during X exit")
+                    || !require(toast.visible, "surface held during X exit"))
+                return;
+            if (!require(notifService.interactionMap["20"] === true,
+                    "X keeps expiration paused through exit"))
+                return;
+            schedule(8, 230);
+            return;
+        }
+
+        if (stage === 8) {
+            if (!require(findCard(20) === null, "X card retired")
+                    || !require(countDismissed(20) === 1, "X dismisses id 20 once")
+                    || !require(notifService.interactionMap["20"] === undefined,
+                        "X expiration pause released after exit"))
+                return;
+            var burst = [];
+            for (var id = 50; id <= 54; id++) {
+                burst.push(makeNotif(id));
+                notifService.activeModel = burst.slice();
+            }
+            if (!require(toast.displayCount <= 6,
+                    "notification storm bounds active plus exiting regions"))
+                return;
+            schedule(9, 260);
+            return;
+        }
+
+        if (stage === 9) {
+            stable53 = findCard(53);
+            stable54 = findCard(54);
+            if (!require(toast.displayCount === 3, "five-notification burst settles to three cards")
+                    || !require(stable54 && stable54.stackIndex === 0,
+                        "burst top 54")
+                    || !require(stable53 && stable53.stackIndex === 1,
+                        "burst second 53")
+                    || !require(findCard(52) && findCard(52).stackIndex === 2,
+                        "burst third 52"))
+                return;
+            notifService.activeModel = notifService.activeModel.concat([makeNotif(55)]);
+            schedule(10, 40);
+            return;
+        }
+
+        if (stage === 10) {
+            if (!require(findCard(55) && findCard(55).stackIndex === 0,
+                    "rapid new top 55")
+                    || !require(findCard(54) === stable54 && stable54.stackIndex === 1,
+                        "54 moved in place")
+                    || !require(findCard(53) === stable53 && stable53.stackIndex === 2,
+                        "53 moved in place")
+                    || !require(findCard(52) && findCard(52).entry.exiting,
+                        "bottom card exits without slot competition"))
+                return;
+            schedule(11, 230);
+            return;
+        }
+
+        if (stage === 11) {
+            if (!require(findCard(52) === null, "displaced bottom retired")
+                    || !require(findCard(54) === stable54 && findCard(53) === stable53,
+                        "burst survivors preserve identity"))
+                return;
+            notifService.activeModel = [];
+            schedule(12, 260);
+            return;
+        }
+
+        if (stage === 12) {
+            if (!require(toast.displayCount === 0, "all exit delegates retired")
+                    || !require(!toast.visible, "toast unmaps after final QML exit"))
+                return;
+            finish();
+        }
     }
 
-    function test_timer_only_dismisses_a_after_rebind() {
-        var root = toast.contentItem || toast;
-        // Race: A on top (newest), swipe A, external-delete A, B rebinds into slot 0,
-        // Timer must still dismiss pendingId=A only.
-        notifService.activeModel = [makeNotif(20, "B"), makeNotif(10, "A")];
-        notifService.activeCount = 2;
-        notifService.current = notifService.activeModel[1];
-        wait(80);
-
-        var card = findTopCard(root);
-        verify(card !== null, "top card must exist");
-        compare(card.notifId, 10);
-        card.width = 300;
-        wait(0);
-
-        var timer = findDismissTimer(card);
-        verify(timer !== null, "dismissAfterSwipe timer must exist");
-
-        card.beginSwipe(0, 0);
-        card.advanceSwipe(400, 0);
-        card.resolveSwipe();
-        wait(0);
-
-        compare(timer.pending, true);
-        compare(timer.pendingId, 10);
-
-        // External delete A (records 10 in dismissedIds); model becomes [B].
-        notifService.dismissId(10, "external");
-        if (!modelHas(20))
-            notifService.activeModel = [makeNotif(20, "B")];
-        notifService.activeCount = notifService.activeModel.length;
-        wait(50);
-
-        // Hard rebind proof: same slot now shows B, timer still holds A.
-        card = findTopCard(root);
-        verify(card !== null);
-        compare(card.notifId, 20);
-        compare(timer.pendingId, 10);
-        compare(timer.pending, true);
-
-        // Snapshot before unambiguous single fire of onTriggered.
-        var tensBefore = countDismissed(10);
-        var twentiesBefore = countDismissed(20);
-        var lenBefore = dismissedIds.length;
-
-        // Single path: invoke production handler once (interval scheduling is
-        // motion-owned; identity capture is what this race tests).
-        timer.triggered();
-        wait(0);
-
-        compare(countDismissed(10), tensBefore + 1, "Timer must dismiss A (10) once more");
-        compare(countDismissed(20), twentiesBefore, "Timer must not dismiss B (20)");
-        compare(dismissedIds.length, lenBefore + 1);
-        verify(modelHas(20), "B must remain in the model");
-        verify(!modelHas(10), "A must stay removed");
-    }
-
-    function test_snap_back_clears_pending() {
-        notifService.activeModel = [makeNotif(1, "One")];
-        notifService.activeCount = 1;
-        wait(80);
-        var card = findTopCard(toast.contentItem || toast);
-        verify(card !== null);
-        var timer = findDismissTimer(card);
-        verify(timer !== null);
-
-        // Ensure card has real width so progress = swipeX/width is meaningful.
-        card.width = 300;
-        wait(0);
-        card.beginSwipe(0, 0);
-        // 20px << toastSwipeDismissPx(96) and << 0.56 * 300.
-        card.advanceSwipe(20, 0);
-        card.resolveSwipe();
-        wait(0);
-        compare(timer.pending, false);
-        compare(timer.pendingId, -1);
-        compare(dismissedIds.length, 0);
-    }
-
-    function test_new_press_supersedes_pending() {
-        notifService.activeModel = [makeNotif(5, "Five")];
-        notifService.activeCount = 1;
-        wait(80);
-        var card = findTopCard(toast.contentItem || toast);
-        verify(card !== null);
-        var timer = findDismissTimer(card);
-        verify(timer !== null);
-
-        card.beginSwipe(0, 0);
-        card.advanceSwipe(400, 0);
-        card.resolveSwipe();
-        wait(0);
-        compare(timer.pending, true);
-        compare(timer.pendingId, 5);
-
-        // New press clears pending (supersede).
-        card.beginSwipe(0, 0);
-        wait(0);
-        compare(timer.pending, false);
-        compare(timer.pendingId, -1);
-    }
-
-    function test_dismiss_id_idempotent() {
-        notifService.activeModel = [makeNotif(7, "Seven")];
-        notifService.activeCount = 1;
-        wait(0);
-        toast.dismissNotificationId(7);
-        toast.dismissNotificationId(7);
-        toast.dismissNotificationId(-1);
-        toast.dismissNotificationId("nope");
-        verify(countDismissed(7) >= 1);
-        verify(countDismissed(-1) === 0);
-    }
-
-    function test_consecutive_swipes_do_not_cross_contaminate() {
-        // Real QML: swipe A to commit, fire, then swipe B — no cross-dismiss.
-        notifService.activeModel = [makeNotif(30, "A"), makeNotif(40, "B")];
-        notifService.activeCount = 2;
-        wait(80);
-        var root = toast.contentItem || toast;
-        var card = findTopCard(root);
-        verify(card !== null);
-        // Newest first → B(40) on top; put A on top for first swipe.
-        notifService.activeModel = [makeNotif(40, "B"), makeNotif(30, "A")];
-        notifService.activeCount = 2;
-        wait(80);
-        card = findTopCard(root);
-        verify(card !== null);
-        compare(card.notifId, 30);
-        card.width = 300;
-
-        var timer = findDismissTimer(card);
-        verify(timer !== null);
-        card.beginSwipe(0, 0);
-        card.advanceSwipe(400, 0);
-        card.resolveSwipe();
-        wait(0);
-        compare(timer.pendingId, 30);
-        var tensA = countDismissed(30);
-        timer.triggered();
-        wait(0);
-        compare(countDismissed(30), tensA + 1);
-        compare(countDismissed(40), 0);
-
-        // After A gone, B should be top; swipe B only.
-        if (!modelHas(40))
-            notifService.activeModel = [makeNotif(40, "B")];
-        notifService.activeCount = notifService.activeModel.length;
-        wait(50);
-        card = findTopCard(root);
-        verify(card !== null);
-        compare(card.notifId, 40);
-        card.width = 300;
-        timer = findDismissTimer(card);
-        verify(timer !== null);
-        card.beginSwipe(0, 0);
-        card.advanceSwipe(400, 0);
-        card.resolveSwipe();
-        wait(0);
-        compare(timer.pendingId, 40);
-        var tensB = countDismissed(40);
-        timer.triggered();
-        wait(0);
-        compare(countDismissed(40), tensB + 1);
-        // A was already dismissed; no extra unexpected id 30 from second swipe.
-        verify(countDismissed(30) >= 1);
-    }
+    Component.onCompleted: schedule(0, 20)
 }

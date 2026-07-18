@@ -175,10 +175,13 @@ class MotionTokenConvergenceTests(unittest.TestCase):
         self.assertIn("function scheduleExpire(id, expireMs)", service)
         self.assertIn("root.rearmVisibleExpires()", service)
 
-        # Toast: 3 fixed slots, springPanel enter (useSpring dual branch), swipe.
-        self.assertIn("id: stackSlot0", toast)
-        self.assertIn("id: stackSlot1", toast)
-        self.assertIn("id: stackSlot2", toast)
+        # Toast: stable id-bound cards, springPanel enter (dual branch), swipe.
+        self.assertIn('objectProp: "modelKey"', toast)
+        self.assertIn("values: root.displayItems", toast)
+        self.assertIn("function reconcileStack()", toast)
+        self.assertIn("function retireCompletedEntries()", toast)
+        self.assertNotIn("id: stackSlot0", toast)
+        self.assertNotIn("id: swipeAnim", toast)
         self.assertIn("Motion.springPanel", toast)
         self.assertIn("function animateEnterTo(value)", toast)
         self.assertIn("root.useSpring && !Motion.reducedMotion", toast)

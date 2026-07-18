@@ -643,7 +643,7 @@ layer-rule {
             style "slide"
             edge "right"
             distance 22
-            opacity-to 0.35
+            opacity-to 0
             transform-duration-ms 110
             transform-curve "emphasized-accel"
             opacity-duration-ms 80

@@ -141,6 +141,12 @@ class NiriSettingsToolTests(unittest.TestCase):
         self.assertEqual(niri_settings_tool.read_animations_text(balanced)["profile"], "balanced")
         self.assertEqual(balanced, original)
 
+    def test_all_motion_profiles_fully_fade_toast_close(self) -> None:
+        for profile in niri_settings_tool.MOTION_PROFILE_NAMES:
+            with self.subTest(profile=profile):
+                close = niri_settings_tool.MOTION_PROFILE_LAYERS[profile]["toast"]["layer-close"]
+                self.assertEqual(close["opacity-to"], 0.0)
+
     def test_motion_profile_write_requires_known_layer_animation_groups(self) -> None:
         original = TAHOE_PHASE0.read_text(encoding="utf-8")
         # T21/T22: process menu lives in the unified `menu` layer-rule; renaming

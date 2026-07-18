@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Task 02: swipe dismiss must bind to stable notification identity.
+"""R09: toast delegates and delayed exits bind to stable notification identity.
 
 Root race (old code):
   1. User swipes notification A past threshold → Timer.pending = true
@@ -7,9 +7,10 @@ Root race (old code):
   3. Timer fires and reads cardRoot.notification (now B) → dismisses B
 
 Fix contract:
+  - ScriptModel keys stable entry wrappers by notification id
   - resolveSwipe captures notifId into Timer.pendingId at commit time
-  - onTriggered dismisses only pendingId via dismissNotificationId
-  - never re-reads stackIndex-bound notification on Timer fire
+  - onTriggered completes only pendingId; the entry then dismisses that id
+  - never re-reads a stackIndex-bound notification on Timer fire
   - cancel / snap-back / new press clear pending identity
 
 Regression strategy:
@@ -20,7 +21,6 @@ Regression strategy:
 
 from __future__ import annotations
 
-import os
 import re
 import shutil
 import subprocess
@@ -33,6 +33,7 @@ from pathlib import Path
 SHELL_ROOT = Path(__file__).resolve().parents[1]
 TOAST = SHELL_ROOT / "components" / "NotificationToast.qml"
 NOTIFICATIONS = SHELL_ROOT / "services" / "Notifications.qml"
+PHASE0_KDL = SHELL_ROOT.parent / "config" / "niri" / "tahoe-phase0.kdl"
 
 
 @dataclass(frozen=True)
@@ -168,18 +169,14 @@ def extract_contract(toast_src: str, notifications_src: str) -> SwipeDismissCont
             re.search(r"function\s+dismissNotificationId\s*\(", toast_src)
         ),
         dismiss_notification_delegates_to_id=(
-            "dismissNotificationId" in dismiss_fn
-            and "dismissId" not in dismiss_fn  # object path delegates; id path owns service call
-        )
-        or (
-            "dismissNotificationId" in dismiss_fn
+            "requestEntryExit" in dismiss_fn and "dismissId" not in dismiss_fn
         ),
         timer_has_pending_id=bool(
             re.search(r"property\s+int\s+pendingId", timer)
         ),
         timer_dismisses_pending_id=bool(
-            re.search(r"dismissNotificationId\s*\(\s*id\s*\)", timer_on_triggered)
-            or re.search(r"dismissNotificationId\s*\(\s*pendingId\s*\)", timer_on_triggered)
+            re.search(r"completeEntryExit\s*\(\s*id\s*\)", timer_on_triggered)
+            or re.search(r"completeEntryExit\s*\(\s*pendingId\s*\)", timer_on_triggered)
         ),
         timer_does_not_read_card_notification=(
             not timer_reads_card_notification and not old_bug_signature
@@ -369,6 +366,35 @@ class NotificationSwipeStableIdentityTests(unittest.TestCase):
         self.assertIn("dismissId", body)
         self.assertRegex(body, r"Number\(id\)|id")
 
+    def test_stack_uses_stable_keyed_entries_and_retained_exit(self) -> None:
+        self.assertIn('objectProp: "modelKey"', self.toast_src)
+        self.assertIn("property var displayItemCache", self.toast_src)
+        self.assertIn("function reconcileStack()", self.toast_src)
+        self.assertIn("function retireCompletedEntries()", self.toast_src)
+        self.assertIn("Behavior on stackY", self.toast_src)
+        self.assertIn("enabled: interactive", self.toast_src)
+        self.assertIn("!root.suppressedByDynamicIsland && displayCount > 0", self.toast_src)
+        self.assertIn("readonly property var liveNotification", self.toast_src)
+        self.assertNotRegex(self.toast_src, r"(?m)^\s*property var liveNotification:")
+        self.assertNotIn("id: stackSlot0", self.toast_src)
+        self.assertNotIn("id: stackSlot1", self.toast_src)
+        self.assertNotIn("id: stackSlot2", self.toast_src)
+        self.assertNotIn("id: swipeAnim", self.toast_src)
+
+    def test_compositor_close_fades_to_zero(self) -> None:
+        kdl = PHASE0_KDL.read_text(encoding="utf-8")
+        rule = re.search(
+            r'match namespace="\^tahoe-notification-toast\$"(?P<body>.*?)\n\}',
+            kdl,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(rule)
+        assert rule
+        close = re.search(r"layer-close\s*\{(?P<body>.*?)\n\s*\}", rule.group("body"), re.DOTALL)
+        self.assertIsNotNone(close)
+        assert close
+        self.assertRegex(close.group("body"), r"opacity-to\s+0(?:\.0+)?\b")
+
     def test_race_a_external_close_b_rebind_timer_must_not_dismiss_b(self) -> None:
         """Canonical failure order from the roadmap.
 
@@ -511,135 +537,36 @@ class NotificationSwipeStableIdentityTests(unittest.TestCase):
         card.rebind_stack(service.active)
         card.fire_timer()
         self.assertEqual([n.id for n in service.active], [2])
-
-
-
-    def _rewrite_toast_shell_for_tests(self, dest: Path) -> None:
-        """Shell-only rewrite so production swipe Timer/card body stays intact."""
-        import re as _re
-
-        src = TOAST.read_text(encoding="utf-8")
-        src = src.replace("import Quickshell.Wayland\n", "")
-        src = src.replace("import Quickshell\n", "")
-        src = src.replace("PanelWindow {", "Window {", 1)
-        if "import QtQuick.Window" not in src:
-            src = src.replace(
-                "import QtQuick\n",
-                "import QtQuick\nimport QtQuick.Window\n",
-                1,
-            )
-        out = []
-        drop = (
-            "aboveWindows",
-            "exclusionMode",
-            "exclusiveZone",
-            "focusable",
-        )
-        for line in src.splitlines(True):
-            if _re.search(r"\bWlrLayershell\.", line):
-                continue
-            if any(_re.search(rf"\b{prop}\s*:", line) for prop in drop):
-                continue
-            out.append(line)
-        src = "".join(out)
-        # Multi-line TahoeGlass.regions: [ ... ]
-        src = _re.sub(
-            r"\n\s*TahoeGlass\.regions:\s*\[[\s\S]*?\n\s*\]",
-            "",
-            src,
-            count=1,
-        )
-
-        def remove_block(text: str, pattern: str) -> str:
-            m = _re.search(pattern, text)
-            if not m:
-                return text
-            start = m.start()
-            brace = text.find("{", m.start())
-            depth = 0
-            i = brace
-            while i < len(text):
-                if text[i] == "{":
-                    depth += 1
-                elif text[i] == "}":
-                    depth -= 1
-                    if depth == 0:
-                        i += 1
-                        break
-                i += 1
-            while start > 0 and text[start - 1] in " \t":
-                start -= 1
-            if start > 0 and text[start - 1] == "\n":
-                start -= 1
-            return text[:start] + text[i:]
-
-        src = remove_block(src, r"mask:\s*Region\s*\{")
-        src = remove_block(src, r"anchors\s*\{\s*\n\s*top:\s*true")
-        src = remove_block(src, r"margins\s*\{")
-        # screenWidth without real screen
-        src = src.replace(
-            "readonly property int screenWidth: Math.max(1, root.numberOr(root.screen && root.screen.width, 1))",
-            "readonly property int screenWidth: Math.max(1, Number(root.width) || 360)",
-        )
-        # Keep toast always "shown" when model non-empty under simplified shell.
-        src = src.replace("Behavior on implicitHeight", "Behavior on height")
-        src = src.replace("implicitHeight:", "height:")
-        src = src.replace("implicitWidth:", "width:")
-        src = src.replace("width: root.implicitWidth", "width: root.width")
-        dest.write_text(src, encoding="utf-8")
-
     def test_real_qml_swipe_identity_race(self) -> None:
-        qt6_runner = Path("/usr/lib/qt6/bin/qmltestrunner")
-        runner = str(qt6_runner) if qt6_runner.is_file() else shutil.which("qmltestrunner")
-        self.assertIsNotNone(runner, "Qt 6 qmltestrunner is required")
-        with tempfile.TemporaryDirectory() as tmp:
-            rewritten = Path(tmp) / "NotificationToast.qml"
-            self._rewrite_toast_shell_for_tests(rewritten)
-            body = rewritten.read_text(encoding="utf-8")
-            self.assertIn("pendingId", body)
-            self.assertIn("dismissNotificationId", body)
-            self.assertIn("resolveSwipe", body)
-            self.assertNotIn("PanelWindow", body)
-
-            work = Path(tmp) / "components"
-            work.mkdir()
-            import os as _os
-            for entry in (SHELL_ROOT / "components").iterdir():
-                if entry.name == "NotificationToast.qml":
-                    continue
-                _os.symlink(entry, work / entry.name)
-            _os.symlink(rewritten, work / "NotificationToast.qml")
-
-            qml_test = Path(tmp) / "tst_swipe.qml"
-            base = Path(__file__).with_name("tst_notification_swipe_stable_identity.qml").read_text(
+        local_runner = Path.home() / ".local" / "bin" / "qs"
+        runner = str(local_runner) if local_runner.is_file() else shutil.which("qs")
+        self.assertIsNotNone(runner, "Tahoe Quickshell runtime is required")
+        with tempfile.TemporaryDirectory(prefix="tahoe-toast-stack-") as tmp:
+            template = Path(__file__).with_name("tst_notification_swipe_stable_identity.qml").read_text(
                 encoding="utf-8"
             )
-            base = base.replace(
-                'property string toastSource: ""',
-                f'property string toastSource: "{work / "NotificationToast.qml"}"',
-            )
-            qml_test.write_text(base, encoding="utf-8")
-
-            env = os.environ.copy()
-            env.setdefault("QT_QPA_PLATFORM", "offscreen")
-            local_qml = Path.home() / ".local" / "lib" / "qt6" / "qml"
-            test_qml = SHELL_ROOT / "tests" / "qml_imports"
-            existing = env.get("QML2_IMPORT_PATH", "")
-            paths = [str(test_qml), str(local_qml)]
-            if existing:
-                paths.append(existing)
-            env["QML2_IMPORT_PATH"] = ":".join(paths)
-            result = subprocess.run(
-                [runner, "-input", str(qml_test), "-file-selector", "test"],
-                cwd=SHELL_ROOT,
-                env=env,
-                text=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                timeout=90,
-                check=False,
-            )
-            self.assertEqual(result.returncode, 0, result.stdout)
+            for profile in ("normal", "reduced"):
+                qml_test = Path(tmp) / f"shell-{profile}.qml"
+                source = template.replace(
+                    'property string toastSource: ""',
+                    f'property string toastSource: "{TOAST}"',
+                ).replace(
+                    'property string motionProfile: "normal"',
+                    f'property string motionProfile: "{profile}"',
+                )
+                qml_test.write_text(source, encoding="utf-8")
+                result = subprocess.run(
+                    [runner, "-p", str(qml_test)],
+                    cwd=SHELL_ROOT,
+                    text=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    timeout=30,
+                    check=False,
+                )
+                self.assertEqual(result.returncode, 0, result.stdout)
+                self.assertIn("NOTIFICATION_STACK_OK", result.stdout, result.stdout)
+                self.assertNotIn("NOTIFICATION_STACK_FAIL", result.stdout, result.stdout)
 
 
 if __name__ == "__main__":

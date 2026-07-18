@@ -912,7 +912,7 @@ MOTION_PROFILE_LAYERS = {
         },
         "toast": {
             "layer-open": spring_phase(0.8, 320, 0.0005, 100, "opacity-from", 0.75, "standard-decel"),
-            "layer-close": layer_phase(110, 80, "opacity-to", 0.35, "emphasized-accel"),
+            "layer-close": layer_phase(110, 80, "opacity-to", 0.0, "emphasized-accel"),
         },
     },
     "fast": {
@@ -942,7 +942,7 @@ MOTION_PROFILE_LAYERS = {
         },
         "toast": {
             "layer-open": spring_phase(0.85, 450, 0.0005, 80, "opacity-from", 0.75, "standard-decel"),
-            "layer-close": layer_phase(90, 60, "opacity-to", 0.35, "emphasized-accel"),
+            "layer-close": layer_phase(90, 60, "opacity-to", 0.0, "emphasized-accel"),
         },
     },
     "liquid": {
@@ -972,7 +972,7 @@ MOTION_PROFILE_LAYERS = {
         },
         "toast": {
             "layer-open": spring_phase(0.78, 260, 0.0005, 120, "opacity-from", 0.75, "standard-decel"),
-            "layer-close": layer_phase(150, 90, "opacity-to", 0.35, "emphasized-accel"),
+            "layer-close": layer_phase(150, 90, "opacity-to", 0.0, "emphasized-accel"),
         },
     },
     "reduced": {

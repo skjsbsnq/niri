@@ -64,12 +64,14 @@ Item {
     property bool flashing: false
     property bool forceHighlight: false
     property int flashStep: 0
+    // Power confirm rows set false so the card can expand without a blink fight.
+    property bool flashOnActivate: true
 
     // Action runs immediately on click. Parent should start work here and must
     // not assume the menu has closed yet.
     signal activated()
-    // Pure visual flash finished (or skipped under reduced motion). Parent
-    // closes the menu here when the action is not keeping the menu open.
+    // Pure visual flash finished (or skipped under reduced motion / flashOnActivate).
+    // Parent closes the menu here when the action is not keeping the menu open.
     signal flashFinished()
 
     width: parent ? parent.width : implicitWidth
@@ -98,7 +100,7 @@ Item {
         // Action first — never wait on the flash timer.
         activated();
 
-        if (Motion.reducedMotion(settingsService)) {
+        if (!flashOnActivate || Motion.reducedMotion(settingsService)) {
             flashFinished();
             return;
         }

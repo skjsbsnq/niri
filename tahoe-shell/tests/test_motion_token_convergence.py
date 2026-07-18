@@ -611,10 +611,11 @@ class MotionTokenConvergenceTests(unittest.TestCase):
         motion = MOTION_JS.read_text(encoding="utf-8")
 
         self.assertIn("var menuFlashInterval = 55;", motion)
-        self.assertIn("Behavior on implicitHeight", menu)
+        # Single eased driver for panel + confirm slot (not Layout.* Behavior).
+        self.assertIn("Behavior on confirmReveal", menu)
         self.assertIn("Motion.elementResize", menu)
         self.assertIn("confirmHost", menu)
-        self.assertIn("Layout.preferredHeight", menu)
+        self.assertIn("slotHeight", menu)
         self.assertIn("toggleWindowOverview", menu)
         self.assertIn("activateFocusedWindow", menu)
         self.assertIn("appMenuService", menu)
@@ -627,7 +628,11 @@ class MotionTokenConvergenceTests(unittest.TestCase):
         self.assertIn("flashHold", menu)
         self.assertIn("holdSeq", menu)
         self.assertIn("visible: open || flashHold", menu)
+        # Ghost hold is visual-only; power confirm does not arm hold so the card can expand.
         self.assertIn("enabled: root.open && root.holdSeq === 0", menu)
+        # Keep-open power rows skip selection flash so the card can expand cleanly.
+        self.assertIn("flashOnActivate: false", menu)
+        self.assertGreaterEqual(menu.count("flashOnActivate: false"), 4)
 
     def test_shared_menu_row_macos_signatures(self) -> None:
         row = (COMPONENTS_ROOT / "MenuRow.qml").read_text(encoding="utf-8")
@@ -645,6 +650,7 @@ class MotionTokenConvergenceTests(unittest.TestCase):
         self.assertIn("Motion.reducedMotion(settingsService)", row)
         # R06: action fires immediately; flash is pure visual; no press scale.
         self.assertIn("signal flashFinished()", row)
+        self.assertIn("property bool flashOnActivate: true", row)
         self.assertIn("activated();", row)
         self.assertIn("flashFinished();", row)
         self.assertNotIn("Motion.pressScaleFor", row)

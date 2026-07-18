@@ -47,9 +47,10 @@ PanelWindow {
     aboveWindows: true
     exclusionMode: ExclusionMode.Ignore
     implicitWidth: 218
-    // Base menu content is fixed; confirm card expands in-place so panel height
-    // can animate via Behavior (eased only — feeds glass region geometry).
-    implicitHeight: 300 + (confirmOpen ? (confirmCardHeight + 2) : 0)
+    // Base menu content is fixed. confirmReveal is the single eased driver for
+    // both the glass panel height and the confirm card slot (no Layout.* Behavior).
+    property real confirmReveal: 0
+    implicitHeight: 300 + confirmReveal
     color: "transparent"
     WlrLayershell.namespace: "tahoe-menu-popup"
 
@@ -63,11 +64,15 @@ PanelWindow {
         left: root.popupLeftMargin
     }
 
-    Behavior on implicitHeight {
+    Behavior on confirmReveal {
         NumberAnimation {
             duration: Motion.elementResize(root.settingsService)
             easing.type: Motion.emphasizedDecel
         }
+    }
+
+    onConfirmOpenChanged: {
+        confirmReveal = confirmOpen ? (confirmCardHeight + 2) : 0;
     }
 
     onOpenChanged: {
@@ -125,8 +130,9 @@ PanelWindow {
             anchors.fill: parent
             anchors.margins: 8
             spacing: 2
-            // Ghost (hold, !open) is visual-only. While a flash is in flight, block
-            // further row clicks so a second arm cannot orphan the first finish.
+            // Ghost (hold, !open) is visual-only. Power confirm no longer arms hold, so
+            // the column stays enabled while the card expands. Mid-flash settings
+            // rows still block a second arm via holdSeq.
             enabled: root.open && root.holdSeq === 0
 
             MenuRow {
@@ -193,40 +199,37 @@ PanelWindow {
                 icon: "\ue897"
                 settingsService: root.settingsService
                 darkMode: root.darkMode
-                onActivated: {
-                    root.armFlashHold();
-                    root.triggerPower("lock");
-                }
+                onActivated: root.triggerPower("lock")
                 onFlashFinished: {
-                    root.finishRowFlash(!(root.powerService && root.powerService.hasPending));
+                    if (!(root.powerService && root.powerService.hasPending))
+                        root.closeRequested();
                 }
             }
 
             MenuRow {
                 text: "睡眠"
                 icon: "\ue51c"
+                flashOnActivate: false
                 settingsService: root.settingsService
                 darkMode: root.darkMode
-                onActivated: {
-                    root.armFlashHold();
-                    root.triggerPower("sleep");
-                }
+                onActivated: root.triggerPower("sleep")
                 onFlashFinished: {
-                    root.finishRowFlash(!(root.powerService && root.powerService.hasPending));
+                    // Keep-open confirm path: no hold arm, no close.
+                    if (!(root.powerService && root.powerService.hasPending))
+                        root.closeRequested();
                 }
             }
 
             MenuRow {
                 text: "退出登录"
                 icon: "\ue9ba"
+                flashOnActivate: false
                 settingsService: root.settingsService
                 darkMode: root.darkMode
-                onActivated: {
-                    root.armFlashHold();
-                    root.triggerPower("logout");
-                }
+                onActivated: root.triggerPower("logout")
                 onFlashFinished: {
-                    root.finishRowFlash(!(root.powerService && root.powerService.hasPending));
+                    if (!(root.powerService && root.powerService.hasPending))
+                        root.closeRequested();
                 }
             }
 
@@ -238,14 +241,13 @@ PanelWindow {
                 text: "重新启动"
                 icon: "\ue5d5"
                 destructive: true
+                flashOnActivate: false
                 settingsService: root.settingsService
                 darkMode: root.darkMode
-                onActivated: {
-                    root.armFlashHold();
-                    root.triggerPower("restart");
-                }
+                onActivated: root.triggerPower("restart")
                 onFlashFinished: {
-                    root.finishRowFlash(!(root.powerService && root.powerService.hasPending));
+                    if (!(root.powerService && root.powerService.hasPending))
+                        root.closeRequested();
                 }
             }
 
@@ -253,32 +255,28 @@ PanelWindow {
                 text: "关机"
                 icon: "\ue8ac"
                 destructive: true
+                flashOnActivate: false
                 settingsService: root.settingsService
                 darkMode: root.darkMode
-                onActivated: {
-                    root.armFlashHold();
-                    root.triggerPower("shutdown");
-                }
+                onActivated: root.triggerPower("shutdown")
                 onFlashFinished: {
-                    root.finishRowFlash(!(root.powerService && root.powerService.hasPending));
+                    if (!(root.powerService && root.powerService.hasPending))
+                        root.closeRequested();
                 }
             }
 
             Item {
                 id: confirmHost
 
+                // Slot height tracks confirmReveal (minus column spacing baked into reveal).
+                // Real property + Behavior is reliable; Layout.preferredHeight Behaviors often no-op.
+                readonly property real slotHeight: Math.max(0, root.confirmReveal - 2)
                 Layout.fillWidth: true
-                Layout.preferredHeight: root.confirmOpen ? root.confirmCardHeight : 0
+                Layout.preferredHeight: slotHeight
                 clip: true
+                // Opacity follows confirm intent immediately; height follows confirmReveal.
                 opacity: root.confirmOpen ? 1 : 0
-                visible: Layout.preferredHeight > 0.5 || opacity > 0.01
-
-                Behavior on Layout.preferredHeight {
-                    NumberAnimation {
-                        duration: Motion.elementResize(root.settingsService)
-                        easing.type: Motion.emphasizedDecel
-                    }
-                }
+                visible: slotHeight > 0.5 || opacity > 0.01
 
                 Behavior on opacity {
                     NumberAnimation {
@@ -297,8 +295,8 @@ PanelWindow {
                     anchors.top: parent.top
                     height: root.confirmCardHeight
                     radius: 12
-                    color: "#5cffffff"
-                    border.color: "#50ffffff"
+                    color: root.darkMode ? "#5c2c2c2e" : "#5cffffff"
+                    border.color: root.darkMode ? "#40ffffff" : "#50ffffff"
 
                     ColumnLayout {
                         anchors.fill: parent
@@ -307,7 +305,7 @@ PanelWindow {
 
                         Text {
                             text: root.powerService ? root.powerService.pendingTitle : ""
-                            color: "#1d1d1f"
+                            color: root.darkMode ? "#f5f7fb" : "#1d1d1f"
                             font.pixelSize: 12
                             font.weight: Font.DemiBold
                             Layout.fillWidth: true
@@ -315,7 +313,7 @@ PanelWindow {
 
                         Text {
                             text: root.powerService ? root.powerService.pendingMessage : ""
-                            color: "#991d1d1f"
+                            color: root.darkMode ? "#94a0ad" : "#991d1d1f"
                             font.pixelSize: 11
                             wrapMode: Text.WordWrap
                             Layout.fillWidth: true

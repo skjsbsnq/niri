@@ -66,3 +66,13 @@
 - 菜单 layer-rule 关闭参数 → R15。
 - TrayMenu 系统模型无 ScriptModel objectProp（非 nativeMenuItems 路径）→ 非本任务 #19 范围。
 - `topBarDismissPopupHeight` 与菜单真实高度可能不完全一致（既有）。
+
+## 后续修复（同日用户反馈：确认卡不丝滑/闪烁）
+
+根因与修补（第二提交）：
+
+1. 电源 keep-open 行误 `armFlashHold()` → `holdSeq≠0` 时整列 `enabled=false`，闪完再启用造成整卡闪。改为这些行不 arm hold。
+2. 行选中闪烁与确认卡展开同帧重叠。keep-open 行（睡眠/退出/重启/关机）设 `flashOnActivate: false`。
+3. `Behavior on Layout.preferredHeight` 不可靠。改为单一 `confirmReveal` 实属性 + `Behavior on confirmReveal`，`implicitHeight` 与 `slotHeight` 都绑定它。
+
+验收：`test_motion_token_convergence` 更新断言；全量 764 全绿；host redeploy parity OK。

@@ -29,7 +29,7 @@ ShellRoot {
         readonly property int activeCount: activeModel.length
         readonly property var current: activeModel.length > 0
             ? activeModel[activeModel.length - 1] : null
-        signal notificationUpdated(int id)
+        signal notificationUpdated(real id)
 
         function visibleStack(max) {
             var count = Math.max(0, Math.min(max, activeModel.length));
@@ -88,7 +88,7 @@ ShellRoot {
         id: notificationFactory
 
         QtObject {
-            property int id: -1
+            property real id: -1
             property string summary: ""
             property string body: ""
             property string appName: "Test"
@@ -381,7 +381,7 @@ ShellRoot {
                 notifService.activeModel = burst.slice();
             }
             if (!require(toast.displayCount <= 6,
-                    "notification storm bounds active plus exiting regions"))
+                    "notification storm bounds active plus exiting wrappers"))
                 return;
             schedule(9, 260);
             return;
@@ -391,6 +391,8 @@ ShellRoot {
             stable53 = findCard(53);
             stable54 = findCard(54);
             if (!require(toast.displayCount === 3, "five-notification burst settles to three cards")
+                    || !require(toast.cardRegions.length === 3,
+                        "five-notification burst settles to three glass regions")
                     || !require(stable54 && stable54.stackIndex === 0,
                         "burst top 54")
                     || !require(stable53 && stable53.stackIndex === 1,
@@ -430,6 +432,105 @@ ShellRoot {
         if (stage === 12) {
             if (!require(toast.displayCount === 0, "all exit delegates retired")
                     || !require(!toast.visible, "toast unmaps after final QML exit"))
+                return;
+            settings.notificationToastStackMax = 3;
+            notifService.activeModel = [makeNotif(70), makeNotif(71), makeNotif(72)];
+            schedule(13, 180);
+            return;
+        }
+
+        if (stage === 13) {
+            var card72 = findCard(72);
+            if (!require(card72 && card72.stackIndex === 0, "shrink-race top 72"))
+                return;
+            toast.dismissNotification(card72.entry);
+            schedule(14, 20);
+            return;
+        }
+
+        if (stage === 14) {
+            var card71 = findCard(71);
+            if (!require(card71 && card71.stackIndex === 0, "shrink-race top 71"))
+                return;
+            toast.dismissNotification(card71.entry);
+            schedule(15, 20);
+            return;
+        }
+
+        if (stage === 15) {
+            var card70 = findCard(70);
+            if (!require(card70 && card70.stackIndex === 0, "shrink-race top 70"))
+                return;
+            toast.dismissNotification(card70.entry);
+            settings.notificationToastStackMax = 1;
+            schedule(16, 30);
+            return;
+        }
+
+        if (stage === 16) {
+            if (!require(toast.displayCount <= 3,
+                    "stack-max shrink bounds retained exit wrappers")
+                    || !require(toast.cardRegions.length <= 3,
+                        "stack-max shrink bounds registered glass regions"))
+                return;
+            schedule(17, 260);
+            return;
+        }
+
+        if (stage === 17) {
+            if (!require(countDismissed(72) === 1 && countDismissed(71) === 1
+                        && countDismissed(70) === 1,
+                    "stack-max shrink settles every dismiss exactly once")
+                    || !require(notifService.activeModel.length === 0,
+                        "stack-max shrink leaves no dismissed notification queued")
+                    || !require(toast.displayCount === 0 && !toast.visible,
+                        "stack-max shrink retires all exit delegates"))
+                return;
+            var largeId = 4000000000;
+            notifService.activeModel = [makeNotif(largeId)];
+            schedule(18, 180);
+            return;
+        }
+
+        if (stage === 18) {
+            var largeIdCard = findCard(4000000000);
+            if (!require(largeIdCard && largeIdCard.notifId === 4000000000,
+                    "uint32 notification id reaches toast without narrowing"))
+                return;
+            var largeIdLive = largeIdCard.liveNotification;
+            largeIdCard.entry.notification = null;
+            largeIdCard.entry.summary = "stale-large-id";
+            largeIdLive.summary = "summary-4000000000-updated";
+            notifService.notificationUpdated(4000000000);
+            schedule(19, 40);
+            return;
+        }
+
+        if (stage === 19) {
+            var largeIdCard = findCard(4000000000);
+            if (!require(largeIdCard && largeIdCard.liveNotification
+                        === notifService.activeModel[0],
+                    "uint32 service update resolves the live notification")
+                    || !require(largeIdCard.displaySummary
+                        === "summary-4000000000-updated",
+                        "uint32 service update refreshes stable content"))
+                return;
+            toast.dismissNotification(largeIdCard.entry);
+            var largeIdTimer = findDismissTimer(largeIdCard);
+            if (!require(largeIdTimer && largeIdTimer.pendingId === 4000000000,
+                    "uint32 notification id reaches delayed dismiss without narrowing"))
+                return;
+            schedule(20, 260);
+            return;
+        }
+
+        if (stage === 20) {
+            if (!require(countDismissed(4000000000) === 1,
+                    "uint32 notification id dismisses exactly once")
+                    || !require(notifService.activeModel.length === 0,
+                        "uint32 notification id leaves no queued notification")
+                    || !require(toast.displayCount === 0 && !toast.visible,
+                        "uint32 notification id exit retires and unmaps"))
                 return;
             finish();
         }

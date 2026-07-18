@@ -89,7 +89,7 @@ Item {
     // Live Notification property updates (replace-id) do not rewrite activeModel.
     // Narrow identity signal for consumers (Dynamic Island); carries only the
     // stable id — never a second snapshot or copied model.
-    signal notificationUpdated(int id)
+    signal notificationUpdated(real id)
 
     FileView {
         id: notificationStateFile
@@ -533,7 +533,7 @@ Item {
 
     Timer {
         id: expireTimer
-        property int targetId: -1
+        property real targetId: -1
         interval: root.defaultExpireMs
         repeat: false
         onTriggered: {

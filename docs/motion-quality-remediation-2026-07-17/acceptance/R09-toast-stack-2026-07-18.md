@@ -54,3 +54,10 @@
 
 - Toast 内联 action/close 控件的共享化与 hover/press 统一属于 R13，本任务未提前合并。
 - 真实宿主 `notify-send` 在临时关闭动态岛后的窄采样窗口未捕获 toast layer；设置已立即恢复为 `dynamicIslandEnabled=true`。R09 的生产 `qs` probe 已直接实例化同一真实 layer surface 并覆盖映射/退出，但肉眼手感仍可在宿主后续调参时复核。
+
+## Follow-up · stackMax 缩小与 uint32 identity
+
+- 修复运行中 `notificationToastStackMax: 3 -> 1` 时，退出 wrapper 上限随设置同步缩小、导致尚未完成的 dismiss 被提前销毁的问题。退出保留上限固定为产品最大栈深 3，三张卡并发退出仍逐一完成且各 dismiss 恰好一次。
+- notification id 从 wrapper、卡片、交互暂停、字段更新信号、延迟退出 Timer 到服务 expire Timer 全部使用 QML `real`，避免 freedesktop `uint32` id 在有符号 `int` 边界被窄化。
+- 真实 `qs` 探针新增 `4000000000` id，覆盖服务信号重新解析 live notification、字段刷新、延迟 dismiss、最终 unmap；同时直接断言 burst 稳态与 stackMax shrink 期间的 `cardRegions` 上界。
+- 独立复审先后发现 id 窄化链路与 region 断言空窗，修复后终审 **CLEAN**。`PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -q -p no:cacheprovider tests/test_notification_swipe_stable_identity.py tests/test_niri_settings_tool.py` → **30 passed, 10 subtests passed**；`git diff --check` 通过。

@@ -172,7 +172,7 @@ def extract_contract(toast_src: str, notifications_src: str) -> SwipeDismissCont
             "requestEntryExit" in dismiss_fn and "dismissId" not in dismiss_fn
         ),
         timer_has_pending_id=bool(
-            re.search(r"property\s+int\s+pendingId", timer)
+            re.search(r"property\s+real\s+pendingId", timer)
         ),
         timer_dismisses_pending_id=bool(
             re.search(r"completeEntryExit\s*\(\s*id\s*\)", timer_on_triggered)
@@ -372,6 +372,13 @@ class NotificationSwipeStableIdentityTests(unittest.TestCase):
         self.assertIn("function reconcileStack()", self.toast_src)
         self.assertIn("function retireCompletedEntries()", self.toast_src)
         self.assertIn("Behavior on stackY", self.toast_src)
+        self.assertIn("maxRetainedExits: Motion.toastStackMaxDefault", self.toast_src)
+        self.assertIn("property real notificationId", self.toast_src)
+        self.assertIn("readonly property real notifId", self.toast_src)
+        self.assertIn("property real interactionNotifId", self.toast_src)
+        self.assertIn("property real pendingId", self.toast_src)
+        self.assertIn("signal notificationUpdated(real id)", self.notifications_src)
+        self.assertIn("property real targetId", self.notifications_src)
         self.assertIn("enabled: interactive", self.toast_src)
         self.assertIn("!root.suppressedByDynamicIsland && displayCount > 0", self.toast_src)
         self.assertIn("readonly property var liveNotification", self.toast_src)

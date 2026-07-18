@@ -46,7 +46,10 @@ PanelWindow {
         return notificationsService.visibleStack(root.stackMax);
     }
     readonly property int stackCount: stackItems.length
-    readonly property int maxRetainedExits: stackMax
+    // Retained exits must not shrink when the user changes stackMax while cards
+    // are already leaving; otherwise destroying a wrapper would drop its pending
+    // service dismiss. The configured stack is capped at this product maximum.
+    readonly property int maxRetainedExits: Motion.toastStackMaxDefault
     // Stable QObject wrappers outlive service removal until their exit finishes.
     // This keeps the surface mapped for timeout/client-close animations and lets
     // cards move between stack slots without rebinding a fixed delegate.
@@ -69,7 +72,7 @@ PanelWindow {
 
         QtObject {
             property string modelKey: ""
-            property int notificationId: -1
+            property real notificationId: -1
             property int stackIndex: -1
             property bool present: false
             property bool exiting: false
@@ -479,7 +482,7 @@ PanelWindow {
             : (entry ? String(entry.iconUrl || "") : "")
         readonly property bool hasIcon: iconUrl.length > 0
         readonly property color accentColor: root.accentFor(liveNotification || entry)
-        readonly property int notifId: entry ? Number(entry.notificationId) : -1
+        readonly property real notifId: entry ? Number(entry.notificationId) : -1
         readonly property string displayAppName: liveNotification
             ? String(liveNotification.appName || "Notification")
             : (entry ? String(entry.appName || "Notification") : "")
@@ -515,7 +518,7 @@ PanelWindow {
         property real swipePointerStartX: 0
         property real swipePointerStartY: 0
         property int lastEnterSerial: -1
-        property int interactionNotifId: -1
+        property real interactionNotifId: -1
         property bool pointerPressed: false
         readonly property bool exitInteractionHold: active && entry.exiting
             && entry.dismissRequested && interactionNotifId === notifId
@@ -815,7 +818,7 @@ PanelWindow {
             // The stable entry remains rendered even if the service has already
             // removed that id (timeout/client close).
             property bool pending: false
-            property int pendingId: -1
+            property real pendingId: -1
             interval: Motion.panelExit(root.settingsService)
             repeat: false
             onTriggered: {

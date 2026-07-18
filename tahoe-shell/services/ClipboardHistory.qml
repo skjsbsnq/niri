@@ -19,6 +19,7 @@ Item {
     property string errorText: ""
     property bool listLoaded: false
     property string lastListText: ""
+    property string pendingListText: ""
     // Coalesce refresh intents that arrive while listProbe is already running.
     // Single latest-pending flag owned by ClipboardHistory — not a second Process.
     property bool refreshPending: false
@@ -27,7 +28,10 @@ Item {
     property string pendingPinRaw: ""
     property string pendingPinPreview: ""
     property string pendingPinIcon: "\ue14f"
+    property string pendingPinText: ""
     property var pinnedEntries: []
+    property var historyEntryCache: Object.create(null)
+    property var pinnedEntryCache: Object.create(null)
     property var commandRunner
 
     readonly property bool available: cliphistAvailable && wlCopyAvailable
@@ -38,14 +42,47 @@ Item {
     readonly property string textMimeType: "text/plain;charset=utf-8"
     readonly property string pinnedStatePath: Quickshell.stateDir + "/clipboard-pins.json"
 
+    Component {
+        id: historyEntryFactory
+
+        QtObject {
+            property string entryId: ""
+            property string modelKey: ""
+            property string raw: ""
+            property string preview: ""
+            property string icon: "\ue14f"
+            property bool binary: false
+            property bool pinnable: true
+        }
+    }
+
+    Component {
+        id: pinnedEntryFactory
+
+        QtObject {
+            property string modelKey: ""
+            property string text: ""
+            property string preview: ""
+            property string icon: "\ue14f"
+            property string sourceRaw: ""
+            property string addedAt: ""
+        }
+    }
+
     function setValue(name, value) {
         if (root[name] !== value)
             root[name] = value;
     }
 
     function clearEntries() {
-        if (root.entries.length > 0)
-            root.entries = [];
+        var cache = root.historyEntryCache || Object.create(null);
+        for (var entryId in cache) {
+            var entry = cache[entryId];
+            if (entry && entry.destroy)
+                entry.destroy(1000);
+        }
+        root.historyEntryCache = Object.create(null);
+        root.entries = [];
     }
 
     function previewForText(text) {
@@ -84,6 +121,49 @@ Item {
         return result;
     }
 
+    function mergePinnedEntries(values) {
+        var sanitized = root.sanitizedPins(values);
+        var cache = root.pinnedEntryCache || Object.create(null);
+        var activeKeys = Object.create(null);
+        var next = [];
+
+        for (var i = 0; i < sanitized.length; i++) {
+            var candidate = sanitized[i];
+            var text = String(candidate.text || "");
+            if (text.length === 0 || activeKeys[text])
+                continue;
+
+            var entry = cache[text];
+            if (!entry) {
+                entry = pinnedEntryFactory.createObject(root);
+                if (!entry)
+                    continue;
+                cache[text] = entry;
+            }
+            entry.modelKey = "pin:" + text;
+            entry.text = text;
+            entry.preview = String(candidate.preview || root.previewForText(text)).slice(0, 180);
+            entry.icon = String(candidate.icon || "\ue14f");
+            entry.sourceRaw = String(candidate.sourceRaw || "");
+            entry.addedAt = String(candidate.addedAt || "");
+            activeKeys[text] = true;
+            next.push(entry);
+        }
+
+        for (var cachedText in cache) {
+            if (activeKeys[cachedText])
+                continue;
+            var removed = cache[cachedText];
+            delete cache[cachedText];
+            if (removed && removed.destroy)
+                removed.destroy(1000);
+        }
+
+        root.pinnedEntryCache = cache;
+        root.pinnedEntries = next;
+        return next;
+    }
+
     function loadPinnedState() {
         if (loadingPinnedState)
             return;
@@ -92,15 +172,15 @@ Item {
         try {
             var text = pinnedFile.text();
             if (!text || String(text).trim().length === 0) {
-                root.pinnedEntries = [];
+                root.mergePinnedEntries([]);
                 root.writePinnedState();
                 return;
             }
 
             var parsed = JSON.parse(String(text));
-            root.pinnedEntries = root.sanitizedPins(parsed && parsed.pinned ? parsed.pinned : []);
+            root.mergePinnedEntries(parsed && parsed.pinned ? parsed.pinned : []);
         } catch (e) {
-            root.pinnedEntries = [];
+            root.mergePinnedEntries([]);
             root.writePinnedState();
         } finally {
             loadingPinnedState = false;
@@ -173,7 +253,7 @@ Item {
                 "sourceRaw": String(sourceRaw || current.sourceRaw || ""),
                 "addedAt": current.addedAt || new Date().toISOString()
             };
-            root.pinnedEntries = root.sanitizedPins(pins);
+            root.mergePinnedEntries(pins);
             root.writePinnedState();
             root.setValue("statusText", "已固定过");
             return;
@@ -187,7 +267,7 @@ Item {
             "addedAt": new Date().toISOString()
         });
 
-        root.pinnedEntries = root.sanitizedPins(pins);
+        root.mergePinnedEntries(pins);
         root.writePinnedState();
         root.setValue("statusText", "已固定");
     }
@@ -197,9 +277,9 @@ Item {
             return;
 
         var text = String(pin.text || "");
-        root.pinnedEntries = root.pinnedEntries.filter(function(item) {
+        root.mergePinnedEntries(root.pinnedEntries.filter(function(item) {
             return String(item.text || "") !== text;
-        });
+        }));
         root.writePinnedState();
         root.setValue("statusText", "已取消固定");
     }
@@ -211,7 +291,7 @@ Item {
 
         var pins = root.pinnedEntries.slice();
         pins.splice(index, 1);
-        root.pinnedEntries = pins;
+        root.mergePinnedEntries(pins);
         root.writePinnedState();
         root.setValue("statusText", "已取消固定");
     }
@@ -238,6 +318,7 @@ Item {
         root.pendingPinRaw = String(entry.raw || "");
         root.pendingPinPreview = String(entry.preview || "");
         root.pendingPinIcon = String(entry.icon || "\ue14f");
+        root.pendingPinText = "";
         root.pinning = true;
         root.setValue("statusText", "正在固定");
         pinDecodeProcess.running = true;
@@ -257,6 +338,7 @@ Item {
         root.pendingPinRaw = "";
         root.pendingPinPreview = "";
         root.pendingPinIcon = "\ue14f";
+        root.pendingPinText = "";
     }
 
     function applyCommandRunnerTools() {
@@ -315,6 +397,7 @@ Item {
         }
         root.refreshPending = false;
         root.updating = true;
+        root.pendingListText = "";
         listProbe.running = true;
         if (!listProbe.running) {
             // FailedToStart can race synchronously; terminal path recovers pending.
@@ -323,12 +406,18 @@ Item {
     }
 
     function finishListProbe(code) {
+        if (!root.updating)
+            return;
+
+        var output = root.pendingListText;
+        root.pendingListText = "";
+        if (code === 0)
+            root.parseList(output);
         root.updating = false;
         if (code !== 0) {
-            root.listLoaded = false;
-            root.lastListText = "";
-            root.clearEntries();
-            root.setValue("statusText", "暂无历史");
+            root.setValue("statusText", root.entries.length > 0
+                ? ("刷新失败，保留 " + root.entries.length + " 项")
+                : "暂无历史");
         }
         if (root.refreshPending) {
             root.refreshPending = false;
@@ -371,6 +460,58 @@ Item {
         return root.commandRunner.dependencyState("clipboard") === "ok" ? "" : root.commandRunner.dependencyDetail("clipboard");
     }
 
+    function cliphistEntryId(raw) {
+        var line = String(raw || "");
+        var match = /^\s*(\d+)(?:\s+|\t)/.exec(line);
+        return match ? String(match[1]) : line;
+    }
+
+    function mergeHistoryEntries(candidates) {
+        var cache = root.historyEntryCache || Object.create(null);
+        var activeIds = Object.create(null);
+        var next = [];
+        var incoming = candidates || [];
+
+        for (var i = 0; i < incoming.length; i++) {
+            var candidate = incoming[i];
+            if (!candidate)
+                continue;
+            var entryId = String(candidate.entryId || "");
+            if (entryId.length === 0 || activeIds[entryId])
+                continue;
+
+            var entry = cache[entryId];
+            if (!entry) {
+                entry = historyEntryFactory.createObject(root);
+                if (!entry)
+                    continue;
+                cache[entryId] = entry;
+            }
+            entry.entryId = entryId;
+            entry.modelKey = "history:" + entryId;
+            entry.raw = String(candidate.raw || "");
+            entry.preview = String(candidate.preview || "");
+            entry.icon = String(candidate.icon || "\ue14f");
+            entry.binary = !!candidate.binary;
+            entry.pinnable = candidate.pinnable !== false;
+            activeIds[entryId] = true;
+            next.push(entry);
+        }
+
+        for (var cachedId in cache) {
+            if (activeIds[cachedId])
+                continue;
+            var removed = cache[cachedId];
+            delete cache[cachedId];
+            if (removed && removed.destroy)
+                removed.destroy(1000);
+        }
+
+        root.historyEntryCache = cache;
+        root.entries = next;
+        return next;
+    }
+
     function parseList(text) {
         var normalizedText = String(text || "");
         if (root.listLoaded && normalizedText === root.lastListText) {
@@ -382,8 +523,8 @@ Item {
         root.lastListText = normalizedText;
 
         var rawLines = normalizedText.split(/\r?\n/);
-        var out = [];
-        for (var i = 0; i < rawLines.length && out.length < 60; i++) {
+        var candidates = [];
+        for (var i = 0; i < rawLines.length && candidates.length < 60; i++) {
             var line = rawLines[i];
             if (!line || line.length === 0)
                 continue;
@@ -400,7 +541,8 @@ Item {
                 || lower.indexOf("image/") >= 0
                 || lower.indexOf("application/") >= 0;
 
-            out.push({
+            candidates.push({
+                "entryId": root.cliphistEntryId(line),
                 "raw": line,
                 "preview": preview,
                 "icon": binary ? "\ue3f4" : "\ue14f",
@@ -409,8 +551,8 @@ Item {
             });
         }
 
-        root.entries = out;
-        root.updateListStatus(out.length);
+        var merged = root.mergeHistoryEntries(candidates);
+        root.updateListStatus(merged.length);
     }
 
     function startWatcher() {
@@ -469,16 +611,43 @@ Item {
             var result = root.commandRunner.runClipboardDeleteEntry(entry.raw);
             root.statusText = result && result.success ? "已删除" : String(result && (result.detail || result.message) || "删除失败");
             root.errorText = result && result.success ? root.dependencyWarningText() : root.statusText;
+            if (result && result.success)
+                root.removePublishedEntry(entry);
             root.scheduleRefresh();
             return;
         }
 
-        root.statusText = "已删除";
-        Quickshell.execDetached({
-            command: ["sh", "-c", "printf %s \"$1\" | cliphist delete", "sh", entry.raw],
-            workingDirectory: ""
-        });
+        try {
+            Quickshell.execDetached({
+                command: ["sh", "-c", "printf %s \"$1\" | cliphist delete", "sh", entry.raw],
+                workingDirectory: ""
+            });
+            root.statusText = "已删除";
+            root.removePublishedEntry(entry);
+        } catch (e) {
+            root.statusText = "删除失败";
+            root.errorText = String(e);
+        }
         root.scheduleRefresh();
+    }
+
+    function removePublishedEntry(entry) {
+        if (!entry)
+            return;
+        var entryId = String(entry.entryId || root.cliphistEntryId(entry.raw));
+        var next = [];
+        for (var i = 0; i < root.entries.length; i++) {
+            if (String(root.entries[i].entryId || "") !== entryId)
+                next.push(root.entries[i]);
+        }
+        var cached = root.historyEntryCache[entryId];
+        if (cached) {
+            delete root.historyEntryCache[entryId];
+            if (cached.destroy)
+                cached.destroy(1000);
+        }
+        root.entries = next;
+        root.updateListStatus(next.length);
     }
 
     function clearHistory() {
@@ -539,7 +708,7 @@ Item {
         command: root.commandRunner && root.commandRunner.clipboardListCommand ? root.commandRunner.clipboardListCommand() : ["cliphist", "list"]
         stdout: StdioCollector {
             id: listProbeOut
-            onStreamFinished: root.parseList(listProbeOut.text)
+            onStreamFinished: root.pendingListText = listProbeOut.text
         }
         onExited: function(code, exitStatus) {
             root.finishListProbe(code);
@@ -557,10 +726,22 @@ Item {
         command: root.commandRunner && root.commandRunner.clipboardDecodeCommand ? root.commandRunner.clipboardDecodeCommand(root.pendingPinRaw) : ["sh", "-c", "printf %s \"$1\" | cliphist decode", "sh", root.pendingPinRaw]
         stdout: StdioCollector {
             id: pinDecodeOut
-            onStreamFinished: root.finishPinDecode(pinDecodeOut.text)
+            onStreamFinished: root.pendingPinText = pinDecodeOut.text
         }
         onExited: function(code, exitStatus) {
-            if (code !== 0 && root.pinning) {
+            if (!root.pinning)
+                return;
+            if (code === 0) {
+                root.finishPinDecode(root.pendingPinText);
+            } else {
+                root.setValue("statusText", "固定失败");
+                root.resetPinDecode();
+            }
+        }
+        onRunningChanged: {
+            // Quickshell emits exited before runningChanged on normal exit.
+            // Remaining pinning state here therefore means FailedToStart.
+            if (!pinDecodeProcess.running && root.pinning) {
                 root.setValue("statusText", "固定失败");
                 root.resetPinDecode();
             }

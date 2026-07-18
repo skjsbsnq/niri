@@ -25,6 +25,7 @@ import os
 import re
 import shutil
 import subprocess
+import tempfile
 import unittest
 from dataclasses import dataclass
 from pathlib import Path
@@ -335,6 +336,264 @@ class ClipboardHistoryEventRefreshTests(unittest.TestCase):
         self.assertTrue(contract.finish_list_probe_replays_pending)
         self.assertTrue(contract.list_probe_running_changed_fallback)
         self.assertTrue(contract.no_parallel_refresh_api)
+
+    def test_stable_entry_caches_and_failed_refresh_retention(self) -> None:
+        src = CLIPBOARD.read_text(encoding="utf-8")
+        self.assertIn("property var historyEntryCache: Object.create(null)", src)
+        self.assertIn("property var pinnedEntryCache: Object.create(null)", src)
+        self.assertIn("function cliphistEntryId(raw)", src)
+        self.assertIn("function mergeHistoryEntries(candidates)", src)
+        self.assertIn("function mergePinnedEntries(values)", src)
+        self.assertIn('entry.modelKey = "history:" + entryId', src)
+        self.assertIn('entry.modelKey = "pin:" + text', src)
+        self.assertIn("root.pendingListText = listProbeOut.text", src)
+        self.assertIn("root.pendingPinText = pinDecodeOut.text", src)
+        finish = _extract_function_body(src, "finishListProbe")
+        self.assertIn("root.parseList(output)", finish)
+        self.assertNotIn("root.clearEntries()", finish)
+        self.assertIn("刷新失败，保留", finish)
+        pin_process = _process_block(src, "pinDecodeProcess")
+        self.assertIn("if (code === 0)", pin_process)
+        self.assertIn("root.finishPinDecode(root.pendingPinText)", pin_process)
+        self.assertIn("FailedToStart", pin_process)
+
+    def test_popup_stable_models_transitions_and_eased_height(self) -> None:
+        popup = CLIPBOARD_POPUP.read_text(encoding="utf-8")
+        self.assertEqual(popup.count('objectProp: "modelKey"'), 2)
+        self.assertEqual(popup.count("add: Transition"), 2)
+        self.assertEqual(popup.count("remove: Transition"), 2)
+        self.assertEqual(popup.count("displaced: Transition"), 2)
+        self.assertGreaterEqual(
+            popup.count("Motion.elementResize(root.settingsService)"), 5
+        )
+        self.assertIn("Behavior on height", popup)
+        self.assertIn("Behavior on Layout.preferredHeight", popup)
+        self.assertNotIn("SpringAnimation", popup)
+
+    def test_clipboard_row_owns_hover_and_press_feedback_only(self) -> None:
+        popup = CLIPBOARD_POPUP.read_text(encoding="utf-8")
+        row = re.search(
+            r"component ClipboardRow: Item \{(?P<body>[\s\S]*?)\n    component SectionHeader",
+            popup,
+        )
+        self.assertIsNotNone(row)
+        assert row
+        body = row.group("body")
+        self.assertIn("Motion.pressScaleFor(root.settingsService, rowMouse.pressed)", body)
+        self.assertIn("Motion.pressDurationFor(root.settingsService)", body)
+        self.assertIn("Behavior on color", body)
+        self.assertIn("ColorAnimation", body)
+        self.assertIn("Motion.fadeFast(root.settingsService)", body)
+
+    def test_real_quickshell_scriptmodel_preserves_clipboard_delegates(self) -> None:
+        local_runner = Path.home() / ".local" / "bin" / "qs"
+        runner = str(local_runner) if local_runner.is_file() else shutil.which("qs")
+        self.assertIsNotNone(runner, "Tahoe Quickshell runtime is required")
+
+        qml = r'''pragma ComponentBehavior: Bound
+
+import QtQuick
+import Quickshell
+import "__SERVICE_IMPORT__" as Services
+
+ShellRoot {
+    id: root
+
+    property int historyCreated: 0
+    property int historyDestroyed: 0
+    property int pinnedCreated: 0
+    property int pinnedDestroyed: 0
+    property var alphaHistoryDelegate: null
+    property var betaHistoryDelegate: null
+    property var alphaPinnedDelegate: null
+    property var betaPinnedDelegate: null
+
+    QtObject {
+        id: fakeRunner
+        property int revision: 1
+        function commandAvailable(name) { return false; }
+        function dependencyDetail(name) { return ""; }
+        function dependencyState(name) { return "missing"; }
+        function refreshDependencies() {}
+    }
+
+    Services.ClipboardHistory {
+        id: clipboard
+        commandRunner: fakeRunner
+        loadingPinnedState: true
+    }
+
+    Item {
+        Repeater {
+            id: historyRows
+            model: ScriptModel {
+                objectProp: "modelKey"
+                values: clipboard.entries
+            }
+            delegate: Item {
+                required property var modelData
+                Component.onCompleted: root.historyCreated += 1
+                Component.onDestruction: root.historyDestroyed += 1
+            }
+        }
+
+        Repeater {
+            id: pinnedRows
+            model: ScriptModel {
+                objectProp: "modelKey"
+                values: clipboard.pinnedEntries
+            }
+            delegate: Item {
+                required property var modelData
+                Component.onCompleted: root.pinnedCreated += 1
+                Component.onDestruction: root.pinnedDestroyed += 1
+            }
+        }
+    }
+
+    Timer {
+        id: settleTimer
+        interval: 5
+        repeat: false
+        property var callback: null
+        onTriggered: callback()
+    }
+
+    function afterModelSettles(callback) {
+        settleTimer.callback = callback;
+        settleTimer.restart();
+    }
+
+    function fail(message) {
+        console.error("CLIPBOARD_STABLE_ROWS_FAIL: " + message);
+        Qt.quit();
+    }
+
+    function require(condition, message) {
+        if (!condition) {
+            fail(message);
+            return false;
+        }
+        return true;
+    }
+
+    function historyDelegate(entryId) {
+        for (var i = 0; i < historyRows.count; i++) {
+            var item = historyRows.itemAt(i);
+            if (item && String(item.modelData.entryId) === String(entryId))
+                return item;
+        }
+        return null;
+    }
+
+    function pinnedDelegate(text) {
+        for (var i = 0; i < pinnedRows.count; i++) {
+            var item = pinnedRows.itemAt(i);
+            if (item && String(item.modelData.text) === String(text))
+                return item;
+        }
+        return null;
+    }
+
+    function startProbe() {
+        clipboard.clearEntries();
+        clipboard.mergePinnedEntries([]);
+        clipboard.listLoaded = false;
+        clipboard.lastListText = "";
+        clipboard.parseList("10\talpha\n20\tbeta");
+        clipboard.mergePinnedEntries([
+            { text: "alpha", preview: "Alpha", icon: "a", sourceRaw: "10\talpha", addedAt: "1" },
+            { text: "beta", preview: "Beta", icon: "b", sourceRaw: "20\tbeta", addedAt: "2" }
+        ]);
+        afterModelSettles(checkInitialRows);
+    }
+
+    function checkInitialRows() {
+        alphaHistoryDelegate = historyDelegate("10");
+        betaHistoryDelegate = historyDelegate("20");
+        alphaPinnedDelegate = pinnedDelegate("alpha");
+        betaPinnedDelegate = pinnedDelegate("beta");
+        if (!require(historyRows.count === 2 && pinnedRows.count === 2,
+                "initial row counts")
+                || !require(historyCreated === 2 && pinnedCreated === 2,
+                    "initial delegate creation")
+                || !require(alphaHistoryDelegate && betaHistoryDelegate
+                    && alphaPinnedDelegate && betaPinnedDelegate,
+                    "initial delegates missing"))
+            return;
+
+        clipboard.parseList("20\tbeta updated\n10\talpha updated\n30\tgamma");
+        clipboard.mergePinnedEntries([
+            { text: "beta", preview: "Beta updated", icon: "B", sourceRaw: "21\tbeta", addedAt: "3" },
+            { text: "alpha", preview: "Alpha updated", icon: "A", sourceRaw: "11\talpha", addedAt: "4" }
+        ]);
+        afterModelSettles(checkMovedRows);
+    }
+
+    function checkMovedRows() {
+        if (!require(historyRows.count === 3 && pinnedRows.count === 2,
+                "moved row counts")
+                || !require(historyCreated === 3 && historyDestroyed === 0
+                    && pinnedCreated === 2 && pinnedDestroyed === 0,
+                    "surviving delegates recreated")
+                || !require(historyDelegate("10") === alphaHistoryDelegate
+                    && historyDelegate("20") === betaHistoryDelegate,
+                    "history delegate identity changed")
+                || !require(pinnedDelegate("alpha") === alphaPinnedDelegate
+                    && pinnedDelegate("beta") === betaPinnedDelegate,
+                    "pinned delegate identity changed")
+                || !require(alphaHistoryDelegate.modelData.preview === "alpha updated"
+                    && betaPinnedDelegate.modelData.preview === "Beta updated",
+                    "latest fields not delivered")
+                || !require(historyRows.itemAt(0) === betaHistoryDelegate
+                    && pinnedRows.itemAt(0) === betaPinnedDelegate,
+                    "delegates did not move in place"))
+            return;
+
+        clipboard.parseList("10\talpha final\n30\tgamma");
+        clipboard.mergePinnedEntries([
+            { text: "alpha", preview: "Alpha final", icon: "A", sourceRaw: "11\talpha", addedAt: "4" }
+        ]);
+        afterModelSettles(checkRemovedRows);
+    }
+
+    function checkRemovedRows() {
+        if (!require(historyRows.count === 2 && pinnedRows.count === 1,
+                "final row counts")
+                || !require(historyDestroyed === 1 && pinnedDestroyed === 1,
+                    "removed delegates were not destroyed once")
+                || !require(historyDelegate("10") === alphaHistoryDelegate
+                    && pinnedDelegate("alpha") === alphaPinnedDelegate,
+                    "surviving delegate changed on removal"))
+            return;
+        console.log("CLIPBOARD_STABLE_ROWS_OK");
+        Qt.quit();
+    }
+
+    Timer {
+        interval: 20
+        running: true
+        repeat: false
+        onTriggered: root.startProbe()
+    }
+}
+'''.replace("__SERVICE_IMPORT__", (SHELL_ROOT / "services").as_uri())
+
+        with tempfile.TemporaryDirectory(prefix="tahoe-clipboard-stable-") as temp_dir:
+            config = Path(temp_dir) / "shell.qml"
+            config.write_text(qml, encoding="utf-8")
+            completed = subprocess.run(
+                [runner, "-p", str(config)],
+                text=True,
+                capture_output=True,
+                timeout=20,
+                check=False,
+            )
+
+        output = completed.stdout + completed.stderr
+        self.assertEqual(completed.returncode, 0, output)
+        self.assertIn("CLIPBOARD_STABLE_ROWS_OK", output, output)
+        self.assertNotIn("CLIPBOARD_STABLE_ROWS_FAIL", output, output)
 
     def test_real_qml_lossless_refresh(self) -> None:
         qt6_runner = Path("/usr/lib/qt6/bin/qmltestrunner")

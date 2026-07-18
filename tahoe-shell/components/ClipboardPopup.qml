@@ -33,7 +33,7 @@ PanelWindow {
     focusable: false
     exclusionMode: ExclusionMode.Ignore
     implicitWidth: 360
-    implicitHeight: panel.implicitHeight
+    implicitHeight: panel.height
     color: "transparent"
     WlrLayershell.namespace: "tahoe-clipboard-popup"
 
@@ -61,11 +61,20 @@ PanelWindow {
         width: parent.width
         implicitHeight: content.implicitHeight + 24
         height: implicitHeight
+        clip: true
         material: GlassStyle.MaterialPanel
         radius: GlassStyle.RadiusPopup
         fillColor: GlassStyle.FillPanelBright
         strokeColor: GlassStyle.StrokePanelBright
         opacity: 1
+
+        // Glass region geometry follows this height: eased only, never spring.
+        Behavior on height {
+            NumberAnimation {
+                duration: Motion.elementResize(root.settingsService)
+                easing.type: Motion.emphasizedDecel
+            }
+        }
 
         ColumnLayout {
             id: content
@@ -136,6 +145,7 @@ PanelWindow {
                 Layout.fillWidth: true
                 spacing: 6
                 visible: root.pinnedEntries.length > 0
+                    || pinnedList.Layout.preferredHeight > 0.5
 
                 SectionHeader {
                     label: "固定"
@@ -146,11 +156,74 @@ PanelWindow {
                     id: pinnedList
 
                     Layout.fillWidth: true
-                    Layout.preferredHeight: Math.min(146, Math.max(44, contentHeight))
+                    Layout.preferredHeight: root.pinnedEntries.length > 0
+                        ? Math.min(146, Math.max(44, contentHeight)) : 0
                     clip: true
                     spacing: 6
                     boundsBehavior: Flickable.StopAtBounds
-                    model: root.pinnedEntries
+                    model: ScriptModel {
+                        objectProp: "modelKey"
+                        values: root.pinnedEntries
+                    }
+
+                    Behavior on Layout.preferredHeight {
+                        NumberAnimation {
+                            duration: Motion.elementResize(root.settingsService)
+                            easing.type: Motion.emphasizedDecel
+                        }
+                    }
+
+                    add: Transition {
+                        ParallelAnimation {
+                            NumberAnimation {
+                                property: "x"
+                                from: 16
+                                to: 0
+                                duration: Motion.elementMove(root.settingsService)
+                                easing.type: Motion.emphasizedDecel
+                            }
+                            NumberAnimation {
+                                property: "opacity"
+                                from: 0
+                                to: 1
+                                duration: Motion.fadeFast(root.settingsService)
+                                easing.type: Motion.standardDecel
+                            }
+                        }
+                    }
+
+                    remove: Transition {
+                        ParallelAnimation {
+                            NumberAnimation {
+                                property: "x"
+                                from: 0
+                                to: -16
+                                duration: Motion.elementMove(root.settingsService)
+                                easing.type: Motion.emphasizedAccel
+                            }
+                            NumberAnimation {
+                                property: "opacity"
+                                from: 1
+                                to: 0
+                                duration: Motion.fadeFast(root.settingsService)
+                                easing.type: Motion.emphasizedAccel
+                            }
+                            NumberAnimation {
+                                property: "height"
+                                to: 0
+                                duration: Motion.elementResize(root.settingsService)
+                                easing.type: Motion.emphasizedDecel
+                            }
+                        }
+                    }
+
+                    displaced: Transition {
+                        NumberAnimation {
+                            properties: "x,y"
+                            duration: Motion.elementMove(root.settingsService)
+                            easing.type: Motion.emphasizedDecel
+                        }
+                    }
 
                     delegate: ClipboardRow {
                         required property var modelData
@@ -188,18 +261,83 @@ PanelWindow {
                 label: "历史"
                 count: root.entries.length
                 visible: root.entries.length > 0
+                    || historyList.Layout.preferredHeight > 0.5
             }
 
             ListView {
                 id: historyList
 
                 Layout.fillWidth: true
-                Layout.preferredHeight: Math.min(root.pinnedEntries.length > 0 ? 250 : 360, Math.max(120, contentHeight))
-                visible: root.entries.length > 0
+                Layout.preferredHeight: root.entries.length > 0
+                    ? Math.min(root.pinnedEntries.length > 0 ? 250 : 360,
+                        Math.max(120, contentHeight)) : 0
+                visible: root.entries.length > 0 || Layout.preferredHeight > 0.5
                 clip: true
                 spacing: 6
                 boundsBehavior: Flickable.StopAtBounds
-                model: root.entries
+                model: ScriptModel {
+                    objectProp: "modelKey"
+                    values: root.entries
+                }
+
+                Behavior on Layout.preferredHeight {
+                    NumberAnimation {
+                        duration: Motion.elementResize(root.settingsService)
+                        easing.type: Motion.emphasizedDecel
+                    }
+                }
+
+                add: Transition {
+                    ParallelAnimation {
+                        NumberAnimation {
+                            property: "x"
+                            from: 20
+                            to: 0
+                            duration: Motion.elementMove(root.settingsService)
+                            easing.type: Motion.emphasizedDecel
+                        }
+                        NumberAnimation {
+                            property: "opacity"
+                            from: 0
+                            to: 1
+                            duration: Motion.fadeFast(root.settingsService)
+                            easing.type: Motion.standardDecel
+                        }
+                    }
+                }
+
+                remove: Transition {
+                    ParallelAnimation {
+                        NumberAnimation {
+                            property: "x"
+                            from: 0
+                            to: 32
+                            duration: Motion.elementMove(root.settingsService)
+                            easing.type: Motion.emphasizedAccel
+                        }
+                        NumberAnimation {
+                            property: "opacity"
+                            from: 1
+                            to: 0
+                            duration: Motion.fadeFast(root.settingsService)
+                            easing.type: Motion.emphasizedAccel
+                        }
+                        NumberAnimation {
+                            property: "height"
+                            to: 0
+                            duration: Motion.elementResize(root.settingsService)
+                            easing.type: Motion.emphasizedDecel
+                        }
+                    }
+                }
+
+                displaced: Transition {
+                    NumberAnimation {
+                        properties: "x,y"
+                        duration: Motion.elementMove(root.settingsService)
+                        easing.type: Motion.emphasizedDecel
+                    }
+                }
 
                 delegate: ClipboardRow {
                     required property var modelData
@@ -241,6 +379,15 @@ PanelWindow {
         signal deleteRequested(var entry)
 
         height: rowFrame.implicitHeight
+        scale: Motion.pressScaleFor(root.settingsService, rowMouse.pressed)
+        transformOrigin: Item.Center
+
+        Behavior on scale {
+            NumberAnimation {
+                duration: Motion.pressDurationFor(root.settingsService)
+                easing.type: Motion.pressEasing
+            }
+        }
 
         Rectangle {
             id: rowFrame
@@ -252,6 +399,13 @@ PanelWindow {
             color: rowMouse.containsMouse ? "#54ffffff" : "#34ffffff"
             border.color: "#44ffffff"
             border.width: 1
+
+            Behavior on color {
+                ColorAnimation {
+                    duration: Motion.fadeFast(root.settingsService)
+                    easing.type: Motion.standardDecel
+                }
+            }
 
             RowLayout {
                 id: rowContent

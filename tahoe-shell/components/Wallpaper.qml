@@ -35,8 +35,10 @@ PanelWindow {
     // --fps is a process-start option. Keep the running budget stable so an idle transition does
     // not tear down and recreate the wallpaper layer on the first pointer event.
     property int appliedWallpaperFps: 15
-    readonly property bool liveWallpaperAllowed: !fullscreenActive
-        && (!sessionIdle || !wallpaperPauseWhenIdle)
+    // Fullscreen does not own the live process lifecycle. Generated linux-wallpaperengine
+    // commands retain its default renderer pause, while custom commands keep their existing
+    // process and layer surface instead of exposing a fallback during a forced cold-start.
+    readonly property bool liveWallpaperAllowed: !sessionIdle || !wallpaperPauseWhenIdle
 
     readonly property bool dynamicDesired: settingsReady
         && settingsService.wallpaperMode === "dynamic"

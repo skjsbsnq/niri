@@ -26,6 +26,7 @@ Item {
     readonly property string effectiveStaticWallpaper: normalizedPath(staticWallpaperPath)
     readonly property string dynamicWallpaperCommand: settingsAdapter.dynamicWallpaperCommand
     readonly property string effectiveDynamicWallpaperCommand: String(dynamicWallpaperCommand || "").trim()
+    readonly property bool lockScreenFollowWallpaper: settingsAdapter.lockScreenFollowWallpaper
     readonly property string dynamicWallpaperExampleCommand: "linux-wallpaperengine --screen-root {output} --assets-dir \"$HOME/.local/share/Steam/steamapps/workshop/content/431960\" WALLPAPER_ID"
     // Live wallpaper engine budget. Active fps is capped low so glass sampling is not forced to
     // full-screen damage at 30Hz; the lower budget applies on the next safe process start.
@@ -339,6 +340,15 @@ Item {
 
     function resetStaticWallpaperPath() {
         setStaticWallpaperPath("");
+    }
+
+    function setLockScreenFollowWallpaper(enabled) {
+        var next = !!enabled;
+        if (settingsAdapter.lockScreenFollowWallpaper === next)
+            return;
+
+        settingsAdapter.lockScreenFollowWallpaper = next;
+        settingsFile.writeAdapter();
     }
 
     function setDynamicWallpaperCommand(command) {
@@ -874,6 +884,8 @@ Item {
             property string wallpaperMode: "static"
             property string staticWallpaperPath: ""
             property string dynamicWallpaperCommand: ""
+            // Static wallpaper, or the Wallpaper Engine project's preview image.
+            property bool lockScreenFollowWallpaper: true
             // Active/idle fps for linux-wallpaperengine (external + dynamic modes).
             property int wallpaperEngineFps: 15
             property int wallpaperEngineIdleFps: 8

@@ -111,12 +111,27 @@ Flickable {
                     }
                 }
             }
+
+            Controls.TahoeListRow {
+                theme: page.theme
+                label: "锁屏跟随壁纸"
+                detail: "静态壁纸直接沿用；动态壁纸显示项目预览图"
+                iconCode: "\ue897"
+                checkable: true
+                enabled: !!(page.panel && page.panel.settingsService)
+                checked: !!(page.panel && page.panel.settingsService
+                    && page.panel.settingsService.lockScreenFollowWallpaper)
+                onToggled: function(next) {
+                    if (page.panel && page.panel.settingsService)
+                        page.panel.settingsService.setLockScreenFollowWallpaper(next);
+                }
+            }
         }
 
         Controls.TahoeSection {
             theme: page.theme
             title: "动态壁纸"
-            subtitle: "用命令托管，或交给 Linux Wallpaper Engine UX 切换。日常建议静态；动态模式会在空闲时自动降帧。"
+            subtitle: "用命令托管，或交给 Linux Wallpaper Engine UX 切换。动态模式空闲时自动降帧；UX 模式全屏时原地暂停，不会重启壁纸。"
 
             Controls.TahoeListRow {
                 theme: page.theme

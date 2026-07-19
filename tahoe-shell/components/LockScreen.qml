@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import Quickshell
+import Quickshell.Io
 import Quickshell.Services.Pam
 import Quickshell.Wayland
 import "Motion.js" as Motion
@@ -16,6 +17,16 @@ WlSessionLock {
     property int failureFeedbackSerial: 0
     property int focusRequestSerial: 0
     property string credentialText: ""
+    readonly property string wallpaperHomeDir: {
+        var value = settingsService && settingsService.homeDir !== undefined
+            ? settingsService.homeDir : Quickshell.env("HOME");
+        return value === undefined || value === null ? "" : String(value).trim();
+    }
+    readonly property string activeWallpaperStatePath: wallpaperHomeDir.length > 0
+        ? wallpaperHomeDir + "/.config/Linux Wallpaper Engine/active-wallpapers.json"
+        : ""
+    property var activeWallpaperEntries: ({})
+    property int activeWallpaperRevision: 0
     readonly property bool reducedMotion: Motion.reducedMotion(settingsService)
     readonly property int lockEnterDuration: reducedMotion ? 0 : Motion.panelEnter(settingsService)
     readonly property int unlockExitDuration: reducedMotion
@@ -31,6 +42,16 @@ WlSessionLock {
         enabled: root.locked
     }
 
+    property FileView activeWallpaperFile: FileView {
+        path: root.activeWallpaperStatePath
+        blockLoading: true
+        watchChanges: true
+        printErrors: false
+        onFileChanged: reload()
+        onLoaded: root.refreshActiveWallpaperEntries()
+        onLoadFailed: root.clearActiveWallpaperEntries()
+    }
+
     property string statusText: ""
     property bool authFailed: false
     // Display only: wall time comes from the sole SystemClock owner above.
@@ -38,6 +59,111 @@ WlSessionLock {
     readonly property string userName: {
         var user = Quickshell.env("USER");
         return user ? String(user) : "用户";
+    }
+
+    function clearActiveWallpaperEntries() {
+        root.activeWallpaperEntries = ({});
+        root.activeWallpaperRevision += 1;
+    }
+
+    function refreshActiveWallpaperEntries() {
+        var next = ({});
+        try {
+            var state = JSON.parse(root.activeWallpaperFile.text());
+            if (state && state.activeWallpapers)
+                next = state.activeWallpapers;
+        } catch (e) {
+            next = ({});
+        }
+        root.activeWallpaperEntries = next;
+        root.activeWallpaperRevision += 1;
+    }
+
+    function stripShellQuotes(value) {
+        var text = String(value || "").trim();
+        if (text.length >= 2) {
+            var first = text.charAt(0);
+            var last = text.charAt(text.length - 1);
+            if ((first === "'" && last === "'") || (first === "\"" && last === "\""))
+                text = text.substring(1, text.length - 1);
+        }
+        return text;
+    }
+
+    function normalizeWallpaperProjectPath(value) {
+        var text = stripShellQuotes(value);
+        if (text.indexOf("file://") === 0)
+            text = text.substring(7);
+        if (wallpaperHomeDir.length > 0) {
+            if (text === "~")
+                text = wallpaperHomeDir;
+            else if (text.indexOf("~/") === 0)
+                text = wallpaperHomeDir + text.substring(1);
+            else if (text.indexOf("$HOME/") === 0)
+                text = wallpaperHomeDir + text.substring(5);
+            else if (text.indexOf("${HOME}/") === 0)
+                text = wallpaperHomeDir + text.substring(7);
+        }
+        if (/^[0-9]+$/.test(text) && wallpaperHomeDir.length > 0)
+            text = wallpaperHomeDir + "/.local/share/Steam/steamapps/workshop/content/431960/" + text;
+        while (text.length > 1 && text.charAt(text.length - 1) === "/")
+            text = text.substring(0, text.length - 1);
+        return text;
+    }
+
+    function wallpaperEntryForOutput(outputName) {
+        root.activeWallpaperRevision;
+        var active = root.activeWallpaperEntries || ({});
+        var output = String(outputName || "").trim();
+        var entry = output.length > 0 ? active[output] : null;
+        if (!entry && output.length === 0) {
+            var keys = Object.keys(active);
+            if (keys.length === 1)
+                entry = active[keys[0]];
+        }
+        return entry || null;
+    }
+
+    function wallpaperProjectForOutput(outputName) {
+        var entry = wallpaperEntryForOutput(outputName);
+        if (!entry)
+            return "";
+        return normalizeWallpaperProjectPath(entry.backgroundId || entry.id || "");
+    }
+
+    function wallpaperProjectFromDynamicCommand(command) {
+        var text = String(command || "").trim();
+        if (text.length === 0)
+            return "";
+        var match = text.match(/(?:^|\s)(?:--bg|-b)(?:\s+|=)(?:"([^"]*)"|'([^']*)'|([^\s]+))/);
+        if (match)
+            return normalizeWallpaperProjectPath(match[1] || match[2] || match[3] || "");
+        var positionalId = text.match(/(?:^|\s)([0-9]{6,})(?=\s*(?:$|[;&|]))/);
+        if (positionalId)
+            return normalizeWallpaperProjectPath(positionalId[1]);
+        var positionalPath = text.match(/(?:^|\s)(?:"([/~$][^"]*)"|'([/~$][^']*)'|((?:\/|~\/|\$HOME\/|\$\{HOME\}\/)[^\s]+))(?=\s*(?:$|[;&|]))/);
+        return positionalPath
+            ? normalizeWallpaperProjectPath(positionalPath[1] || positionalPath[2] || positionalPath[3] || "")
+            : "";
+    }
+
+    function wallpaperPreviewFromProject(projectPath, metadataText) {
+        var project = normalizeWallpaperProjectPath(projectPath);
+        if (project.length === 0)
+            return "";
+        try {
+            var metadata = JSON.parse(String(metadataText || ""));
+            var preview = String(metadata && metadata.preview ? metadata.preview : "").trim();
+            if (preview.length === 0)
+                return "";
+            if (preview.indexOf("file://") === 0 || preview.charAt(0) === "/")
+                return preview;
+            while (preview.indexOf("./") === 0)
+                preview = preview.substring(2);
+            return project + "/" + preview;
+        } catch (e) {
+            return "";
+        }
     }
 
     function resetPasswordInput(requestFocus) {
@@ -51,6 +177,14 @@ WlSessionLock {
         root.unlocking = false;
         if (root.pam.active)
             root.pam.abort();
+        if (root.activeWallpaperStatePath.length > 0
+                && root.settingsService
+                && root.settingsService.wallpaperMode === "external"
+                && root.settingsService.lockScreenFollowWallpaper !== false) {
+            root.activeWallpaperFile.reload();
+            root.activeWallpaperFile.waitForJob();
+            root.refreshActiveWallpaperEntries();
+        }
         root.statusText = "";
         root.authFailed = false;
         root.locked = true;
@@ -172,9 +306,59 @@ WlSessionLock {
         id: surface
 
         property bool entered: false
+        readonly property string lockOutputName: surface.screen
+            ? String(surface.screen.name || "").trim() : ""
+        readonly property bool followWallpaper: !root.settingsService
+            || root.settingsService.lockScreenFollowWallpaper === undefined
+            || !!root.settingsService.lockScreenFollowWallpaper
+        readonly property string lockWallpaperMode: root.settingsService
+            ? String(root.settingsService.wallpaperMode || "static") : "static"
+        readonly property string configuredStaticWallpaper: root.settingsService
+            ? String(root.settingsService.effectiveStaticWallpaper || "").trim() : ""
+        readonly property string configuredDynamicCommand: root.settingsService
+            ? String(root.settingsService.effectiveDynamicWallpaperCommand || "").trim() : ""
+        readonly property string wallpaperProjectPath: {
+            root.activeWallpaperRevision;
+            if (!surface.followWallpaper)
+                return "";
+            if (surface.lockWallpaperMode === "external")
+                return root.wallpaperProjectForOutput(surface.lockOutputName);
+            if (surface.lockWallpaperMode === "dynamic")
+                return root.wallpaperProjectFromDynamicCommand(surface.configuredDynamicCommand);
+            return "";
+        }
+        property string wallpaperPreviewSource: ""
+        property bool configuredStaticWallpaperFailed: false
+        readonly property string defaultWallpaperSource: Quickshell.shellPath("assets/backgrounds/iridescence.jpg")
+        readonly property string staticWallpaperSource: configuredStaticWallpaper.length > 0
+            && !configuredStaticWallpaperFailed
+            ? configuredStaticWallpaper : defaultWallpaperSource
+        readonly property string lockWallpaperSource: {
+            if (!surface.followWallpaper)
+                return surface.defaultWallpaperSource;
+            if (surface.lockWallpaperMode === "static")
+                return surface.staticWallpaperSource;
+            return surface.wallpaperPreviewSource.length > 0
+                ? surface.wallpaperPreviewSource : surface.staticWallpaperSource;
+        }
         color: "#101215"
 
+        function refreshWallpaperPreview() {
+            if (surface.wallpaperProjectPath.length === 0) {
+                surface.wallpaperPreviewSource = "";
+                return;
+            }
+            surface.wallpaperPreviewSource = root.wallpaperPreviewFromProject(
+                surface.wallpaperProjectPath,
+                wallpaperProjectFile.text()
+            );
+        }
+
+        onWallpaperProjectPathChanged: wallpaperPreviewSource = ""
+        onConfiguredStaticWallpaperChanged: configuredStaticWallpaperFailed = false
+
         Component.onCompleted: {
+            surface.refreshWallpaperPreview();
             Qt.callLater(function() {
                 surface.entered = true;
             });
@@ -196,10 +380,22 @@ WlSessionLock {
             }
 
             Image {
+                id: backgroundImage
                 anchors.fill: parent
-                source: Quickshell.shellPath("assets/backgrounds/iridescence.jpg")
+                source: surface.lockWallpaperSource
                 fillMode: Image.PreserveAspectCrop
                 asynchronous: true
+                onStatusChanged: {
+                    if (status !== Image.Error)
+                        return;
+                    if (surface.wallpaperPreviewSource.length > 0
+                            && surface.lockWallpaperSource === surface.wallpaperPreviewSource) {
+                        surface.wallpaperPreviewSource = "";
+                    } else if (surface.configuredStaticWallpaper.length > 0
+                            && surface.lockWallpaperSource === surface.configuredStaticWallpaper) {
+                        surface.configuredStaticWallpaperFailed = true;
+                    }
+                }
             }
 
             Rectangle {
@@ -449,6 +645,18 @@ WlSessionLock {
                     });
                 }
             }
+        }
+
+        FileView {
+            id: wallpaperProjectFile
+            path: surface.wallpaperProjectPath.length > 0
+                ? surface.wallpaperProjectPath + "/project.json" : ""
+            blockLoading: true
+            watchChanges: true
+            printErrors: false
+            onFileChanged: reload()
+            onLoaded: surface.refreshWallpaperPreview()
+            onLoadFailed: surface.wallpaperPreviewSource = ""
         }
     }
 }

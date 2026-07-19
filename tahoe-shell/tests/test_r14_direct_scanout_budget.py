@@ -119,7 +119,7 @@ process.stdout.write(JSON.stringify(names));
             r"shell\.closeMotionSamplingSurfaces\(\);",
         )
 
-    def test_wallpaper_and_weather_share_fullscreen_battery_budget(self) -> None:
+    def test_wallpaper_keeps_surface_while_renderer_handles_fullscreen_pause(self) -> None:
         wallpaper = WALLPAPER.read_text(encoding="utf-8")
         shell = SHELL.read_text(encoding="utf-8")
         sidebar = SIDEBAR.read_text(encoding="utf-8")
@@ -127,7 +127,14 @@ process.stdout.write(JSON.stringify(names));
         prestart = PRESTART.read_text(encoding="utf-8")
         self.assertIn("property bool fullscreenActive: false", wallpaper)
         self.assertIn("property bool onBattery: false", wallpaper)
-        self.assertIn("readonly property bool liveWallpaperAllowed: !fullscreenActive", wallpaper)
+        live_gate = re.search(
+            r"readonly property bool liveWallpaperAllowed:(.*?)\n\s*readonly property bool dynamicDesired:",
+            wallpaper,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(live_gate)
+        self.assertNotIn("fullscreenActive", live_gate.group(1))
+        self.assertIn("wallpaperPauseWhenIdle", live_gate.group(1))
         self.assertRegex(wallpaper, r"sessionIdle\s*\|\|\s*onBattery")
         self.assertIn("fullscreenActive: niri.anyFullscreen", shell)
         self.assertIn("onBattery: battery.onBattery", shell)
@@ -137,6 +144,7 @@ process.stdout.write(JSON.stringify(names));
         self.assertIn("&& root.backgroundEffectsAllowed", weather)
         self.assertIn("def system_on_battery():", prestart)
         self.assertIn("startup_fps_budget()", prestart)
+        self.assertIn("Fullscreen does not own the live process lifecycle", wallpaper)
         self.assertNotIn("--no-fullscreen-pause", wallpaper)
         self.assertNotIn("--no-fullscreen-pause", prestart)
 

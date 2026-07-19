@@ -9,6 +9,7 @@ SHELL_ROOT = Path(__file__).resolve().parents[1]
 WALLPAPER = SHELL_ROOT / "components" / "Wallpaper.qml"
 SETTINGS = SHELL_ROOT / "services" / "DesktopSettings.qml"
 PAGE = SHELL_ROOT / "components" / "settings" / "pages" / "WallpaperPage.qml"
+LOCK_SCREEN = SHELL_ROOT / "components" / "LockScreen.qml"
 PRESTART = SHELL_ROOT / "scripts" / "prestart-wallpaper.sh"
 
 
@@ -24,6 +25,26 @@ class WallpaperIdleBudgetTests(unittest.TestCase):
         self.assertIn("function setWallpaperPauseWhenIdle(", text)
         # Active fps hard-capped at 20 (glass sampling budget).
         self.assertIn("clampInt(value, 1, 20, 15)", text)
+
+    def test_desktop_settings_and_page_expose_lock_screen_follow(self) -> None:
+        settings = SETTINGS.read_text(encoding="utf-8")
+        page = PAGE.read_text(encoding="utf-8")
+        self.assertIn("property bool lockScreenFollowWallpaper: true", settings)
+        self.assertIn("readonly property bool lockScreenFollowWallpaper", settings)
+        self.assertIn("function setLockScreenFollowWallpaper(", settings)
+        self.assertIn("锁屏跟随壁纸", page)
+        self.assertIn("动态壁纸显示项目预览图", page)
+        self.assertIn("setLockScreenFollowWallpaper", page)
+
+    def test_lock_screen_preview_has_static_and_builtin_fallbacks(self) -> None:
+        text = LOCK_SCREEN.read_text(encoding="utf-8")
+        self.assertIn("active-wallpapers.json", text)
+        self.assertIn('wallpaperProjectPath + "/project.json"', text)
+        self.assertIn("metadata.preview", text)
+        self.assertIn("source: surface.lockWallpaperSource", text)
+        self.assertIn("status !== Image.Error", text)
+        self.assertIn('surface.wallpaperPreviewSource = ""', text)
+        self.assertIn("surface.configuredStaticWallpaperFailed = true", text)
 
     def test_wallpaper_idle_monitor_and_fps_rewrite(self) -> None:
         text = WALLPAPER.read_text(encoding="utf-8")

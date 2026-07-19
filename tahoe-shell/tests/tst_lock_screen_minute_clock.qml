@@ -191,6 +191,76 @@ TestCase {
         compare(Qt.formatDateTime(lock.clockNow, "yyyy年M月d日"), "2026年1月5日");
     }
 
+    function test_wallpaper_preview_resolver_is_output_aware() {
+        lock.activeWallpaperEntries = {
+            "eDP-2": { "backgroundId": "/tmp/wallpapers/one" },
+            "HDMI-A-1": { "backgroundId": "/tmp/wallpapers/two" }
+        };
+        lock.activeWallpaperRevision += 1;
+        compare(lock.wallpaperProjectForOutput("eDP-2"), "/tmp/wallpapers/one");
+        compare(lock.wallpaperProjectForOutput("HDMI-A-1"), "/tmp/wallpapers/two");
+        compare(lock.wallpaperProjectForOutput("missing"), "");
+
+        lock.activeWallpaperEntries = {
+            "eDP-2": { "backgroundId": "/tmp/wallpapers/only" }
+        };
+        lock.activeWallpaperRevision += 1;
+        compare(lock.wallpaperProjectForOutput("HDMI-A-1"), "");
+        compare(lock.wallpaperProjectForOutput(""), "/tmp/wallpapers/only");
+    }
+
+    function test_wallpaper_preview_resolver_reads_project_metadata() {
+        compare(
+            lock.wallpaperPreviewFromProject(
+                "/tmp/wallpapers/one",
+                '{"preview":"preview.gif"}'
+            ),
+            "/tmp/wallpapers/one/preview.gif"
+        );
+        compare(lock.wallpaperPreviewFromProject("/tmp/wallpapers/one", "{}"), "");
+        compare(lock.wallpaperPreviewFromProject("/tmp/wallpapers/one", "not-json"), "");
+    }
+
+    function test_dynamic_wallpaper_command_resolves_project_path() {
+        compare(
+            lock.wallpaperProjectFromDynamicCommand(
+                "linux-wallpaperengine --screen-root eDP-2 --bg '/tmp/wallpapers/three'"
+            ),
+            "/tmp/wallpapers/three"
+        );
+        compare(
+            lock.wallpaperProjectFromDynamicCommand("linux-wallpaperengine 3286906338"),
+            "/tmp/tahoe-shell-test-home/.local/share/Steam/steamapps/workshop/content/431960/3286906338"
+        );
+        compare(
+            lock.wallpaperProjectFromDynamicCommand("linux-wallpaperengine '/tmp/wallpapers/four'"),
+            "/tmp/wallpapers/four"
+        );
+    }
+
+    function test_missing_wallpaper_sources_fall_back_to_builtin() {
+        lock.settingsService = wallpaperSettings;
+        wallpaperSettings.wallpaperMode = "external";
+        wallpaperSettings.effectiveStaticWallpaper = "";
+        lock.lock();
+        wait(0);
+        var surface = lock.surfaceInstances[0];
+        verify(surface !== null);
+        surface.wallpaperPreviewSource = "/definitely/missing/tahoe-preview.png";
+        tryCompare(surface, "wallpaperPreviewSource", "", 1000);
+        compare(surface.lockWallpaperSource, surface.defaultWallpaperSource);
+        lock.unlock();
+
+        wallpaperSettings.wallpaperMode = "static";
+        wallpaperSettings.effectiveStaticWallpaper = "/definitely/missing/tahoe-static.png";
+        lock.lock();
+        wait(0);
+        surface = lock.surfaceInstances[0];
+        tryCompare(surface, "configuredStaticWallpaperFailed", true, 1000);
+        compare(surface.lockWallpaperSource, surface.defaultWallpaperSource);
+        lock.unlock();
+    }
+
     function test_password_input_is_the_only_authentication_state() {
         lock.lock();
         wait(0);
@@ -322,6 +392,22 @@ TestCase {
         id: reducedSettings
 
         property string motionProfile: "reduced"
+        property string homeDir: "/tmp/tahoe-shell-test-home"
+        property string wallpaperMode: "static"
+        property string effectiveStaticWallpaper: ""
+        property string effectiveDynamicWallpaperCommand: ""
+        property bool lockScreenFollowWallpaper: true
+    }
+
+    QtObject {
+        id: wallpaperSettings
+
+        property string motionProfile: "balanced"
+        property string homeDir: "/tmp/tahoe-shell-test-home"
+        property string wallpaperMode: "external"
+        property string effectiveStaticWallpaper: ""
+        property string effectiveDynamicWallpaperCommand: ""
+        property bool lockScreenFollowWallpaper: true
     }
 
     Component {

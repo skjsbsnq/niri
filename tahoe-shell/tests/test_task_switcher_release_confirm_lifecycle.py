@@ -875,9 +875,12 @@ class TaskSwitcherReleaseConfirmQmlTests(unittest.TestCase):
         # GlassPanel / ScriptModel / WindowPreviewFallback are heavy for Timer-only tests.
         # Replace GlassPanel block with empty Item; keep ListView model as plain array binding.
         src = remove_block(src, r"GlassPanel\s*\{")
-        src = src.replace(
-            "model: ScriptModel {\n                    values: root.windowChoices\n                }",
+        src = re.sub(
+            r"model:\s*ScriptModel\s*\{\s*(?:objectProp:\s*\"modelKey\"\s*)?"
+            r"values:\s*root\.windowChoices\s*\}",
             "model: root.windowChoices",
+            src,
+            count=1,
         )
         # WindowPreviewFallback may reference unavailable types; keep if present in components.
         src = src.replace(

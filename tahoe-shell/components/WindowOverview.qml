@@ -153,7 +153,10 @@ PanelWindow {
         if (next < 0)
             next += windowChoices.length;
         selectedWindowKey = windowKey(windowChoices[next]);
-        overviewFlick.ensureVisible();
+        Qt.callLater(function() {
+            if (root.open)
+                overviewFlick.ensureVisible();
+        });
     }
 
     function activateWindow(window) {
@@ -687,6 +690,7 @@ PanelWindow {
             contentHeight: groupColumn.implicitHeight
             clip: true
             boundsBehavior: Flickable.StopAtBounds
+            onMovementStarted: ensureVisibleAnimation.stop()
 
             function ensureVisible() {
                 var item = root.selectedCardItem;
@@ -695,10 +699,33 @@ PanelWindow {
 
                 var top = item.mapToItem(groupColumn, 0, 0).y - 12;
                 var bottom = top + item.height + 24;
+                var targetY = contentY;
                 if (top < contentY)
-                    contentY = Math.max(0, top);
+                    targetY = Math.max(0, top);
                 else if (bottom > contentY + height)
-                    contentY = Math.min(Math.max(0, contentHeight - height), bottom - height);
+                    targetY = Math.min(Math.max(0, contentHeight - height), bottom - height);
+
+                targetY = Math.max(0, Math.min(Math.max(0, contentHeight - height), targetY));
+                if (Math.abs(targetY - contentY) < 0.5)
+                    return;
+
+                ensureVisibleAnimation.stop();
+                if (Motion.reducedMotion(root.settingsService)
+                        || Motion.elementMove(root.settingsService) <= 0) {
+                    contentY = targetY;
+                    return;
+                }
+                ensureVisibleAnimation.from = contentY;
+                ensureVisibleAnimation.to = targetY;
+                ensureVisibleAnimation.restart();
+            }
+
+            NumberAnimation {
+                id: ensureVisibleAnimation
+                target: overviewFlick
+                property: "contentY"
+                duration: Motion.elementMove(root.settingsService)
+                easing.type: Motion.emphasizedDecel
             }
 
             Column {
@@ -708,6 +735,7 @@ PanelWindow {
 
                 Repeater {
                     model: ScriptModel {
+                        objectProp: "key"
                         values: root.workspaceGroups
                     }
 
@@ -744,8 +772,17 @@ PanelWindow {
                             width: parent.width
                             spacing: 12
 
+                            move: Transition {
+                                NumberAnimation {
+                                    properties: "x,y"
+                                    duration: Motion.elementMove(root.settingsService)
+                                    easing.type: Motion.emphasizedDecel
+                                }
+                            }
+
                             Repeater {
                                 model: ScriptModel {
+                                    objectProp: "modelKey"
                                     values: groupDelegate.modelData.windows
                                 }
 
@@ -958,6 +995,8 @@ PanelWindow {
                                     Component.onDestruction: {
                                         // No free-standing clone layers; transform state dies with the card.
                                         stopFlightAnims();
+                                        if (root.selectedCardItem === windowCard)
+                                            root.selectedCardItem = null;
                                     }
 
                                     Rectangle {
@@ -966,6 +1005,21 @@ PanelWindow {
                                         color: windowCard.selected ? "#76ffffff" : cardMouse.containsMouse ? "#44ffffff" : "#24ffffff"
                                         border.color: windowCard.selected ? "#a8ffffff" : "#34ffffff"
                                         border.width: windowCard.selected ? 2 : 1
+
+                                        Behavior on color {
+                                            ColorAnimation { duration: Motion.fadeFast(root.settingsService) }
+                                        }
+
+                                        Behavior on border.color {
+                                            ColorAnimation { duration: Motion.fadeFast(root.settingsService) }
+                                        }
+
+                                        Behavior on border.width {
+                                            NumberAnimation {
+                                                duration: Motion.elementResize(root.settingsService)
+                                                easing.type: Motion.emphasizedDecel
+                                            }
+                                        }
                                     }
 
                                     Rectangle {

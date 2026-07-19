@@ -27,7 +27,18 @@ class TaskOverviewMotionTests(unittest.TestCase):
         self.assertIn("highlightSpring", text)
         self.assertIn("Motion.springSnappy", text)
         self.assertIn("syncSelectionHighlight", text)
+        self.assertIn("syncViewportToHighlight", text)
+        self.assertIn("onContentXChanged: root.syncViewportToHighlight()", text)
+        self.assertNotIn("positionViewAtIndex", text)
         self.assertIn("root.useSpring && !Motion.reducedMotion", text)
+        self.assertIn('objectProp: "modelKey"', text)
+        # Confirmation feedback is delegate-local; the outer panel remains instant.
+        self.assertIn("id: confirmationPop", text)
+        self.assertIn("to: 1.06", text)
+        self.assertIn("ScriptAction { script: root.finishConfirm() }", text)
+        self.assertIn("root.confirming && root.confirmationWindowKey", text)
+        self.assertIn("Behavior on color", text)
+        self.assertIn("Behavior on width", text)
         # Still uses shared thumbnail contract.
         self.assertIn("thumbnailProvider.requestThumbnails", text)
         self.assertIn("WindowPreviewFallback", text)
@@ -56,6 +67,16 @@ class TaskOverviewMotionTests(unittest.TestCase):
         # useSpring dual branch for flight.
         self.assertIn("shouldAnimateFlight", text)
         self.assertIn("root.useSpring && !Motion.reducedMotion", text)
+        # R16 content-only polish: smooth keyboard scroll, stable Flow identity,
+        # displaced-card movement, and selected-card color/border transitions.
+        self.assertIn("id: ensureVisibleAnimation", text)
+        self.assertIn('property: "contentY"', text)
+        self.assertIn("Motion.elementMove(root.settingsService)", text)
+        self.assertIn('objectProp: "key"', text)
+        self.assertIn('objectProp: "modelKey"', text)
+        self.assertIn("move: Transition", text)
+        self.assertIn("Behavior on border.color", text)
+        self.assertIn("Behavior on border.width", text)
 
     def test_shell_forwards_use_spring(self) -> None:
         text = self.read("shell.qml")

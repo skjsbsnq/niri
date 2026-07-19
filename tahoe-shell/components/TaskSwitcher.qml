@@ -18,6 +18,10 @@ PanelWindow {
     property int selectedIndex: 0
     property string selectedWindowKey: ""
     property bool keyboardMode: false
+    property bool confirming: false
+    property var confirmationWindow: null
+    property string confirmationWindowKey: ""
+    property real confirmationScale: 1
     readonly property var windowChoices: windowsService && windowsService.recentWindowList ? windowsService.recentWindowList : []
     readonly property int screenWidth: Math.max(1, numberOr(root.screen && root.screen.width, root.width))
     readonly property int screenHeight: Math.max(1, numberOr(root.screen && root.screen.height, root.height))
@@ -54,6 +58,7 @@ PanelWindow {
         // Session boundary: a prior modifier-release Timer must never confirm a
         // later reopen (release → close → reopen within the 40ms window).
         releaseConfirmTimer.stop();
+        resetConfirmation();
         if (open) {
             if (windowChoices.length === 0) {
                 closeRequested();
@@ -89,8 +94,6 @@ PanelWindow {
         Qt.callLater(function() {
             if (!root.open)
                 return;
-            if (windowListView.count > 0)
-                windowListView.positionViewAtIndex(root.selectedIndex, ListView.Contain);
             syncSelectionHighlight(true);
         });
     }
@@ -174,7 +177,7 @@ PanelWindow {
     }
 
     function cycle(direction) {
-        if (!windowChoices || windowChoices.length === 0)
+        if (confirming || !windowChoices || windowChoices.length === 0)
             return;
         if (direction === 0)
             return;
@@ -199,14 +202,49 @@ PanelWindow {
     }
 
     function chooseIndex(index) {
+        if (confirming)
+            return;
         selectedIndex = normalizeIndex(index);
         confirm();
     }
 
     function confirm() {
-        // End any pending modifier-release confirm before closing the session.
+        // End any modifier-release trigger before starting the single visual
+        // confirmation path. Activation waits for the card pop to finish so the
+        // selected delegate cannot disappear underneath the feedback.
         releaseConfirmTimer.stop();
+        if (confirming || !open)
+            return;
+
         var window = currentWindow();
+        if (!window) {
+            closeRequested();
+            return;
+        }
+
+        confirmationWindow = window;
+        confirmationWindowKey = windowKey(window);
+        confirmationScale = 1;
+        confirming = true;
+
+        if (Motion.reducedMotion(settingsService) || Motion.elementMove(settingsService) <= 0) {
+            finishConfirm();
+            return;
+        }
+        confirmationPop.restart();
+    }
+
+    function finishConfirm() {
+        if (!confirming)
+            return;
+
+        var window = confirmationWindow;
+        confirming = false;
+        confirmationWindow = null;
+        confirmationWindowKey = "";
+        confirmationScale = 1;
+        if (!open)
+            return;
         if (window && windowsService) {
             if (window.isMinimized)
                 windowsService.restore(window);
@@ -216,8 +254,17 @@ PanelWindow {
         closeRequested();
     }
 
+    function resetConfirmation() {
+        confirmationPop.stop();
+        confirming = false;
+        confirmationWindow = null;
+        confirmationWindowKey = "";
+        confirmationScale = 1;
+    }
+
     function cancel() {
         releaseConfirmTimer.stop();
+        resetConfirmation();
         closeRequested();
     }
 
@@ -274,12 +321,55 @@ PanelWindow {
     function syncSelectionHighlight(animate) {
         var targetX = selectionContentXFor(root.selectedIndex);
         highlightSpring.stop();
+        highlightEase.stop();
         if (animate && root.useSpring && !Motion.reducedMotion(root.settingsService) && root.open) {
             highlightSpring.to = targetX;
             highlightSpring.restart();
+        } else if (animate && !Motion.reducedMotion(root.settingsService)
+                   && Motion.elementMove(root.settingsService) > 0 && root.open) {
+            highlightEase.from = selectionHighlight.contentX;
+            highlightEase.to = targetX;
+            highlightEase.restart();
         } else {
             selectionHighlight.contentX = targetX;
         }
+    }
+
+    function syncViewportToHighlight() {
+        if (!windowListView || windowListView.width <= 0)
+            return;
+
+        var maxContentX = Math.max(0, windowListView.contentWidth - windowListView.width);
+        var nextContentX = Math.max(0, Math.min(maxContentX, windowListView.contentX));
+        var left = selectionHighlight.contentX;
+        var right = left + root.cardWidth;
+        if (left < nextContentX)
+            nextContentX = left;
+        else if (right > nextContentX + windowListView.width)
+            nextContentX = right - windowListView.width;
+        windowListView.contentX = Math.max(0, Math.min(maxContentX, nextContentX));
+    }
+
+    SequentialAnimation {
+        id: confirmationPop
+
+        NumberAnimation {
+            target: root
+            property: "confirmationScale"
+            from: 1
+            to: 1.06
+            duration: Math.round(Motion.elementMove(root.settingsService) * 0.46)
+            easing.type: Motion.standardDecel
+        }
+        NumberAnimation {
+            target: root
+            property: "confirmationScale"
+            from: 1.06
+            to: 1
+            duration: Math.round(Motion.elementMove(root.settingsService) * 0.54)
+            easing.type: Motion.emphasizedDecel
+        }
+        ScriptAction { script: root.finishConfirm() }
     }
 
     // Single release-confirm Timer owned by this switcher. Stopped at every
@@ -415,6 +505,7 @@ PanelWindow {
                 currentIndex: root.selectedIndex
                 z: 1
                 model: ScriptModel {
+                    objectProp: "modelKey"
                     values: root.windowChoices
                 }
 
@@ -435,6 +526,14 @@ PanelWindow {
 
                     width: root.cardWidth
                     height: windowListView.height
+                    transform: Scale {
+                        origin.x: windowItem.width / 2
+                        origin.y: windowItem.height / 2
+                        xScale: root.confirming && root.confirmationWindowKey === root.windowKey(windowItem.modelData)
+                            ? root.confirmationScale
+                            : 1
+                        yScale: xScale
+                    }
 
                     onModelDataChanged: if (root.open) root.requestThumbnailFor(modelData, false)
                     Component.onCompleted: if (root.open) root.requestThumbnailFor(modelData, false)
@@ -447,6 +546,10 @@ PanelWindow {
                         color: windowItem.selected ? "#4cffffff" : cardMouse.containsMouse ? "#44ffffff" : "#24ffffff"
                         border.color: "#34ffffff"
                         border.width: 1
+
+                        Behavior on color {
+                            ColorAnimation { duration: Motion.fadeFast(root.settingsService) }
+                        }
                     }
 
                     Rectangle {
@@ -553,6 +656,17 @@ PanelWindow {
                         height: 4
                         radius: 2
                         color: windowItem.modelData && windowItem.modelData.isFocused ? "#202124" : windowItem.minimized ? "#8a929a" : "#6c747c"
+
+                        Behavior on width {
+                            NumberAnimation {
+                                duration: Motion.elementResize(root.settingsService)
+                                easing.type: Motion.emphasizedDecel
+                            }
+                        }
+
+                        Behavior on color {
+                            ColorAnimation { duration: Motion.fadeFast(root.settingsService) }
+                        }
                     }
 
                     MouseArea {
@@ -560,6 +674,7 @@ PanelWindow {
 
                         anchors.fill: parent
                         hoverEnabled: true
+                        enabled: !root.confirming
                         cursorShape: Qt.PointingHandCursor
                         onEntered: root.selectedIndex = windowItem.index
                         onClicked: root.chooseIndex(windowItem.index)
@@ -581,12 +696,14 @@ PanelWindow {
                 height: parent.height
                 z: 2
 
-                Behavior on contentX {
-                    enabled: !root.useSpring || Motion.reducedMotion(root.settingsService)
-                    NumberAnimation {
-                        duration: Motion.elementMove(root.settingsService)
-                        easing.type: Motion.emphasizedDecel
-                    }
+                onContentXChanged: root.syncViewportToHighlight()
+
+                NumberAnimation {
+                    id: highlightEase
+                    target: selectionHighlight
+                    property: "contentX"
+                    duration: Motion.elementMove(root.settingsService)
+                    easing.type: Motion.emphasizedDecel
                 }
 
                 SpringAnimation {

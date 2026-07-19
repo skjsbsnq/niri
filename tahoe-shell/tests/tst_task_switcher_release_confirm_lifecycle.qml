@@ -134,6 +134,7 @@ TestCase {
         activateCount = 0;
         activatedIds = [];
         closeRequestedCount = 0;
+        settings.motionProfile = "balanced";
         verify(switcherSource.length > 0);
 
         var comp = Qt.createComponent(Qt.resolvedUrl(switcherSource));
@@ -215,11 +216,54 @@ TestCase {
         compare(timer.running, true);
         switcher.chooseIndex(2);
         compare(timer.running, false);
-        compare(activateCount, 1);
+        compare(switcher.confirming, true);
+        compare(activateCount, 0);
+        compare(switcher.open, true);
+        wait(30);
+        compare(activateCount, 0);
+        tryCompare(testCase, "activateCount", 1, 500);
+        tryCompare(switcher, "open", false, 500);
         compare(activatedIds[0], 3);
-        compare(switcher.open, false);
         wait(60);
         compare(activateCount, 1);
+    }
+
+    function test_cancel_during_confirmation_pop_never_activates() {
+        openKeyboardSession(1);
+        switcher.selectedIndex = 1;
+        switcher.confirm();
+        compare(switcher.confirming, true);
+        compare(activateCount, 0);
+        switcher.cancel();
+        compare(switcher.confirming, false);
+        compare(switcher.open, false);
+        wait(220);
+        compare(activateCount, 0);
+        compare(closeRequestedCount, 1);
+    }
+
+    function test_repeated_confirm_during_pop_activates_once() {
+        openKeyboardSession(1);
+        switcher.selectedIndex = 2;
+        switcher.confirm();
+        switcher.confirm();
+        compare(switcher.confirming, true);
+        tryCompare(testCase, "activateCount", 1, 500);
+        tryCompare(switcher, "open", false, 500);
+        compare(activatedIds.length, 1);
+        compare(activatedIds[0], 3);
+        compare(closeRequestedCount, 1);
+    }
+
+    function test_reduced_motion_confirms_without_pop_delay() {
+        settings.motionProfile = "reduced";
+        openKeyboardSession(1);
+        switcher.selectedIndex = 1;
+        switcher.confirm();
+        compare(activateCount, 1);
+        compare(activatedIds[0], 2);
+        compare(switcher.open, false);
+        compare(switcher.confirming, false);
     }
 
     function test_repeated_open_close_no_stale_confirm() {

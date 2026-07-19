@@ -217,10 +217,10 @@ environment {
     // but GLVND defaults GLX clients to Mesa/llvmpipe unless forced.
     __GLX_VENDOR_LIBRARY_NAME "nvidia"
 
-    // Keep Electron apps such as Linux QQ on native Wayland. X11 remains
-    // available as an explicit per-app fallback, but fractional Xwayland
-    // scaling at 1.25 necessarily resamples buffers and can soften text.
-    ELECTRON_OZONE_PLATFORM_HINT "wayland"
+    // Let Electron choose its default backend. Apps with backend-specific
+    // bugs use per-app flags; Linux QQ currently uses X11 for reliable
+    // clipboard ownership after asynchronous copy operations.
+    ELECTRON_OZONE_PLATFORM_HINT "auto"
 }
 
 recent-windows {

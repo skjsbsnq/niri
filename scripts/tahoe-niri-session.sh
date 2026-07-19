@@ -315,10 +315,9 @@ main() {
   local quickshell_bin
   local use_wrapper=false
 
-  # Prefer native Wayland for Electron apps such as Linux QQ. The patched
-  # xwayland-satellite remains the explicit compatibility fallback, but X11
-  # buffers are resampled on the 1.25-scale output and can look softer.
-  export ELECTRON_OZONE_PLATFORM_HINT="${ELECTRON_OZONE_PLATFORM_HINT:-wayland}"
+  # Let Electron choose its default backend. Backend-specific workarounds,
+  # including Linux QQ's X11 clipboard fallback, belong in per-app flags.
+  export ELECTRON_OZONE_PLATFORM_HINT="${ELECTRON_OZONE_PLATFORM_HINT:-auto}"
   # Keep Xwayland GLX clients on the NVIDIA vendor path. Without this, GLVND can
   # select Mesa llvmpipe for Proton launchers even when Xwayland glamor is on.
   export __GLX_VENDOR_LIBRARY_NAME="${__GLX_VENDOR_LIBRARY_NAME:-nvidia}"

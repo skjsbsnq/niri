@@ -31,7 +31,7 @@ Checks Tahoe's patched xwayland-satellite compatibility path and prints
 STATUS|id|state|title|detail|impact|action lines for the Tahoe health page.
 
 States used by this check:
-  ok       static path and regression anchors are current
+  ok       path, regression anchors, and behavior-tested build are current
   missing  required path is absent
   stale    installed build/config/runtime does not match the expected ref/patch
   broken   installed path exists but fails validation
@@ -178,8 +178,12 @@ check_regressions() {
   append_missing_patterns "$XWAYLAND_SATELLITE_PATCH" missing_clipboard \
     'UTF8_STRING' \
     'text/plain;charset=utf-8' \
-    'selection_cancelled' \
-    'ForeignSelection'
+    'ForeignSelection' \
+    'ExtDataControlManagerV1' \
+    'SelectionBackend::ExtDataControl' \
+    'copy_from_x11_without_x11_focus' \
+    'x11_utf8_string_bridges_wayland_text_mimes' \
+    'wayland_offer_waits_for_x11_source_cancellation'
 
   if [[ ${#missing_maximize[@]} -gt 0 || ${#missing_minimize[@]} -gt 0 || ${#missing_clipboard[@]} -gt 0 ]]; then
     state="broken"
@@ -202,6 +206,7 @@ check_xwayland_path() {
   local stamp_commit=""
   local stamp_patch_sha=""
   local stamp_patch_applied=""
+  local stamp_behavior_tests=""
   local wrapper_home_path=""
   local runtime_pids=""
   local runtime_note=""
@@ -251,6 +256,7 @@ check_xwayland_path() {
     stamp_commit="$(stamp_value commit)"
     stamp_patch_sha="$(stamp_value patch_sha256)"
     stamp_patch_applied="$(stamp_value patch_applied)"
+    stamp_behavior_tests="$(stamp_value behavior_tests)"
 
     [[ "$stamp_repo" == "$XWAYLAND_SATELLITE_REPO_URL" ]] \
       || stale+=("stamp repo=$stamp_repo，期望 $XWAYLAND_SATELLITE_REPO_URL")
@@ -258,6 +264,8 @@ check_xwayland_path() {
       || stale+=("stamp ref=$stamp_ref，期望 $XWAYLAND_SATELLITE_REF")
     [[ "$stamp_patch_sha" == "$patch_sha" ]] \
       || stale+=("stamp patch_sha=$stamp_patch_sha，当前 $patch_sha")
+    [[ "$stamp_behavior_tests" == passed ]] \
+      || stale+=("behavior tests=${stamp_behavior_tests:-未记录}，期望 passed")
 
     if expected_commit="$(resolve_ref "$XWAYLAND_SATELLITE_REF")"; then
       [[ "$stamp_commit" == "$expected_commit" ]] \
@@ -330,7 +338,7 @@ check_xwayland_path() {
     action="运行 arch-update.sh；若刚更新过，重启 niri 或重新打开 X11 app"
     [[ ${#stale[@]} -eq 0 ]] || strict_failed=true
   else
-    detail="ref $XWAYLAND_SATELLITE_REF；patch sha $patch_sha；patch_applied=${stamp_patch_applied:-unknown}；wrapper $XWAYLAND_SATELLITE_GLAMOR_WRAPPER；$runtime_note"
+    detail="ref $XWAYLAND_SATELLITE_REF；patch sha $patch_sha；patch_applied=${stamp_patch_applied:-unknown}；behavior_tests=${stamp_behavior_tests:-unknown}；wrapper $XWAYLAND_SATELLITE_GLAMOR_WRAPPER；$runtime_note"
   fi
 
   emit_status xwayland "$state" 'XWayland patched path' "$detail" "$impact" "$action"

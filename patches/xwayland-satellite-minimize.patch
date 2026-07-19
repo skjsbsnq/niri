@@ -3,19 +3,215 @@ index 611c959..7b5c811 100644
 --- a/src/lib.rs
 +++ b/src/lib.rs
 @@ -19,6 +19,7 @@ pub trait XConnection: Sized + 'static {
-
+ 
      fn set_window_dims(&mut self, window: x::Window, dims: PendingSurfaceState) -> bool;
      fn set_fullscreen(&mut self, window: x::Window, fullscreen: bool);
 +    fn set_maximized(&mut self, window: x::Window, maximized: bool);
      fn focus_window(&mut self, window: x::Window, output_name: Option<String>);
      fn close_window(&mut self, window: x::Window);
      fn unmap_window(&mut self, window: x::Window);
+diff --git a/src/server/clientside.rs b/src/server/clientside.rs
+index 664c909..97cffbe 100644
+--- a/src/server/clientside.rs
++++ b/src/server/clientside.rs
+@@ -28,6 +28,12 @@ use wayland_client::{
+     Connection, Dispatch, Proxy, QueueHandle, delegate_noop, event_created_child,
+     globals::{Global, GlobalList, GlobalListContents},
+ };
++use wayland_protocols::ext::data_control::v1::client::{
++    ext_data_control_device_v1::{self, EVT_DATA_OFFER_OPCODE, ExtDataControlDeviceV1},
++    ext_data_control_manager_v1::ExtDataControlManagerV1,
++    ext_data_control_offer_v1::{self, ExtDataControlOfferV1},
++    ext_data_control_source_v1::{self, ExtDataControlSourceV1},
++};
+ use wayland_protocols::{
+     wp::{
+         fractional_scale::v1::client::{
+@@ -92,13 +98,16 @@ use wayland_server::protocol as server;
+ use wl_drm::client::wl_drm::WlDrm;
+ use xcb::x;
+ 
++use super::selection::SourceKind;
++
+ pub(super) struct SelectionEvents<T> {
+     pub offer: Option<T>,
+     pub requests: Vec<(
++        wayland_client::backend::ObjectId,
+         String,
+         smithay_client_toolkit::data_device_manager::WritePipe,
+     )>,
+-    pub cancelled: bool,
++    pub cancelled: Vec<wayland_client::backend::ObjectId>,
+ }
+ 
+ impl<T> Default for SelectionEvents<T> {
+@@ -106,11 +115,21 @@ impl<T> Default for SelectionEvents<T> {
+         Self {
+             offer: None,
+             requests: Default::default(),
+-            cancelled: false,
++            cancelled: Default::default(),
+         }
+     }
+ }
+ 
++#[derive(Default)]
++pub(super) struct ControlSourceEvents {
++    pub requests: Vec<(
++        ExtDataControlSourceV1,
++        String,
++        smithay_client_toolkit::data_device_manager::WritePipe,
++    )>,
++    pub cancelled: Vec<ExtDataControlSourceV1>,
++}
++
+ pub(super) struct MyWorld {
+     pub world: World,
+     pub global_list: GlobalList,
+@@ -120,6 +139,8 @@ pub(super) struct MyWorld {
+     queued_events: Vec<mpsc::Receiver<(Entity, ObjectEvent)>>,
+     pub clipboard: SelectionEvents<SelectionOffer>,
+     pub primary: SelectionEvents<PrimarySelectionOffer>,
++    pub control_clipboard: ControlSourceEvents,
++    pub control_primary: ControlSourceEvents,
+     pub pending_activations: Vec<(xcb::x::Window, String)>,
+ }
+ 
+@@ -134,6 +155,8 @@ impl MyWorld {
+             queued_events: Vec::new(),
+             clipboard: Default::default(),
+             primary: Default::default(),
++            control_clipboard: Default::default(),
++            control_primary: Default::default(),
+             pending_activations: Vec::new(),
+         }
+     }
+@@ -491,20 +514,20 @@ impl DataSourceHandler for MyWorld {
+         &mut self,
+         _: &wayland_client::Connection,
+         _: &wayland_client::QueueHandle<Self>,
+-        _: &wayland_client::protocol::wl_data_source::WlDataSource,
++        source: &wayland_client::protocol::wl_data_source::WlDataSource,
+         mime: String,
+         fd: smithay_client_toolkit::data_device_manager::WritePipe,
+     ) {
+-        self.clipboard.requests.push((mime, fd));
++        self.clipboard.requests.push((source.id(), mime, fd));
+     }
+ 
+     fn cancelled(
+         &mut self,
+         _: &wayland_client::Connection,
+         _: &wayland_client::QueueHandle<Self>,
+-        _: &wayland_client::protocol::wl_data_source::WlDataSource,
++        source: &wayland_client::protocol::wl_data_source::WlDataSource,
+     ) {
+-        self.clipboard.cancelled = true;
++        self.clipboard.cancelled.push(source.id());
+     }
+ 
+     fn action(
+@@ -619,19 +642,90 @@ impl PrimarySelectionSourceHandler for MyWorld {
+         &mut self,
+         _: &Connection,
+         _: &QueueHandle<Self>,
+-        _: &ZwpPrimarySelectionSourceV1,
++        source: &ZwpPrimarySelectionSourceV1,
+         mime: String,
+         write_pipe: smithay_client_toolkit::data_device_manager::WritePipe,
+     ) {
+-        self.primary.requests.push((mime, write_pipe));
++        self.primary.requests.push((source.id(), mime, write_pipe));
+     }
+ 
+     fn cancelled(
+         &mut self,
+         _: &Connection,
+         _: &QueueHandle<Self>,
+-        _: &ZwpPrimarySelectionSourceV1,
++        source: &ZwpPrimarySelectionSourceV1,
++    ) {
++        self.primary.cancelled.push(source.id());
++    }
++}
++
++delegate_noop!(MyWorld: ExtDataControlManagerV1);
++
++impl Dispatch<ExtDataControlSourceV1, SourceKind> for MyWorld {
++    fn event(
++        state: &mut Self,
++        source: &ExtDataControlSourceV1,
++        event: <ExtDataControlSourceV1 as Proxy>::Event,
++        kind: &SourceKind,
++        _: &Connection,
++        _: &QueueHandle<Self>,
++    ) {
++        let events = match kind {
++            SourceKind::Clipboard => &mut state.control_clipboard,
++            SourceKind::Primary => &mut state.control_primary,
++        };
++        match event {
++            ext_data_control_source_v1::Event::Send { mime_type, fd } => {
++                events.requests.push((
++                    source.clone(),
++                    mime_type,
++                    smithay_client_toolkit::data_device_manager::WritePipe::from(fd),
++                ));
++            }
++            ext_data_control_source_v1::Event::Cancelled => {
++                events.cancelled.push(source.clone());
++            }
++            _ => {}
++        }
++    }
++}
++
++impl Dispatch<ExtDataControlOfferV1, ()> for MyWorld {
++    fn event(
++        _: &mut Self,
++        _: &ExtDataControlOfferV1,
++        event: <ExtDataControlOfferV1 as Proxy>::Event,
++        _: &(),
++        _: &Connection,
++        _: &QueueHandle<Self>,
+     ) {
+-        self.primary.cancelled = true;
++        if let ext_data_control_offer_v1::Event::Offer { .. } = event {}
+     }
+ }
++
++impl Dispatch<ExtDataControlDeviceV1, ()> for MyWorld {
++    fn event(
++        _: &mut Self,
++        device: &ExtDataControlDeviceV1,
++        event: <ExtDataControlDeviceV1 as Proxy>::Event,
++        _: &(),
++        _: &Connection,
++        _: &QueueHandle<Self>,
++    ) {
++        match event {
++            ext_data_control_device_v1::Event::Selection { id }
++            | ext_data_control_device_v1::Event::PrimarySelection { id } => {
++                if let Some(offer) = id {
++                    offer.destroy();
++                }
++            }
++            ext_data_control_device_v1::Event::Finished => device.destroy(),
++            ext_data_control_device_v1::Event::DataOffer { .. } => {}
++            _ => {}
++        }
++    }
++
++    event_created_child!(MyWorld, ExtDataControlDeviceV1, [
++        EVT_DATA_OFFER_OPCODE => (ExtDataControlOfferV1, ()),
++    ]);
++}
 diff --git a/src/server/event.rs b/src/server/event.rs
 index ba31797..1ea16d9 100644
 --- a/src/server/event.rs
 +++ b/src/server/event.rs
 @@ -388,18 +388,23 @@ impl SurfaceEvents {
-
+ 
                  let mut role = data.get::<&mut SurfaceRole>().unwrap();
                  if let SurfaceRole::Toplevel(Some(toplevel)) = &mut *role {
 +                    let window = *data.get::<&x::Window>().unwrap();
@@ -40,12 +236,12 @@ index ba31797..1ea16d9 100644
 +                        state.connection.set_maximized(window, toplevel.maximized);
 +                    }
                  };
-
+ 
                  role.xdg_mut().unwrap().pending = Some(PendingSurfaceState {
 @@ -762,11 +767,20 @@ impl Event for client::wl_pointer::Event {
                      pub const LEFT: u32 = 0x110;
                  }
-
+ 
 +                let mut last_click_serial = None;
                  if button_state == WEnum::Value(client::wl_pointer::ButtonState::Pressed)
                      && button == button_codes::LEFT
@@ -64,7 +260,7 @@ index ba31797..1ea16d9 100644
                          }
                          CurrentSurface::Decoration(parent) => {
 @@ -781,6 +795,9 @@ impl Event for client::wl_pointer::Event {
-
+ 
                  server.button(serial, time, button, convert_wenum(button_state));
                  drop(query);
 +                if last_click_serial.is_some() {
@@ -92,7 +288,7 @@ index 0496628..d32c375 100644
 +    maximized: bool,
      decoration: decoration::DecorationsData,
  }
-
+ 
 @@ -422,6 +424,9 @@ impl<S: X11Selection> XConnection for NoConnection<S> {
      fn set_fullscreen(&mut self, _: x::Window, _: bool) {
          debug!("could not toggle fullscreen without XWayland initialized");
@@ -108,7 +304,7 @@ index 0496628..d32c375 100644
      last_focused_toplevel: Option<x::Window>,
      last_hovered: Option<x::Window>,
 +    last_click_serial: Option<(x::Window, client::wl_seat::WlSeat, u32)>,
-
+ 
      xdg_wm_base: XdgWmBase,
      compositor: client::wl_compositor::WlCompositor,
 @@ -559,6 +565,7 @@ impl<S: X11Selection> ServerState<NoConnection<S>> {
@@ -122,7 +318,7 @@ index 0496628..d32c375 100644
 @@ -1173,6 +1180,89 @@ impl<S: X11Selection + 'static> InnerServerState<S> {
          }
      }
-
+ 
 +    pub fn set_minimized(&mut self, window: x::Window) {
 +        let Some(data) = self
 +            .windows
@@ -212,7 +408,7 @@ index 0496628..d32c375 100644
 @@ -1235,7 +1325,14 @@ impl<S: X11Selection + 'static> InnerServerState<S> {
              return;
          };
-
+ 
 -        let Some(last_click_data) = data.get::<&LastClickSerial>() else {
 +        let last_click_data = data
 +            .get::<&LastClickSerial>()
@@ -228,16 +424,16 @@ index 0496628..d32c375 100644
 @@ -1246,7 +1343,7 @@ impl<S: X11Selection + 'static> InnerServerState<S> {
              return;
          };
-
+ 
 -        data.toplevel._move(&last_click_data.0, last_click_data.1);
 +        data.toplevel._move(&seat, serial);
      }
-
+ 
      pub fn resize_window(&mut self, window: x::Window, direction: MoveResizeDirection) {
 @@ -1260,7 +1357,14 @@ impl<S: X11Selection + 'static> InnerServerState<S> {
              return;
          };
-
+ 
 -        let Some(last_click_data) = data.get::<&LastClickSerial>() else {
 +        let last_click_data = data
 +            .get::<&LastClickSerial>()
@@ -253,12 +449,12 @@ index 0496628..d32c375 100644
 @@ -1286,8 +1390,7 @@ impl<S: X11Selection + 'static> InnerServerState<S> {
              | MoveResizeDirection::Cancel => unreachable!(),
          };
-
+ 
 -        data.toplevel
 -            .resize(&last_click_data.0, last_click_data.1, edge);
 +        data.toplevel.resize(&seat, serial, edge);
      }
-
+ 
      pub fn destroy_window(&mut self, window: x::Window) {
 @@ -1442,6 +1545,9 @@ impl<S: X11Selection + 'static> InnerServerState<S> {
          if fullscreen {
@@ -267,7 +463,7 @@ index 0496628..d32c375 100644
 +        if window.attrs.maximized {
 +            toplevel.set_maximized();
 +        }
-
+ 
          let wl_decoration = self.decoration_manager.as_ref().map(|decoration_manager| {
              let decoration =
 @@ -1519,6 +1625,7 @@ impl<S: X11Selection + 'static> InnerServerState<S> {
@@ -279,32 +475,395 @@ index 0496628..d32c375 100644
                  wl: wl_decoration,
                  satellite: sat_decoration,
 diff --git a/src/server/selection.rs b/src/server/selection.rs
-index bd32aaa..a6df77b 100644
+index bd32aaa..f3fced2 100644
 --- a/src/server/selection.rs
 +++ b/src/server/selection.rs
-@@ -93,13 +93,18 @@ impl<S: X11Selection> InnerServerState<S> {
+@@ -17,10 +17,27 @@ use smithay_client_toolkit::primary_selection::offer::PrimarySelectionOffer;
+ use smithay_client_toolkit::primary_selection::selection::PrimarySelectionSource;
+ use std::io::Read;
+ use std::rc::{Rc, Weak};
++use wayland_protocols::ext::data_control::v1::client::{
++    ext_data_control_device_v1::ExtDataControlDeviceV1,
++    ext_data_control_manager_v1::ExtDataControlManagerV1,
++    ext_data_control_source_v1::ExtDataControlSourceV1,
++};
++
++#[derive(Copy, Clone, Debug)]
++pub(super) enum SourceKind {
++    Clipboard,
++    Primary,
++}
+ 
+ pub(super) struct SelectionStates<S: X11Selection> {
+     clipboard: Option<SelectionState<S, Clipboard>>,
+     primary: Option<SelectionState<S, Primary>>,
++    control: Option<DataControlState>,
++}
++
++struct DataControlState {
++    manager: ExtDataControlManagerV1,
++    device: Option<ExtDataControlDeviceV1>,
+ }
+ 
+ impl<S: X11Selection> SelectionStates<S> {
+@@ -36,6 +53,13 @@ impl<S: X11Selection> SelectionStates<S> {
+                 .inspect_err(|_| info!("Primary selection unsupported."))
+                 .ok()
+                 .map(SelectionState::new),
++            control: global_list
++                .bind::<ExtDataControlManagerV1, _, _>(qh, 1..=1, ())
++                .ok()
++                .map(|manager| DataControlState {
++                    manager,
++                    device: None,
++                }),
+         }
+     }
+ 
+@@ -47,14 +71,69 @@ impl<S: X11Selection> SelectionStates<S> {
+         if let Some(d) = &mut self.primary {
+             d.device = Some(d.manager.get_selection_device(qh, seat));
+         }
++
++        let Some(control) = &mut self.control else {
++            return;
++        };
++        let device = control.manager.get_data_device(seat, qh, ());
++
++        if let Some(SelectionData::X11 {
++            inner: SelectionSource::Control { inner, published },
++            ..
++        }) = self
++            .clipboard
++            .as_mut()
++            .and_then(|state| state.source.as_mut())
++        {
++            if !*published {
++                device.set_selection(Some(inner));
++                *published = true;
++            }
++        }
++        if let Some(SelectionData::X11 {
++            inner: SelectionSource::Control { inner, published },
++            ..
++        }) = self
++            .primary
++            .as_mut()
++            .and_then(|state| state.source.as_mut())
++        {
++            if !*published {
++                device.set_primary_selection(Some(inner));
++                *published = true;
++            }
++        }
++
++        control.device = Some(device);
+     }
+ }
+ 
+ enum SelectionData<S: X11Selection, T: SelectionType> {
+-    X11 { inner: T::Source, data: Weak<S> },
++    X11 {
++        inner: SelectionSource<T::Source>,
++        data: Weak<S>,
++    },
+     Foreign(ForeignSelection<T>),
+ }
+ 
++enum SelectionSource<T> {
++    Core(T),
++    Control {
++        inner: ExtDataControlSourceV1,
++        published: bool,
++    },
++}
++
++fn destroy_selection<S: X11Selection, T: SelectionType>(selection: SelectionData<S, T>) {
++    if let SelectionData::X11 {
++        inner: SelectionSource::Control { inner, .. },
++        ..
++    } = selection
++    {
++        inner.destroy();
++    }
++}
++
+ struct SelectionState<S: X11Selection, T: SelectionType> {
+     manager: T::Manager,
+     device: Option<T::DataDevice>,
+@@ -78,28 +157,89 @@ impl<S: X11Selection> InnerServerState<S> {
+     }
+ 
+     fn handle_impl<T: SelectionType>(&mut self) {
++        let (requests, cancelled) = {
++            let events = T::get_events(&mut self.world);
++            (
++                std::mem::take(&mut events.requests),
++                std::mem::take(&mut events.cancelled),
++            )
++        };
++        let (control_requests, control_cancelled) = {
++            let events = T::get_control_events(&mut self.world);
++            (
++                std::mem::take(&mut events.requests),
++                std::mem::take(&mut events.cancelled),
++            )
++        };
++
+         let Some(state) = T::selection_state(&mut self.selection_states) else {
+             return;
+         };
+ 
+-        let events = T::get_events(&mut self.world);
++        if let Some(SelectionData::X11 {
++            inner: SelectionSource::Core(inner),
++            data,
++        }) = state.source.as_ref()
++        {
++            let source_id = T::source_id(inner);
++            for (request_source, mime_type, fd) in requests {
++                if request_source == source_id {
++                    if let Some(data) = data.upgrade() {
++                        data.write_to(&mime_type, fd);
++                    }
++                }
++            }
++        }
++
++        let core_cancelled = matches!(
++            state.source.as_ref(),
++            Some(SelectionData::X11 {
++                inner: SelectionSource::Core(inner),
++                ..
++            }) if cancelled.contains(&T::source_id(inner))
++        );
++        if core_cancelled {
++            state.source = None;
++        }
+ 
+-        for (mime_type, fd) in std::mem::take(&mut events.requests) {
+-            let SelectionData::X11 { data, .. } = state.source.as_ref().unwrap() else {
+-                unreachable!("Got selection request without having set the selection?")
++        for (source, mime_type, fd) in control_requests {
++            let Some(SelectionData::X11 {
++                inner: SelectionSource::Control { inner, .. },
++                data,
++            }) = state.source.as_ref()
++            else {
++                continue;
+             };
+-            if let Some(data) = data.upgrade() {
+-                data.write_to(&mime_type, fd);
++            if source == *inner {
++                if let Some(data) = data.upgrade() {
++                    data.write_to(&mime_type, fd);
++                }
              }
          }
-
-+        let selection_cancelled = events.cancelled;
-         if events.cancelled {
-             state.source = None;
-             events.cancelled = false;
+ 
+-        if events.cancelled {
+-            state.source = None;
+-            events.cancelled = false;
++        for source in control_cancelled {
++            let is_current = matches!(
++                state.source.as_ref(),
++                Some(SelectionData::X11 {
++                    inner: SelectionSource::Control { inner, .. },
++                    ..
++                }) if source == *inner
++            );
++            if is_current {
++                let old = state.source.take().unwrap();
++                destroy_selection(old);
++            }
          }
-
+ 
 -        if state.source.is_none() {
 -            if let Some(offer) = T::take_offer(&mut events.offer) {
-+        if let Some(offer) = T::take_offer(&mut events.offer) {
-+            // Wayland selections do not cancel old data offers when a different
-+            // Wayland client replaces the clipboard. Keep X11-owned selections
-+            // until the compositor cancels our source, but always refresh stale
-+            // foreign offers.
-+            if selection_cancelled || !matches!(state.source, Some(SelectionData::X11 { .. })) {
++        // Keep an incoming offer pending while an X11-owned source is active.
++        // Its matching cancel may arrive in a later dispatch cycle. Foreign
++        // sources can be replaced immediately, even without a cancel event.
++        if !matches!(state.source, Some(SelectionData::X11 { .. })) {
++            let offer = {
++                let events = T::get_events(&mut self.world);
++                T::take_offer(&mut events.offer)
++            };
++            if let Some(offer) = offer {
                  let mime_types = T::get_mimes(&offer);
                  let foreign = ForeignSelection {
                      mime_types,
+@@ -111,24 +251,58 @@ impl<S: X11Selection> InnerServerState<S> {
+     }
+ 
+     pub(crate) fn set_selection_source<T: SelectionType>(&mut self, selection: &Rc<S>) {
+-        if let Some(state) = T::selection_state(&mut self.selection_states) {
++        let serial = self.last_kb_serial.as_ref().map(|(_seat, serial)| *serial);
++        let control = self.selection_states.control.as_ref().map(|control| {
++            (
++                control.manager.clone(),
++                control.device.clone().filter(Proxy::is_alive),
++            )
++        });
++
++        let Some(state) = T::selection_state(&mut self.selection_states) else {
++            return;
++        };
++
++        let inner = if let Some(serial) = serial {
+             let src = T::create_source(&state.manager, &self.qh, selection.mime_types());
+-            let data = SelectionData::X11 {
+-                inner: src,
+-                data: Rc::downgrade(selection),
+-            };
+-            let SelectionData::X11 { inner, .. } = state.source.insert(data) else {
+-                unreachable!();
++            T::set_selection(&src, state.device.as_ref().unwrap(), serial);
++            SelectionSource::Core(src)
++        } else if let Some((manager, device)) = control {
++            let src = manager.create_data_source(&self.qh, T::KIND);
++            for mime in selection.mime_types() {
++                src.offer(mime.to_owned());
++            }
++            let published = if let Some(device) = device.as_ref() {
++                T::set_control_selection(device, Some(&src));
++                true
++            } else {
++                false
+             };
+-            if let Some(serial) = self
+-                .last_kb_serial
+-                .as_ref()
+-                .map(|(_seat, serial)| serial)
+-                .copied()
+-            {
+-                T::set_selection(inner, state.device.as_ref().unwrap(), serial);
++            SelectionSource::Control {
++                inner: src,
++                published,
+             }
++        } else {
++            // Preserve the core-only behavior when ext-data-control is unavailable. The source
++            // is retained, but cannot be published until the client has an input serial.
++            warn!(
++                "cannot publish X11 {:?} selection without an input serial or ext-data-control-v1",
++                T::KIND
++            );
++            SelectionSource::Core(T::create_source(
++                &state.manager,
++                &self.qh,
++                selection.mime_types(),
++            ))
++        };
++
++        if let Some(old) = state.source.take() {
++            destroy_selection(old);
+         }
++        state.source = Some(SelectionData::X11 {
++            inner,
++            data: Rc::downgrade(selection),
++        });
+     }
+ 
+     pub(crate) fn new_selection<T: SelectionType>(&mut self) -> Option<ForeignSelection<T>> {
+@@ -173,6 +347,8 @@ pub trait SelectionType: Sized {
+     type Manager;
+     type DataDevice;
+ 
++    const KIND: SourceKind;
++
+     // The methods in this trait shouldn't be used outside of this file.
+ 
+     fn selection_state<S: X11Selection>(
+@@ -187,8 +363,17 @@ pub trait SelectionType: Sized {
+ 
+     fn set_selection(source: &Self::Source, device: &Self::DataDevice, serial: u32);
+ 
++    fn source_id(source: &Self::Source) -> wayland_client::backend::ObjectId;
++
++    fn set_control_selection(
++        device: &ExtDataControlDeviceV1,
++        source: Option<&ExtDataControlSourceV1>,
++    );
++
+     fn get_events(world: &mut MyWorld) -> &mut SelectionEvents<Self::Offer>;
+ 
++    fn get_control_events(world: &mut MyWorld) -> &mut super::clientside::ControlSourceEvents;
++
+     fn receive_offer(offer: &Self::Offer, mime_type: String) -> std::io::Result<ReadPipe>;
+ 
+     fn take_offer(offer: &mut Option<Self::Offer>) -> Option<Self::Offer> {
+@@ -208,6 +393,8 @@ impl SelectionType for Clipboard {
+     type Manager = DataDeviceManagerState;
+     type DataDevice = DataDevice;
+ 
++    const KIND: SourceKind = SourceKind::Clipboard;
++
+     fn selection_state<S: X11Selection>(
+         state: &mut SelectionStates<S>,
+     ) -> &mut Option<SelectionState<S, Self>> {
+@@ -226,10 +413,25 @@ impl SelectionType for Clipboard {
+         source.set_selection(device, serial);
+     }
+ 
++    fn source_id(source: &Self::Source) -> wayland_client::backend::ObjectId {
++        source.inner().id()
++    }
++
++    fn set_control_selection(
++        device: &ExtDataControlDeviceV1,
++        source: Option<&ExtDataControlSourceV1>,
++    ) {
++        device.set_selection(source);
++    }
++
+     fn get_events(world: &mut MyWorld) -> &mut SelectionEvents<Self::Offer> {
+         &mut world.clipboard
+     }
+ 
++    fn get_control_events(world: &mut MyWorld) -> &mut super::clientside::ControlSourceEvents {
++        &mut world.control_clipboard
++    }
++
+     fn take_offer(offer: &mut Option<Self::Offer>) -> Option<Self::Offer> {
+         offer.take().filter(|offer| offer.inner().is_alive())
+     }
+@@ -256,6 +458,8 @@ impl SelectionType for Primary {
+     type Manager = PrimarySelectionManagerState;
+     type DataDevice = PrimarySelectionDevice;
+ 
++    const KIND: SourceKind = SourceKind::Primary;
++
+     fn selection_state<S: X11Selection>(
+         state: &mut SelectionStates<S>,
+     ) -> &mut Option<SelectionState<S, Self>> {
+@@ -274,10 +478,25 @@ impl SelectionType for Primary {
+         source.set_selection(device, serial);
+     }
+ 
++    fn source_id(source: &Self::Source) -> wayland_client::backend::ObjectId {
++        source.inner().id()
++    }
++
++    fn set_control_selection(
++        device: &ExtDataControlDeviceV1,
++        source: Option<&ExtDataControlSourceV1>,
++    ) {
++        device.set_primary_selection(source);
++    }
++
+     fn get_events(world: &mut MyWorld) -> &mut SelectionEvents<Self::Offer> {
+         &mut world.primary
+     }
+ 
++    fn get_control_events(world: &mut MyWorld) -> &mut super::clientside::ControlSourceEvents {
++        &mut world.control_primary
++    }
++
+     fn receive_offer(offer: &Self::Offer, mime_type: String) -> std::io::Result<ReadPipe> {
+         offer.receive(mime_type)
+     }
 diff --git a/src/server/tests.rs b/src/server/tests.rs
-index 13492cd..718a05d 100644
+index 13492cd..769e6b4 100644
 --- a/src/server/tests.rs
 +++ b/src/server/tests.rs
 @@ -3,7 +3,7 @@ use crate::server::selection::{Primary, SelectionType};
@@ -323,11 +882,11 @@ index 13492cd..718a05d 100644
 +    maximized_windows: HashSet<Window>,
      set_window_dims_counter: usize,
  }
-
+ 
 @@ -213,6 +214,15 @@ impl super::XConnection for FakeXConnection {
          self.window_mut(window).fullscreen = fullscreen;
      }
-
+ 
 +    #[track_caller]
 +    fn set_maximized(&mut self, window: xcb::x::Window, maximized: bool) {
 +        if maximized {
@@ -343,7 +902,7 @@ index 13492cd..718a05d 100644
 @@ -1278,6 +1288,108 @@ fn fullscreen() {
      );
  }
-
+ 
 +#[test]
 +fn maximize() {
 +    let (mut f, comp) = TestFixture::new_with_compositor();
@@ -449,6 +1008,225 @@ index 13492cd..718a05d 100644
  #[test]
  fn window_title_and_class() {
      let (mut f, comp) = TestFixture::new_with_compositor();
+@@ -1366,11 +1478,26 @@ trait SelectionTest {
+         testwl: &mut testwl::Server,
+         send_data: impl SendDataForMimeFn,
+     ) -> Vec<testwl::PasteData>;
++    fn control_mimes(testwl: &mut testwl::Server) -> Vec<String>;
++    fn control_paste_data(
++        testwl: &mut testwl::Server,
++        send_data: impl SendDataForMimeFn,
++    ) -> Vec<testwl::PasteData>;
++    fn backend(testwl: &testwl::Server) -> Option<testwl::SelectionBackend>;
+     fn create_offer(testwl: &mut testwl::Server, data: Vec<testwl::PasteData>);
+ }
+ 
+ macro_rules! selection_tests {
+-    ($name:ident, $selection_type:ty, $get_mime_fn:ident, $get_paste_data_fn:ident, $create_offer_fn:ident) => {
++    (
++        $name:ident,
++        $selection_type:ty,
++        $get_mime_fn:ident,
++        $get_paste_data_fn:ident,
++        $get_control_mime_fn:ident,
++        $get_control_paste_data_fn:ident,
++        $get_backend_fn:ident,
++        $create_offer_fn:ident
++    ) => {
+         impl SelectionTest for $selection_type {
+             type SelectionType = $selection_type;
+             fn mimes(testwl: &mut testwl::Server) -> Vec<String> {
+@@ -1382,6 +1509,18 @@ macro_rules! selection_tests {
+             ) -> Vec<testwl::PasteData> {
+                 testwl.$get_paste_data_fn(send_data)
+             }
++            fn control_mimes(testwl: &mut testwl::Server) -> Vec<String> {
++                testwl.$get_control_mime_fn()
++            }
++            fn control_paste_data(
++                testwl: &mut testwl::Server,
++                send_data: impl SendDataForMimeFn,
++            ) -> Vec<testwl::PasteData> {
++                testwl.$get_control_paste_data_fn(send_data)
++            }
++            fn backend(testwl: &testwl::Server) -> Option<testwl::SelectionBackend> {
++                testwl.$get_backend_fn()
++            }
+             fn create_offer(testwl: &mut testwl::Server, data: Vec<testwl::PasteData>) {
+                 testwl.$create_offer_fn(data);
+             }
+@@ -1394,6 +1533,21 @@ macro_rules! selection_tests {
+                 super::copy_from_x11::<$selection_type>();
+             }
+ 
++            #[test]
++            fn copy_from_x11_without_x11_focus() {
++                super::copy_from_x11_without_x11_focus::<$selection_type>();
++            }
++
++            #[test]
++            fn copy_from_x11_without_ext_data_control() {
++                super::copy_from_x11_without_ext_data_control::<$selection_type>();
++            }
++
++            #[test]
++            fn selection_ext_then_core() {
++                super::selection_ext_then_core::<$selection_type>();
++            }
++
+             #[test]
+             fn copy_from_wayland() {
+                 super::copy_from_wayland::<$selection_type>();
+@@ -1412,6 +1566,9 @@ selection_tests!(
+     Clipboard,
+     data_source_mimes,
+     clipboard_paste_data,
++    control_data_source_mimes,
++    control_clipboard_paste_data,
++    clipboard_source_backend,
+     create_data_offer
+ );
+ selection_tests!(
+@@ -1419,6 +1576,9 @@ selection_tests!(
+     Primary,
+     primary_source_mimes,
+     primary_paste_data,
++    control_primary_source_mimes,
++    control_primary_paste_data,
++    primary_source_backend,
+     create_primary_offer
+ );
+ 
+@@ -1441,6 +1601,8 @@ fn copy_from_x11<T: SelectionTest>() {
+     f.satellite.set_selection_source::<T::SelectionType>(&mimes);
+     f.run();
+ 
++    assert_eq!(T::backend(&f.testwl), Some(testwl::SelectionBackend::Core));
++
+     let server_mimes = T::mimes(&mut f.testwl);
+     for mime in mimes.iter() {
+         assert!(server_mimes.contains(&mime.mime_type));
+@@ -1453,6 +1615,81 @@ fn copy_from_x11<T: SelectionTest>() {
+     assert_eq!(*mimes, data);
+ }
+ 
++fn copy_from_x11_without_x11_focus<T: SelectionTest>() {
++    let (mut f, _comp) = TestFixture::new_with_compositor();
++
++    let mimes = std::rc::Rc::new(vec![testwl::PasteData {
++        mime_type: "text".to_string(),
++        data: b"abc".to_vec(),
++    }]);
++
++    f.satellite.set_selection_source::<T::SelectionType>(&mimes);
++    f.run();
++
++    assert_eq!(
++        T::backend(&f.testwl),
++        Some(testwl::SelectionBackend::ExtDataControl)
++    );
++
++    let server_mimes = T::control_mimes(&mut f.testwl);
++    for mime in mimes.iter() {
++        assert!(server_mimes.contains(&mime.mime_type));
++    }
++
++    let data = T::control_paste_data(&mut f.testwl, |_, _| {
++        f.satellite.run();
++        true
++    });
++    assert_eq!(*mimes, data);
++}
++
++fn copy_from_x11_without_ext_data_control<T: SelectionTest>() {
++    let mut f = TestFixture::new_pre_connect(|testwl| {
++        testwl.disable_ext_data_control_global();
++    });
++    let comp = f.compositor();
++    let win = Window::new(1);
++    let (_surface, _id) = f.create_toplevel(&comp, win);
++    let mimes = std::rc::Rc::new(vec![testwl::PasteData {
++        mime_type: "text".to_string(),
++        data: b"abc".to_vec(),
++    }]);
++
++    f.satellite.set_selection_source::<T::SelectionType>(&mimes);
++    f.run();
++
++    assert_eq!(T::backend(&f.testwl), Some(testwl::SelectionBackend::Core));
++    assert_eq!(T::mimes(&mut f.testwl), vec!["text"]);
++}
++
++fn selection_ext_then_core<T: SelectionTest>() {
++    let (mut f, comp) = TestFixture::new_with_compositor();
++    let initial = std::rc::Rc::new(vec![testwl::PasteData {
++        mime_type: "initial".to_string(),
++        data: b"ext".to_vec(),
++    }]);
++    f.satellite
++        .set_selection_source::<T::SelectionType>(&initial);
++    f.run();
++    assert_eq!(
++        T::backend(&f.testwl),
++        Some(testwl::SelectionBackend::ExtDataControl)
++    );
++
++    let win = Window::new(1);
++    let (_surface, _id) = f.create_toplevel(&comp, win);
++    let replacement = std::rc::Rc::new(vec![testwl::PasteData {
++        mime_type: "replacement".to_string(),
++        data: b"core".to_vec(),
++    }]);
++    f.satellite
++        .set_selection_source::<T::SelectionType>(&replacement);
++    f.run();
++
++    assert_eq!(T::backend(&f.testwl), Some(testwl::SelectionBackend::Core));
++    assert_eq!(T::mimes(&mut f.testwl), vec!["replacement"]);
++}
++
+ fn copy_from_wayland<T: SelectionTest>() {
+     let (mut f, comp) = TestFixture::new_with_compositor();
+     TestObject::<WlKeyboard>::from_request(&comp.seat.obj, wl_seat::Request::GetKeyboard {});
+@@ -1559,6 +1796,38 @@ fn selection_x11_then_wayland<T: SelectionTest>() {
+     }
+ }
+ 
++#[test]
++fn wayland_offer_waits_for_x11_source_cancellation() {
++    let (mut f, comp) = TestFixture::new_with_compositor();
++    TestObject::<WlKeyboard>::from_request(&comp.seat.obj, wl_seat::Request::GetKeyboard {});
++    let win = Window::new(1);
++    let (_surface, _id) = f.create_toplevel(&comp, win);
++
++    let x11data = std::rc::Rc::new(vec![testwl::PasteData {
++        mime_type: "old".to_string(),
++        data: b"x11".to_vec(),
++    }]);
++    f.satellite.set_selection_source::<Clipboard>(&x11data);
++    f.run();
++
++    f.testwl
++        .create_data_offer_without_cancelling(vec![testwl::PasteData {
++            mime_type: "replacement".to_string(),
++            data: b"wayland".to_vec(),
++        }]);
++    f.run();
++    assert!(f.satellite.new_selection::<Clipboard>().is_none());
++
++    f.testwl.cancel_clipboard_source();
++    f.run();
++    let selection = f
++        .satellite
++        .new_selection::<Clipboard>()
++        .expect("pending Wayland offer was lost when X11 source was cancelled");
++    assert_eq!(selection.mime_types.len(), 1);
++    assert_eq!(selection.mime_types[0], "replacement");
++}
++
+ #[test]
+ fn raise_window_on_pointer_event() {
+     let (mut f, comp) = TestFixture::new_with_compositor();
 diff --git a/src/xstate/mod.rs b/src/xstate/mod.rs
 index e9425f0..bcc310a 100644
 --- a/src/xstate/mod.rs
@@ -468,9 +1246,9 @@ index e9425f0..bcc310a 100644
              ],
          );
 @@ -554,12 +560,31 @@ impl XState {
-
+ 
                  trace!("_NET_WM_STATE ({action:?}) props: {prop1:?} {prop2:?}");
-
+ 
 -                for prop in [prop1, prop2] {
 -                    match prop {
 -                        x if x == self.atoms.wm_fullscreen => {
@@ -537,11 +1315,11 @@ index e9425f0..bcc310a 100644
 +                && states.contains(&self.atoms.wm_maximized_vert);
 +            server_state.set_initial_maximized(window, maximized);
 +        }
-
+ 
          let transient_for = self
              .property_cookie_wrapper(
 @@ -661,6 +698,23 @@ impl XState {
-
+ 
          let is_popup =
              self.guess_is_popup(window, motif_hints, wmhints, transient_for.is_some())?;
 +        let allowed_actions = if is_popup {
@@ -629,11 +1407,11 @@ index e9425f0..bcc310a 100644
 +        }
 +    }
  }
-
+ 
  impl XConnection for RealConnection {
 @@ -1360,24 +1460,15 @@ impl XConnection for RealConnection {
      }
-
+ 
      fn set_fullscreen(&mut self, window: x::Window, fullscreen: bool) {
 -        let data = if fullscreen {
 -            std::slice::from_ref(&self.atoms.wm_fullscreen)
@@ -642,7 +1420,7 @@ index e9425f0..bcc310a 100644
 -        };
 +        self.set_net_wm_state(window, &[self.atoms.wm_fullscreen], fullscreen);
 +    }
-
+ 
 -        if let Err(e) = self
 -            .connection
 -            .send_and_check_request(&x::ChangeProperty::<x::Atom> {
@@ -662,7 +1440,7 @@ index e9425f0..bcc310a 100644
 +            maximized,
 +        );
      }
-
+ 
      fn focus_window(&mut self, window: x::Window, output_name: Option<String>) {
 diff --git a/src/xstate/selection.rs b/src/xstate/selection.rs
 index 8500a79..30cbcc9 100644
@@ -670,7 +1448,7 @@ index 8500a79..30cbcc9 100644
 +++ b/src/xstate/selection.rs
 @@ -477,12 +477,21 @@ impl<T: SelectionType> SelectionDataImpl for SelectionData<T> {
          }
-
+ 
          let selection = get_atom_name(connection, self.atom);
 -        let mimes = targets
 +        let mut utf8_x11 = false;
@@ -694,7 +1472,7 @@ index 8500a79..30cbcc9 100644
 @@ -499,6 +508,32 @@ impl<T: SelectionType> SelectionDataImpl for SelectionData<T> {
              })
              .collect();
-
+ 
 +        if utf8_x11 {
 +            for (name, already_present) in [
 +                ("text/plain;charset=utf-8", text_plain_utf8),
@@ -725,7 +1503,7 @@ index 8500a79..30cbcc9 100644
              mimes,
              connection: connection.clone(),
 diff --git a/tests/integration.rs b/tests/integration.rs
-index c49b5cb..9641d16 100644
+index c49b5cb..d5ad91f 100644
 --- a/tests/integration.rs
 +++ b/tests/integration.rs
 @@ -18,7 +18,7 @@ use wayland_server::Resource;
@@ -735,7 +1513,7 @@ index c49b5cb..9641d16 100644
 -use xwayland_satellite::xstate::{MoveResizeDirection, WmSizeHintsFlags, WmState};
 +use xwayland_satellite::xstate::{MoveResizeDirection, SetState, WmSizeHintsFlags, WmState};
  use xwls::timespec_from_millis;
-
+ 
  #[derive(Default)]
 @@ -329,6 +329,12 @@ xcb::atoms_struct! {
          net_active_window => b"_NET_ACTIVE_WINDOW",
@@ -753,7 +1531,7 @@ index c49b5cb..9641d16 100644
 @@ -519,6 +525,20 @@ impl Connection {
          self.wait_for_reply(self.send_request(req)).unwrap()
      }
-
+ 
 +    #[track_caller]
 +    fn get_atom_property(&self, window: x::Window, property: x::Atom) -> Vec<x::Atom> {
 +        self.get_reply(&x::GetProperty {
@@ -771,10 +1549,70 @@ index c49b5cb..9641d16 100644
      #[track_caller]
      fn set_selection_owner(&self, window: x::Window, selection: x::Atom) {
          self.send_and_check_request(&x::SetSelectionOwner {
-@@ -2423,6 +2443,71 @@ fn rotated_output() {
-
+@@ -1147,6 +1167,59 @@ fn copy_from_x11() {
+     }
+ }
+ 
++#[test]
++fn x11_utf8_string_bridges_wayland_text_mimes() {
++    let mut f = Fixture::new();
++    let mut connection = Connection::new(&f.display);
++    let window = connection.new_window(connection.root, 0, 0, 20, 20, false);
++    f.map_as_toplevel(&mut connection, window);
++
++    let utf8_string = connection
++        .get_reply(&x::InternAtom {
++            only_if_exists: false,
++            name: b"UTF8_STRING",
++        })
++        .atom();
++
++    connection.set_selection_owner(window, connection.atoms.clipboard);
++    let request = connection.await_selection_request();
++    assert_eq!(request.target(), connection.atoms.targets);
++    connection.set_property(
++        request.requestor(),
++        x::ATOM_ATOM,
++        request.property(),
++        &[utf8_string],
++    );
++    connection.send_selection_notify(&request);
++    f.wait_and_dispatch();
++
++    let mut mimes = f.testwl.data_source_mimes();
++    mimes.sort();
++    assert_eq!(
++        mimes,
++        ["UTF8_STRING", "text/plain", "text/plain;charset=utf-8"]
++    );
++
++    let payload = b"QQ-\xe8\x81\x8a\xe5\xa4\xa9";
++    let data = f.testwl.clipboard_paste_data(|mime, _| {
++        let request = connection.await_selection_request();
++        assert_eq!(request.target(), utf8_string, "Wayland MIME {mime}");
++        connection.set_property(
++            request.requestor(),
++            utf8_string,
++            request.property(),
++            payload,
++        );
++        connection.send_selection_notify(&request);
++        true
++    });
++
++    assert_eq!(data.len(), 3);
++    for item in data {
++        assert_eq!(item.data, payload, "Wayland MIME {}", item.mime_type);
++    }
++}
++
+ #[test]
+ fn copy_from_wayland() {
+     let mut f = Fixture::new();
+@@ -2423,6 +2496,71 @@ fn rotated_output() {
+ 
  const BTN_LEFT: u32 = 0x110;
-
+ 
 +#[test]
 +fn client_maximize() {
 +    let mut f = Fixture::new();
@@ -844,10 +1682,22 @@ index c49b5cb..9641d16 100644
  fn client_init_move() {
      let mut f = Fixture::new();
 diff --git a/testwl/src/lib.rs b/testwl/src/lib.rs
-index f8d850f..c4d3987 100644
+index f8d850f..3a0899a 100644
 --- a/testwl/src/lib.rs
 +++ b/testwl/src/lib.rs
-@@ -158,6 +158,7 @@ pub struct Toplevel {
+@@ -6,6 +6,11 @@ use std::os::fd::{AsFd, BorrowedFd, OwnedFd};
+ use std::os::unix::net::UnixStream;
+ use std::sync::{Arc, Mutex, OnceLock};
+ use std::time::Instant;
++use wayland_protocols::ext::data_control::v1::server::{
++    ext_data_control_device_v1::{self, ExtDataControlDeviceV1},
++    ext_data_control_manager_v1::{self, ExtDataControlManagerV1},
++    ext_data_control_source_v1::{self, ExtDataControlSourceV1},
++};
+ use wayland_protocols::wp::linux_drm_syncobj::v1::server::wp_linux_drm_syncobj_manager_v1::WpLinuxDrmSyncobjManagerV1;
+ use wayland_protocols::wp::primary_selection::zv1::server::zwp_primary_selection_device_manager_v1::ZwpPrimarySelectionDeviceManagerV1;
+ use wayland_protocols::wp::primary_selection::zv1::server::zwp_primary_selection_device_v1::ZwpPrimarySelectionDeviceV1;
+@@ -158,6 +163,7 @@ pub struct Toplevel {
      pub min_size: Option<Vec2>,
      pub max_size: Option<Vec2>,
      pub states: Vec<xdg_toplevel::State>,
@@ -855,7 +1705,404 @@ index f8d850f..c4d3987 100644
      pub closed: bool,
      pub title: Option<String>,
      pub app_id: Option<String>,
-@@ -1559,6 +1560,34 @@ impl Dispatch<XdgToplevel, SurfaceId> for State {
+@@ -283,6 +289,10 @@ struct State {
+     data_device: Option<WlDataDevice>,
+     primary_man: Option<ZwpPrimarySelectionDeviceManagerV1>,
+     primary_device: Option<ZwpPrimarySelectionDeviceV1>,
++    control_clipboard: Option<ExtDataControlSourceV1>,
++    control_primary: Option<ExtDataControlSourceV1>,
++    control_data_device_man: Option<ExtDataControlManagerV1>,
++    control_data_device: Option<ExtDataControlDeviceV1>,
+     xdg_activation: Option<XdgActivationV1>,
+     valid_tokens: HashSet<String>,
+     token_counter: u32,
+@@ -315,6 +325,10 @@ impl Default for State {
+             primary_device: None,
+             data_device_man: None,
+             data_device: None,
++            control_clipboard: None,
++            control_primary: None,
++            control_data_device_man: None,
++            control_data_device: None,
+             xdg_activation: None,
+             valid_tokens: HashSet::new(),
+             token_counter: 0,
+@@ -436,6 +450,7 @@ pub struct Server {
+     state: State,
+     client: Option<Client>,
+     decorations_global: GlobalId,
++    control_global: GlobalId,
+ }
+ 
+ pub trait SendDataForMimeFn: FnMut(&str, &mut Server) -> bool {}
+@@ -475,6 +490,7 @@ impl Server {
+         dh.create_global::<State, WlSeat, _>(5, ());
+         dh.create_global::<State, WlDataDeviceManager, _>(3, ());
+         dh.create_global::<State, ZwpPrimarySelectionDeviceManagerV1, _>(1, ());
++        let control_global = dh.create_global::<State, ExtDataControlManagerV1, _>(1, ());
+         dh.create_global::<State, ZwpTabletManagerV2, _>(1, ());
+         dh.create_global::<State, XdgActivationV1, _>(1, ());
+         let decorations_global = dh.create_global::<State, ZxdgDecorationManagerV1, _>(1, ());
+@@ -539,6 +555,7 @@ impl Server {
+             state: State::default(),
+             client: None,
+             decorations_global,
++            control_global,
+         }
+     }
+ 
+@@ -677,6 +694,46 @@ impl Server {
+         data.mimes.to_vec()
+     }
+ 
++    #[track_caller]
++    pub fn control_data_source_mimes(&self) -> Vec<String> {
++        let Some(selection) = &self.state.control_clipboard else {
++            panic!("No selection set on ext data control device");
++        };
++
++        let data: &Mutex<DataSourceData> = selection.data().unwrap();
++        data.lock().unwrap().mimes.to_vec()
++    }
++
++    #[track_caller]
++    pub fn control_primary_source_mimes(&self) -> Vec<String> {
++        let Some(selection) = &self.state.control_primary else {
++            panic!("No primary selection set on ext data control device");
++        };
++
++        let data: &Mutex<DataSourceData> = selection.data().unwrap();
++        data.lock().unwrap().mimes.to_vec()
++    }
++
++    pub fn clipboard_source_backend(&self) -> Option<SelectionBackend> {
++        if self.state.clipboard.is_some() {
++            Some(SelectionBackend::Core)
++        } else if self.state.control_clipboard.is_some() {
++            Some(SelectionBackend::ExtDataControl)
++        } else {
++            None
++        }
++    }
++
++    pub fn primary_source_backend(&self) -> Option<SelectionBackend> {
++        if self.state.primary.is_some() {
++            Some(SelectionBackend::Core)
++        } else if self.state.control_primary.is_some() {
++            Some(SelectionBackend::ExtDataControl)
++        } else {
++            None
++        }
++    }
++
+     fn paste_impl(
+         &mut self,
+         data: &Mutex<DataSourceData>,
+@@ -773,18 +830,68 @@ impl Server {
+         ret
+     }
+ 
++    #[track_caller]
++    pub fn control_clipboard_paste_data(
++        &mut self,
++        send_data_for_mime: impl SendDataForMimeFn,
++    ) -> Vec<PasteData> {
++        let Some(selection) = self.state.control_clipboard.take() else {
++            panic!("No selection set on ext data control device");
++        };
++
++        let ret = self.paste_impl(
++            selection.data().unwrap(),
++            send_data_for_mime,
++            |mime_type, fd| selection.send(mime_type, fd),
++        );
++        self.state.control_clipboard = Some(selection);
++        ret
++    }
++
++    #[track_caller]
++    pub fn control_primary_paste_data(
++        &mut self,
++        send_data_for_mime: impl SendDataForMimeFn,
++    ) -> Vec<PasteData> {
++        let Some(selection) = self.state.control_primary.take() else {
++            panic!("No primary selection set on ext data control device");
++        };
++
++        let ret = self.paste_impl(
++            selection.data().unwrap(),
++            send_data_for_mime,
++            |mime_type, fd| selection.send(mime_type, fd),
++        );
++        self.state.control_primary = Some(selection);
++        ret
++    }
++
+     pub fn data_source_exists(&self) -> bool {
+         self.state.clipboard.is_none()
+     }
+ 
+     #[track_caller]
+     pub fn create_data_offer(&mut self, data: Vec<PasteData>) {
++        self.create_data_offer_impl(data, true);
++    }
++
++    #[track_caller]
++    pub fn create_data_offer_without_cancelling(&mut self, data: Vec<PasteData>) {
++        self.create_data_offer_impl(data, false);
++    }
++
++    fn create_data_offer_impl(&mut self, data: Vec<PasteData>, cancel_current: bool) {
+         let Some(dev) = &self.state.data_device else {
+             panic!("No data device created");
+         };
+ 
+-        if let Some(selection) = self.state.clipboard.take() {
+-            selection.cancelled();
++        if cancel_current {
++            if let Some(selection) = self.state.clipboard.take() {
++                selection.cancelled();
++            }
++            if let Some(selection) = self.state.control_clipboard.take() {
++                selection.cancelled();
++            }
+         }
+ 
+         let mimes: Vec<_> = data.iter().map(|m| m.mime_type.clone()).collect();
+@@ -802,6 +909,17 @@ impl Server {
+         self.display.flush_clients().unwrap();
+     }
+ 
++    #[track_caller]
++    pub fn cancel_clipboard_source(&mut self) {
++        if let Some(selection) = self.state.clipboard.take() {
++            selection.cancelled();
++        }
++        if let Some(selection) = self.state.control_clipboard.take() {
++            selection.cancelled();
++        }
++        self.display.flush_clients().unwrap();
++    }
++
+     #[track_caller]
+     pub fn create_primary_offer(&mut self, data: Vec<PasteData>) {
+         let Some(dev) = &self.state.primary_device else {
+@@ -811,6 +929,9 @@ impl Server {
+         if let Some(selection) = self.state.primary.take() {
+             selection.cancelled();
+         }
++        if let Some(selection) = self.state.control_primary.take() {
++            selection.cancelled();
++        }
+ 
+         let mimes: Vec<_> = data.iter().map(|m| m.mime_type.clone()).collect();
+         let offer = self
+@@ -836,6 +957,9 @@ impl Server {
+         if let Some(selection) = self.state.clipboard.take() {
+             selection.cancelled();
+         }
++        if let Some(selection) = self.state.control_clipboard.take() {
++            selection.cancelled();
++        }
+ 
+         dev.selection(None);
+         self.display.flush_clients().unwrap();
+@@ -952,6 +1076,12 @@ impl Server {
+             .remove_global::<State>(self.decorations_global.clone());
+     }
+ 
++    pub fn disable_ext_data_control_global(&self) {
++        self.display
++            .handle()
++            .remove_global::<State>(self.control_global.clone());
++    }
++
+     #[track_caller]
+     pub fn get_buffer_dimensions(&self, buffer: &WlBuffer) -> Vec2 {
+         *self
+@@ -962,6 +1092,12 @@ impl Server {
+     }
+ }
+ 
++#[derive(Copy, Clone, Eq, PartialEq, Debug)]
++pub enum SelectionBackend {
++    Core,
++    ExtDataControl,
++}
++
+ #[derive(Clone, Eq, PartialEq, Debug)]
+ pub struct PasteData {
+     pub mime_type: String,
+@@ -1240,7 +1376,7 @@ impl Dispatch<ZwpPrimarySelectionSourceV1, Mutex<DataSourceData>> for State {
+     fn request(
+         state: &mut Self,
+         _: &Client,
+-        _: &ZwpPrimarySelectionSourceV1,
++        source: &ZwpPrimarySelectionSourceV1,
+         request: <ZwpPrimarySelectionSourceV1 as Resource>::Request,
+         data: &Mutex<DataSourceData>,
+         _: &DisplayHandle,
+@@ -1252,7 +1388,9 @@ impl Dispatch<ZwpPrimarySelectionSourceV1, Mutex<DataSourceData>> for State {
+                 data.lock().unwrap().mimes.push(mime_type);
+             }
+             Request::Destroy => {
+-                state.primary = None;
++                if state.primary.as_ref() == Some(source) {
++                    state.primary = None;
++                }
+             }
+             _ => todo!("{request:?}"),
+         }
+@@ -1272,6 +1410,9 @@ impl Dispatch<ZwpPrimarySelectionDeviceV1, WlSeat> for State {
+         use wayland_protocols::wp::primary_selection::zv1::server::zwp_primary_selection_device_v1::Request;
+         match request {
+             Request::SetSelection { source, .. } => {
++                if let Some(selection) = state.control_primary.take() {
++                    selection.cancelled();
++                }
+                 state.primary = source;
+             }
+             Request::Destroy => {
+@@ -1324,7 +1465,7 @@ impl Dispatch<WlDataSource, Mutex<DataSourceData>> for State {
+     fn request(
+         state: &mut Self,
+         _: &Client,
+-        _: &WlDataSource,
++        source: &WlDataSource,
+         request: <WlDataSource as Resource>::Request,
+         data: &Mutex<DataSourceData>,
+         _: &DisplayHandle,
+@@ -1336,7 +1477,9 @@ impl Dispatch<WlDataSource, Mutex<DataSourceData>> for State {
+                 data.mimes.push(mime_type);
+             }
+             wl_data_source::Request::Destroy => {
+-                state.clipboard = None;
++                if state.clipboard.as_ref() == Some(source) {
++                    state.clipboard = None;
++                }
+             }
+             other => todo!("unhandled request {other:?}"),
+         }
+@@ -1355,6 +1498,9 @@ impl Dispatch<WlDataDevice, WlSeat> for State {
+     ) {
+         match request {
+             wl_data_device::Request::SetSelection { source, .. } => {
++                if let Some(selection) = state.control_clipboard.take() {
++                    selection.cancelled();
++                }
+                 state.clipboard = source;
+             }
+             wl_data_device::Request::Release => {
+@@ -1387,6 +1533,108 @@ impl Dispatch<WlDataDeviceManager, ()> for State {
+     }
+ }
+ 
++impl GlobalDispatch<ExtDataControlManagerV1, ()> for State {
++    fn bind(
++        state: &mut Self,
++        _: &DisplayHandle,
++        _: &Client,
++        resource: wayland_server::New<ExtDataControlManagerV1>,
++        _: &(),
++        data_init: &mut wayland_server::DataInit<'_, Self>,
++    ) {
++        state.control_data_device_man = Some(data_init.init(resource, ()));
++    }
++}
++
++impl Dispatch<ExtDataControlManagerV1, ()> for State {
++    fn request(
++        state: &mut Self,
++        _: &Client,
++        _: &ExtDataControlManagerV1,
++        request: <ExtDataControlManagerV1 as Resource>::Request,
++        _: &(),
++        _: &DisplayHandle,
++        data_init: &mut wayland_server::DataInit<'_, Self>,
++    ) {
++        match request {
++            ext_data_control_manager_v1::Request::CreateDataSource { id } => {
++                data_init.init(id, DataSourceData::default().into());
++            }
++            ext_data_control_manager_v1::Request::GetDataDevice { id, seat } => {
++                state.control_data_device = Some(data_init.init(id, seat));
++            }
++            ext_data_control_manager_v1::Request::Destroy => {
++                state.control_data_device_man = None;
++            }
++            _ => unreachable!(),
++        }
++    }
++}
++
++impl Dispatch<ExtDataControlSourceV1, Mutex<DataSourceData>> for State {
++    fn request(
++        state: &mut Self,
++        _: &Client,
++        source: &ExtDataControlSourceV1,
++        request: <ExtDataControlSourceV1 as Resource>::Request,
++        data: &Mutex<DataSourceData>,
++        _: &DisplayHandle,
++        _: &mut wayland_server::DataInit<'_, Self>,
++    ) {
++        match request {
++            ext_data_control_source_v1::Request::Offer { mime_type } => {
++                data.lock().unwrap().mimes.push(mime_type);
++            }
++            ext_data_control_source_v1::Request::Destroy => {
++                if state.control_clipboard.as_ref() == Some(source) {
++                    state.control_clipboard = None;
++                }
++                if state.control_primary.as_ref() == Some(source) {
++                    state.control_primary = None;
++                }
++            }
++            _ => unreachable!(),
++        }
++    }
++}
++
++impl Dispatch<ExtDataControlDeviceV1, WlSeat> for State {
++    fn request(
++        state: &mut Self,
++        _: &Client,
++        _: &ExtDataControlDeviceV1,
++        request: <ExtDataControlDeviceV1 as Resource>::Request,
++        _: &WlSeat,
++        _: &DisplayHandle,
++        _: &mut wayland_server::DataInit<'_, Self>,
++    ) {
++        match request {
++            ext_data_control_device_v1::Request::SetSelection { source } => {
++                if let Some(selection) = state.clipboard.take() {
++                    selection.cancelled();
++                }
++                if let Some(old) = state.control_clipboard.take() {
++                    old.cancelled();
++                }
++                state.control_clipboard = source;
++            }
++            ext_data_control_device_v1::Request::SetPrimarySelection { source } => {
++                if let Some(selection) = state.primary.take() {
++                    selection.cancelled();
++                }
++                if let Some(old) = state.control_primary.take() {
++                    old.cancelled();
++                }
++                state.control_primary = source;
++            }
++            ext_data_control_device_v1::Request::Destroy => {
++                state.control_data_device = None;
++            }
++            _ => unreachable!(),
++        }
++    }
++}
++
+ impl GlobalDispatch<WlSeat, ()> for State {
+     fn bind(
+         state: &mut Self,
+@@ -1559,6 +1807,34 @@ impl Dispatch<XdgToplevel, SurfaceId> for State {
                      y: height,
                  });
              }
@@ -890,7 +2137,7 @@ index f8d850f..c4d3987 100644
              xdg_toplevel::Request::SetFullscreen { .. } => {
                  let data = state.surfaces.get_mut(surface_id).unwrap();
                  let Some(SurfaceRole::Toplevel(toplevel)) = &mut data.role else {
-@@ -1585,6 +1614,13 @@ impl Dispatch<XdgToplevel, SurfaceId> for State {
+@@ -1585,6 +1861,13 @@ impl Dispatch<XdgToplevel, SurfaceId> for State {
                  let states = toplevel.states.clone();
                  state.configure_toplevel(*surface_id, 100, 100, states);
              }
@@ -904,7 +2151,7 @@ index f8d850f..c4d3987 100644
              xdg_toplevel::Request::Destroy => {}
              xdg_toplevel::Request::SetTitle { title } => {
                  let data = state.surfaces.get_mut(surface_id).unwrap();
-@@ -1649,6 +1685,7 @@ impl Dispatch<XdgSurface, SurfaceId> for State {
+@@ -1649,6 +1932,7 @@ impl Dispatch<XdgSurface, SurfaceId> for State {
                      min_size: None,
                      max_size: None,
                      states: Vec::new(),

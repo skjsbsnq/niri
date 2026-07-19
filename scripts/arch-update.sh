@@ -313,6 +313,7 @@ xwayland_satellite_build_is_current() {
   grep -Fxq "ref=$XWAYLAND_SATELLITE_REF" "$XWAYLAND_SATELLITE_BUILD_STAMP" || return 1
   grep -Fxq "commit=$xwayland_satellite_after_commit" "$XWAYLAND_SATELLITE_BUILD_STAMP" || return 1
   grep -Fxq "patch_sha256=$xwayland_satellite_patch_sha" "$XWAYLAND_SATELLITE_BUILD_STAMP" || return 1
+  grep -Fxq 'behavior_tests=passed' "$XWAYLAND_SATELLITE_BUILD_STAMP" || return 1
 
   return 0
 }
@@ -351,8 +352,11 @@ prepare_xwayland_satellite_worktree() {
     && grep -Rqs '_NET_WM_ACTION_MAXIMIZE_HORZ' "$XWAYLAND_SATELLITE_WORK_DIR/src" \
     && grep -Rqs '_NET_WM_ACTION_MAXIMIZE_VERT' "$XWAYLAND_SATELLITE_WORK_DIR/src" \
     && grep -Rqs 'State::Maximized' "$XWAYLAND_SATELLITE_WORK_DIR/src" \
-    && grep -Rqs 'selection_cancelled' "$XWAYLAND_SATELLITE_WORK_DIR/src" \
-    && grep -Rqs 'text/plain;charset=utf-8' "$XWAYLAND_SATELLITE_WORK_DIR/src"; then
+    && grep -Rqs 'ExtDataControlManagerV1' "$XWAYLAND_SATELLITE_WORK_DIR/src" \
+    && grep -Rqs 'copy_from_x11_without_x11_focus' "$XWAYLAND_SATELLITE_WORK_DIR/src" \
+    && grep -Rqs 'text/plain;charset=utf-8' "$XWAYLAND_SATELLITE_WORK_DIR/src" \
+    && grep -Rqs 'x11_utf8_string_bridges_wayland_text_mimes' "$XWAYLAND_SATELLITE_WORK_DIR/tests" \
+    && grep -Rqs 'wayland_offer_waits_for_x11_source_cancellation' "$XWAYLAND_SATELLITE_WORK_DIR/src"; then
     log "xwayland-satellite patch no longer applies, but upstream appears to include Tahoe maximize, minimize, and clipboard support; building without local patch"
     return
   fi
@@ -385,6 +389,7 @@ write_xwayland_satellite_build_stamp() {
     printf 'patch=%s\n' "$XWAYLAND_SATELLITE_PATCH"
     printf 'patch_sha256=%s\n' "$xwayland_satellite_patch_sha"
     printf 'patch_applied=%s\n' "$xwayland_satellite_patch_applied"
+    printf 'behavior_tests=passed\n'
     printf 'binary=%s\n' "$XWAYLAND_SATELLITE_BIN"
     printf 'glamor_wrapper=%s\n' "$XWAYLAND_SATELLITE_GLAMOR_WRAPPER"
   } > "$XWAYLAND_SATELLITE_BUILD_STAMP"
@@ -835,6 +840,12 @@ build_xwayland_satellite() {
   require_cmd cargo
 
   prepare_xwayland_satellite_worktree
+
+  log "running patched xwayland-satellite behavior tests"
+  (
+    cd "$XWAYLAND_SATELLITE_WORK_DIR"
+    CARGO_TARGET_DIR="$XWAYLAND_SATELLITE_TARGET_DIR" cargo test --locked
+  )
 
   log "building patched xwayland-satellite"
   (

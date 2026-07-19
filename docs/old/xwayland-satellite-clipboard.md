@@ -27,8 +27,17 @@ Wayland client replaced the clipboard with another Wayland offer, the old
 foreign offer could stay in `state.source`, leaving X11 clients with stale or
 missing clipboard data.
 
+The opposite direction had a second failure mode. X11 selection changes create
+a Wayland data source, but v0.8.1 only calls `wl_data_device.set_selection` when
+`last_kb_serial` exists. An X11 owner created before any X11 keyboard focus
+therefore updated satellite's internal state but was never published to
+Wayland. Codex, `wl-paste --watch`, and `cliphist` all continued to see the old
+selection. Passing serial `0` is not protocol-correct, so the patch uses
+`ext-data-control-v1` as the serial-free fallback exposed by niri. This is based
+on upstream xwayland-satellite PR #431 while it remains unmerged.
+
 The local patch in `patches/xwayland-satellite-minimize.patch` therefore does
-four things (the filename is retained for deployed-path compatibility):
+five things (the filename is retained for deployed-path compatibility):
 
 1. Bridges X11 `_NET_WM_STATE_MAXIMIZED_HORZ` / `MAXIMIZED_VERT` requests and
    state updates to Wayland `xdg_toplevel` maximize/unmaximize.
@@ -36,7 +45,10 @@ four things (the filename is retained for deployed-path compatibility):
    `xdg_toplevel.set_minimized()`.
 3. Refreshes stale Wayland clipboard offers while preserving X11-owned
    selections until the compositor cancels them.
-4. Exposes X11 `UTF8_STRING` selections as Wayland `text/plain;charset=utf-8`
+4. Publishes X11 clipboard and primary selections through
+   `ext-data-control-v1` when no input serial is available, while retaining the
+   core data-device path for focused X11 clients.
+5. Exposes X11 `UTF8_STRING` selections as Wayland `text/plain;charset=utf-8`
    and `text/plain` aliases. This fixes apps such as Linux QQ, which can copy
    valid text through X11 targets that GTK terminals do not treat as pasteable
    Wayland text.
@@ -66,11 +78,17 @@ rm -rf /tmp/xwayland-satellite-patchcheck
 git clone https://github.com/Supreeeme/xwayland-satellite.git /tmp/xwayland-satellite-patchcheck
 git -C /tmp/xwayland-satellite-patchcheck checkout v0.8.1
 git -C /tmp/xwayland-satellite-patchcheck apply /home/wwt/niri/patches/xwayland-satellite-minimize.patch
-cargo test selection --locked --manifest-path /tmp/xwayland-satellite-patchcheck/Cargo.toml
-cargo test quick_empty_data_offer --locked --manifest-path /tmp/xwayland-satellite-patchcheck/Cargo.toml
-cargo test maximize --locked --manifest-path /tmp/xwayland-satellite-patchcheck/Cargo.toml
-cargo test --test integration client_maximize --locked --manifest-path /tmp/xwayland-satellite-patchcheck/Cargo.toml
+cargo test --locked --manifest-path /tmp/xwayland-satellite-patchcheck/Cargo.toml
+cargo test --locked --manifest-path /tmp/xwayland-satellite-patchcheck/Cargo.toml \
+  --lib copy_from_x11_without_x11_focus
+cargo test --locked --manifest-path /tmp/xwayland-satellite-patchcheck/Cargo.toml \
+  --test integration x11_utf8_string_bridges_wayland_text_mimes
 ```
+
+`scripts/arch-update.sh` runs the full first command before installing every
+rebuilt satellite and records `behavior_tests=passed` in the build stamp. The
+health check rejects a new patch hash without that stamp; source anchors alone
+are not treated as proof of clipboard behavior.
 
 Build and wrapper self-check:
 
@@ -90,7 +108,9 @@ DISPLAY=:1 /tmp/x11_clipboard_probe read
 
 DISPLAY=:1 /tmp/x11_clipboard_probe own 'from-x11' &
 sleep 0.5
-wl-paste --no-newline
+wl-paste --list-types
+wl-paste --no-newline --type 'text/plain;charset=utf-8'
+wl-paste --no-newline --type 'text/plain'
 ```
 
 Use the live `$DISPLAY` from the session, usually `:1` in Tahoe niri. If unsure:
@@ -100,6 +120,14 @@ env | grep '^DISPLAY='
 pgrep -af 'xwayland-satellite|Xwayland'
 ```
 
+Do not infer an application's backend from `$DISPLAY` alone. Check its command
+line and X11 window tree. Linux QQ with `--ozone-platform=wayland` is a native
+Wayland client, so its copy failures do not traverse xwayland-satellite.
+Electron can silently reject asynchronous clipboard writes after a native
+Wayland window loses focus. Tahoe therefore uses `--ozone-platform=x11` in
+QQ's per-app flags until an end-to-end native test passes; the session-wide
+Electron hint remains `auto`.
+
 ## Runtime Gotcha
 
 Installing a new patched binary is not enough if `xwayland-satellite` is already
@@ -107,7 +135,8 @@ running. After replacing the binary, the old process can keep running from a
 deleted inode:
 
 ```sh
-readlink -f /proc/$(pgrep -n xwayland-satellite)/exe
+pid="$(pgrep -n -f 'xwayland-satellite|minimize' || true)"
+readlink -f "/proc/$pid/exe"
 ```
 
 If it prints a path ending in `(deleted)`, the running bridge is still the old
@@ -121,6 +150,8 @@ bridge process.
   stores Wayland clipboard history; it is not the X11 bridge.
 - Do not assume `wl-copy`/`wl-paste` passing means X11 interop works. That only
   proves Wayland-side selection works.
+- Do not classify QQ as X11 when its process has `--ozone-platform=wayland`.
+  Diagnose that native Electron path separately.
 - Do not replace the glamor wrapper with `/usr/bin/xwayland-satellite`; the
   system package can be older and miss Tahoe's maximize, minimize, and
   clipboard compatibility fixes.

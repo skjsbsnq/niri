@@ -143,7 +143,11 @@ PanelWindow {
         }
     }
 
-    visible: !root.fullscreenActive || barSurface.opacity > 0.01
+    // Hard unmap with fullscreen chrome hide. Keeping the surface mapped until
+    // the opacity animation finished left TopBar alive while Dynamic Island
+    // unmapped; on workspace switch away from a fullscreen game the island
+    // remapped under the still-mapped topbar and disappeared behind glass.
+    visible: !root.fullscreenActive
 
     Behavior on fullscreenTransition {
         NumberAnimation {

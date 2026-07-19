@@ -103,16 +103,31 @@ process.stdout.write(JSON.stringify(names));
             source = path.read_text(encoding="utf-8")
             self.assertIn("property bool fullscreenActive: false", source, path.name)
             self.assertIn("property real fullscreenTransition: fullscreenActive ? 1 : 0", source, path.name)
-            self.assertRegex(
-                source,
-                r"visible:\s*!root\.fullscreenActive\s*\|\|\s*\w+\.opacity\s*>\s*0\.01",
-                path.name,
-            )
+            # TopBar hard-unmaps (no opacity hold); Dock may keep a brief fade surface.
+            if path == TOPBAR:
+                self.assertRegex(
+                    source,
+                    r"visible:\s*!root\.fullscreenActive\b",
+                    path.name,
+                )
+                self.assertNotIn(
+                    "visible: !root.fullscreenActive || barSurface.opacity > 0.01",
+                    source,
+                )
+            else:
+                self.assertRegex(
+                    source,
+                    r"visible:\s*!root\.fullscreenActive\s*\|\|\s*\w+\.opacity\s*>\s*0\.01",
+                    path.name,
+                )
             self.assertIn("Behavior on fullscreenTransition", source, path.name)
             self.assertIn("Motion.elementResize(root.settingsService)", source, path.name)
         island = ISLAND.read_text(encoding="utf-8")
         self.assertIn("property bool fullscreenActive: false", island)
         self.assertIn("visible: !root.fullscreenActive", island)
+        # Island must stack above TopBar after remap (Overlay > Top).
+        self.assertIn("WlrLayer.Overlay", island)
+        self.assertIn("tahoe-dynamic-island", island)
         # Chrome hide: active-workspace fullscreen only, and never while overview open.
         self.assertIn("function fullscreenOutputsOnActiveWorkspaces(", model)
         self.assertIn("activeFullscreenOutputNames", windows)

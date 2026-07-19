@@ -568,7 +568,11 @@ PanelWindow {
     implicitWidth: screenWidth
     implicitHeight: 220
     color: "transparent"
-    WlrLayershell.layer: WlrLayer.Top
+    // Overlay, not Top: after fullscreen unmap/remap, TopBar (Top layer) can
+    // re-enter the stack above a same-layer island and paint over the capsule.
+    // Overlay stays above Top regardless of remap order (workspace switch after
+    // a fullscreen game is the common trigger).
+    WlrLayershell.layer: WlrLayer.Overlay
     WlrLayershell.namespace: "tahoe-dynamic-island"
 
     anchors {

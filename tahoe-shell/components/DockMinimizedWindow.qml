@@ -20,6 +20,10 @@ Item {
     property int thumbnailMaxWidth: 320
     property int thumbnailMaxHeight: 220
     property real bounceOffset: 0
+    property real lifecycleOpacity: 1
+    property real lifecycleScale: 1
+    property real pressScale: Motion.pressScaleFor(root.settingsService, thumbnailMouse.pressed)
+    property real pressOpacity: thumbnailMouse.pressed ? 0.75 : 1
     readonly property bool hasWindowId: windowModel && windowModel.id !== undefined && windowModel.id !== null
     readonly property int thumbnailProviderRevision: thumbnailProvider ? thumbnailProvider.revision : 0
     readonly property var thumbnailState: thumbnailProvider ? thumbnailProvider.thumbnailStateForWindow(windowModel, thumbnailProviderRevision) : null
@@ -45,11 +49,11 @@ Item {
 
     width: 112
     height: 62
-    scale: Motion.pressScaleFor(root.settingsService, thumbnailMouse.pressed)
-    opacity: thumbnailMouse.pressed ? 0.75 : 1
+    scale: lifecycleScale * pressScale
+    opacity: lifecycleOpacity * pressOpacity
 
-    Behavior on scale { NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing } }
-    Behavior on opacity { NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing } }
+    Behavior on pressScale { NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing } }
+    Behavior on pressOpacity { NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing } }
 
     function scheduleThumbnailRefresh() {
         refreshTimer.restart();
@@ -148,6 +152,15 @@ Item {
         border.color: root.hovered ? "#80ffffff" : "#3fffffff"
         border.width: 1
         clip: true
+
+        Behavior on color {
+            ColorAnimation { duration: Motion.fadeFast(root.settingsService) }
+        }
+
+        Behavior on border.color {
+            ColorAnimation { duration: Motion.fadeFast(root.settingsService) }
+        }
+
         transform: Translate {
             y: -root.bounceOffset
         }

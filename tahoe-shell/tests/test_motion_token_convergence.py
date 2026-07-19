@@ -430,22 +430,21 @@ class MotionTokenConvergenceTests(unittest.TestCase):
         self.assertIn("readonly property real dockWaveLeftExtraPx: 0", dock)
         self.assertNotIn("return (rightExtra - leftExtra) / 2;", dock)
 
-        # Unified hover label: one capsule, 13px, no y-slide Behavior.
+        # Unified hover label: one capsule, 13px, smoothly follows icon geometry.
         self.assertIn("id: dockHoverLabel", dock)
         self.assertIn("function showDockHoverLabel", dock)
         self.assertIn("font.pixelSize: 13", dock)
         self.assertEqual(dock.count("id: hoverLabel"), 0)
         self.assertEqual(dock.count("id: toolLabel"), 0)
         self.assertEqual(dock.count("id: windowHoverLabel"), 0)
-        # No y Behavior on the unified label (instant appear).
-        hover_block = re.search(
-            r"id: dockHoverLabel.*?Behavior on opacity \{.*?\}",
-            dock,
-            re.S,
-        )
-        self.assertIsNotNone(hover_block)
-        assert hover_block
-        self.assertNotIn("Behavior on y", hover_block.group(0))
+        hover_start = dock.find("id: dockHoverLabel")
+        hover_end = dock.find("} // dockChrome", hover_start)
+        self.assertGreaterEqual(hover_start, 0)
+        self.assertGreater(hover_end, hover_start)
+        hover_block = dock[hover_start:hover_end]
+        self.assertIn("Behavior on x", hover_block)
+        self.assertIn("Behavior on y", hover_block)
+        self.assertIn("Motion.elementMove", hover_block)
 
         # Click bounce still uses dual-branch spring/ease; wave mag/push do NOT
         # (T08-fix8: direct bind — spring restart every move caused jitter).
@@ -458,6 +457,10 @@ class MotionTokenConvergenceTests(unittest.TestCase):
         self.assertIn("slotXTarget", window_button)
         self.assertIn("width: slotWidthTarget", window_button)
         self.assertIn("x: slotXTarget", window_button)
+        self.assertIn("Behavior on width", window_button)
+        self.assertIn("Behavior on x", window_button)
+        self.assertNotIn("onSlotWidthTargetChanged", window_button)
+        self.assertNotIn("onSlotXTargetChanged", window_button)
         # T08-fix8: fixed glass + fit-in-section visual wave (rest slots + pushX).
         self.assertIn("function computeSectionWave(", dock)
         self.assertIn("function pinnedPushXAt(index)", dock)

@@ -28,7 +28,7 @@
 | R14 | 锁屏动效包 | #38 #39 #40(余) | S–M | DONE | [R14](acceptance/R14-lock-screen-motion-2026-07-19.md)：双屏 secure 时序与凭据清理覆盖，793 tests 全绿，终审 FINAL CLEAN，真实 nested session lock 通过 |
 | R15 | KDL 参数修正包 | #6 #89 #95 #96 #97 #100 | S | DONE | [R15](acceptance/R15-kdl-motion-parameters-2026-07-19.md)：Spotlight/状态弹窗/窗口参数收敛，795 tests 全绿，双 config validate、完整部署与 nested 回归通过 |
 | R16 | Overview / 切换器收尾 | #42 #43 #44 #45 #46 | S | DONE | [R16](acceptance/R16-overview-task-switcher-2026-07-19.md)：795 tests 全绿，独立审查 CLEAN，nested 10 窗口 Overview 与真实 QML confirm 生命周期验收通过 |
-| R17 | Dock 布局动画 | #72 #73 #76 #77 #78 #79 #80 #81 #82 #90 | M | PENDING | |
+| R17 | Dock 布局动画 | #72 #73 #76 #77 #78 #79 #80 #81 #82 #90 | M | DONE | [R17](acceptance/R17-dock-layout-motion-2026-07-19.md)：803 tests 全绿，独立复审 CLEAN，nested 窗口/最小化/全屏与 pointer-origin 菜单验收通过 |
 | R18 | 外围收尾（顶栏/设置/侧栏细节/壁纸/托盘） | #51 #52 #60–#65 #70 #71 #87 #88 #91–#94 | M | PENDING | |
 | R19 | 治理收尾与总验收 | 复测全量 | S | PENDING | |
 

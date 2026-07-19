@@ -26,6 +26,7 @@ PanelWindow {
     property var dynamicIslandService
     property var settingsService
     property bool fullscreenActive: false
+    property real fullscreenTransition: fullscreenActive ? 1 : 0
     property bool controlCenterOpen: false
     property bool launchpadOpen: false
     property bool appMenuOpen: false
@@ -142,7 +143,14 @@ PanelWindow {
         }
     }
 
-    visible: !root.fullscreenActive
+    visible: !root.fullscreenActive || barSurface.opacity > 0.01
+
+    Behavior on fullscreenTransition {
+        NumberAnimation {
+            duration: Motion.elementResize(root.settingsService)
+            easing.type: Motion.emphasizedDecel
+        }
+    }
 
     anchors {
         left: true
@@ -203,13 +211,7 @@ PanelWindow {
         interaction: 0.0
         materialAlpha: opacity
         glassEnabled: opacity > 0.01
-        opacity: 1
-
-        // Local exception: topbar glass fade is slightly shorter than panelEnter
-        // so clock/status reveal does not lag behind compositor layer motion.
-        Behavior on opacity {
-            NumberAnimation { duration: 170; easing.type: Motion.emphasizedDecel }
-        }
+        opacity: 1 - root.fullscreenTransition
 
         Item {
             id: topBarContent
@@ -221,6 +223,9 @@ PanelWindow {
             // of the ends would clip under the arc.
             anchors.leftMargin: 14
             anchors.rightMargin: 14
+            transform: Translate {
+                y: -root.fullscreenTransition * root.height
+            }
             // T12: stable reserve covers max compact media so clock↔media does not
             // shove left/right clusters. Not tied to current island state width.
             readonly property int centerReserveWidth: IslandMotion.v2CompactMediaWidthMax

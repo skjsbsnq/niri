@@ -97,10 +97,20 @@ process.stdout.write(JSON.stringify(names));
 
     def test_persistent_top_layers_unmap_on_their_fullscreen_output(self) -> None:
         shell = SHELL.read_text(encoding="utf-8")
-        for path in (TOPBAR, DOCK, ISLAND):
+        for path in (TOPBAR, DOCK):
             source = path.read_text(encoding="utf-8")
             self.assertIn("property bool fullscreenActive: false", source, path.name)
-            self.assertIn("visible: !root.fullscreenActive", source, path.name)
+            self.assertIn("property real fullscreenTransition: fullscreenActive ? 1 : 0", source, path.name)
+            self.assertRegex(
+                source,
+                r"visible:\s*!root\.fullscreenActive\s*\|\|\s*\w+\.opacity\s*>\s*0\.01",
+                path.name,
+            )
+            self.assertIn("Behavior on fullscreenTransition", source, path.name)
+            self.assertIn("Motion.elementResize(root.settingsService)", source, path.name)
+        island = ISLAND.read_text(encoding="utf-8")
+        self.assertIn("property bool fullscreenActive: false", island)
+        self.assertIn("visible: !root.fullscreenActive", island)
         self.assertGreaterEqual(shell.count("fullscreenActive: niri.fullscreenOnOutput(modelData)"), 3)
         self.assertIn("function onAnyFullscreenChanged()", shell)
         self.assertRegex(

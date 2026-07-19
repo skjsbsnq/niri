@@ -52,10 +52,25 @@ Item {
     signal dockPointerEntered()
     signal dockPointerExited()
 
-    // Rest slot geometry. Wave must NOT animate x/width (that caused clip-out).
+    // Rest slot geometry. R17 eases model/layout changes here; the live wave
+    // remains a separate visual-only pushX/scale transform.
     x: slotXTarget
     width: slotWidthTarget
     height: 60
+
+    Behavior on x {
+        NumberAnimation {
+            duration: Motion.elementMove(root.settingsService)
+            easing.type: Motion.emphasizedDecel
+        }
+    }
+
+    Behavior on width {
+        NumberAnimation {
+            duration: Motion.elementResize(root.settingsService)
+            easing.type: Motion.emphasizedDecel
+        }
+    }
 
     function updateDockRectangle() {
         if (!root.dockWindow)
@@ -141,13 +156,7 @@ Item {
     // Mag/push are bound to targets; Behavior alone retargets. Do NOT also
     // assign in on*TargetChanged — Qt logs "another interceptor unsupported"
     // and drops the second Behavior (session log spam + choppy wave).
-    onSlotWidthTargetChanged: root.width = root.slotWidthTarget
-    onSlotXTargetChanged: root.x = root.slotXTarget
-    Component.onCompleted: {
-        root.x = root.slotXTarget;
-        root.width = root.slotWidthTarget;
-        root.scheduleDockRectangleUpdate();
-    }
+    Component.onCompleted: root.scheduleDockRectangleUpdate()
 
     Behavior on magnification {
         enabled: !Motion.reducedMotion(root.settingsService)
@@ -242,6 +251,17 @@ Item {
             ? (root.minimized ? "#7b818a" : "#202124")
             : root.minimized ? "#7b818a" : "#99000000"
         opacity: (root.windowModel || root.toplevel) ? 1 : 0
+
+        Behavior on width {
+            NumberAnimation {
+                duration: Motion.elementResize(root.settingsService)
+                easing.type: Motion.emphasizedDecel
+            }
+        }
+
+        Behavior on color {
+            ColorAnimation { duration: Motion.fadeFast(root.settingsService) }
+        }
     }
 
     Rectangle {

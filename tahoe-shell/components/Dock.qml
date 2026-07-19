@@ -20,6 +20,7 @@ PanelWindow {
     property bool useSpring: false
     property bool darkMode: false
     property bool menuOpen: false
+    property real fullscreenTransition: fullscreenActive ? 1 : 0
     property real dockMouseX: -10000
     property bool dockHovered: false
     property bool pointerDragActive: false
@@ -87,6 +88,7 @@ PanelWindow {
     readonly property real dockLiftFactor: 0
     readonly property int dockSurfaceMaxWidth: Math.max(1, root.width - dockOuterMargin)
     readonly property int dockContentMaxWidth: Math.max(1, dockSurfaceMaxWidth - dockSurfacePadding)
+    readonly property var dockPinnedEntries: buildDockPinnedEntries()
     readonly property int pinnedAppCount: root.appsService && root.appsService.pinnedApps ? root.appsService.pinnedApps.length : 0
     readonly property int windowButtonCount: dockWindowList.length
     readonly property int minimizedWindowButtonCount: dockMinimizedWindowList.length
@@ -121,6 +123,13 @@ PanelWindow {
         : 0
     readonly property int availableMinimizedViewportWidth: hasMinimizedWindows ? Math.max(0, dockRemainingFlexibleWidth - windowViewportWidth) : 0
     readonly property int minimizedViewportWidth: hasMinimizedWindows ? Math.min(minimizedWindowContentWidth, availableMinimizedViewportWidth) : 0
+    readonly property real dockRowTargetWidth: pinnedDisplayedWidth
+        + dockWindowDividerWidth
+        + windowViewportWidth
+        + minimizedViewportWidth
+        + dockRightToolsWidth
+        + dockRowSpacingWidth
+    readonly property real dockChromeTargetWidth: Math.min(dockSurfaceMaxWidth, dockRowTargetWidth + dockSurfacePadding)
     // Wave section: "pinned" | "window" | "" — cursor is rest-local to that section.
     property string dockWaveSection: ""
     readonly property color glassFill: darkMode ? "#d01d1f24" : GlassStyle.FillDock
@@ -131,7 +140,36 @@ PanelWindow {
     signal openPinnedAppMenu(var app, string appId, var anchorRect)
     signal openWindowMenu(var window, var anchorRect)
 
-    visible: !root.fullscreenActive
+    // ScriptModel must key pinned delegates by the configured pin identity, not
+    // the currently resolved DesktopEntry id. A fallback pin may resolve to a
+    // different desktop entry after a scan; retaining modelKey preserves the
+    // delegate's hover, magnification, reorder, and launch-bounce state.
+    function buildDockPinnedEntries() {
+        var apps = root.appsService && root.appsService.pinnedApps
+            ? root.appsService.pinnedApps
+            : [];
+        var entries = [];
+        for (var i = 0; i < apps.length; i++) {
+            var app = apps[i];
+            var persistentId = root.appsService
+                ? root.appsService.pinnedIdForVisualIndex(i, app)
+                : "";
+            entries.push({
+                "modelKey": String(persistentId || ("pinned-" + i)),
+                "app": app
+            });
+        }
+        return entries;
+    }
+
+    visible: !root.fullscreenActive || dockChrome.opacity > 0.01
+
+    Behavior on fullscreenTransition {
+        NumberAnimation {
+            duration: Motion.elementResize(root.settingsService)
+            easing.type: Motion.emphasizedDecel
+        }
+    }
 
     onDockHiddenChanged: {
         dockRevealPrepareTimer.stop();
@@ -829,11 +867,19 @@ PanelWindow {
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.bottom: parent.bottom
         anchors.bottomMargin: 0
-        width: Math.min(root.dockSurfaceMaxWidth, dockRow.implicitWidth + root.dockSurfacePadding)
+        width: root.dockChromeTargetWidth
         // Taller than glass: rest shelf + headroom for mag + name capsule.
         height: root.dockSurfaceHeight + root.dockMagHeadroom
+        opacity: 1 - root.fullscreenTransition
         // Never clip — icons/labels may occupy the headroom band.
         clip: false
+
+        Behavior on width {
+            NumberAnimation {
+                duration: Motion.elementResize(root.settingsService)
+                easing.type: Motion.emphasizedDecel
+            }
+        }
 
         transform: Translate {
             y: root.dockSlideOffset
@@ -865,8 +911,8 @@ PanelWindow {
             regionHeight: Math.round(root.dockVisibleHeight)
             // Quantize so spring settle noise does not republish glass every frame.
             interaction: Math.round(root.dockGlassInteraction * 50) / 50
-            materialAlpha: 1.0
-            glassEnabled: root.dockGlassActive && root.dockVisibleHeight > 0.5
+            materialAlpha: 1.0 - root.fullscreenTransition
+            glassEnabled: root.dockGlassActive && root.dockVisibleHeight > 0.5 && root.fullscreenTransition < 0.99
         }
 
         // Hover over glass + headroom band.
@@ -910,8 +956,13 @@ PanelWindow {
             anchors.horizontalCenter: parent.horizontalCenter
             anchors.bottom: parent.bottom
             anchors.bottomMargin: Math.max(0, Math.round((root.dockSurfaceHeight - root.dockPinnedRowHeight) / 2))
-            spacing: root.dockItemSpacing
+            // Optional sections own animated spacer widths. Row.spacing would
+            // otherwise appear/disappear in a single frame when visible flips.
+            spacing: 0
             height: root.dockPinnedRowHeight
+            transform: Translate {
+                y: root.fullscreenTransition * root.dockSurfaceHeight
+            }
 
             Item {
                 id: pinnedSectionHost
@@ -919,6 +970,13 @@ PanelWindow {
                 height: root.dockPinnedRowHeight
                 // Allow mag to paint above this host into the panel headroom.
                 clip: false
+
+                Behavior on width {
+                    NumberAnimation {
+                        duration: Motion.elementResize(root.settingsService)
+                        easing.type: Motion.emphasizedDecel
+                    }
+                }
 
                 // Flickable only for REST overflow. contentWidth is rest-sized
                 // forever — never wave-driven. Clip ONLY when scrolling.
@@ -945,7 +1003,8 @@ PanelWindow {
 
                         Repeater {
                             model: ScriptModel {
-                                values: root.appsService ? root.appsService.pinnedApps : []
+                                objectProp: "modelKey"
+                                values: root.dockPinnedEntries
                             }
 
                             delegate: Item {
@@ -956,8 +1015,9 @@ PanelWindow {
                                 // pressScale still uses Behavior (single) via Motion press token.
                                 property real pressScale: Motion.pressScaleFor(root.settingsService, iconMouse.pressed && !pinnedButton.reorderActive)
                                 readonly property int pinnedIndex: pinnedButton.index
-                                readonly property string appId: root.appsService ? root.appsService.pinnedIdForVisualIndex(pinnedButton.pinnedIndex, modelData) : ""
-                                readonly property var appModel: root.appsService ? root.appsService.resolveApplication(pinnedButton.appId, modelData) : modelData
+                                readonly property var pinnedApp: modelData ? modelData.app : null
+                                readonly property string appId: modelData ? String(modelData.modelKey || "") : ""
+                                readonly property var appModel: root.appsService ? root.appsService.resolveApplication(pinnedButton.appId, pinnedButton.pinnedApp) : pinnedButton.pinnedApp
                                 property bool suppressNextClick: false
                                 readonly property bool hovered: !root.pointerDragActive && iconMouse.containsMouse
                                 readonly property bool running: (!appModel || appModel.shellAction !== "launchpad")
@@ -980,6 +1040,13 @@ PanelWindow {
                                 // T08-fix7: rest slot layout is immutable.
                                 x: root.pinnedRestX(pinnedButton.index)
                                 width: root.dockPinnedButtonWidth
+
+                                Behavior on x {
+                                    NumberAnimation {
+                                        duration: Motion.elementMove(root.settingsService)
+                                        easing.type: Motion.emphasizedDecel
+                                    }
+                                }
 
                                 onRunningChanged: {
                                     if (pinnedButton.running)
@@ -1089,7 +1156,10 @@ PanelWindow {
                                         : (root.darkMode ? "#e6ffffff" : "#cc000000")
                                     opacity: width > 0 ? 1 : 0
                                     Behavior on width {
-                                        NumberAnimation { duration: 120; easing.type: Motion.emphasizedDecel }
+                                        NumberAnimation { duration: Motion.elementResize(root.settingsService); easing.type: Motion.emphasizedDecel }
+                                    }
+                                    Behavior on color {
+                                        ColorAnimation { duration: Motion.fadeFast(root.settingsService) }
                                     }
                                 }
 
@@ -1357,10 +1427,24 @@ PanelWindow {
             }
 
             Item {
+                width: root.dockItemSpacing
+                height: root.dockPinnedRowHeight
+            }
+
+            Item {
+                id: windowDividerHost
                 // Separator host: same row height so Row vertical align stays flat.
                 width: root.hasDockWindowSection ? root.dockSeparatorWidth : 0
                 height: root.dockPinnedRowHeight
-                visible: root.hasDockWindowSection
+                visible: width > 0
+
+                Behavior on width {
+                    NumberAnimation {
+                        duration: Motion.elementResize(root.settingsService)
+                        easing.type: Motion.emphasizedDecel
+                    }
+                }
+
                 Rectangle {
                     width: 1
                     height: root.dockIconSize
@@ -1371,12 +1455,32 @@ PanelWindow {
             }
 
             Item {
+                id: windowDividerTrailingSpacer
+                width: root.hasDockWindowSection ? root.dockItemSpacing : 0
+                height: root.dockPinnedRowHeight
+
+                Behavior on width {
+                    NumberAnimation {
+                        duration: Motion.elementResize(root.settingsService)
+                        easing.type: Motion.emphasizedDecel
+                    }
+                }
+            }
+
+            Item {
                 id: windowSectionHost
                 width: root.windowViewportWidth
                 // REST height only — center the window row inside pinned row height.
                 height: root.dockPinnedRowHeight
-                visible: root.hasNonMinimizedWindows && width > 0
+                visible: width > 0
                 clip: false
+
+                Behavior on width {
+                    NumberAnimation {
+                        duration: Motion.elementResize(root.settingsService)
+                        easing.type: Motion.emphasizedDecel
+                    }
+                }
 
                 // Rest overflow scroll only (see pinnedViewport). Wave is visual.
                 Flickable {
@@ -1469,10 +1573,31 @@ PanelWindow {
             }
 
             Item {
+                id: windowMinimizedSpacer
+                width: root.hasNonMinimizedWindows && root.hasMinimizedWindows ? root.dockItemSpacing : 0
+                height: root.dockPinnedRowHeight
+
+                Behavior on width {
+                    NumberAnimation {
+                        duration: Motion.elementResize(root.settingsService)
+                        easing.type: Motion.emphasizedDecel
+                    }
+                }
+            }
+
+            Item {
+                id: minimizedSectionHost
                 width: root.minimizedViewportWidth
                 height: root.dockPinnedRowHeight
-                visible: root.hasMinimizedWindows && width > 0
+                visible: width > 0
                 clip: false
+
+                Behavior on width {
+                    NumberAnimation {
+                        duration: Motion.elementResize(root.settingsService)
+                        easing.type: Motion.emphasizedDecel
+                    }
+                }
 
                 DockMinimizedShelf {
                     anchors.left: parent.left
@@ -1512,6 +1637,19 @@ PanelWindow {
             }
 
             Item {
+                id: windowSectionTrailingSpacer
+                width: root.hasDockWindowSection ? root.dockItemSpacing : 0
+                height: root.dockPinnedRowHeight
+
+                Behavior on width {
+                    NumberAnimation {
+                        duration: Motion.elementResize(root.settingsService)
+                        easing.type: Motion.emphasizedDecel
+                    }
+                }
+            }
+
+            Item {
                 width: root.dockSeparatorWidth
                 height: root.dockPinnedRowHeight
                 Rectangle {
@@ -1523,10 +1661,20 @@ PanelWindow {
                 }
             }
 
+            Item {
+                width: root.dockItemSpacing
+                height: root.dockPinnedRowHeight
+            }
+
             DockToolButton {
                 iconSource: root.appsService ? root.appsService.iconPath("dock", "downloads.png") : ""
                 label: "下载"
                 onActivated: root.openDownloads()
+            }
+
+            Item {
+                width: root.dockItemSpacing
+                height: root.dockPinnedRowHeight
             }
 
             DockToolButton {
@@ -1577,6 +1725,14 @@ PanelWindow {
 
             Behavior on opacity {
                 NumberAnimation { duration: Motion.fadeFast(root.settingsService); easing.type: Motion.emphasizedDecel }
+            }
+
+            Behavior on x {
+                NumberAnimation { duration: Motion.elementMove(root.settingsService); easing.type: Motion.emphasizedDecel }
+            }
+
+            Behavior on y {
+                NumberAnimation { duration: Motion.elementMove(root.settingsService); easing.type: Motion.emphasizedDecel }
             }
         }
     } // dockChrome

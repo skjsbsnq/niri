@@ -130,6 +130,22 @@ PanelWindow {
         + dockRightToolsWidth
         + dockRowSpacingWidth
     readonly property real dockChromeTargetWidth: Math.min(dockSurfaceMaxWidth, dockRowTargetWidth + dockSurfacePadding)
+    // WindowButton computes its exact target with mapToItem(), but that call
+    // does not observe changes in ancestor geometry. Keep the parent-chain
+    // scene offset explicit so first-layout and later Dock motion republish the
+    // foreign-toplevel rectangle instead of leaving the creation-frame value.
+    readonly property real windowSectionSceneOffsetX: dockChrome.x
+        + dockRow.x
+        + windowSectionHost.x
+        + windowViewport.x
+        + windowRow.x
+        - windowViewport.contentX
+    readonly property real windowSectionSceneOffsetY: dockChrome.y
+        + dockRow.y
+        + windowSectionHost.y
+        + windowViewport.y
+        + windowRow.y
+        - windowViewport.contentY
     // Wave section: "pinned" | "window" | "" — cursor is rest-local to that section.
     property string dockWaveSection: ""
     readonly property color glassFill: darkMode ? "#d01d1f24" : GlassStyle.FillDock
@@ -1537,6 +1553,9 @@ PanelWindow {
                                 dockWindow: root
                                 dockSurfaceItem: dockSurface
                                 dockSlideOffset: root.dockSlideOffset
+                                dockFullscreenOffset: root.fullscreenTransition * root.dockSurfaceHeight
+                                dockSceneOffsetX: root.windowSectionSceneOffsetX
+                                dockSceneOffsetY: root.windowSectionSceneOffsetY
                                 onDockPointerMoved: function(localX, buttons) {
                                     root.updateWindowHoverLabelGeometry(windowButton);
                                     // localX is rest-slot local from WindowButton (T08-fix7).

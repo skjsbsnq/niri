@@ -107,6 +107,69 @@ class R17DockLayoutMotionTests(unittest.TestCase):
         self.assertIn("Motion.elementResize", indicator.group(0))
         self.assertIn("Motion.fadeFast", indicator.group(0))
 
+    def test_window_rectangle_tracks_ancestor_layout_motion(self) -> None:
+        delegate_prefix = self.dock.split("delegate: WindowButton {", 1)[1].split(
+            "onDockPointerMoved:", 1
+        )[0]
+        for axis in ("X", "Y"):
+            self.assertIn(f"property real dockSceneOffset{axis}: 0", self.button)
+            self.assertIn(
+                f"onDockSceneOffset{axis}Changed: scheduleDockRectangleUpdate()",
+                self.button,
+            )
+            self.assertIn(
+                f"dockSceneOffset{axis}: root.windowSectionSceneOffset{axis}",
+                delegate_prefix,
+            )
+
+        self.assertIn("property real dockFullscreenOffset: 0", self.button)
+        self.assertIn(
+            "onDockFullscreenOffsetChanged: scheduleDockRectangleUpdate()",
+            self.button,
+        )
+        self.assertIn(
+            "dockFullscreenOffset: root.fullscreenTransition * root.dockSurfaceHeight",
+            delegate_prefix,
+        )
+        self.assertIn(
+            "- root.dockSlideOffset - root.dockFullscreenOffset",
+            self.button,
+        )
+
+        scene_x = re.search(
+            r"readonly property real windowSectionSceneOffsetX:(?P<body>.*?)\n\s*readonly property real windowSectionSceneOffsetY:",
+            self.dock,
+            re.S,
+        )
+        self.assertIsNotNone(scene_x)
+        assert scene_x
+        for dependency in (
+            "dockChrome.x",
+            "dockRow.x",
+            "windowSectionHost.x",
+            "windowViewport.x",
+            "windowRow.x",
+            "windowViewport.contentX",
+        ):
+            self.assertIn(dependency, scene_x.group("body"))
+
+        scene_y = re.search(
+            r"readonly property real windowSectionSceneOffsetY:(?P<body>.*?)\n\s*// Wave section:",
+            self.dock,
+            re.S,
+        )
+        self.assertIsNotNone(scene_y)
+        assert scene_y
+        for dependency in (
+            "dockChrome.y",
+            "dockRow.y",
+            "windowSectionHost.y",
+            "windowViewport.y",
+            "windowRow.y",
+            "windowViewport.contentY",
+        ):
+            self.assertIn(dependency, scene_y.group("body"))
+
     def test_minimized_shelf_has_real_lifecycle_and_displacement(self) -> None:
         self.assertIn("ListView {", self.shelf)
         self.assertIn('objectProp: "modelKey"', self.shelf)

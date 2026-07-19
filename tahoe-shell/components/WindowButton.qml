@@ -32,6 +32,13 @@ Item {
     property var dockWindow
     property var dockSurfaceItem
     property real dockSlideOffset: 0
+    property real dockFullscreenOffset: 0
+    // Observable scene offset of the delegate's parent chain. mapToItem()
+    // itself does not establish QML binding dependencies on ancestor motion,
+    // so Dock forwards these values to refresh the foreign-toplevel hint while
+    // its centered row and optional sections are being laid out.
+    property real dockSceneOffsetX: 0
+    property real dockSceneOffsetY: 0
     property var labelClipItem: null
     property real labelClipContentX: 0
     // Per-button hover label is disabled when Dock owns the unified capsule
@@ -78,14 +85,14 @@ Item {
 
         // The foreign-toplevel hint is the icon itself, not this delegate's
         // hit target. Mapping both corners includes hover magnification/lift.
-        // Remove Dock's autohide translation so cached hints always refer to
-        // the stable, fully revealed Dock position rather than off-screen.
+        // Remove Dock's transient hide translations so cached hints always
+        // refer to the stable, fully revealed position rather than off-screen.
         var topLeft = icon.mapToItem(null, 0, 0);
         var bottomRight = icon.mapToItem(null, icon.width, icon.height);
         var left = Math.floor(Math.min(topLeft.x, bottomRight.x));
-        var top = Math.floor(Math.min(topLeft.y, bottomRight.y) - root.dockSlideOffset);
+        var top = Math.floor(Math.min(topLeft.y, bottomRight.y) - root.dockSlideOffset - root.dockFullscreenOffset);
         var right = Math.ceil(Math.max(topLeft.x, bottomRight.x));
-        var bottom = Math.ceil(Math.max(topLeft.y, bottomRight.y) - root.dockSlideOffset);
+        var bottom = Math.ceil(Math.max(topLeft.y, bottomRight.y) - root.dockSlideOffset - root.dockFullscreenOffset);
         var targetWidth = Math.max(1, right - left);
         var targetHeight = Math.max(1, bottom - top);
         if (root.windowsService && root.windowModel) {
@@ -153,6 +160,11 @@ Item {
     onDockWindowChanged: scheduleDockRectangleUpdate()
     onWindowModelChanged: scheduleDockRectangleUpdate()
     onToplevelChanged: scheduleDockRectangleUpdate()
+    onDockSceneOffsetXChanged: scheduleDockRectangleUpdate()
+    onDockSceneOffsetYChanged: scheduleDockRectangleUpdate()
+    // Fullscreen eventually unmaps the Dock layer surface. Re-publish while
+    // it maps back even though updateDockRectangle() normalizes this offset.
+    onDockFullscreenOffsetChanged: scheduleDockRectangleUpdate()
     // Mag/push are bound to targets; Behavior alone retargets. Do NOT also
     // assign in on*TargetChanged — Qt logs "another interceptor unsupported"
     // and drops the second Behavior (session log spam + choppy wave).

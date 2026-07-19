@@ -51,15 +51,29 @@ class WallpaperIdleBudgetTests(unittest.TestCase):
         # Capture and static fallback both crop to fill; no letterbox black bars.
         self.assertIn("fillMode: Image.PreserveAspectCrop", text)
         self.assertNotIn("fillMode: Image.PreserveAspectFit", text)
-        self.assertIn("cache: false", text)
+        # Capture Image uses cache so unlock preload and lock surface share a
+        # decoded pixmap (cache:false would force a cold 4K decode on every lock).
+        self.assertIn("id: capturedWallpaperImage", text)
         self.assertNotIn("project.json", text)
         self.assertNotIn("metadata.preview", text)
         self.assertIn("status !== Image.Error", text)
         self.assertIn("surface.configuredStaticWallpaperFailed = true", text)
-        # Same-path reloads must toggle source so Error retries re-fetch.
+        # Same-path Error retries blank to re-fetch; Ready re-lock keeps frame.
         self.assertIn("surface.captureLoadSource === nextSource", text)
         self.assertIn("surface.captureLoadSource = \"\"", text)
+        self.assertIn("expectCapturedWallpaper", text)
+        self.assertIn("showStaticUnderlay", text)
+        self.assertIn("asynchronous: false", text)
         self.assertIn("opacity: 1", text)
+        # Live follow must not always paint fallback underlay first.
+        self.assertIn("visible: surface.showStaticUnderlay", text)
+        # Warm decode + sized load so lock enter is not a gray flash.
+        self.assertIn("property Instantiator capturePreloaders", text)
+        self.assertIn("function captureDecodeSize(", text)
+        self.assertIn("sourceSize: surface.captureSourceSize", text)
+        self.assertIn("cache: true", text)
+        # Dim full on map; only fades out on unlock (no brightness pop).
+        self.assertIn("opacity: root.unlocking ? 0 : 1", text)
 
     def test_wallpaper_idle_monitor_and_fps_rewrite(self) -> None:
         text = WALLPAPER.read_text(encoding="utf-8")
@@ -91,7 +105,7 @@ class WallpaperIdleBudgetTests(unittest.TestCase):
         self.assertNotIn("prestartedWallpaperCleanupTimer", text)
         self.assertNotIn('Quickshell.stateDir + "/wallpaper-prestart.pids"', text)
         self.assertIn("dynamicActive = true", text)
-        self.assertIn("Keep that", text)
+        self.assertIn("already owns a mapped background surface", text)
         self.assertIn("kill -KILL", text)
         self.assertNotIn("onSessionIdleChanged:", text)
         self.assertNotIn("onEffectiveWallpaperFpsChanged:", text)
@@ -114,8 +128,17 @@ class WallpaperIdleBudgetTests(unittest.TestCase):
         # Empty-command path must not release prestart while state is still loading.
         self.assertIn("externalStateLoaded", body)
         self.assertIn("tryAdoptPrestartedWallpaper(\"external\")", body)
-        self.assertIn("if (dynamicDesired || externalDesired)", text)
+        self.assertIn("if ((dynamicDesired || externalDesired)", text)
         self.assertIn("showRestartCover()", text)
+        # Adopting prestart must not raise restart cover over a live surface.
+        adopt = re.search(
+            r"function tryAdoptPrestartedWallpaper\(mode\) \{(.*?)\n    \}",
+            text,
+            re.S,
+        )
+        self.assertIsNotNone(adopt)
+        self.assertIn("restartCoverVisible = false", adopt.group(1))
+        self.assertNotIn("restartCoverVisible = true", adopt.group(1))
         # Restart cover must not paint the configured static wallpaper.
         cover = re.search(r"id: restartCover(.*?)// Live wallpapers", text, re.S)
         self.assertIsNotNone(cover)

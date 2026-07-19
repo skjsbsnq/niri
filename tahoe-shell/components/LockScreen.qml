@@ -50,6 +50,41 @@ WlSessionLock {
         return root.lockWallpaperCaptureDir + "/" + safeOutputName(outputName) + ".png";
     }
 
+    // Live lock follows engine screenshots. Pre-decode them while unlocked so
+    // the first lock frame is not gray while a 4K PNG is loaded on demand.
+    readonly property bool shouldPreloadCaptures: {
+        if (!root.settingsService)
+            return true;
+        if (root.settingsService.lockScreenFollowWallpaper === false)
+            return false;
+        return String(root.settingsService.wallpaperMode || "static") !== "static";
+    }
+
+    function captureDecodeSize(screenOrName) {
+        var screen = screenOrName;
+        if (typeof screenOrName === "string" || screenOrName === undefined || screenOrName === null) {
+            var name = String(screenOrName || "").trim();
+            var screens = Quickshell.screens || [];
+            screen = null;
+            for (var i = 0; i < screens.length; i++) {
+                if (String(screens[i].name || "").trim() === name) {
+                    screen = screens[i];
+                    break;
+                }
+            }
+        }
+        var w = screen && screen.width ? Math.round(Number(screen.width)) : 0;
+        var h = screen && screen.height ? Math.round(Number(screen.height)) : 0;
+        if (w <= 0)
+            w = 1920;
+        if (h <= 0)
+            h = 1080;
+        // Cap decode size: engine may write 2x/4x frames; lock only needs panel size.
+        w = Math.min(w, 2560);
+        h = Math.min(h, 1600);
+        return Qt.size(w, h);
+    }
+
     function resetPasswordInput(requestFocus) {
         root.credentialText = "";
         if (requestFocus)
@@ -178,6 +213,34 @@ WlSessionLock {
         }
     }
 
+    // Warm Qt's image cache for each output while the session is unlocked.
+    // Uses the same path + sourceSize as the lock surface so the first lock
+    // frame can hit a decoded pixmap instead of a gray clear color.
+    // Must be a typed property: WlSessionLock's default property is the surface
+    // Component, so a bare Instantiator child would replace the lock UI.
+    property Instantiator capturePreloaders: Instantiator {
+        model: Quickshell.screens
+        active: root.shouldPreloadCaptures && !root.locked
+        asynchronous: false
+
+        delegate: Image {
+            required property var modelData
+            readonly property string outputName: modelData
+                ? String(modelData.name || "").trim() : ""
+            source: root.shouldPreloadCaptures && outputName.length > 0
+                ? root.lockWallpaperCapturePath(outputName) : ""
+            sourceSize: root.captureDecodeSize(modelData)
+            asynchronous: true
+            cache: true
+            visible: false
+            width: 1
+            height: 1
+            fillMode: Image.PreserveAspectCrop
+            smooth: true
+            mipmap: false
+        }
+    }
+
     WlSessionLockSurface {
         id: surface
 
@@ -192,6 +255,7 @@ WlSessionLock {
         readonly property string configuredStaticWallpaper: root.settingsService
             ? String(root.settingsService.effectiveStaticWallpaper || "").trim() : ""
         readonly property string capturedWallpaperSource: root.lockWallpaperCapturePath(surface.lockOutputName)
+        readonly property size captureSourceSize: root.captureDecodeSize(surface.screen)
         property bool capturedWallpaperReady: false
         property int captureRetryCount: 0
         property string captureLoadSource: ""
@@ -202,6 +266,12 @@ WlSessionLock {
             ? configuredStaticWallpaper : defaultWallpaperSource
         readonly property string fallbackWallpaperSource: surface.followWallpaper
             ? surface.staticWallpaperSource : surface.defaultWallpaperSource
+        // Live modes use the engine capture only. Never show the default/static
+        // underlay first — that is the "static then live frame" lock flash.
+        readonly property bool expectCapturedWallpaper: surface.followWallpaper
+            && surface.lockWallpaperMode !== "static"
+        readonly property bool showStaticUnderlay: !surface.expectCapturedWallpaper
+            || (surface.captureExhausted && !surface.capturedWallpaperReady)
         readonly property string lockWallpaperSource: {
             if (!surface.followWallpaper)
                 return surface.defaultWallpaperSource;
@@ -210,17 +280,20 @@ WlSessionLock {
             return surface.capturedWallpaperReady
                 ? surface.capturedWallpaperSource : surface.fallbackWallpaperSource;
         }
-        // Match the desktop wallpaper panel so the first lock frame is never a
-        // pure black clear while the capture Image is still decoding.
+        // Panel clear while capture decodes. Prefer gray continuity with the
+        // desktop wallpaper plate over flashing iridescence/default static.
         color: "#1c1d20"
+        property bool captureExhausted: false
 
         function shouldLoadCapturedWallpaper() {
-            return surface.followWallpaper && surface.lockWallpaperMode !== "static";
+            return surface.expectCapturedWallpaper;
         }
 
         function requestCapturedWallpaperReload(resetAttempts) {
-            if (resetAttempts)
+            if (resetAttempts) {
                 surface.captureRetryCount = 0;
+                surface.captureExhausted = false;
+            }
             if (!surface.shouldLoadCapturedWallpaper()) {
                 surface.captureRetryTimer.stop();
                 surface.capturedWallpaperReady = false;
@@ -228,11 +301,12 @@ WlSessionLock {
                 return;
             }
             var nextSource = surface.capturedWallpaperSource;
-            // Same path must toggle source or Qt Image will not re-fetch.
-            // Ready→ready: brief blank is acceptable for cache bust (underlay
-            // holds). Not-ready / Error: always blank then restore so retries
-            // after missing or corrupt capture actually reload.
+            // Prefer keeping a decoded capture on screen. Never paint the static
+            // underlay first while waiting for live capture.
             if (surface.captureLoadSource === nextSource) {
+                if (surface.capturedWallpaperReady)
+                    return; // Re-lock: keep last engine frame; no static flash.
+                // Error / not-ready: blank then restore so Qt re-fetches the PNG.
                 surface.captureLoadSource = "";
                 Qt.callLater(function() {
                     if (surface.shouldLoadCapturedWallpaper())
@@ -246,8 +320,10 @@ WlSessionLock {
         function scheduleCapturedWallpaperRetry() {
             if (!surface.shouldLoadCapturedWallpaper() || !root.locked)
                 return;
-            if (surface.captureRetryCount >= 15)
+            if (surface.captureRetryCount >= 15) {
+                surface.captureExhausted = true;
                 return;
+            }
             surface.captureRetryCount += 1;
             surface.captureRetryTimer.restart();
         }
@@ -258,7 +334,7 @@ WlSessionLock {
         onFollowWallpaperChanged: requestCapturedWallpaperReload(true)
 
         property Timer captureRetryTimer: Timer {
-            interval: 350
+            interval: 200
             repeat: false
             onTriggered: surface.requestCapturedWallpaperReload(false)
         }
@@ -266,18 +342,24 @@ WlSessionLock {
         property Connections lockStateConnections: Connections {
             target: root
             function onLockedChanged() {
-                if (root.locked)
-                    surface.requestCapturedWallpaperReload(true);
-                else
+                if (root.locked) {
+                    // Surface is often brand new; bind capture without blanking a
+                    // preloaded path. Do not force-reset a Ready frame.
+                    surface.requestCapturedWallpaperReload(false);
+                } else {
                     surface.captureRetryTimer.stop();
+                }
             }
         }
 
         Component.onCompleted: {
-            // Load the capture immediately so the first composited lock frame
-            // already has wallpaper pixels; only the chrome fades in.
+            // Bind capture before the first frame when possible. Preload + cache
+            // + sourceSize should make this Ready immediately on warm lock.
+            if (surface.expectCapturedWallpaper)
+                surface.captureLoadSource = surface.capturedWallpaperSource;
             if (root.locked)
-                surface.requestCapturedWallpaperReload(true);
+                surface.requestCapturedWallpaperReload(false);
+            // Chrome fades in one tick later; wallpaper/dim are already present.
             Qt.callLater(function() {
                 surface.entered = true;
             });
@@ -295,7 +377,9 @@ WlSessionLock {
             Image {
                 id: backgroundImage
                 anchors.fill: parent
-                source: surface.fallbackWallpaperSource
+                // Static modes only. Live follow never paints default/static first.
+                visible: surface.showStaticUnderlay
+                source: surface.showStaticUnderlay ? surface.fallbackWallpaperSource : ""
                 fillMode: Image.PreserveAspectCrop
                 asynchronous: true
                 cache: true
@@ -316,29 +400,32 @@ WlSessionLock {
                 id: capturedWallpaperImage
                 anchors.fill: parent
                 source: surface.captureLoadSource
-                // Keep last good frame visible during reloads; only hide when we
-                // truly have no capture yet (first lock after boot).
+                sourceSize: surface.captureSourceSize
+                // Instant show when Ready — no crossfade from static underlay.
                 opacity: (surface.capturedWallpaperReady || status === Image.Ready) ? 1 : 0
                 fillMode: Image.PreserveAspectCrop
-                asynchronous: true
-                cache: false
+                // Synchronous first paint; preload + matching sourceSize/cache
+                // should hit a warm pixmap and avoid the gray enter flash.
+                asynchronous: false
+                cache: true
                 smooth: true
                 mipmap: false
-
-                Behavior on opacity {
-                    NumberAnimation {
-                        duration: root.reducedMotion ? 0 : 120
-                        easing.type: Motion.emphasizedDecel
-                    }
-                }
 
                 onStatusChanged: {
                     if (status === Image.Ready) {
                         surface.capturedWallpaperReady = true;
+                        surface.captureExhausted = false;
                         surface.captureRetryTimer.stop();
                     } else if (status === Image.Error) {
                         surface.capturedWallpaperReady = false;
                         surface.scheduleCapturedWallpaperRetry();
+                    }
+                }
+
+                Component.onCompleted: {
+                    if (status === Image.Ready) {
+                        surface.capturedWallpaperReady = true;
+                        surface.captureExhausted = false;
                     }
                 }
             }
@@ -346,14 +433,16 @@ WlSessionLock {
             Rectangle {
                 anchors.fill: parent
                 color: "#52000000"
-                opacity: surface.entered && !root.unlocking ? 1 : 0
+                // Dim is full as soon as the lock surface maps. Fading dim in
+                // from 0 made the capture look like a brightness flash even when
+                // the wallpaper pixels were already correct.
+                opacity: root.unlocking ? 0 : 1
 
                 Behavior on opacity {
+                    enabled: root.unlocking || root.reducedMotion
                     NumberAnimation {
-                        duration: root.unlocking
-                            ? root.unlockExitDuration : root.lockEnterDuration
-                        easing.type: root.unlocking
-                            ? Motion.emphasizedAccel : Motion.emphasizedDecel
+                        duration: root.unlockExitDuration
+                        easing.type: Motion.emphasizedAccel
                     }
                 }
             }

@@ -470,11 +470,12 @@ PanelWindow {
         prestartedWallpaperAdopted = true;
         prestartedWallpaperMode = mode;
         adoptedWallpaperCommand = mode === "dynamic" ? dynamicCommand : externalCommand;
-        // The serialized launcher started this exact renderer before Quickshell. Keep that
-        // surface for the session instead of creating a second background surface to take over.
+        // The serialized launcher already owns a mapped background surface. Do not
+        // raise restartCover over it — that is the post-boot "flash" after the live
+        // wallpaper was already visible (gray/capture plate for ~1.6s then drop).
         dynamicActive = true;
-        restartCoverVisible = true;
-        prestartedWallpaperReadyTimer.restart();
+        restartCoverVisible = false;
+        prestartedWallpaperReadyTimer.stop();
         return true;
     }
 
@@ -695,12 +696,18 @@ PanelWindow {
             // never adopt/start against "default" and thrash the boot renderer.
             if (root.screenName().length === 0)
                 return;
-            if (root.dynamicDesired || root.externalDesired)
-                root.showRestartCover();
             root.reloadPrestartedWallpaperState();
             root.refreshExternalCommand();
             root.syncDynamicProcess();
             root.syncExternalProcess();
+            // Cover only if we still need a cold start; never plate over an
+            // already-adopted or running live renderer.
+            if ((root.dynamicDesired || root.externalDesired)
+                    && !root.dynamicActive
+                    && !root.prestartedWallpaperAdopted
+                    && !dynamicProcess.running
+                    && !externalProcess.running)
+                root.showRestartCover();
         }
     }
     onLiveWallpaperAllowedChanged: {
@@ -720,14 +727,18 @@ PanelWindow {
     Component.onCompleted: {
         appliedWallpaperFps = effectiveWallpaperFps;
         completed = true;
-        // Cover any gap before the live renderer is adopted/started so boot
-        // never falls through a transparent background to the compositor clear.
-        if (dynamicDesired || externalDesired)
-            showRestartCover();
+        // Adopt/start first. Prestart already paints; raising a cover before
+        // adopt would hide the live wallpaper then drop it 1.6s later (flash).
         reloadPrestartedWallpaperState();
         activeWallpaperFile.reload();
         syncDynamicProcess();
         syncExternalProcess();
+        if ((dynamicDesired || externalDesired)
+                && !dynamicActive
+                && !prestartedWallpaperAdopted
+                && !dynamicProcess.running
+                && !externalProcess.running)
+            showRestartCover();
     }
 
     // Separate from lock IdleMonitor: tracks the lower next-start budget or optional pause before

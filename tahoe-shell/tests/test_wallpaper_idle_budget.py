@@ -162,7 +162,7 @@ class WallpaperIdleBudgetTests(unittest.TestCase):
         )
         external_suppression = re.search(
             r"readonly property bool externalSuppressesStatic:(.*?)"
-            r"readonly property bool showStaticWallpaper:",
+            r"readonly property bool liveModePending:",
             text,
             re.S,
         )
@@ -170,9 +170,21 @@ class WallpaperIdleBudgetTests(unittest.TestCase):
         self.assertIsNotNone(dynamic_suppression)
         self.assertIsNotNone(external_suppression)
         self.assertNotIn("dynamicActive", dynamic_suppression.group(1))
-        self.assertNotIn("dynamicActive", external_suppression.group(1))
-        self.assertIn("!dynamicLaunchFailed", dynamic_suppression.group(1))
         self.assertIn("!externalLaunchFailed", external_suppression.group(1))
+        # Boot race: empty command while screen/prestart still resolving must
+        # still suppress static (not only "command non-empty").
+        self.assertIn("screenName().length === 0", external_suppression.group(1))
+        self.assertIn("!prestartStateLoaded", external_suppression.group(1))
+        self.assertIn("!dynamicLaunchFailed", dynamic_suppression.group(1))
+        self.assertIn("liveModePending", text)
+        self.assertIn("&& !liveModePending", text)
+        # No opacity fade of the static wallpaper plate over live — unmount.
+        static_layer = re.search(r"id: staticLayer(.*?)// Intentional command", text, re.S)
+        self.assertIsNotNone(static_layer)
+        body = static_layer.group(1)
+        self.assertIn("visible: root.showStaticWallpaper", body)
+        self.assertIn("opacity: 1", body)
+        self.assertNotIn("opacity: root.showStaticWallpaper", body)
 
     def test_wallpaper_page_exposes_budget_controls(self) -> None:
         text = PAGE.read_text(encoding="utf-8")

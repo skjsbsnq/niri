@@ -57,12 +57,47 @@ PanelWindow {
         && liveWallpaperAllowed
     readonly property bool dynamicSuppressesStatic: dynamicDesired
         && !dynamicLaunchFailed
+    // Keep static suppressed for the whole live boot path: prestart may already
+    // be painting while screen/UX command/prestart records are still resolving.
+    // The old condition went false for one frame when externalStateLoaded flipped
+    // true with an empty command (no screen yet) → default static flashed over
+    // the live engine, then faded out over 160ms.
     readonly property bool externalSuppressesStatic: externalDesired
-        && (!externalStateLoaded || (externalCommand.length > 0 && !externalLaunchFailed))
+        && !externalLaunchFailed
+        && (
+            !externalStateLoaded
+            || !prestartStateLoaded
+            || screenName().length === 0
+            || externalCommand.length > 0
+            || prestartedWallpaperAdopted
+            || prestartedWallpaperStopPending
+            || !!prestartedWallpaperRecord
+        )
+    // Live modes that are still starting also suppress static even before
+    // dynamicDesired/externalDesired fully evaluate (settings mid-load).
+    readonly property bool liveModePending: settingsReady
+        && !nestedSession
+        && liveWallpaperAllowed
+        && !dynamicActive
+        && !restartCoverVisible
+        && (
+            (settingsService.wallpaperMode === "external" && !externalLaunchFailed
+                && (!externalStateLoaded || !prestartStateLoaded
+                    || screenName().length === 0 || !!prestartedWallpaperRecord
+                    || prestartedWallpaperAdopted || prestartedWallpaperStopPending
+                    || externalCommand.length > 0
+                    || externalProcess.running || externalRestartPending))
+            || (settingsService.wallpaperMode === "dynamic" && !dynamicLaunchFailed
+                && (screenName().length === 0 || dynamicCommand.length > 0
+                    || !!prestartedWallpaperRecord || prestartedWallpaperAdopted
+                    || prestartedWallpaperStopPending
+                    || dynamicProcess.running || dynamicRestartPending))
+        )
     readonly property bool showStaticWallpaper: settingsReady
         && !dynamicActive
         && !dynamicSuppressesStatic
         && !externalSuppressesStatic
+        && !liveModePending
         && !restartCoverVisible
     readonly property bool liveWallpaperVisible: settingsReady && !showStaticWallpaper
     // Keep the background layer transparent whenever a live renderer is
@@ -72,6 +107,7 @@ PanelWindow {
         || dynamicActive
         || dynamicSuppressesStatic
         || externalSuppressesStatic
+        || liveModePending
         || restartCoverVisible
     property string externalCommand: ""
     property bool dynamicActive: false
@@ -756,16 +792,12 @@ PanelWindow {
     Item {
         id: staticLayer
         anchors.fill: parent
-        visible: root.settingsReady
-        opacity: root.showStaticWallpaper ? 1.0 : 0.0
+        // Only mount when static is actually shown. A brief true→false on
+        // showStaticWallpaper with Behavior on opacity used to fade the default
+        // image over the live engine for ~160ms after boot adopt.
+        visible: root.showStaticWallpaper
+        opacity: 1
         clip: true
-
-        Behavior on opacity {
-            NumberAnimation {
-                duration: 160
-                easing.type: Motion.emphasizedDecel
-            }
-        }
 
         readonly property real zoom: root.launchpadOpen ? Motion.launchpadWallpaperScale : 1.0
         readonly property real dimOpacity: root.launchpadOpen ? Motion.launchpadWallpaperDim : 0.0
@@ -775,7 +807,8 @@ PanelWindow {
             anchors.centerIn: parent
             width: parent.width
             height: parent.height
-            source: root.staticWallpaperSource()
+            // Avoid binding apps default (iridescence) while live mode is pending.
+            source: root.showStaticWallpaper ? root.staticWallpaperSource() : ""
             fillMode: Image.PreserveAspectCrop
             smooth: true
             asynchronous: true

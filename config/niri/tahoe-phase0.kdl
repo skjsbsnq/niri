@@ -206,7 +206,8 @@ hotkey-overlay {
 xwayland-satellite {
     // Built and refreshed by scripts/arch-update.sh from
     // patches/xwayland-satellite-minimize.patch.
-    // The wrapper keeps the minimize patch and forces Xwayland glamor,
+    // The legacy filename now carries maximize, minimize, and clipboard
+    // compatibility fixes. The wrapper also forces Xwayland glamor,
     // otherwise GLX clients fall back to llvmpipe on this NVIDIA setup.
     path "~/.local/lib/niri/xwayland-satellite-minimize-glamor"
 }
@@ -216,10 +217,10 @@ environment {
     // but GLVND defaults GLX clients to Mesa/llvmpipe unless forced.
     __GLX_VENDOR_LIBRARY_NAME "nvidia"
 
-    // Keep Electron apps such as Linux QQ on native Wayland when possible.
-    // The patched xwayland-satellite path handles X11 minimize fallback,
-    // but native Wayland still avoids the X11 bridge for Electron clients.
-    ELECTRON_OZONE_PLATFORM_HINT "auto"
+    // Keep Electron apps such as Linux QQ on native Wayland. X11 remains
+    // available as an explicit per-app fallback, but fractional Xwayland
+    // scaling at 1.25 necessarily resamples buffers and can soften text.
+    ELECTRON_OZONE_PLATFORM_HINT "wayland"
 }
 
 recent-windows {

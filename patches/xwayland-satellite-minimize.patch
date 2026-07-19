@@ -1,11 +1,51 @@
+diff --git a/src/lib.rs b/src/lib.rs
+index 611c959..7b5c811 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -19,6 +19,7 @@ pub trait XConnection: Sized + 'static {
+
+     fn set_window_dims(&mut self, window: x::Window, dims: PendingSurfaceState) -> bool;
+     fn set_fullscreen(&mut self, window: x::Window, fullscreen: bool);
++    fn set_maximized(&mut self, window: x::Window, maximized: bool);
+     fn focus_window(&mut self, window: x::Window, output_name: Option<String>);
+     fn close_window(&mut self, window: x::Window);
+     fn unmap_window(&mut self, window: x::Window);
 diff --git a/src/server/event.rs b/src/server/event.rs
-index ba31797..73bc44e 100644
+index ba31797..1ea16d9 100644
 --- a/src/server/event.rs
 +++ b/src/server/event.rs
-@@ -762,11 +762,20 @@ impl Event for client::wl_pointer::Event {
+@@ -388,18 +388,23 @@ impl SurfaceEvents {
+
+                 let mut role = data.get::<&mut SurfaceRole>().unwrap();
+                 if let SurfaceRole::Toplevel(Some(toplevel)) = &mut *role {
++                    let window = *data.get::<&x::Window>().unwrap();
+                     let prev_fs = toplevel.fullscreen;
+                     toplevel.fullscreen =
+                         states.contains(&(u32::from(xdg_toplevel::State::Fullscreen) as u8));
+                     if toplevel.fullscreen != prev_fs {
+-                        state.connection.set_fullscreen(
+-                            *data.get::<&x::Window>().unwrap(),
+-                            toplevel.fullscreen,
+-                        );
++                        state.connection.set_fullscreen(window, toplevel.fullscreen);
+                         if let Some(decorations) = toplevel.decoration.satellite.as_mut() {
+                             decorations.handle_fullscreen(toplevel.fullscreen);
+                         }
+                     }
++
++                    let prev_maximized = toplevel.maximized;
++                    toplevel.maximized =
++                        states.contains(&(u32::from(xdg_toplevel::State::Maximized) as u8));
++                    if toplevel.maximized != prev_maximized {
++                        state.connection.set_maximized(window, toplevel.maximized);
++                    }
+                 };
+
+                 role.xdg_mut().unwrap().pending = Some(PendingSurfaceState {
+@@ -762,11 +767,20 @@ impl Event for client::wl_pointer::Event {
                      pub const LEFT: u32 = 0x110;
                  }
- 
+
 +                let mut last_click_serial = None;
                  if button_state == WEnum::Value(client::wl_pointer::ButtonState::Pressed)
                      && button == button_codes::LEFT
@@ -23,8 +63,8 @@ index ba31797..73bc44e 100644
                              cmd.insert(*entity, (LastClickSerial(seat.clone(), serial),));
                          }
                          CurrentSurface::Decoration(parent) => {
-@@ -781,6 +790,9 @@ impl Event for client::wl_pointer::Event {
- 
+@@ -781,6 +795,9 @@ impl Event for client::wl_pointer::Event {
+
                  server.button(serial, time, button, convert_wenum(button_state));
                  drop(query);
 +                if last_click_serial.is_some() {
@@ -34,18 +74,44 @@ index ba31797..73bc44e 100644
              }
              _ => {
 diff --git a/src/server/mod.rs b/src/server/mod.rs
-index 0496628..5fceefd 100644
+index 0496628..d32c375 100644
 --- a/src/server/mod.rs
 +++ b/src/server/mod.rs
-@@ -458,6 +458,7 @@ pub struct InnerServerState<S: X11Selection> {
+@@ -100,6 +100,7 @@ where
+ #[derive(Default, Debug)]
+ struct WindowAttributes {
+     is_popup: bool,
++    maximized: bool,
+     dims: WindowDims,
+     size_hints: Option<WmNormalHints>,
+     title: Option<WmName>,
+@@ -228,6 +229,7 @@ struct ToplevelData {
+     toplevel: XdgToplevel,
+     xdg: XdgSurfaceData,
+     fullscreen: bool,
++    maximized: bool,
+     decoration: decoration::DecorationsData,
+ }
+
+@@ -422,6 +424,9 @@ impl<S: X11Selection> XConnection for NoConnection<S> {
+     fn set_fullscreen(&mut self, _: x::Window, _: bool) {
+         debug!("could not toggle fullscreen without XWayland initialized");
+     }
++    fn set_maximized(&mut self, _: x::Window, _: bool) {
++        debug!("could not toggle maximized without XWayland initialized");
++    }
+     fn set_window_dims(&mut self, _: x::Window, _: crate::server::PendingSurfaceState) -> bool {
+         debug!("could not set window dimensions without XWayland initialized");
+         false
+@@ -458,6 +463,7 @@ pub struct InnerServerState<S: X11Selection> {
      unfocus: bool,
      last_focused_toplevel: Option<x::Window>,
      last_hovered: Option<x::Window>,
 +    last_click_serial: Option<(x::Window, client::wl_seat::WlSeat, u32)>,
- 
+
      xdg_wm_base: XdgWmBase,
      compositor: client::wl_compositor::WlCompositor,
-@@ -559,6 +560,7 @@ impl<S: X11Selection> ServerState<NoConnection<S>> {
+@@ -559,6 +565,7 @@ impl<S: X11Selection> ServerState<NoConnection<S>> {
              unfocus: false,
              last_focused_toplevel: None,
              last_hovered: None,
@@ -53,10 +119,10 @@ index 0496628..5fceefd 100644
              xdg_wm_base,
              compositor,
              subcompositor,
-@@ -1173,6 +1175,30 @@ impl<S: X11Selection + 'static> InnerServerState<S> {
+@@ -1173,6 +1180,89 @@ impl<S: X11Selection + 'static> InnerServerState<S> {
          }
      }
- 
+
 +    pub fn set_minimized(&mut self, window: x::Window) {
 +        let Some(data) = self
 +            .windows
@@ -81,13 +147,72 @@ index 0496628..5fceefd 100644
 +        toplevel.toplevel.set_minimized();
 +    }
 +
++    pub fn set_initial_maximized(&mut self, window: x::Window, maximized: bool) {
++        let Some(data) = self
++            .windows
++            .get(&window)
++            .copied()
++            .and_then(|id| self.world.entity(id).ok())
++        else {
++            debug!("not setting initial maximized state for unknown window {window:?}");
++            return;
++        };
++
++        data.get::<&mut WindowData>().unwrap().attrs.maximized = maximized;
++
++        if !maximized {
++            return;
++        }
++
++        if let Some(role) = data.get::<&SurfaceRole>() {
++            if let SurfaceRole::Toplevel(Some(toplevel)) = &*role {
++                toplevel.toplevel.set_maximized();
++            }
++        }
++    }
++
++    pub fn set_maximized(&mut self, window: x::Window, state: super::xstate::SetState) {
++        let Some(data) = self
++            .windows
++            .get(&window)
++            .copied()
++            .and_then(|id| self.world.entity(id).ok())
++        else {
++            warn!("Tried to set unknown window {window:?} maximized");
++            return;
++        };
++
++        let Some(role) = data.get::<&SurfaceRole>() else {
++            warn!("Tried to set window without role maximized: {window:?}");
++            return;
++        };
++
++        let SurfaceRole::Toplevel(Some(toplevel)) = &*role else {
++            warn!("Tried to set an unmapped toplevel or non toplevel maximized: {window:?}");
++            return;
++        };
++
++        use crate::xstate::SetState;
++        match state {
++            SetState::Add => toplevel.toplevel.set_maximized(),
++            SetState::Remove => toplevel.toplevel.unset_maximized(),
++            SetState::Toggle => {
++                if toplevel.maximized {
++                    toplevel.toplevel.unset_maximized()
++                } else {
++                    toplevel.toplevel.set_maximized()
++                }
++            }
++        }
++    }
++
      pub fn set_transient_for(&mut self, window: x::Window, parent: x::Window) {
          let Some(mut win) = self
              .windows
-@@ -1235,7 +1261,14 @@ impl<S: X11Selection + 'static> InnerServerState<S> {
+@@ -1235,7 +1325,14 @@ impl<S: X11Selection + 'static> InnerServerState<S> {
              return;
          };
- 
+
 -        let Some(last_click_data) = data.get::<&LastClickSerial>() else {
 +        let last_click_data = data
 +            .get::<&LastClickSerial>()
@@ -100,19 +225,19 @@ index 0496628..5fceefd 100644
              warn!("Requested move of window {window:?} but we don't have a click serial for it");
              return;
          };
-@@ -1246,7 +1279,7 @@ impl<S: X11Selection + 'static> InnerServerState<S> {
+@@ -1246,7 +1343,7 @@ impl<S: X11Selection + 'static> InnerServerState<S> {
              return;
          };
- 
+
 -        data.toplevel._move(&last_click_data.0, last_click_data.1);
 +        data.toplevel._move(&seat, serial);
      }
- 
+
      pub fn resize_window(&mut self, window: x::Window, direction: MoveResizeDirection) {
-@@ -1260,7 +1293,14 @@ impl<S: X11Selection + 'static> InnerServerState<S> {
+@@ -1260,7 +1357,14 @@ impl<S: X11Selection + 'static> InnerServerState<S> {
              return;
          };
- 
+
 -        let Some(last_click_data) = data.get::<&LastClickSerial>() else {
 +        let last_click_data = data
 +            .get::<&LastClickSerial>()
@@ -125,16 +250,34 @@ index 0496628..5fceefd 100644
              warn!("Requested resize of window {window:?} but we don't have a click serial for it");
              return;
          };
-@@ -1286,8 +1326,7 @@ impl<S: X11Selection + 'static> InnerServerState<S> {
+@@ -1286,8 +1390,7 @@ impl<S: X11Selection + 'static> InnerServerState<S> {
              | MoveResizeDirection::Cancel => unreachable!(),
          };
- 
+
 -        data.toplevel
 -            .resize(&last_click_data.0, last_click_data.1, edge);
 +        data.toplevel.resize(&seat, serial, edge);
      }
- 
+
      pub fn destroy_window(&mut self, window: x::Window) {
+@@ -1442,6 +1545,9 @@ impl<S: X11Selection + 'static> InnerServerState<S> {
+         if fullscreen {
+             toplevel.set_fullscreen(None);
+         }
++        if window.attrs.maximized {
++            toplevel.set_maximized();
++        }
+
+         let wl_decoration = self.decoration_manager.as_ref().map(|decoration_manager| {
+             let decoration =
+@@ -1519,6 +1625,7 @@ impl<S: X11Selection + 'static> InnerServerState<S> {
+             },
+             toplevel,
+             fullscreen: false,
++            maximized: false,
+             decoration: DecorationsData {
+                 wl: wl_decoration,
+                 satellite: sat_decoration,
 diff --git a/src/server/selection.rs b/src/server/selection.rs
 index bd32aaa..a6df77b 100644
 --- a/src/server/selection.rs
@@ -142,13 +285,13 @@ index bd32aaa..a6df77b 100644
 @@ -93,13 +93,18 @@ impl<S: X11Selection> InnerServerState<S> {
              }
          }
- 
+
 +        let selection_cancelled = events.cancelled;
          if events.cancelled {
              state.source = None;
              events.cancelled = false;
          }
- 
+
 -        if state.source.is_none() {
 -            if let Some(offer) = T::take_offer(&mut events.offer) {
 +        if let Some(offer) = T::take_offer(&mut events.offer) {
@@ -160,13 +303,374 @@ index bd32aaa..a6df77b 100644
                  let mime_types = T::get_mimes(&offer);
                  let foreign = ForeignSelection {
                      mime_types,
+diff --git a/src/server/tests.rs b/src/server/tests.rs
+index 13492cd..718a05d 100644
+--- a/src/server/tests.rs
++++ b/src/server/tests.rs
+@@ -3,7 +3,7 @@ use crate::server::selection::{Primary, SelectionType};
+ use crate::xstate::{SetState, WinSize, WmName};
+ use crate::{XConnection, timespec_from_millis};
+ use rustix::event::{PollFd, PollFlags, poll};
+-use std::collections::HashMap;
++use std::collections::{HashMap, HashSet};
+ use std::io::Write;
+ use std::os::fd::{AsRawFd, BorrowedFd};
+ use std::os::unix::net::UnixStream;
+@@ -161,6 +161,7 @@ struct WindowData {
+ struct FakeXConnection {
+     focused_window: Option<Window>,
+     windows: HashMap<Window, WindowData>,
++    maximized_windows: HashSet<Window>,
+     set_window_dims_counter: usize,
+ }
+
+@@ -213,6 +214,15 @@ impl super::XConnection for FakeXConnection {
+         self.window_mut(window).fullscreen = fullscreen;
+     }
+
++    #[track_caller]
++    fn set_maximized(&mut self, window: xcb::x::Window, maximized: bool) {
++        if maximized {
++            self.maximized_windows.insert(window);
++        } else {
++            self.maximized_windows.remove(&window);
++        }
++    }
++
+     #[track_caller]
+     fn set_window_dims(&mut self, window: Window, state: super::PendingSurfaceState) -> bool {
+         self.window_mut(window).dims = WindowDims {
+@@ -1278,6 +1288,108 @@ fn fullscreen() {
+     );
+ }
+
++#[test]
++fn maximize() {
++    let (mut f, comp) = TestFixture::new_with_compositor();
++    let win = Window::new(1);
++    let (_, id) = f.create_toplevel(&comp, win);
++
++    f.satellite.set_maximized(win, SetState::Add);
++    f.run();
++    f.run();
++
++    let data = f.testwl.get_surface_data(id).unwrap();
++    assert!(
++        data.toplevel()
++            .states
++            .contains(&xdg_toplevel::State::Maximized)
++    );
++    assert!(f.connection().maximized_windows.contains(&win));
++
++    f.satellite.set_maximized(win, SetState::Remove);
++    f.run();
++    f.run();
++
++    let data = f.testwl.get_surface_data(id).unwrap();
++    assert!(
++        !data
++            .toplevel()
++            .states
++            .contains(&xdg_toplevel::State::Maximized)
++    );
++    assert!(!f.connection().maximized_windows.contains(&win));
++
++    f.satellite.set_maximized(win, SetState::Toggle);
++    f.run();
++    f.run();
++
++    let data = f.testwl.get_surface_data(id).unwrap();
++    assert!(
++        data.toplevel()
++            .states
++            .contains(&xdg_toplevel::State::Maximized)
++    );
++
++    f.satellite.set_maximized(win, SetState::Toggle);
++    f.run();
++    f.run();
++
++    let data = f.testwl.get_surface_data(id).unwrap();
++    assert!(
++        !data
++            .toplevel()
++            .states
++            .contains(&xdg_toplevel::State::Maximized)
++    );
++}
++
++#[test]
++fn initial_maximize() {
++    let (mut f, comp) = TestFixture::new_with_compositor();
++    let win = Window::new(1);
++    let (buffer, surface) = comp.create_surface();
++    f.new_window(
++        win,
++        false,
++        WindowData {
++            mapped: true,
++            dims: WindowDims {
++                x: 0,
++                y: 0,
++                width: 50,
++                height: 50,
++            },
++            fullscreen: false,
++        },
++    );
++    f.satellite.set_initial_maximized(win, true);
++    f.map_window(&comp, win, &surface.obj, &buffer);
++    f.run();
++    f.run();
++
++    let id = f.check_new_surface();
++    let data = f.testwl.get_surface_data(id).unwrap();
++    assert!(
++        data.toplevel()
++            .states
++            .contains(&xdg_toplevel::State::Maximized)
++    );
++    assert!(f.connection().maximized_windows.contains(&win));
++}
++
++#[test]
++fn minimize() {
++    let (mut f, comp) = TestFixture::new_with_compositor();
++    let win = Window::new(1);
++    let (_, id) = f.create_toplevel(&comp, win);
++
++    f.satellite.set_minimized(win);
++    f.run();
++
++    let data = f.testwl.get_surface_data(id).unwrap();
++    assert!(data.toplevel().minimized);
++}
++
+ #[test]
+ fn window_title_and_class() {
+     let (mut f, comp) = TestFixture::new_with_compositor();
+diff --git a/src/xstate/mod.rs b/src/xstate/mod.rs
+index e9425f0..bcc310a 100644
+--- a/src/xstate/mod.rs
++++ b/src/xstate/mod.rs
+@@ -301,7 +301,13 @@ impl XState {
+                 self.atoms.active_win,
+                 self.atoms.motif_wm_hints,
+                 self.atoms.net_wm_state,
++                self.atoms.wm_allowed_actions,
+                 self.atoms.wm_fullscreen,
++                self.atoms.wm_maximized_horz,
++                self.atoms.wm_maximized_vert,
++                self.atoms.wm_action_minimize,
++                self.atoms.wm_action_maximize_horz,
++                self.atoms.wm_action_maximize_vert,
+                 self.atoms.moveresize,
+             ],
+         );
+@@ -554,12 +560,31 @@ impl XState {
+
+                 trace!("_NET_WM_STATE ({action:?}) props: {prop1:?} {prop2:?}");
+
+-                for prop in [prop1, prop2] {
+-                    match prop {
+-                        x if x == self.atoms.wm_fullscreen => {
+-                            server_state.set_fullscreen(e.window(), action);
+-                        }
+-                        _ => {}
++                let props = [prop1, prop2];
++                if props.contains(&self.atoms.wm_fullscreen) {
++                    server_state.set_fullscreen(e.window(), action);
++                }
++                if props.contains(&self.atoms.wm_maximized_horz)
++                    || props.contains(&self.atoms.wm_maximized_vert)
++                {
++                    // XDG toplevel only has a two-dimensional maximized state.
++                    // Treat either EWMH axis as a request for that state, but
++                    // dispatch once when clients send both atoms together.
++                    server_state.set_maximized(e.window(), action);
++                }
++            }
++            x if x == self.atoms.wm_change_state => {
++                let x::ClientMessageData::Data32(data) = e.data() else {
++                    unreachable!();
++                };
++
++                match WmState::try_from(data[0]) {
++                    Ok(WmState::Iconic) => server_state.set_minimized(e.window()),
++                    Ok(state) => {
++                        debug!("ignoring WM_CHANGE_STATE request for {state:?}");
++                    }
++                    Err(_) => {
++                        warn!("unknown state for WM_CHANGE_STATE: {}", data[0]);
+                     }
+                 }
+             }
+@@ -579,7 +604,7 @@ impl XState {
+                 let button = data[3];
+                 // XXX: This can technically be driven by keyboard events and other mouse buttons as well,
+                 // but I haven't found an application that does this yet. We'll cross that bridge when we get to it.
+-                if button != 1 {
++                if button != 0 && button != 1 {
+                     warn!(
+                         "Attempted move/resize of {:?} with non left click button ({button})",
+                         e.window()
+@@ -628,6 +653,13 @@ impl XState {
+         let size_hints = self.get_wm_size_hints(window);
+         let motif_wm_hints = self.get_motif_wm_hints(window);
+         let wm_hints = self.get_wm_hints(window);
++        let window_state = self.property_cookie_wrapper(
++            window,
++            self.atoms.net_wm_state,
++            x::ATOM_ATOM,
++            32,
++            |reply: x::GetPropertyReply| reply.value::<x::Atom>().to_vec(),
++        );
+         let mut title = name.resolve()?;
+         if title.is_none() {
+             title = self.get_wm_name(window).resolve()?;
+@@ -647,6 +679,11 @@ impl XState {
+         if let Some(decorations) = motif_hints.as_ref().and_then(|m| m.decorations) {
+             server_state.set_win_decorations(window, decorations);
+         }
++        if let Some(states) = window_state.resolve()? {
++            let maximized = states.contains(&self.atoms.wm_maximized_horz)
++                && states.contains(&self.atoms.wm_maximized_vert);
++            server_state.set_initial_maximized(window, maximized);
++        }
+
+         let transient_for = self
+             .property_cookie_wrapper(
+@@ -661,6 +698,23 @@ impl XState {
+
+         let is_popup =
+             self.guess_is_popup(window, motif_hints, wmhints, transient_for.is_some())?;
++        let allowed_actions = if is_popup {
++            Vec::new()
++        } else {
++            vec![
++                self.atoms.wm_action_minimize,
++                self.atoms.wm_action_maximize_horz,
++                self.atoms.wm_action_maximize_vert,
++            ]
++        };
++        self.connection
++            .send_and_check_request(&x::ChangeProperty::<x::Atom> {
++                mode: x::PropMode::Replace,
++                window,
++                property: self.atoms.wm_allowed_actions,
++                r#type: x::ATOM_ATOM,
++                data: &allowed_actions,
++            })?;
+         server_state.set_popup(window, is_popup);
+         if let Some(parent) = transient_for.and_then(|t| (!is_popup).then_some(t)) {
+             server_state.set_transient_for(window, parent);
+@@ -1032,13 +1086,20 @@ xcb::atoms_struct! {
+         wm_protocols => b"WM_PROTOCOLS" only_if_exists = false,
+         wm_delete_window => b"WM_DELETE_WINDOW" only_if_exists = false,
+         wm_transient_for => b"WM_TRANSIENT_FOR" only_if_exists = false,
++        wm_change_state => b"WM_CHANGE_STATE" only_if_exists = false,
+         wm_state => b"WM_STATE" only_if_exists = false,
+         wm_s0 => b"WM_S0" only_if_exists = false,
+         wm_check => b"_NET_SUPPORTING_WM_CHECK" only_if_exists = false,
+         net_wm_name => b"_NET_WM_NAME" only_if_exists = false,
+         wm_pid => b"_NET_WM_PID" only_if_exists = false,
+         net_wm_state => b"_NET_WM_STATE" only_if_exists = false,
++        wm_allowed_actions => b"_NET_WM_ALLOWED_ACTIONS" only_if_exists = false,
+         wm_fullscreen => b"_NET_WM_STATE_FULLSCREEN" only_if_exists = false,
++        wm_maximized_horz => b"_NET_WM_STATE_MAXIMIZED_HORZ" only_if_exists = false,
++        wm_maximized_vert => b"_NET_WM_STATE_MAXIMIZED_VERT" only_if_exists = false,
++        wm_action_minimize => b"_NET_WM_ACTION_MINIMIZE" only_if_exists = false,
++        wm_action_maximize_horz => b"_NET_WM_ACTION_MAXIMIZE_HORZ" only_if_exists = false,
++        wm_action_maximize_vert => b"_NET_WM_ACTION_MAXIMIZE_VERT" only_if_exists = false,
+         skip_taskbar => b"_NET_WM_STATE_SKIP_TASKBAR" only_if_exists = false,
+         active_win => b"_NET_ACTIVE_WINDOW" only_if_exists = false,
+         client_list => b"_NET_CLIENT_LIST" only_if_exists = false,
+@@ -1334,6 +1395,45 @@ impl RealConnection {
+     fn root_window(&self) -> x::Window {
+         self.connection.get_setup().roots().next().unwrap().root()
+     }
++
++    fn set_net_wm_state(&self, window: x::Window, atoms: &[x::Atom], enabled: bool) {
++        let cookie = self.connection.send_request(&x::GetProperty {
++            delete: false,
++            window,
++            property: self.atoms.net_wm_state,
++            r#type: x::ATOM_ATOM,
++            long_offset: 0,
++            long_length: 1024,
++        });
++        let Ok(reply) = self.connection.wait_for_reply(cookie) else {
++            warn!("Failed to read _NET_WM_STATE for {window:?}");
++            return;
++        };
++
++        let mut states = reply.value::<x::Atom>().to_vec();
++        if enabled {
++            for atom in atoms {
++                if !states.contains(atom) {
++                    states.push(*atom);
++                }
++            }
++        } else {
++            states.retain(|state| !atoms.contains(state));
++        }
++
++        if let Err(e) = self
++            .connection
++            .send_and_check_request(&x::ChangeProperty::<x::Atom> {
++                mode: x::PropMode::Replace,
++                window,
++                property: self.atoms.net_wm_state,
++                r#type: x::ATOM_ATOM,
++                data: &states,
++            })
++        {
++            warn!("Failed to update _NET_WM_STATE on {window:?} ({e})");
++        }
++    }
+ }
+
+ impl XConnection for RealConnection {
+@@ -1360,24 +1460,15 @@ impl XConnection for RealConnection {
+     }
+
+     fn set_fullscreen(&mut self, window: x::Window, fullscreen: bool) {
+-        let data = if fullscreen {
+-            std::slice::from_ref(&self.atoms.wm_fullscreen)
+-        } else {
+-            &[]
+-        };
++        self.set_net_wm_state(window, &[self.atoms.wm_fullscreen], fullscreen);
++    }
+
+-        if let Err(e) = self
+-            .connection
+-            .send_and_check_request(&x::ChangeProperty::<x::Atom> {
+-                mode: x::PropMode::Replace,
+-                window,
+-                property: self.atoms.net_wm_state,
+-                r#type: x::ATOM_ATOM,
+-                data,
+-            })
+-        {
+-            warn!("Failed to set fullscreen state on {window:?} ({e})");
+-        }
++    fn set_maximized(&mut self, window: x::Window, maximized: bool) {
++        self.set_net_wm_state(
++            window,
++            &[self.atoms.wm_maximized_horz, self.atoms.wm_maximized_vert],
++            maximized,
++        );
+     }
+
+     fn focus_window(&mut self, window: x::Window, output_name: Option<String>) {
 diff --git a/src/xstate/selection.rs b/src/xstate/selection.rs
 index 8500a79..30cbcc9 100644
 --- a/src/xstate/selection.rs
 +++ b/src/xstate/selection.rs
 @@ -477,12 +477,21 @@ impl<T: SelectionType> SelectionDataImpl for SelectionData<T> {
          }
- 
+
          let selection = get_atom_name(connection, self.atom);
 -        let mimes = targets
 +        let mut utf8_x11 = false;
@@ -190,7 +694,7 @@ index 8500a79..30cbcc9 100644
 @@ -499,6 +508,32 @@ impl<T: SelectionType> SelectionDataImpl for SelectionData<T> {
              })
              .collect();
- 
+
 +        if utf8_x11 {
 +            for (name, already_present) in [
 +                ("text/plain;charset=utf-8", text_plain_utf8),
@@ -220,91 +724,127 @@ index 8500a79..30cbcc9 100644
          let selection = Rc::new(Selection {
              mimes,
              connection: connection.clone(),
-diff --git a/src/server/tests.rs b/src/server/tests.rs
-index 13492cd..453fb1f 100644
---- a/src/server/tests.rs
-+++ b/src/server/tests.rs
-@@ -1278,6 +1278,19 @@ fn fullscreen() {
-     );
- }
- 
+diff --git a/tests/integration.rs b/tests/integration.rs
+index c49b5cb..9641d16 100644
+--- a/tests/integration.rs
++++ b/tests/integration.rs
+@@ -18,7 +18,7 @@ use wayland_server::Resource;
+ use wayland_server::protocol::{wl_output, wl_pointer};
+ use xcb::{Xid, x};
+ use xwayland_satellite as xwls;
+-use xwayland_satellite::xstate::{MoveResizeDirection, WmSizeHintsFlags, WmState};
++use xwayland_satellite::xstate::{MoveResizeDirection, SetState, WmSizeHintsFlags, WmState};
+ use xwls::timespec_from_millis;
+
+ #[derive(Default)]
+@@ -329,6 +329,12 @@ xcb::atoms_struct! {
+         net_active_window => b"_NET_ACTIVE_WINDOW",
+         wm_delete_window => b"WM_DELETE_WINDOW",
+         net_wm_state => b"_NET_WM_STATE",
++        wm_allowed_actions => b"_NET_WM_ALLOWED_ACTIONS",
++        wm_maximized_horz => b"_NET_WM_STATE_MAXIMIZED_HORZ",
++        wm_maximized_vert => b"_NET_WM_STATE_MAXIMIZED_VERT",
++        wm_action_minimize => b"_NET_WM_ACTION_MINIMIZE",
++        wm_action_maximize_horz => b"_NET_WM_ACTION_MAXIMIZE_HORZ",
++        wm_action_maximize_vert => b"_NET_WM_ACTION_MAXIMIZE_VERT",
+         skip_taskbar => b"_NET_WM_STATE_SKIP_TASKBAR",
+         transient_for => b"WM_TRANSIENT_FOR",
+         clipboard => b"CLIPBOARD",
+@@ -519,6 +525,20 @@ impl Connection {
+         self.wait_for_reply(self.send_request(req)).unwrap()
+     }
+
++    #[track_caller]
++    fn get_atom_property(&self, window: x::Window, property: x::Atom) -> Vec<x::Atom> {
++        self.get_reply(&x::GetProperty {
++            delete: false,
++            window,
++            property,
++            r#type: x::ATOM_ATOM,
++            long_offset: 0,
++            long_length: 1024,
++        })
++        .value::<x::Atom>()
++        .to_vec()
++    }
++
+     #[track_caller]
+     fn set_selection_owner(&self, window: x::Window, selection: x::Atom) {
+         self.send_and_check_request(&x::SetSelectionOwner {
+@@ -2423,6 +2443,71 @@ fn rotated_output() {
+
+ const BTN_LEFT: u32 = 0x110;
+
 +#[test]
-+fn minimize() {
-+    let (mut f, comp) = TestFixture::new_with_compositor();
-+    let win = Window::new(1);
-+    let (_, id) = f.create_toplevel(&comp, win);
++fn client_maximize() {
++    let mut f = Fixture::new();
++    let mut connection = Connection::new(&f.display);
 +
-+    f.satellite.set_minimized(win);
-+    f.run();
++    let window = connection.new_window(connection.root, 0, 0, 20, 20, false);
++    let surface = f.map_as_toplevel(&mut connection, window);
 +
-+    let data = f.testwl.get_surface_data(id).unwrap();
-+    assert!(data.toplevel().minimized);
++    let allowed_actions = connection.get_atom_property(window, connection.atoms.wm_allowed_actions);
++    assert!(allowed_actions.contains(&connection.atoms.wm_action_minimize));
++    assert!(allowed_actions.contains(&connection.atoms.wm_action_maximize_horz));
++    assert!(allowed_actions.contains(&connection.atoms.wm_action_maximize_vert));
++
++    let request_maximized = |connection: &Connection, state: SetState| {
++        connection.send_client_message(&x::ClientMessageEvent::new(
++            window,
++            connection.atoms.net_wm_state,
++            x::ClientMessageData::Data32([
++                state as u32,
++                connection.atoms.wm_maximized_horz.resource_id(),
++                connection.atoms.wm_maximized_vert.resource_id(),
++                1,
++                0,
++            ]),
++        ));
++    };
++
++    let assert_maximized = |f: &Fixture, connection: &Connection, expected: bool| {
++        let wayland_maximized = f
++            .testwl
++            .get_surface_data(surface)
++            .unwrap()
++            .toplevel()
++            .states
++            .contains(&xdg_toplevel::State::Maximized);
++        assert_eq!(wayland_maximized, expected);
++
++        let x11_states = connection.get_atom_property(window, connection.atoms.net_wm_state);
++        assert_eq!(
++            x11_states.contains(&connection.atoms.wm_maximized_horz),
++            expected
++        );
++        assert_eq!(
++            x11_states.contains(&connection.atoms.wm_maximized_vert),
++            expected
++        );
++    };
++
++    request_maximized(&connection, SetState::Add);
++    f.wait_and_dispatch();
++    assert_maximized(&f, &connection, true);
++
++    request_maximized(&connection, SetState::Remove);
++    f.wait_and_dispatch();
++    assert_maximized(&f, &connection, false);
++
++    request_maximized(&connection, SetState::Toggle);
++    f.wait_and_dispatch();
++    assert_maximized(&f, &connection, true);
++
++    request_maximized(&connection, SetState::Toggle);
++    f.wait_and_dispatch();
++    assert_maximized(&f, &connection, false);
 +}
 +
  #[test]
- fn window_title_and_class() {
-     let (mut f, comp) = TestFixture::new_with_compositor();
-diff --git a/src/xstate/mod.rs b/src/xstate/mod.rs
-index e9425f0..261ce29 100644
---- a/src/xstate/mod.rs
-+++ b/src/xstate/mod.rs
-@@ -302,6 +302,7 @@ impl XState {
-                 self.atoms.motif_wm_hints,
-                 self.atoms.net_wm_state,
-                 self.atoms.wm_fullscreen,
-+                self.atoms.wm_action_minimize,
-                 self.atoms.moveresize,
-             ],
-         );
-@@ -563,6 +564,21 @@ impl XState {
-                     }
-                 }
-             }
-+            x if x == self.atoms.wm_change_state => {
-+                let x::ClientMessageData::Data32(data) = e.data() else {
-+                    unreachable!();
-+                };
-+
-+                match WmState::try_from(data[0]) {
-+                    Ok(WmState::Iconic) => server_state.set_minimized(e.window()),
-+                    Ok(state) => {
-+                        debug!("ignoring WM_CHANGE_STATE request for {state:?}");
-+                    }
-+                    Err(_) => {
-+                        warn!("unknown state for WM_CHANGE_STATE: {}", data[0]);
-+                    }
-+                }
-+            }
-             x if x == self.atoms.active_win => {
-                 server_state.activate_window(e.window());
-             }
-@@ -579,7 +595,7 @@ impl XState {
-                 let button = data[3];
-                 // XXX: This can technically be driven by keyboard events and other mouse buttons as well,
-                 // but I haven't found an application that does this yet. We'll cross that bridge when we get to it.
--                if button != 1 {
-+                if button != 0 && button != 1 {
-                     warn!(
-                         "Attempted move/resize of {:?} with non left click button ({button})",
-                         e.window()
-@@ -1032,6 +1048,7 @@ xcb::atoms_struct! {
-         wm_protocols => b"WM_PROTOCOLS" only_if_exists = false,
-         wm_delete_window => b"WM_DELETE_WINDOW" only_if_exists = false,
-         wm_transient_for => b"WM_TRANSIENT_FOR" only_if_exists = false,
-+        wm_change_state => b"WM_CHANGE_STATE" only_if_exists = false,
-         wm_state => b"WM_STATE" only_if_exists = false,
-         wm_s0 => b"WM_S0" only_if_exists = false,
-         wm_check => b"_NET_SUPPORTING_WM_CHECK" only_if_exists = false,
-@@ -1039,6 +1056,7 @@ xcb::atoms_struct! {
-         wm_pid => b"_NET_WM_PID" only_if_exists = false,
-         net_wm_state => b"_NET_WM_STATE" only_if_exists = false,
-         wm_fullscreen => b"_NET_WM_STATE_FULLSCREEN" only_if_exists = false,
-+        wm_action_minimize => b"_NET_WM_ACTION_MINIMIZE" only_if_exists = false,
-         skip_taskbar => b"_NET_WM_STATE_SKIP_TASKBAR" only_if_exists = false,
-         active_win => b"_NET_ACTIVE_WINDOW" only_if_exists = false,
-         client_list => b"_NET_CLIENT_LIST" only_if_exists = false,
+ fn client_init_move() {
+     let mut f = Fixture::new();
 diff --git a/testwl/src/lib.rs b/testwl/src/lib.rs
-index f8d850f..952e8d0 100644
+index f8d850f..c4d3987 100644
 --- a/testwl/src/lib.rs
 +++ b/testwl/src/lib.rs
 @@ -158,6 +158,7 @@ pub struct Toplevel {
@@ -315,7 +855,42 @@ index f8d850f..952e8d0 100644
      pub closed: bool,
      pub title: Option<String>,
      pub app_id: Option<String>,
-@@ -1585,6 +1586,13 @@ impl Dispatch<XdgToplevel, SurfaceId> for State {
+@@ -1559,6 +1560,34 @@ impl Dispatch<XdgToplevel, SurfaceId> for State {
+                     y: height,
+                 });
+             }
++            xdg_toplevel::Request::SetMaximized => {
++                let data = state.surfaces.get_mut(surface_id).unwrap();
++                let Some(SurfaceRole::Toplevel(toplevel)) = &mut data.role else {
++                    unreachable!();
++                };
++                if !toplevel.states.contains(&xdg_toplevel::State::Maximized) {
++                    toplevel.states.push(xdg_toplevel::State::Maximized);
++                }
++                let states = toplevel.states.clone();
++                state.configure_toplevel(*surface_id, 100, 100, states);
++            }
++            xdg_toplevel::Request::UnsetMaximized => {
++                let data = state.surfaces.get_mut(surface_id).unwrap();
++                let Some(SurfaceRole::Toplevel(toplevel)) = &mut data.role else {
++                    unreachable!();
++                };
++                let Some(pos) = toplevel
++                    .states
++                    .iter()
++                    .copied()
++                    .position(|p| p == xdg_toplevel::State::Maximized)
++                else {
++                    return;
++                };
++                toplevel.states.swap_remove(pos);
++                let states = toplevel.states.clone();
++                state.configure_toplevel(*surface_id, 100, 100, states);
++            }
+             xdg_toplevel::Request::SetFullscreen { .. } => {
+                 let data = state.surfaces.get_mut(surface_id).unwrap();
+                 let Some(SurfaceRole::Toplevel(toplevel)) = &mut data.role else {
+@@ -1585,6 +1614,13 @@ impl Dispatch<XdgToplevel, SurfaceId> for State {
                  let states = toplevel.states.clone();
                  state.configure_toplevel(*surface_id, 100, 100, states);
              }
@@ -329,7 +904,7 @@ index f8d850f..952e8d0 100644
              xdg_toplevel::Request::Destroy => {}
              xdg_toplevel::Request::SetTitle { title } => {
                  let data = state.surfaces.get_mut(surface_id).unwrap();
-@@ -1649,6 +1657,7 @@ impl Dispatch<XdgSurface, SurfaceId> for State {
+@@ -1649,6 +1685,7 @@ impl Dispatch<XdgSurface, SurfaceId> for State {
                      min_size: None,
                      max_size: None,
                      states: Vec::new(),

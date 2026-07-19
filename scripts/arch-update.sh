@@ -342,12 +342,22 @@ prepare_xwayland_satellite_worktree() {
   fi
 
   if grep -Rqs 'set_minimized' "$XWAYLAND_SATELLITE_WORK_DIR/src" \
-    && grep -Rqs 'WM_CHANGE_STATE' "$XWAYLAND_SATELLITE_WORK_DIR/src"; then
-    log "xwayland-satellite patch no longer applies, but upstream appears to include minimize support; building without local patch"
+    && grep -Rqs 'WM_CHANGE_STATE' "$XWAYLAND_SATELLITE_WORK_DIR/src" \
+    && grep -Rqs 'set_maximized' "$XWAYLAND_SATELLITE_WORK_DIR/src" \
+    && grep -Rqs 'unset_maximized' "$XWAYLAND_SATELLITE_WORK_DIR/src" \
+    && grep -Rqs '_NET_WM_ALLOWED_ACTIONS' "$XWAYLAND_SATELLITE_WORK_DIR/src" \
+    && grep -Rqs '_NET_WM_STATE_MAXIMIZED_HORZ' "$XWAYLAND_SATELLITE_WORK_DIR/src" \
+    && grep -Rqs '_NET_WM_STATE_MAXIMIZED_VERT' "$XWAYLAND_SATELLITE_WORK_DIR/src" \
+    && grep -Rqs '_NET_WM_ACTION_MAXIMIZE_HORZ' "$XWAYLAND_SATELLITE_WORK_DIR/src" \
+    && grep -Rqs '_NET_WM_ACTION_MAXIMIZE_VERT' "$XWAYLAND_SATELLITE_WORK_DIR/src" \
+    && grep -Rqs 'State::Maximized' "$XWAYLAND_SATELLITE_WORK_DIR/src" \
+    && grep -Rqs 'selection_cancelled' "$XWAYLAND_SATELLITE_WORK_DIR/src" \
+    && grep -Rqs 'text/plain;charset=utf-8' "$XWAYLAND_SATELLITE_WORK_DIR/src"; then
+    log "xwayland-satellite patch no longer applies, but upstream appears to include Tahoe maximize, minimize, and clipboard support; building without local patch"
     return
   fi
 
-  die "xwayland-satellite minimize patch does not apply to $xwayland_satellite_after_commit; update $XWAYLAND_SATELLITE_PATCH or run with BUILD_XWAYLAND_SATELLITE=false"
+  die "xwayland-satellite Tahoe compatibility patch does not apply to $xwayland_satellite_after_commit; update $XWAYLAND_SATELLITE_PATCH or run with BUILD_XWAYLAND_SATELLITE=false"
 }
 
 install_xwayland_satellite_build_deps() {

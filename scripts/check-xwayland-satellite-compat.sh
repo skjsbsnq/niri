@@ -142,17 +142,33 @@ check_regressions() {
   local patch_sha="$1"
   local state="ok"
   local detail=""
-  local impact="X11 最小化和 X11/Wayland 剪贴板桥接补丁锚点存在"
+  local impact="X11 最大化、最小化和 X11/Wayland 剪贴板桥接补丁锚点存在"
   local action=""
+  local missing_maximize=()
   local missing_minimize=()
   local missing_clipboard=()
 
   if [[ ! -f "$XWAYLAND_SATELLITE_PATCH" ]]; then
-    emit_status xwayland_regression missing 'XWayland 回归检查' "缺少 patch：$XWAYLAND_SATELLITE_PATCH" '无法确认 minimize 和 clipboard bridge 补丁内容' '恢复 patches/xwayland-satellite-minimize.patch'
+    emit_status xwayland_regression missing 'XWayland 回归检查' "缺少 patch：$XWAYLAND_SATELLITE_PATCH" '无法确认 maximize、minimize 和 clipboard bridge 补丁内容' '恢复 patches/xwayland-satellite-minimize.patch'
     strict_failed=true
     return
   fi
 
+  append_missing_patterns "$XWAYLAND_SATELLITE_PATCH" missing_maximize \
+    'set_maximized' \
+    'set_net_wm_state' \
+    '_NET_WM_ALLOWED_ACTIONS' \
+    '_NET_WM_STATE_MAXIMIZED_HORZ' \
+    '_NET_WM_STATE_MAXIMIZED_VERT' \
+    'wm_action_maximize_horz' \
+    'wm_action_maximize_vert' \
+    'xdg_toplevel::Request::SetMaximized' \
+    'xdg_toplevel::Request::UnsetMaximized' \
+    'xdg_toplevel::State::Maximized' \
+    'SetState::Toggle' \
+    'fn maximize' \
+    'fn client_maximize' \
+    'fn initial_maximize'
   append_missing_patterns "$XWAYLAND_SATELLITE_PATCH" missing_minimize \
     'set_minimized' \
     'WM_CHANGE_STATE' \
@@ -165,14 +181,14 @@ check_regressions() {
     'selection_cancelled' \
     'ForeignSelection'
 
-  if [[ ${#missing_minimize[@]} -gt 0 || ${#missing_clipboard[@]} -gt 0 ]]; then
+  if [[ ${#missing_maximize[@]} -gt 0 || ${#missing_minimize[@]} -gt 0 || ${#missing_clipboard[@]} -gt 0 ]]; then
     state="broken"
-    detail="patch sha $patch_sha；缺 minimize 锚点：$(join_reasons "${missing_minimize[@]:-无}")；缺 clipboard 锚点：$(join_reasons "${missing_clipboard[@]:-无}")"
-    impact="更新后可能重新丢失 X11 minimize 或剪贴板桥接能力"
+    detail="patch sha $patch_sha；缺 maximize 锚点：$(join_reasons "${missing_maximize[@]:-无}")；缺 minimize 锚点：$(join_reasons "${missing_minimize[@]:-无}")；缺 clipboard 锚点：$(join_reasons "${missing_clipboard[@]:-无}")"
+    impact="更新后可能重新丢失 X11 maximize、minimize 或剪贴板桥接能力"
     action="更新 $XWAYLAND_SATELLITE_PATCH，并重新运行 arch-update.sh"
     strict_failed=true
   else
-    detail="patch sha $patch_sha；minimize 与 clipboard bridge 锚点完整"
+    detail="patch sha $patch_sha；maximize、minimize 与 clipboard bridge 锚点完整"
   fi
 
   emit_status xwayland_regression "$state" 'XWayland 回归检查' "$detail" "$impact" "$action"
@@ -192,7 +208,7 @@ check_xwayland_path() {
   local runtime_stale=false
   local state="ok"
   local detail=""
-  local impact="X11 应用兼容路径、minimize patch 和 clipboard bridge 构建记录可诊断"
+  local impact="X11 应用兼容路径、maximize/minimize patch 和 clipboard bridge 构建记录可诊断"
   local action=""
   local missing=()
   local stale=()
@@ -259,7 +275,12 @@ check_xwayland_path() {
     stale+=("niri config 未指向 glamor wrapper")
   fi
 
-  runtime_pids="$(pgrep -x xwayland-satellite 2>/dev/null | paste -sd, - || true)"
+  # Linux truncates /proc/PID/comm to 15 bytes, so the running process is
+  # normally named "xwayland-satell" even though the executable is longer.
+  runtime_pids="$({
+    pgrep -x xwayland-satellite 2>/dev/null || true
+    pgrep -x xwayland-satell 2>/dev/null || true
+  } | sort -nu | paste -sd, -)"
   if [[ -n "$runtime_pids" ]]; then
     local expected_bin
     local pid
@@ -288,13 +309,13 @@ check_xwayland_path() {
   if [[ ${#broken[@]} -gt 0 ]]; then
     state="broken"
     detail="$(join_reasons "${broken[@]}")"
-    impact="X11 app 可能无法启动、无法最小化或 GLX/剪贴板降级"
+    impact="X11 app 可能无法启动、无法最大化/最小化或 GLX/剪贴板降级"
     action="重新运行 FORCE_XWAYLAND_SATELLITE_BUILD=true bash scripts/arch-update.sh"
     strict_failed=true
   elif [[ ${#missing[@]} -gt 0 ]]; then
     state="missing"
     detail="$(join_reasons "${missing[@]}")"
-    impact="Tahoe XWayland 兼容路径缺失，X11 app 可能无法正常显示或最小化"
+    impact="Tahoe XWayland 兼容路径缺失，X11 app 可能无法正常显示、最大化或最小化"
     action="运行 BUILD_XWAYLAND_SATELLITE=auto bash scripts/arch-update.sh"
     strict_failed=true
   elif [[ ${#stale[@]} -gt 0 || "$runtime_stale" == true ]]; then

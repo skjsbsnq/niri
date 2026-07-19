@@ -16,7 +16,7 @@ OpenGL renderer string: llvmpipe (LLVM ...)
 Accelerated: no
 ```
 
-This was not caused by the local minimize patch itself. The patched binary could
+This was not caused by the local Tahoe compatibility patch itself. The patched binary could
 use hardware GLX when started with the right arguments and environment.
 
 ## Root Cause

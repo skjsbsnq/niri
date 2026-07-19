@@ -28,13 +28,15 @@ foreign offer could stay in `state.source`, leaving X11 clients with stale or
 missing clipboard data.
 
 The local patch in `patches/xwayland-satellite-minimize.patch` therefore does
-two things:
+four things (the filename is retained for deployed-path compatibility):
 
-1. Forwards X11 `WM_CHANGE_STATE/IconicState` minimize requests to Wayland
+1. Bridges X11 `_NET_WM_STATE_MAXIMIZED_HORZ` / `MAXIMIZED_VERT` requests and
+   state updates to Wayland `xdg_toplevel` maximize/unmaximize.
+2. Forwards X11 `WM_CHANGE_STATE/IconicState` minimize requests to Wayland
    `xdg_toplevel.set_minimized()`.
-2. Refreshes stale Wayland clipboard offers while preserving X11-owned
+3. Refreshes stale Wayland clipboard offers while preserving X11-owned
    selections until the compositor cancels them.
-3. Exposes X11 `UTF8_STRING` selections as Wayland `text/plain;charset=utf-8`
+4. Exposes X11 `UTF8_STRING` selections as Wayland `text/plain;charset=utf-8`
    and `text/plain` aliases. This fixes apps such as Linux QQ, which can copy
    valid text through X11 targets that GTK terminals do not treat as pasteable
    Wayland text.
@@ -66,6 +68,8 @@ git -C /tmp/xwayland-satellite-patchcheck checkout v0.8.1
 git -C /tmp/xwayland-satellite-patchcheck apply /home/wwt/niri/patches/xwayland-satellite-minimize.patch
 cargo test selection --locked --manifest-path /tmp/xwayland-satellite-patchcheck/Cargo.toml
 cargo test quick_empty_data_offer --locked --manifest-path /tmp/xwayland-satellite-patchcheck/Cargo.toml
+cargo test maximize --locked --manifest-path /tmp/xwayland-satellite-patchcheck/Cargo.toml
+cargo test --test integration client_maximize --locked --manifest-path /tmp/xwayland-satellite-patchcheck/Cargo.toml
 ```
 
 Build and wrapper self-check:
@@ -118,6 +122,6 @@ bridge process.
 - Do not assume `wl-copy`/`wl-paste` passing means X11 interop works. That only
   proves Wayland-side selection works.
 - Do not replace the glamor wrapper with `/usr/bin/xwayland-satellite`; the
-  system package can be older and misses both the Tahoe minimize patch and this
-  clipboard patch.
+  system package can be older and miss Tahoe's maximize, minimize, and
+  clipboard compatibility fixes.
 - Do not forget to restart the running bridge after installing a new binary.

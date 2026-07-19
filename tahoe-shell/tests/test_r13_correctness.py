@@ -51,9 +51,13 @@ class R13CorrectnessTests(unittest.TestCase):
     def test_lock_screen_has_one_password_state_and_clock_is_declared_first(self) -> None:
         lock = LOCK.read_text(encoding="utf-8")
         self.assertNotRegex(lock, r"property\s+string\s+password\b")
-        self.assertIn("pam.respond(passwordInput.text)", lock)
-        self.assertIn('passwordInput.text = ""', lock)
-        self.assertLess(lock.index("id: lockClock"), lock.index("clockNow: lockClock.date"))
+        self.assertEqual(lock.count('property string credentialText: ""'), 1)
+        self.assertIn("root.pam.respond(root.credentialText)", lock)
+        self.assertIn('root.credentialText = ""', lock)
+        self.assertLess(
+            lock.index("property SystemClock lockClock"),
+            lock.index("clockNow: root.lockClock.date"),
+        )
 
     def test_reported_startup_reference_errors_are_removed(self) -> None:
         shell = SHELL.read_text(encoding="utf-8")

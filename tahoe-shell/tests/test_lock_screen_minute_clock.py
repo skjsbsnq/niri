@@ -28,6 +28,10 @@ from pathlib import Path
 
 SHELL_ROOT = Path(__file__).resolve().parents[1]
 LOCK_SCREEN = SHELL_ROOT / "components" / "LockScreen.qml"
+SHELL = SHELL_ROOT / "shell.qml"
+WAYLAND_LOCK_MOCK = (
+    SHELL_ROOT / "tests" / "qml_imports" / "Quickshell" / "Wayland" / "WlSessionLock.qml"
+)
 QML_TEST = Path(__file__).with_name("tst_lock_screen_minute_clock.qml")
 
 
@@ -81,10 +85,59 @@ class LockScreenSystemClockContractTests(unittest.TestCase):
     def test_display_binds_clock_date(self) -> None:
         src = LOCK_SCREEN.read_text(encoding="utf-8")
         self.assertIn('Qt.formatDateTime(root.clockNow, "HH:mm")', src)
-        self.assertIn("readonly property date clockNow: lockClock.date", src)
+        self.assertIn("readonly property date clockNow: root.lockClock.date", src)
         # No local writable date owner (must be readonly binding to SystemClock).
-        self.assertRegex(src, r"readonly\s+property\s+date\s+clockNow\s*:\s*lockClock\.date")
+        self.assertRegex(src, r"readonly\s+property\s+date\s+clockNow\s*:\s*root\.lockClock\.date")
         self.assertNotRegex(src, r"property\s+date\s+clockNow\s*:\s*new\s+Date")
+
+    def test_process_wide_owners_are_not_captured_by_surface_component(self) -> None:
+        src = LOCK_SCREEN.read_text(encoding="utf-8")
+        self.assertRegex(src, r"property\s+SystemClock\s+lockClock\s*:\s*SystemClock")
+        self.assertRegex(src, r"property\s+PamContext\s+pam\s*:\s*PamContext")
+        self.assertIn("root.lockClock.resync()", src)
+        self.assertIn("root.pam.start()", src)
+        self.assertEqual(src.count('property string credentialText: ""'), 1)
+        self.assertIn("onCredentialTextChanged", src)
+        self.assertIn("passwordInput.text = root.credentialText", src)
+        self.assertIn("root.pam.respond(root.credentialText)", src)
+        self.assertNotIn("passwordInput.text", _extract_function_body(src, "resetPasswordInput"))
+        self.assertNotIn("passwordInput.text", _extract_function_body(src, "submitPassword"))
+
+    def test_r14_motion_feedback_and_bounded_secure_exit(self) -> None:
+        src = LOCK_SCREEN.read_text(encoding="utf-8")
+        shell = SHELL.read_text(encoding="utf-8")
+        button_surface = (
+            SHELL_ROOT / "components" / "controls" / "ButtonSurface.qml"
+        ).read_text(encoding="utf-8")
+        self.assertIn('import "Motion.js" as Motion', src)
+        self.assertIn('import "controls" as Controls', src)
+        self.assertIn("Controls.IconButton", src)
+        self.assertIn("Motion.pressScaleFor", button_surface)
+        self.assertIn("property bool unlocking", src)
+        self.assertIn("Math.min(180, Motion.panelExit(settingsService))", src)
+        self.assertIn("property SequentialAnimation unlockSequence", src)
+        self.assertIn("root.beginUnlock()", src)
+        self.assertNotIn("root.unlock();\n                return;", src)
+        self.assertIn("failureFeedbackSerial", src)
+        self.assertIn("triggerAuthenticationFailure", src)
+        self.assertIn("Behavior on border.color", src)
+        self.assertIn("id: failureShakeAnimation", src)
+        self.assertIn("renderedText", src)
+        self.assertNotIn("SpringAnimation", src)
+        self.assertRegex(
+            shell,
+            r"LockScreen\s*\{[^}]*settingsService:\s*desktopSettings",
+            re.DOTALL,
+        )
+
+    def test_wayland_mock_models_two_surfaces_and_secure_release(self) -> None:
+        mock = WAYLAND_LOCK_MOCK.read_text(encoding="utf-8")
+        self.assertIn("default property Component surface", mock)
+        self.assertIn("property int screenCount: 2", mock)
+        self.assertIn("surface.createObject(root)", mock)
+        self.assertIn("root.secure = root.surfaceInstances.length === root.screenCount", mock)
+        self.assertIn("root.secure = false", mock)
+        self.assertIn("root.releaseSurfaces()", mock)
 
     def test_real_qml_lock_screen_system_clock(self) -> None:
         qt6_runner = Path("/usr/lib/qt6/bin/qmltestrunner")

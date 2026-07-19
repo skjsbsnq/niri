@@ -1,18 +1,18 @@
-pragma Singleton
 import QtQml
+pragma Singleton
 
 QtObject {
-    // QML property names must be lower-case; expose enum-like values used by LockScreen.
+
+    enum Result {
+        Success = 0,
+        MaxTries = 1
+    }
+
     readonly property int success: 0
     readonly property int maxTries: 1
 
-    // Bridge production-style PamResult.Success lookups via JS property names on the
-    // singleton object (not Q_PROPERTY). Attached after construction below.
-    Component.onCompleted: {
-        // QtObject can receive dynamic JS properties.
-        PamResult["Success"] = 0;
-        PamResult["MaxTries"] = 1;
+    function toString(v) {
+        return String(v);
     }
 
-    function toString(v) { return String(v); }
 }

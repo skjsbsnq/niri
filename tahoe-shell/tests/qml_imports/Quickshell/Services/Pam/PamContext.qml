@@ -10,16 +10,22 @@ QtObject {
     property bool responseRequired: false
     property bool responseVisible: false
     property string lastResponse: ""
+    property bool startResult: true
+    property int startCount: 0
+    property int abortCount: 0
 
     signal completed(int result)
     signal error(int err)
     signal pamMessage()
 
     function start() {
-        return true;
+        startCount += 1;
+        active = startResult;
+        return startResult;
     }
 
     function abort() {
+        abortCount += 1;
         active = false;
     }
 
@@ -27,4 +33,5 @@ QtObject {
         lastResponse = String(text || "");
         return true;
     }
+
 }

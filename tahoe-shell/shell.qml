@@ -775,6 +775,7 @@ ShellRoot {
 
     LockScreen {
         id: lockScreen
+        settingsService: desktopSettings
     }
 
     IdleMonitor {

@@ -268,13 +268,13 @@ animations {
     window-open {
         duration-ms 220
         curve "ease-out-cubic"
-        scale-from 0.97
+        scale-from 0.94
     }
 
     window-close {
         duration-ms 180
         curve "ease-out-cubic"
-        scale-to 0.97
+        scale-to 0.94
     }
 
     window-movement {
@@ -417,8 +417,7 @@ layer-rule {
         layer-open {
             style "edge-reveal"
             edge "top"
-            // edge-reveal uses the layer surface extent; this is not a short-travel knob.
-            distance 24
+            // edge-reveal uses the layer surface extent; distance is not a short-travel knob and is intentionally omitted.
             opacity-from 0.84
             spring damping-ratio=0.85 stiffness=380 epsilon=0.0005
             opacity-duration-ms 110
@@ -427,8 +426,6 @@ layer-rule {
         layer-close {
             style "edge-reveal"
             edge "top"
-            // edge-reveal uses the layer surface extent; this is not a short-travel knob.
-            distance 24
             opacity-to 1.0
             transform-duration-ms 210
             transform-curve "emphasized-accel"
@@ -446,8 +443,6 @@ layer-rule {
         layer-open {
             style "edge-reveal"
             edge "top"
-            // edge-reveal uses the layer surface extent; this is not a short-travel knob.
-            distance 24
             opacity-from 0.86
             spring damping-ratio=0.85 stiffness=380 epsilon=0.0005
             opacity-duration-ms 100
@@ -456,8 +451,6 @@ layer-rule {
         layer-close {
             style "edge-reveal"
             edge "top"
-            // edge-reveal uses the layer surface extent; this is not a short-travel knob.
-            distance 24
             opacity-to 1.0
             transform-duration-ms 210
             transform-curve "emphasized-accel"
@@ -508,7 +501,7 @@ layer-rule {
         }
         layer-close {
             style "popout"
-            scale-to 0.992
+            scale-to 0.96
             opacity-to 0
             transform-duration-ms 110
             transform-curve "emphasized-accel"
@@ -566,9 +559,7 @@ layer-rule {
         layer-open {
             style "edge-reveal"
             edge "top"
-            // edge-reveal uses the layer surface extent; this is not a short-travel knob.
-            distance 24
-            opacity-from 0.84
+            opacity-from 0.68
             spring damping-ratio=0.85 stiffness=380 epsilon=0.0005
             opacity-duration-ms 110
             opacity-curve "standard-decel"
@@ -576,12 +567,11 @@ layer-rule {
         layer-close {
             style "edge-reveal"
             edge "top"
-            // edge-reveal uses the layer surface extent; this is not a short-travel knob.
-            distance 24
-            opacity-to 1.0
+            opacity-to 0
             transform-duration-ms 210
             transform-curve "emphasized-accel"
-            opacity-duration-ms 0
+            opacity-duration-ms 120
+            opacity-curve "emphasized-accel"
         }
     }
 }

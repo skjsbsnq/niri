@@ -147,6 +147,15 @@ class NiriSettingsToolTests(unittest.TestCase):
                 close = niri_settings_tool.MOTION_PROFILE_LAYERS[profile]["toast"]["layer-close"]
                 self.assertEqual(close["opacity-to"], 0.0)
 
+    def test_all_motion_profiles_preserve_small_popup_fade_remediation(self) -> None:
+        for profile in niri_settings_tool.MOTION_PROFILE_NAMES:
+            with self.subTest(profile=profile):
+                popup = niri_settings_tool.MOTION_PROFILE_LAYERS[profile]["small_popup"]
+                self.assertEqual(popup["layer-close"]["opacity-to"], 0.0)
+                self.assertEqual(popup["layer-close"]["opacity-curve"], "emphasized-accel")
+                if profile != "reduced":
+                    self.assertEqual(popup["layer-open"]["opacity-from"], 0.68)
+
     def test_motion_profile_write_requires_known_layer_animation_groups(self) -> None:
         original = TAHOE_PHASE0.read_text(encoding="utf-8")
         # T21/T22: process menu lives in the unified `menu` layer-rule; renaming

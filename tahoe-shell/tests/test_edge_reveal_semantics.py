@@ -159,6 +159,10 @@ class EdgeRevealSemanticsTests(unittest.TestCase):
         self.assertIn("edge-reveal uses the layer surface extent", text)
         self.assertIn("not a short-travel knob", text)
 
+        for block in extract_blocks(text, r"(?m)^\s*layer-(?:open|close)\s*\{"):
+            if re.search(r'(?m)^\s*style\s+"edge-reveal"\s*$', block):
+                self.assertNotRegex(block, r"(?m)^\s*distance\b")
+
     def test_runtime_full_surface_edge_reveal_regression_test_remains(self) -> None:
         text = LAYER_TESTS.read_text(encoding="utf-8")
 
@@ -189,6 +193,24 @@ class EdgeRevealSemanticsTests(unittest.TestCase):
                 self.assertRegex(block, r'(?m)^\s*edge\s+"top"\s*$')
                 for forbidden in ("pop-slide", "scale-from", "scale-to", "origin"):
                     self.assertNotIn(forbidden, block)
+
+        self.assertRegex(layer_open, r"(?m)^\s*opacity-from\s+0\.68\s*$")
+        self.assertRegex(layer_close, r"(?m)^\s*opacity-to\s+0\s*$")
+        self.assertRegex(layer_close, r"(?m)^\s*opacity-duration-ms\s+120\s*$")
+        self.assertRegex(layer_close, r'(?m)^\s*opacity-curve\s+"emphasized-accel"\s*$')
+
+    def test_spotlight_close_scale_is_symmetric_with_open(self) -> None:
+        text = CONFIG.read_text(encoding="utf-8")
+        spotlight_rule = next(
+            rule
+            for rule in extract_blocks(text, r"(?m)^\s*layer-rule\s*\{")
+            if layer_rule_namespaces(rule) == {"tahoe-spotlight"}
+        )
+        animations = extract_one_block(spotlight_rule, r"(?m)^\s*animations\s*\{")
+        layer_open = extract_one_block(animations, r"(?m)^\s*layer-open\s*\{")
+        layer_close = extract_one_block(animations, r"(?m)^\s*layer-close\s*\{")
+        self.assertRegex(layer_open, r"(?m)^\s*scale-from\s+0\.96\s*$")
+        self.assertRegex(layer_close, r"(?m)^\s*scale-to\s+0\.96\s*$")
 
     def test_menus_use_pop_slide_with_pointer_origin(self) -> None:
         """T21/T22: app and shell menus share pointer pop-slide + 4px drop."""
@@ -240,11 +262,11 @@ class WindowLifecycleAnimationTests(unittest.TestCase):
         for block, expected_lines in (
             (
                 window_open,
-                (r"duration-ms\s+220", r'curve\s+"ease-out-cubic"', r"scale-from\s+0\.97"),
+                (r"duration-ms\s+220", r'curve\s+"ease-out-cubic"', r"scale-from\s+0\.94"),
             ),
             (
                 window_close,
-                (r"duration-ms\s+180", r'curve\s+"ease-out-cubic"', r"scale-to\s+0\.97"),
+                (r"duration-ms\s+180", r'curve\s+"ease-out-cubic"', r"scale-to\s+0\.94"),
             ),
             (window_restore, (r"duration-ms\s+300", r'curve\s+"linear"')),
         ):

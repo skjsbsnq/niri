@@ -903,8 +903,8 @@ MOTION_PROFILE_LAYERS = {
             "layer-close": layer_phase(110, 80, "opacity-to", 0.0, "emphasized-accel"),
         },
         "small_popup": {
-            "layer-open": spring_phase(0.85, 380, 0.0005, 110, "opacity-from", 0.84, "standard-decel"),
-            "layer-close": {**layer_phase(210, 0, "opacity-to", 1.0), "opacity-curve": None},
+            "layer-open": spring_phase(0.85, 380, 0.0005, 110, "opacity-from", 0.68, "standard-decel"),
+            "layer-close": layer_phase(210, 120, "opacity-to", 0.0, "emphasized-accel"),
         },
         "menu": {
             "layer-open": spring_phase(0.88, 500, 0.001, 90, "opacity-from", 0.0, "standard-decel"),
@@ -933,8 +933,8 @@ MOTION_PROFILE_LAYERS = {
             "layer-close": layer_phase(90, 60, "opacity-to", 0.0, "emphasized-accel"),
         },
         "small_popup": {
-            "layer-open": spring_phase(0.9, 520, 0.0005, 80, "opacity-from", 0.84, "standard-decel"),
-            "layer-close": {**layer_phase(140, 0, "opacity-to", 1.0), "opacity-curve": None},
+            "layer-open": spring_phase(0.9, 520, 0.0005, 80, "opacity-from", 0.68, "standard-decel"),
+            "layer-close": layer_phase(140, 90, "opacity-to", 0.0, "emphasized-accel"),
         },
         "menu": {
             "layer-open": spring_phase(0.95, 750, 0.001, 70, "opacity-from", 0.0, "standard-decel"),
@@ -963,8 +963,8 @@ MOTION_PROFILE_LAYERS = {
             "layer-close": layer_phase(150, 90, "opacity-to", 0.0, "emphasized-accel"),
         },
         "small_popup": {
-            "layer-open": spring_phase(0.82, 300, 0.0005, 130, "opacity-from", 0.84, "standard-decel"),
-            "layer-close": {**layer_phase(210, 0, "opacity-to", 1.0), "opacity-curve": None},
+            "layer-open": spring_phase(0.82, 300, 0.0005, 130, "opacity-from", 0.68, "standard-decel"),
+            "layer-close": layer_phase(210, 140, "opacity-to", 0.0, "emphasized-accel"),
         },
         "menu": {
             "layer-open": spring_phase(0.82, 420, 0.001, 110, "opacity-from", 0.0, "standard-decel"),

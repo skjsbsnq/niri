@@ -759,10 +759,10 @@ PanelWindow {
             Item {
                 id: inputMethodButton
 
-                Layout.preferredWidth: Math.max(root.statusIconWidth, inputMethodLabel.implicitWidth + 10)
+                Layout.preferredWidth: 0
                 Layout.preferredHeight: root.statusItemHeight
                 Layout.alignment: Qt.AlignVCenter
-                // Always show the language glyph; unavailable uses "--" from displayText.
+                visible: false
                 scale: Motion.pressScaleFor(root.settingsService, inputMethodMouse.pressed)
                 opacity: inputMethodMouse.pressed ? 0.75 : (root.inputMethodService && root.inputMethodService.available ? 1 : 0.55)
 

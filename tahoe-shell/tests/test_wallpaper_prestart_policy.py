@@ -129,6 +129,83 @@ class WallpaperPrestartPolicyTests(unittest.TestCase):
         self.assertEqual(args.count("--no-fullscreen-pause"), 1)
         self.assertEqual(str(record["command"]).count("--no-fullscreen-pause"), 1)
 
+    def test_external_prestart_honors_explicit_effect_flags(self) -> None:
+        """UX false for disableParallax/Particles must match Wallpaper.qml exactly."""
+        with tempfile.TemporaryDirectory(prefix="tahoe-wallpaper-effects-") as temp:
+            root = Path(temp)
+            home = root / "home"
+            state = root / "state"
+            bin_dir = root / "bin"
+            arg_log = root / "wallpaper-args.json"
+            bin_dir.mkdir(parents=True)
+            state.mkdir(parents=True)
+            (state / "desktop-settings.json").write_text(
+                json.dumps(
+                    {
+                        "wallpaperMode": "external",
+                        "wallpaperEngineFps": 12,
+                        "wallpaperEngineIdleFps": 8,
+                        "wallpaperPauseWhenFullscreen": True,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            active_dir = home / ".config" / "Linux Wallpaper Engine"
+            active_dir.mkdir(parents=True)
+            (active_dir / "active-wallpapers.json").write_text(
+                json.dumps(
+                    {
+                        "activeWallpapers": {
+                            "eDP-2": {
+                                "backgroundId": "/wallpapers/example",
+                                "screen": "eDP-2",
+                                "scaling": "fill",
+                                "fps": 30,
+                                "silent": True,
+                                "disableParallax": False,
+                                "disableParticles": False,
+                            }
+                        }
+                    }
+                ),
+                encoding="utf-8",
+            )
+            niri = bin_dir / "niri"
+            niri.write_text(
+                "#!/usr/bin/env python3\n"
+                "import json\n"
+                'print(json.dumps({"eDP-2": {}}))\n',
+                encoding="utf-8",
+            )
+            niri.chmod(0o755)
+            wallpaper = bin_dir / "linux-wallpaperengine"
+            wallpaper.write_text(
+                "#!/usr/bin/env python3\n"
+                "import json, os, sys, time\n"
+                'open(os.environ["ARG_LOG"], "w", encoding="utf-8").write('
+                "json.dumps(sys.argv[1:]))\n"
+                "time.sleep(0.4)\n",
+                encoding="utf-8",
+            )
+            wallpaper.chmod(0o755)
+            env = os.environ.copy()
+            env.update(
+                {
+                    "HOME": str(home),
+                    "TAHOE_STATE_DIR": str(state),
+                    "ARG_LOG": str(arg_log),
+                    "PATH": str(bin_dir) + os.pathsep + env.get("PATH", ""),
+                }
+            )
+            subprocess.run(["bash", str(PRESTART)], env=env, check=True, timeout=10)
+            deadline = time.monotonic() + 2
+            while not arg_log.exists() and time.monotonic() < deadline:
+                time.sleep(0.01)
+            self.assertTrue(arg_log.exists())
+            args = json.loads(arg_log.read_text(encoding="utf-8"))
+            self.assertNotIn("--disable-parallax", args)
+            self.assertNotIn("--disable-particles", args)
+
     def test_prestart_without_announced_outputs_defers_to_quickshell(self) -> None:
         with tempfile.TemporaryDirectory(prefix="tahoe-wallpaper-no-output-") as temp:
             root = Path(temp)

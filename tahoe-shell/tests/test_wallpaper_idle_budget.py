@@ -48,13 +48,18 @@ class WallpaperIdleBudgetTests(unittest.TestCase):
         self.assertIn("source: surface.captureLoadSource", text)
         self.assertIn("capturedWallpaperReady", text)
         self.assertIn("requestCapturedWallpaperReload", text)
-        self.assertIn("fillMode: Image.PreserveAspectFit", text)
+        # Capture and static fallback both crop to fill; no letterbox black bars.
         self.assertIn("fillMode: Image.PreserveAspectCrop", text)
+        self.assertNotIn("fillMode: Image.PreserveAspectFit", text)
         self.assertIn("cache: false", text)
         self.assertNotIn("project.json", text)
         self.assertNotIn("metadata.preview", text)
         self.assertIn("status !== Image.Error", text)
         self.assertIn("surface.configuredStaticWallpaperFailed = true", text)
+        # Same-path reloads must toggle source so Error retries re-fetch.
+        self.assertIn("surface.captureLoadSource === nextSource", text)
+        self.assertIn("surface.captureLoadSource = \"\"", text)
+        self.assertIn("opacity: 1", text)
 
     def test_wallpaper_idle_monitor_and_fps_rewrite(self) -> None:
         text = WALLPAPER.read_text(encoding="utf-8")
@@ -93,6 +98,36 @@ class WallpaperIdleBudgetTests(unittest.TestCase):
         self.assertIn("root.appliedWallpaperFps", text)
         # Idle path must stop live engine when pause is enabled.
         self.assertIn("&& liveWallpaperAllowed", text)
+
+    def test_external_sync_waits_for_command_and_screen(self) -> None:
+        text = WALLPAPER.read_text(encoding="utf-8")
+        sync = re.search(
+            r"function syncExternalProcess\(\) \{(.*?)\n    \}",
+            text,
+            re.S,
+        )
+        self.assertIsNotNone(sync)
+        body = sync.group(1)
+        self.assertIn("if (screenName().length === 0)", body)
+        self.assertIn("if (externalCommand.length === 0)", body)
+        self.assertIn("if (!externalStateLoaded || !prestartStateLoaded)", body)
+        # Empty-command path must not release prestart while state is still loading.
+        self.assertIn("externalStateLoaded", body)
+        self.assertIn("tryAdoptPrestartedWallpaper(\"external\")", body)
+        self.assertIn("if (dynamicDesired || externalDesired)", text)
+        self.assertIn("showRestartCover()", text)
+        # Restart cover must not paint the configured static wallpaper.
+        cover = re.search(r"id: restartCover(.*?)// Live wallpapers", text, re.S)
+        self.assertIsNotNone(cover)
+        self.assertNotIn("staticWallpaperSource()", cover.group(1))
+        self.assertIn("lockWallpaperCapturePath", cover.group(1))
+        self.assertIn("&& !restartCoverVisible", text)
+        # Unexpected process exit must drop the cover so static can fall back.
+        self.assertIn("!root.dynamicRestartPending", text)
+        self.assertIn("!root.externalRestartPending", text)
+        self.assertIn("root.restartCoverVisible = false", text)
+        # Valid prestart record reloads clear the sticky released flag.
+        self.assertIn("prestartedWallpaperReleased = false", text)
 
     def test_live_wallpaper_startup_never_reveals_static_fallback(self) -> None:
         text = WALLPAPER.read_text(encoding="utf-8")

@@ -95,4 +95,25 @@ TestCase {
         compare(windowsService.events[windowsService.events.length - 2].left, initialLeft + 120);
         compare(windowsService.events[windowsService.events.length - 1].kind, "minimize");
     }
+
+    function test_fullscreen_suppresses_rectangle_republish() {
+        windowsService.reset();
+        button.dockFullscreenActive = true;
+        button.updateDockRectangle();
+        compare(windowsService.callCount, 0);
+        // Force also blocked while still fullscreen (layer unmapped).
+        button.updateDockRectangle(true);
+        compare(windowsService.callCount, 0);
+
+        // After fullscreen clears, offset may still be non-zero during reveal —
+        // publish must work so minimize targets are refilled after niri unmap clear.
+        button.dockFullscreenOffset = 40;
+        button.dockFullscreenActive = false;
+        button.updateDockRectangle();
+        compare(windowsService.callCount, 1);
+
+        windowsService.reset();
+        button.updateDockRectangle(true);
+        compare(windowsService.callCount, 1);
+    }
 }

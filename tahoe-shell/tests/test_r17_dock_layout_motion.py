@@ -123,12 +123,20 @@ class R17DockLayoutMotionTests(unittest.TestCase):
             )
 
         self.assertIn("property real dockFullscreenOffset: 0", self.button)
-        self.assertIn(
-            "onDockFullscreenOffsetChanged: scheduleDockRectangleUpdate()",
-            self.button,
-        )
+        self.assertIn("property bool dockFullscreenActive: false", self.button)
+        self.assertIn("function dockRectanglePublishBlocked()", self.button)
+        self.assertIn("return root.dockFullscreenActive;", self.button)
+        # Must not gate on slide offset — that blocked minimize rects after exit.
+        self.assertNotIn("dockFullscreenOffset > 0.5", self.button)
+        self.assertIn("updateDockRectangle(true)", self.button)
+        self.assertIn("onDockFullscreenOffsetChanged: scheduleDockRectangleUpdate()", self.button)
+        self.assertIn("onDockFullscreenActiveChanged:", self.button)
         self.assertIn(
             "dockFullscreenOffset: root.fullscreenTransition * root.dockSurfaceHeight",
+            delegate_prefix,
+        )
+        self.assertIn(
+            "dockFullscreenActive: root.fullscreenActive",
             delegate_prefix,
         )
         self.assertIn(

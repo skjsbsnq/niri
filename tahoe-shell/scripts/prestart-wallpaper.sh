@@ -341,10 +341,11 @@ def external_args(entry, fallback_screen):
         if entry.get(key):
             args.append(option)
 
-    # Default quieter for compositor cost unless UX explicitly enables effects.
-    if entry.get("disableParallax", True):
+    # Match Wallpaper.qml: only default quieter when the UX key is absent.
+    # An explicit false must not inject the flag or adoption command strings diverge.
+    if entry.get("disableParallax") is True or "disableParallax" not in entry:
         args.append("--disable-parallax")
-    if entry.get("disableParticles", True):
+    if entry.get("disableParticles") is True or "disableParticles" not in entry:
         args.append("--disable-particles")
 
     if not settings_pause_when_fullscreen():

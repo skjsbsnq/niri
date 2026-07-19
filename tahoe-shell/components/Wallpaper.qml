@@ -63,11 +63,16 @@ PanelWindow {
         && !dynamicActive
         && !dynamicSuppressesStatic
         && !externalSuppressesStatic
+        && !restartCoverVisible
     readonly property bool liveWallpaperVisible: settingsReady && !showStaticWallpaper
+    // Keep the background layer transparent whenever a live renderer is
+    // expected or a restart cover is up, so the compositor never composites
+    // the configured static image underneath a starting/restarting engine.
     readonly property bool yieldToDynamicWallpaper: !settingsReady
         || dynamicActive
         || dynamicSuppressesStatic
         || externalSuppressesStatic
+        || restartCoverVisible
     property string externalCommand: ""
     property bool dynamicActive: false
     property bool dynamicRestartPending: false
@@ -310,9 +315,16 @@ PanelWindow {
     }
 
     function refreshExternalCommand() {
-        externalCommand = (settingsReady && settingsService.wallpaperMode === "external" && liveWallpaperAllowed)
-            ? restoreCommandFromUxState()
-            : "";
+        // Only clear when external mode is actually off. While settings/UX state
+        // are still loading, keep the previous command so a prestarted renderer
+        // is not released (and the desktop does not flash the static fallback).
+        if (!(settingsReady && settingsService.wallpaperMode === "external" && liveWallpaperAllowed)) {
+            externalCommand = "";
+            return;
+        }
+        var restored = restoreCommandFromUxState();
+        if (restored.length > 0 || externalStateLoaded)
+            externalCommand = restored;
     }
 
     function prepareWallpaperProcessStart() {
@@ -398,6 +410,10 @@ PanelWindow {
                     && String(parsed.output || "") === screenName()
                     && prestartedRecordProcessMatches(parsed)) {
                 prestartedWallpaperRecord = parsed;
+                // A freshly validated record may replace one we previously
+                // released (health false-negative, intentional stop). Allow
+                // adoption again for this instance lifetime.
+                prestartedWallpaperReleased = false;
             } else if (parsed && prestartedWallpaperRecordPath.length > 0) {
                 Quickshell.execDetached({
                     command: ["rm", "-f", "--", prestartedWallpaperRecordPath],
@@ -479,6 +495,11 @@ PanelWindow {
     function syncDynamicProcess() {
         if (!completed)
             return;
+        // Wait for the output binding: prestart records and engine args are
+        // per-screen. Starting against an empty name creates a second renderer
+        // that races the supervised prestart process.
+        if (screenName().length === 0)
+            return;
 
         if (!dynamicDesired || dynamicCommand.length === 0) {
             if (prestartedWallpaperMode === "dynamic")
@@ -510,6 +531,7 @@ PanelWindow {
         }
 
         if (prestartStateLoaded && prestartedWallpaperRecord
+                && dynamicCommand.length > 0
                 && !prestartedRecordMatches("dynamic")) {
             showRestartCover();
             releasePrestartedWallpaper();
@@ -545,8 +567,39 @@ PanelWindow {
     function syncExternalProcess() {
         if (!completed)
             return;
+        if (screenName().length === 0)
+            return;
 
-        if (!externalDesired || externalCommand.length === 0) {
+        if (!externalDesired) {
+            if (prestartedWallpaperMode === "external")
+                releasePrestartedWallpaper();
+            externalRestartPending = false;
+            externalLaunchFailed = false;
+            externalProcess.running = false;
+            if (!dynamicDesired && !dynamicProcess.running
+                    && !prestartedWallpaperAdopted)
+                restartCoverVisible = false;
+            if (!dynamicProcess.running && !prestartedWallpaperAdopted)
+                dynamicActive = false;
+            return;
+        }
+
+        // External command is reconstructed from UX JSON. Until that file is
+        // loaded (or prestart is still being evaluated) keep any adopted
+        // prestart renderer and do not tear it down over an empty command.
+        if (externalCommand.length === 0) {
+            if (!externalStateLoaded || !prestartStateLoaded)
+                return;
+            if (prestartedWallpaperRecord && !prestartedWallpaperAdopted
+                    && tryAdoptPrestartedWallpaper("external")) {
+                externalLaunchFailed = false;
+                return;
+            }
+            if (prestartedWallpaperAdopted && prestartedWallpaperMode === "external")
+                return;
+            if (externalProcess.running)
+                return;
+            // Loaded state with no command for this output: fall through to stop.
             if (prestartedWallpaperMode === "external")
                 releasePrestartedWallpaper();
             externalRestartPending = false;
@@ -575,7 +628,11 @@ PanelWindow {
             releasePrestartedWallpaper();
         }
 
+        // Only release a non-matching prestart record once we can compare a
+        // fully-built expected command. Early empty/partial comparisons used
+        // to kill the boot renderer and flash the static wallpaper.
         if (prestartStateLoaded && prestartedWallpaperRecord
+                && externalCommand.length > 0
                 && !prestartedRecordMatches("external")) {
             showRestartCover();
             releasePrestartedWallpaper();
@@ -633,6 +690,13 @@ PanelWindow {
     }
     onScreenChanged: {
         if (root.completed) {
+            // Output name drives both the prestart record path and the engine
+            // --screen-root. Defer until the PanelWindow has a real screen so we
+            // never adopt/start against "default" and thrash the boot renderer.
+            if (root.screenName().length === 0)
+                return;
+            if (root.dynamicDesired || root.externalDesired)
+                root.showRestartCover();
             root.reloadPrestartedWallpaperState();
             root.refreshExternalCommand();
             root.syncDynamicProcess();
@@ -656,6 +720,10 @@ PanelWindow {
     Component.onCompleted: {
         appliedWallpaperFps = effectiveWallpaperFps;
         completed = true;
+        // Cover any gap before the live renderer is adopted/started so boot
+        // never falls through a transparent background to the compositor clear.
+        if (dynamicDesired || externalDesired)
+            showRestartCover();
         reloadPrestartedWallpaperState();
         activeWallpaperFile.reload();
         syncDynamicProcess();
@@ -734,6 +802,8 @@ PanelWindow {
     // Intentional command changes (including the fullscreen-pause setting) require a
     // renderer restart. Hold the renderer's own full-size captured frame over the gap
     // so the desktop never falls through to a default image or an empty background.
+    // Prefer the live capture only; the configured static path is a last-resort dim
+    // underlay so unlock/restart never flashes a mismatched default wallpaper.
     Item {
         id: restartCover
         anchors.fill: parent
@@ -753,19 +823,11 @@ PanelWindow {
         }
 
         Image {
-            anchors.fill: parent
-            source: root.staticWallpaperSource()
-            fillMode: Image.PreserveAspectCrop
-            asynchronous: true
-            smooth: true
-        }
-
-        Image {
             id: restartCoverCapture
             anchors.fill: parent
             source: root.restartCoverVisible || restartCover.opacity > 0.01
                 ? root.lockWallpaperCapturePath(root.screenName()) : ""
-            fillMode: Image.PreserveAspectFit
+            fillMode: Image.PreserveAspectCrop
             asynchronous: true
             cache: false
             smooth: true
@@ -827,6 +889,12 @@ PanelWindow {
                 liveWallpaperReadyTimer.stop();
                 root.dynamicActive = false;
             }
+            // Intentional restarts keep the cover; unexpected exit must drop it
+            // so showStaticWallpaper can fall back instead of a permanent void.
+            if (!root.dynamicRestartPending
+                    && !externalProcess.running
+                    && !root.prestartedWallpaperAdopted)
+                root.restartCoverVisible = false;
         }
     }
 
@@ -849,6 +917,10 @@ PanelWindow {
                 liveWallpaperReadyTimer.stop();
                 root.dynamicActive = false;
             }
+            if (!root.externalRestartPending
+                    && !dynamicProcess.running
+                    && !root.prestartedWallpaperAdopted)
+                root.restartCoverVisible = false;
         }
     }
 

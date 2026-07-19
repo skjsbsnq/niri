@@ -210,7 +210,9 @@ WlSessionLock {
             return surface.capturedWallpaperReady
                 ? surface.capturedWallpaperSource : surface.fallbackWallpaperSource;
         }
-        color: "#101215"
+        // Match the desktop wallpaper panel so the first lock frame is never a
+        // pure black clear while the capture Image is still decoding.
+        color: "#1c1d20"
 
         function shouldLoadCapturedWallpaper() {
             return surface.followWallpaper && surface.lockWallpaperMode !== "static";
@@ -219,16 +221,26 @@ WlSessionLock {
         function requestCapturedWallpaperReload(resetAttempts) {
             if (resetAttempts)
                 surface.captureRetryCount = 0;
-            surface.capturedWallpaperReady = false;
-            surface.captureLoadSource = "";
             if (!surface.shouldLoadCapturedWallpaper()) {
                 surface.captureRetryTimer.stop();
+                surface.capturedWallpaperReady = false;
+                surface.captureLoadSource = "";
                 return;
             }
-            Qt.callLater(function() {
-                if (surface.shouldLoadCapturedWallpaper())
-                    surface.captureLoadSource = surface.capturedWallpaperSource;
-            });
+            var nextSource = surface.capturedWallpaperSource;
+            // Same path must toggle source or Qt Image will not re-fetch.
+            // Ready→ready: brief blank is acceptable for cache bust (underlay
+            // holds). Not-ready / Error: always blank then restore so retries
+            // after missing or corrupt capture actually reload.
+            if (surface.captureLoadSource === nextSource) {
+                surface.captureLoadSource = "";
+                Qt.callLater(function() {
+                    if (surface.shouldLoadCapturedWallpaper())
+                        surface.captureLoadSource = nextSource;
+                });
+                return;
+            }
+            surface.captureLoadSource = nextSource;
         }
 
         function scheduleCapturedWallpaperRetry() {
@@ -262,6 +274,8 @@ WlSessionLock {
         }
 
         Component.onCompleted: {
+            // Load the capture immediately so the first composited lock frame
+            // already has wallpaper pixels; only the chrome fades in.
             if (root.locked)
                 surface.requestCapturedWallpaperReload(true);
             Qt.callLater(function() {
@@ -273,16 +287,10 @@ WlSessionLock {
             id: visualLayer
 
             anchors.fill: parent
-            opacity: surface.entered && !root.unlocking ? 1 : 0
-
-            Behavior on opacity {
-                NumberAnimation {
-                    duration: root.unlocking
-                        ? root.unlockExitDuration : root.lockEnterDuration
-                    easing.type: root.unlocking
-                        ? Motion.emphasizedAccel : Motion.emphasizedDecel
-                }
-            }
+            // Wallpaper stays fully opaque for the entire lock surface lifetime.
+            // Unlock only fades chrome; the surface is then destroyed, so the
+            // desktop live wallpaper is revealed without a static cross-fade.
+            opacity: 1
 
             Image {
                 id: backgroundImage
@@ -290,7 +298,7 @@ WlSessionLock {
                 source: surface.fallbackWallpaperSource
                 fillMode: Image.PreserveAspectCrop
                 asynchronous: true
-                cache: false
+                cache: true
                 smooth: true
                 mipmap: false
                 onStatusChanged: {
@@ -308,8 +316,10 @@ WlSessionLock {
                 id: capturedWallpaperImage
                 anchors.fill: parent
                 source: surface.captureLoadSource
-                opacity: surface.capturedWallpaperReady ? 1 : 0
-                fillMode: Image.PreserveAspectFit
+                // Keep last good frame visible during reloads; only hide when we
+                // truly have no capture yet (first lock after boot).
+                opacity: (surface.capturedWallpaperReady || status === Image.Ready) ? 1 : 0
+                fillMode: Image.PreserveAspectCrop
                 asynchronous: true
                 cache: false
                 smooth: true
@@ -336,6 +346,16 @@ WlSessionLock {
             Rectangle {
                 anchors.fill: parent
                 color: "#52000000"
+                opacity: surface.entered && !root.unlocking ? 1 : 0
+
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: root.unlocking
+                            ? root.unlockExitDuration : root.lockEnterDuration
+                        easing.type: root.unlocking
+                            ? Motion.emphasizedAccel : Motion.emphasizedDecel
+                    }
+                }
             }
 
             ColumnLayout {
@@ -345,6 +365,7 @@ WlSessionLock {
                 anchors.horizontalCenter: parent.horizontalCenter
                 anchors.verticalCenter: parent.verticalCenter
                 spacing: 16
+                opacity: surface.entered && !root.unlocking ? 1 : 0
                 transform: Translate {
                     id: contentShift
 
@@ -357,6 +378,15 @@ WlSessionLock {
                             easing.type: root.unlocking
                                 ? Motion.emphasizedAccel : Motion.emphasizedDecel
                         }
+                    }
+                }
+
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: root.unlocking
+                            ? root.unlockExitDuration : root.lockEnterDuration
+                        easing.type: root.unlocking
+                            ? Motion.emphasizedAccel : Motion.emphasizedDecel
                     }
                 }
 

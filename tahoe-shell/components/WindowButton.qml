@@ -33,6 +33,10 @@ Item {
     property var dockSurfaceItem
     property real dockSlideOffset: 0
     property real dockFullscreenOffset: 0
+    // When Dock is unmapped for fullscreen, suppress foreign-toplevel rectangle
+    // republish. Publishing into a closing game's handle (visibleChanged during
+    // unmap on the same event stack as zwlr closed) previously crashed Quickshell.
+    property bool dockFullscreenActive: false
     // Observable scene offset of the delegate's parent chain. mapToItem()
     // itself does not establish QML binding dependencies on ancestor motion,
     // so Dock forwards these values to refresh the foreign-toplevel hint while
@@ -79,8 +83,24 @@ Item {
         }
     }
 
-    function updateDockRectangle() {
+    // Only suppress while the Dock layer is unmapped for fullscreen. After
+    // fullscreenActive clears, republish immediately even if the reveal slide
+    // is still running — niri cleared rects on unmap and minimize needs them.
+    // C++ set_rectangle guards cover the closed-handle race on game exit.
+    function dockRectanglePublishBlocked() {
+        return root.dockFullscreenActive;
+    }
+
+    function updateDockRectangle(forcePublish) {
         if (!root.dockWindow)
+            return;
+        if (!forcePublish && root.dockRectanglePublishBlocked())
+            return;
+        // Interactive minimize/restore may run mid-reveal: never publish into
+        // a still-unmapped fullscreen Dock (compositor has no layer surface).
+        if (forcePublish && root.dockFullscreenActive)
+            return;
+        if (!root.windowModel && !root.toplevel)
             return;
 
         // The foreign-toplevel hint is the icon itself, not this delegate's
@@ -110,6 +130,8 @@ Item {
     }
 
     function scheduleDockRectangleUpdate() {
+        if (root.dockRectanglePublishBlocked())
+            return;
         dockRectangleRefresh.restart();
     }
 
@@ -117,7 +139,9 @@ Item {
         if (!root.windowModel && !root.toplevel)
             return;
 
-        updateDockRectangle();
+        // Force publish after fullscreen so minimize/restore is not a silent
+        // no-op while the dock reveal animation still holds a non-zero offset.
+        updateDockRectangle(true);
 
         if (root.windowsService && root.windowModel) {
             if (root.windowModel.isMinimized) {
@@ -144,7 +168,7 @@ Item {
         if (!root.windowModel && !root.toplevel)
             return;
 
-        updateDockRectangle();
+        updateDockRectangle(true);
         if (root.windowsService && root.windowModel)
             root.windowsService.minimize(root.windowModel);
         else
@@ -162,9 +186,14 @@ Item {
     onToplevelChanged: scheduleDockRectangleUpdate()
     onDockSceneOffsetXChanged: scheduleDockRectangleUpdate()
     onDockSceneOffsetYChanged: scheduleDockRectangleUpdate()
-    // Fullscreen eventually unmaps the Dock layer surface. Re-publish while
-    // it maps back even though updateDockRectangle() normalizes this offset.
+    // Offset still animates after fullscreen ends; keep coordinates fresh for
+    // minimize targets. While fullscreenActive, schedule is blocked above.
     onDockFullscreenOffsetChanged: scheduleDockRectangleUpdate()
+    // Layer remaps as soon as fullscreen clears — refill rects niri wiped on unmap.
+    onDockFullscreenActiveChanged: {
+        if (!root.dockFullscreenActive)
+            scheduleDockRectangleUpdate();
+    }
     // Mag/push are bound to targets; Behavior alone retargets. Do NOT also
     // assign in on*TargetChanged — Qt logs "another interceptor unsupported"
     // and drops the second Behavior (session log spam + choppy wave).

@@ -1554,6 +1554,7 @@ PanelWindow {
                                 dockSurfaceItem: dockSurface
                                 dockSlideOffset: root.dockSlideOffset
                                 dockFullscreenOffset: root.fullscreenTransition * root.dockSurfaceHeight
+                                dockFullscreenActive: root.fullscreenActive
                                 dockSceneOffsetX: root.windowSectionSceneOffsetX
                                 dockSceneOffsetY: root.windowSectionSceneOffsetY
                                 onDockPointerMoved: function(localX, buttons) {

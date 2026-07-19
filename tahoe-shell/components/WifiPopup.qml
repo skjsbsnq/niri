@@ -7,6 +7,7 @@ import Quickshell.Wayland
 import "TahoeGlass.js" as GlassStyle
 import "Motion.js" as Motion
 import "PopupGeometry.js" as PopupGeometry
+import "controls" as Controls
 
 PanelWindow {
     id: root
@@ -91,8 +92,10 @@ PanelWindow {
                     Layout.fillWidth: true
                 }
 
-                ToggleSwitch {
+                Controls.ToggleSwitch {
                     checked: root.controlsService && root.controlsService.wifiEnabled
+                    enabled: !!root.controlsService
+                    settingsService: root.settingsService
                     onToggled: {
                         if (root.controlsService)
                             root.controlsService.toggleWifi();
@@ -132,9 +135,10 @@ PanelWindow {
                     }
                 }
 
-                PillButton {
+                Controls.TextButton {
                     label: "断开"
                     danger: true
+                    settingsService: root.settingsService
                     onActivated: {
                         if (root.controlsService)
                             root.controlsService.disconnectWifi();
@@ -238,8 +242,9 @@ PanelWindow {
                 visible: root.controlsService && root.controlsService.wifiEnabled
                 spacing: 8
 
-                PillButton {
+                Controls.TextButton {
                     label: "重新扫描"
+                    settingsService: root.settingsService
                     onActivated: {
                         if (root.controlsService)
                             root.controlsService.rescanWifi();
@@ -248,87 +253,12 @@ PanelWindow {
 
                 Item { Layout.fillWidth: true }
 
-                PillButton {
+                Controls.TextButton {
                     label: "Wi-Fi 设置..."
+                    settingsService: root.settingsService
                     onActivated: Quickshell.execDetached({ command: ["nm-connection-editor"] })
                 }
             }
-        }
-    }
-
-    component ToggleSwitch: Item {
-        id: sw
-
-        property bool checked: false
-        signal toggled()
-
-        Layout.preferredWidth: 42
-        Layout.preferredHeight: 24
-        Layout.alignment: Qt.AlignVCenter
-
-        Rectangle {
-            anchors.fill: parent
-            radius: height / 2
-            color: sw.checked ? "#2c9cf2" : "#32000000"
-            border.color: "#38ffffff"
-            border.width: 1
-
-            Rectangle {
-                width: 20
-                height: 20
-                radius: 10
-                x: sw.checked ? parent.width - width - 2 : 2
-                anchors.verticalCenter: parent.verticalCenter
-                color: "#ffffff"
-
-                Behavior on x {
-                    NumberAnimation { duration: Motion.elementMove(root.settingsService); easing.type: Motion.emphasizedDecel }
-                }
-            }
-        }
-
-        MouseArea {
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            onClicked: sw.toggled()
-        }
-    }
-
-    component PillButton: Item {
-        id: btn
-
-        property string label: ""
-        property bool danger: false
-        signal activated()
-
-        Layout.preferredWidth: labelText.implicitWidth + 18
-        Layout.preferredHeight: 24
-        Layout.alignment: Qt.AlignVCenter
-
-        Rectangle {
-            anchors.fill: parent
-            radius: 12
-            color: buttonMouse.containsMouse ? "#70ffffff" : "#34ffffff"
-            border.color: "#50ffffff"
-            border.width: 1
-        }
-
-        Text {
-            id: labelText
-            anchors.centerIn: parent
-            text: btn.label
-            color: btn.danger ? "#ccff453a" : "#1d1d1f"
-            font.pixelSize: 12
-            font.weight: Font.DemiBold
-        }
-
-        MouseArea {
-            id: buttonMouse
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            onClicked: btn.activated()
         }
     }
 
@@ -475,8 +405,9 @@ PanelWindow {
                             Keys.onEscapePressed: row.toggleExpanded(row.entry ? row.entry.name : "")
                         }
 
-                        PillButton {
+                        Controls.TextButton {
                             label: "连接"
+                            settingsService: root.settingsService
                             onActivated: {
                                 row.connectRequested(row.entry, pskInput.text);
                                 pskInput.text = "";

@@ -5,6 +5,7 @@ import QtQuick.Layouts
 import QtQuick.Effects
 import "Motion.js" as Motion
 import "settings/SettingsTheme.js" as Theme
+import "controls" as Controls
 
 // Weather sidebar page (medium intensity):
 // - WeatherBackground particles only inside the hero card
@@ -106,19 +107,30 @@ Item {
                 anchors.verticalCenter: parent.verticalCenter
                 spacing: 4
 
-                IconButton {
-                    iconCode: "\ue5d5"
+                Controls.IconButton {
+                    width: 28
+                    height: 28
+                    iconCode: root.updating ? "\ue863" : "\ue5d5"
                     enabled: !!root.weatherService && !root.updating
-                    busy: root.updating
+                    flat: true
+                    hoverColor: root.cardHover
+                    iconColor: root.textSecondary
+                    settingsService: root.settingsService
                     onActivated: {
                         if (root.weatherService && typeof root.weatherService.refresh === "function")
                             root.weatherService.refresh();
                     }
                 }
 
-                IconButton {
+                Controls.IconButton {
+                    width: 28
+                    height: 28
                     iconCode: "\ue8b8"
                     enabled: true
+                    flat: true
+                    hoverColor: root.cardHover
+                    iconColor: root.textSecondary
+                    settingsService: root.settingsService
                     onActivated: root.openWeatherSettingsRequested()
                 }
             }
@@ -1007,40 +1019,6 @@ Item {
         Component.onCompleted: {
             if (root.cardsEnter)
                 wcard.snapEnter(0, 1);
-        }
-    }
-
-    component IconButton: Item {
-        id: button
-        property string iconCode: ""
-        property bool busy: false
-        property bool enabled: true
-        signal activated()
-
-        width: 28
-        height: 28
-
-        Rectangle {
-            anchors.fill: parent
-            radius: 14
-            color: buttonMouse.containsMouse && button.enabled ? root.cardHover : "transparent"
-        }
-
-        TahoeSymbol {
-            anchors.centerIn: parent
-            name: button.busy ? "\ue863" : button.iconCode
-            color: root.textSecondary
-            size: 16
-            opacity: button.enabled ? 1 : 0.5
-        }
-
-        MouseArea {
-            id: buttonMouse
-            anchors.fill: parent
-            hoverEnabled: true
-            enabled: button.enabled
-            cursorShape: button.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-            onClicked: button.activated()
         }
     }
 

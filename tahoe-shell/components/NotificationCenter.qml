@@ -7,6 +7,7 @@ import Quickshell.Wayland
 import "TahoeGlass.js" as GlassStyle
 import "Motion.js" as Motion
 import "PopupGeometry.js" as PopupGeometry
+import "controls" as Controls
 
 PanelWindow {
     id: root
@@ -277,34 +278,12 @@ PanelWindow {
                     Layout.fillWidth: true
                 }
 
-                Item {
-                    Layout.preferredWidth: clearLabel.implicitWidth + 18
-                    Layout.preferredHeight: 24
+                Controls.TextButton {
+                    label: "清空"
+                    settingsService: root.settingsService
                     visible: root.historyCount > 0 && !root.clearing
-
-                    Rectangle {
-                        anchors.fill: parent
-                        radius: 12
-                        color: clearMouse.containsMouse ? "#70ffffff" : "#34ffffff"
-                        border.color: "#50ffffff"
-                    }
-
-                    Text {
-                        id: clearLabel
-                        anchors.centerIn: parent
-                        text: "清空"
-                        color: "#1d1d1f"
-                        font.pixelSize: 12
-                        font.weight: Font.DemiBold
-                    }
-
-                    MouseArea {
-                        id: clearMouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: root.startClearAll()
-                    }
+                    enabled: !!root.notificationsService && !root.clearing
+                    onActivated: root.startClearAll()
                 }
             }
 
@@ -354,30 +333,19 @@ PanelWindow {
                         }
                     }
 
-                    Rectangle {
-                        Layout.preferredWidth: 40
-                        Layout.preferredHeight: 22
-                        radius: 11
-                        color: root.dndEnabled ? "#2c9cf2" : "#32000000"
-
-                        Rectangle {
-                            width: 18
-                            height: 18
-                            radius: 9
-                            x: root.dndEnabled ? parent.width - width - 2 : 2
-                            anchors.verticalCenter: parent.verticalCenter
-                            color: "#ffffff"
-
-                            Behavior on x {
-                                NumberAnimation { duration: Motion.elementMove(root.settingsService); easing.type: Motion.emphasizedDecel }
-                            }
-                        }
+                    Controls.ToggleSwitch {
+                        checked: root.dndEnabled
+                        enabled: !!root.notificationsService
+                        compact: true
+                        interactive: false
+                        settingsService: root.settingsService
                     }
                 }
 
                 MouseArea {
                     anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
+                    enabled: !!root.notificationsService
+                    cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
                     onClicked: {
                         if (root.notificationsService)
                             root.notificationsService.toggleDnd();
@@ -715,32 +683,18 @@ PanelWindow {
                     }
                 }
 
-                Item {
+                Controls.IconButton {
                     Layout.preferredWidth: 22
                     Layout.preferredHeight: 22
                     Layout.alignment: Qt.AlignTop
-
-                    Rectangle {
-                        anchors.fill: parent
-                        radius: 11
-                        color: closeMouse.containsMouse ? "#70ffffff" : "transparent"
-                    }
-
-                    TahoeSymbol {
-                        anchors.centerIn: parent
-                        name: "\ue5cd"
-                        color: "#731d1d1f"
-                        size: 15
-                    }
-
-                    MouseArea {
-                        id: closeMouse
-                        anchors.fill: parent
-                        enabled: !row.removing && !root.clearing
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: row.beginRemoval()
-                    }
+                    iconCode: "\ue5cd"
+                    iconColor: "#731d1d1f"
+                    iconSize: 15
+                    flat: true
+                    cornerRadius: 11
+                    enabled: !row.removing && !root.clearing
+                    settingsService: root.settingsService
+                    onActivated: row.beginRemoval()
                 }
             }
         }

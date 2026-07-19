@@ -7,6 +7,7 @@ import Quickshell.Wayland
 import "TahoeGlass.js" as GlassStyle
 import "PopupGeometry.js" as PopupGeometry
 import "Motion.js" as Motion
+import "controls" as Controls
 
 PanelWindow {
     id: root
@@ -344,17 +345,32 @@ PanelWindow {
                         Layout.fillWidth: true
                         spacing: 8
 
-                        ConfirmButton {
-                            text: "取消"
+                        Controls.TextButton {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 26
+                            label: "取消"
+                            fontPixelSize: 11
+                            foregroundColor: root.darkMode ? "#f5f7fb" : "#1d1d1f"
+                            baseColor: "#44ffffff"
+                            hoverColor: "#70ffffff"
+                            cornerRadius: 9
+                            settingsService: root.settingsService
                             onActivated: {
                                 if (root.powerService)
                                     root.powerService.cancelPending();
                             }
                         }
 
-                        ConfirmButton {
-                            text: root.powerService ? root.powerService.pendingTitle : "确认"
+                        Controls.TextButton {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 26
+                            label: root.powerService ? root.powerService.pendingTitle : "确认"
+                            fontPixelSize: 11
+                            danger: true
                             primary: true
+                            cornerRadius: 9
+                            prominentBorderColor: "#40ffffff"
+                            settingsService: root.settingsService
                             onActivated: {
                                 if (root.powerService)
                                     root.powerService.confirmPending();
@@ -368,45 +384,4 @@ PanelWindow {
     }
 
 
-    component ConfirmButton: Item {
-        id: button
-
-        property alias text: label.text
-        property bool primary: false
-
-        signal activated()
-
-        Layout.fillWidth: true
-        Layout.preferredHeight: 26
-
-        Rectangle {
-            anchors.fill: parent
-            radius: 9
-            color: button.primary
-                ? (buttonMouse.containsMouse ? "#e0ff453a" : "#d8ff453a")
-                : (buttonMouse.containsMouse ? "#70ffffff" : "#44ffffff")
-            border.color: button.primary ? "#40ffffff" : "#50ffffff"
-        }
-
-        Text {
-            id: label
-
-            anchors.centerIn: parent
-            color: button.primary ? "#ffffff" : "#1d1d1f"
-            font.pixelSize: 11
-            font.weight: Font.DemiBold
-            elide: Text.ElideRight
-            width: parent.width - 10
-            horizontalAlignment: Text.AlignHCenter
-        }
-
-        MouseArea {
-            id: buttonMouse
-
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: Qt.PointingHandCursor
-            onClicked: button.activated()
-        }
-    }
 }

@@ -7,6 +7,7 @@ import Quickshell.Wayland
 import "TahoeGlass.js" as GlassStyle
 import "Motion.js" as Motion
 import "PopupGeometry.js" as PopupGeometry
+import "controls" as Controls
 
 PanelWindow {
     id: root
@@ -115,12 +116,28 @@ PanelWindow {
                         border.width: 2
 
                         Rectangle {
+                            id: batteryFill
+
                             x: 5
                             y: 5
                             width: root.available ? Math.max(4, (parent.width - 10) * root.percentage / 100) : 0
                             height: parent.height - 10
                             radius: 6
                             color: root.available && root.percentage <= 15 && root.batteryService.onBattery ? "#ff453a" : "#34c759"
+
+                            Behavior on width {
+                                NumberAnimation {
+                                    duration: Motion.elementResize(root.settingsService)
+                                    easing.type: Motion.emphasizedDecel
+                                }
+                            }
+
+                            Behavior on color {
+                                ColorAnimation {
+                                    duration: Motion.fadeFast(root.settingsService)
+                                    easing.type: Motion.standardDecel
+                                }
+                            }
                         }
                     }
 
@@ -219,13 +236,46 @@ PanelWindow {
                 Repeater {
                     model: root.powerProfileService ? root.powerProfileService.profiles : []
 
-                    delegate: ProfileButton {
+                    delegate: Controls.ButtonSurface {
+                        id: profileButton
+
                         required property var modelData
+                        readonly property bool supported: root.powerProfileService
+                            && root.powerProfileService.supports(modelData.id)
 
                         Layout.fillWidth: true
-                        profile: modelData
+                        Layout.preferredHeight: 44
+                        settingsService: root.settingsService
                         active: root.powerProfileService && root.powerProfileService.profile === modelData.id
-                        supported: root.powerProfileService && root.powerProfileService.supports(modelData.id)
+                        enabled: supported
+                        cornerRadius: 14
+                        baseColor: "#34ffffff"
+                        hoverColor: "#54ffffff"
+                        borderColor: "#44ffffff"
+                        activeColor: "#5ad7f0ff"
+                        activeHoverColor: "#68d7f0ff"
+                        activeBorderColor: "#882c9cf2"
+
+                        ColumnLayout {
+                            anchors.centerIn: parent
+                            spacing: 1
+
+                            TahoeSymbol {
+                                Layout.alignment: Qt.AlignHCenter
+                                name: profileButton.modelData ? profileButton.modelData.icon : ""
+                                color: profileButton.active ? "#0b6bd3" : "#731d1d1f"
+                                size: 16
+                            }
+
+                            Text {
+                                Layout.alignment: Qt.AlignHCenter
+                                text: profileButton.modelData ? profileButton.modelData.label : ""
+                                color: "#1d1d1f"
+                                font.pixelSize: 11
+                                font.weight: profileButton.active ? Font.DemiBold : Font.Normal
+                            }
+                        }
+
                         onActivated: {
                             if (root.powerProfileService)
                                 root.powerProfileService.setProfile(modelData.id);
@@ -273,54 +323,4 @@ PanelWindow {
         }
     }
 
-    component ProfileButton: Item {
-        id: btn
-
-        property var profile
-        property bool active: false
-        property bool supported: true
-        signal activated()
-
-        Layout.preferredHeight: 44
-
-        Rectangle {
-            anchors.fill: parent
-            radius: 14
-            color: btn.active ? "#5ad7f0ff" : (buttonMouse.containsMouse ? "#54ffffff" : "#34ffffff")
-            border.color: btn.active ? "#882c9cf2" : "#44ffffff"
-            border.width: 1
-            opacity: btn.supported ? 1 : 0.45
-        }
-
-        ColumnLayout {
-            anchors.centerIn: parent
-            spacing: 1
-
-            TahoeSymbol {
-                Layout.alignment: Qt.AlignHCenter
-                name: btn.profile ? btn.profile.icon : ""
-                color: btn.active ? "#0b6bd3" : "#731d1d1f"
-                size: 16
-            }
-
-            Text {
-                Layout.alignment: Qt.AlignHCenter
-                text: btn.profile ? btn.profile.label : ""
-                color: "#1d1d1f"
-                font.pixelSize: 11
-                font.weight: btn.active ? Font.DemiBold : Font.Normal
-            }
-        }
-
-        MouseArea {
-            id: buttonMouse
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: btn.supported ? Qt.PointingHandCursor : Qt.ArrowCursor
-            onClicked: {
-                if (btn.supported)
-                    btn.activated();
-            }
-        }
-    }
 }

@@ -7,6 +7,7 @@ import Quickshell.Wayland
 import "TahoeGlass.js" as GlassStyle
 import "Motion.js" as Motion
 import "PopupGeometry.js" as PopupGeometry
+import "controls" as Controls
 
 PanelWindow {
     id: root
@@ -97,9 +98,10 @@ PanelWindow {
                     Layout.fillWidth: true
                 }
 
-                IconButton {
+                Controls.IconButton {
                     iconCode: "\ue5d5"
                     enabled: !!root.clipboardService
+                    settingsService: root.settingsService
                     onActivated: {
                         if (root.clipboardService)
                             root.clipboardService.refresh();
@@ -119,11 +121,14 @@ PanelWindow {
                     Layout.fillWidth: true
                 }
 
-                TextButton {
+                Controls.TextButton {
                     label: "清空历史"
                     iconCode: "\ue872"
                     enabled: root.clipboardService && root.clipboardService.cliphistAvailable && root.entries.length > 0
                     danger: true
+                    minimumWidth: 80
+                    fontPixelSize: 11
+                    settingsService: root.settingsService
                     onActivated: {
                         if (root.clipboardService)
                             root.clipboardService.clearHistory();
@@ -435,11 +440,12 @@ PanelWindow {
                     maximumLineCount: 2
                 }
 
-                IconButton {
+                Controls.IconButton {
                     iconCode: row.pinnedRow ? "\ue5cd" : "\ue866"
                     enabled: row.pinnedRow || (root.clipboardService && root.clipboardService.cliphistAvailable && row.pinnable)
                     active: row.pinned && !row.pinnedRow
                     danger: row.pinnedRow
+                    settingsService: root.settingsService
                     onActivated: {
                         if (row.pinnedRow)
                             row.unpinRequested(row.entry);
@@ -448,17 +454,19 @@ PanelWindow {
                     }
                 }
 
-                IconButton {
+                Controls.IconButton {
                     iconCode: "\ue14d"
                     enabled: row.copyEnabled
+                    settingsService: root.settingsService
                     onActivated: row.copyRequested(row.entry)
                 }
 
-                IconButton {
+                Controls.IconButton {
                     iconCode: "\ue872"
                     enabled: root.clipboardService && root.clipboardService.cliphistAvailable
                     danger: true
                     visible: !row.pinnedRow
+                    settingsService: root.settingsService
                     onActivated: row.deleteRequested(row.entry)
                 }
             }
@@ -507,98 +515,4 @@ PanelWindow {
         }
     }
 
-    component IconButton: Item {
-        id: btn
-
-        property string iconCode: ""
-        property bool enabled: true
-        property bool danger: false
-        property bool active: false
-        signal activated()
-
-        Layout.preferredWidth: 26
-        Layout.preferredHeight: 24
-        Layout.alignment: Qt.AlignVCenter
-
-        Rectangle {
-            anchors.fill: parent
-            radius: 12
-            color: btn.active ? "#d82c9cf2" : (btnMouse.containsMouse && btn.enabled ? "#70ffffff" : "#34ffffff")
-            border.color: btn.active ? "#70ffffff" : "#50ffffff"
-            border.width: 1
-            opacity: btn.enabled ? 1 : 0.45
-        }
-
-        TahoeSymbol {
-            anchors.centerIn: parent
-            name: btn.iconCode
-            color: btn.active ? "#ffffff" : (btn.danger ? "#ccff453a" : "#1d1d1f")
-            size: 16
-        }
-
-        MouseArea {
-            id: btnMouse
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: btn.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-            onClicked: {
-                if (btn.enabled)
-                    btn.activated();
-            }
-        }
-    }
-
-    component TextButton: Item {
-        id: btn
-
-        property string label: ""
-        property string iconCode: ""
-        property bool enabled: true
-        property bool danger: false
-        signal activated()
-
-        Layout.preferredWidth: Math.max(80, labelText.implicitWidth + (btn.iconCode.length > 0 ? 34 : 20))
-        Layout.preferredHeight: 24
-        Layout.alignment: Qt.AlignVCenter
-
-        Rectangle {
-            anchors.fill: parent
-            radius: 12
-            color: btnMouse.containsMouse && btn.enabled ? "#70ffffff" : "#34ffffff"
-            border.color: "#50ffffff"
-            border.width: 1
-            opacity: btn.enabled ? 1 : 0.45
-        }
-
-        Row {
-            anchors.centerIn: parent
-            spacing: 4
-
-            TahoeSymbol {
-                name: btn.iconCode
-                color: btn.danger ? "#ccff453a" : "#1d1d1f"
-                size: 15
-                visible: btn.iconCode.length > 0
-            }
-
-            Text {
-                id: labelText
-                text: btn.label
-                color: btn.danger ? "#ccff453a" : "#1d1d1f"
-                font.pixelSize: 11
-                font.weight: Font.DemiBold
-            }
-        }
-
-        MouseArea {
-            id: btnMouse
-            anchors.fill: parent
-            hoverEnabled: true
-            cursorShape: btn.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-            onClicked: {
-                if (btn.enabled)
-                    btn.activated();
-            }
-        }
-    }
 }

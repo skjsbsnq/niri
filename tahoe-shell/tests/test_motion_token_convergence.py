@@ -586,6 +586,9 @@ class MotionTokenConvergenceTests(unittest.TestCase):
             "settings/controls/TahoeListRow.qml": 1,
             "settings/controls/TahoeSidebarButton.qml": 1,
             "settings/controls/TahoeSegmented.qml": 1,
+            # R13: popup buttons and switches centralize press feedback here.
+            "controls/ButtonSurface.qml": 1,
+            "controls/ToggleSwitch.qml": 1,
         }
 
         for relative, expected_count in required_counts.items():

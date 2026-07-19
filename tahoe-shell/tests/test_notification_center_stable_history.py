@@ -59,7 +59,8 @@ class NotificationCenterStableHistoryTests(unittest.TestCase):
         self.assertIn("id: removalCollapseTimer", self.center)
         self.assertIn("row.collapsing = true", self.center)
         self.assertIn("root.completeHistoryRemoval(row.entry.id)", self.center)
-        self.assertIn("onClicked: row.beginRemoval()", self.center)
+        self.assertIn("Controls.IconButton", self.center)
+        self.assertIn("onActivated: row.beginRemoval()", self.center)
         self.assertNotRegex(
             self.center,
             r"onClicked:\s*\{[^}]*removeHistoryItem",

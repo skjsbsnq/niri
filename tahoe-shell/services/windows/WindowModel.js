@@ -496,6 +496,62 @@ function fullscreenOutputNames(toplevels) {
     return names;
 }
 
+// Outputs where a fullscreen window sits on that output's *active* workspace.
+// Foreign-toplevel fullscreen alone is not enough: a game left fullscreen on
+// workspace 1 must not keep shell chrome unmapped while the user is on workspace 2.
+function fullscreenOutputsOnActiveWorkspaces(windows, workspaces) {
+    var activeByOutput = {};
+    var workspaceList = Array.isArray(workspaces) ? workspaces : [];
+    for (var w = 0; w < workspaceList.length; w++) {
+        var workspace = workspaceList[w];
+        if (!workspace || !workspace.isActive)
+            continue;
+        var out = textOrEmpty(workspace.output);
+        if (out.length === 0)
+            continue;
+        activeByOutput[out] = workspace.id;
+    }
+
+    var list = Array.isArray(windows) ? windows : [];
+    var seen = {};
+    var names = [];
+    for (var i = 0; i < list.length; i++) {
+        var window = list[i];
+        if (!window || !window.toplevel || !window.toplevel.fullscreen)
+            continue;
+        if (window.workspaceId === undefined || window.workspaceId === null)
+            continue;
+
+        var output = textOrEmpty(window.output);
+        var screens = window.toplevel.screens || [];
+        if (output.length === 0 && screens.length > 0)
+            output = textOrEmpty(screens[0] ? screens[0].name : "");
+        if (output.length === 0)
+            continue;
+
+        var activeId = activeByOutput[output];
+        if (activeId === undefined || activeId === null)
+            continue;
+        if (String(window.workspaceId) !== String(activeId))
+            continue;
+
+        // Prefer foreign-toplevel screen list when present; otherwise trust IPC output.
+        var onOutput = screens.length === 0;
+        for (var j = 0; j < screens.length; j++) {
+            if (textOrEmpty(screens[j] ? screens[j].name : "") === output) {
+                onOutput = true;
+                break;
+            }
+        }
+        if (!onOutput || seen[output])
+            continue;
+        seen[output] = true;
+        names.push(output);
+    }
+    names.sort();
+    return names;
+}
+
 function activeWorkspaceForOutput(workspaces, outputName) {
     var target = String(outputName || "").trim();
     if (target.length === 0)

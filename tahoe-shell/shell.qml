@@ -817,7 +817,9 @@ ShellRoot {
 
             TopBar {
                 screen: modelData
-                fullscreenActive: niri.fullscreenOnOutput(modelData)
+                // Unmap for direct scanout only during normal fullscreen play.
+                // Overview (Mod+O) must still show shell chrome over a fullscreen game.
+                fullscreenActive: niri.shellChromeHiddenOnOutput(modelData)
                 appsService: apps
                 appMenuService: appMenu
                 niriService: niri
@@ -890,7 +892,7 @@ ShellRoot {
 
             DynamicIslandOverlay {
                 screen: modelData
-                fullscreenActive: niri.fullscreenOnOutput(modelData)
+                fullscreenActive: niri.shellChromeHiddenOnOutput(modelData)
                 dynamicIslandService: dynamicIsland
                 settingsService: desktopSettings
                 useSpring: shell.useSpring
@@ -997,7 +999,7 @@ ShellRoot {
 
             Dock {
                 screen: modelData
-                fullscreenActive: niri.fullscreenOnOutput(modelData)
+                fullscreenActive: niri.shellChromeHiddenOnOutput(modelData)
                 appsService: apps
                 niriService: niri
                 thumbnailProvider: thumbnailProvider

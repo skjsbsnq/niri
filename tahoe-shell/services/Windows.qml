@@ -49,6 +49,18 @@ Item {
     // size equality is not a valid fullscreen signal.
     readonly property var fullscreenOutputNames: WindowModel.fullscreenOutputNames(toplevelList)
     readonly property bool anyFullscreen: fullscreenOutputNames.length > 0
+    // Only active-workspace fullscreen should unmap shell chrome. A game left
+    // fullscreen on another workspace must not hide TopBar/Dock after Super+wheel.
+    readonly property var activeFullscreenOutputNames: WindowModel.fullscreenOutputsOnActiveWorkspaces(
+        windowList, ipcWorkspaces)
+    readonly property bool anyActiveFullscreen: activeFullscreenOutputNames.length > 0
+    // niri OverviewOpenedOrClosed. While overview is open the user expects shell
+    // chrome (TopBar/Dock/Island) even if a game is still committed fullscreen —
+    // R14 unmap is only for direct scanout during normal fullscreen gameplay.
+    property bool overviewOpen: false
+    // Hide persistent Top/Overlay chrome only for active-workspace fullscreen,
+    // and never while overview is open.
+    readonly property bool shellChromeHiddenByFullscreen: anyActiveFullscreen && !overviewOpen
 
     property bool available: false
     property string lastError: ""
@@ -98,6 +110,22 @@ Item {
         if (name.length === 0)
             return false;
         return root.fullscreenOutputNames.indexOf(name) !== -1;
+    }
+
+    function activeFullscreenOnOutput(screenOrName) {
+        var name = typeof screenOrName === "object" && screenOrName
+            ? String(screenOrName.name || "").trim()
+            : String(screenOrName || "").trim();
+        if (name.length === 0)
+            return false;
+        return root.activeFullscreenOutputNames.indexOf(name) !== -1;
+    }
+
+    // Per-output chrome hide: active-workspace fullscreen only, never in overview.
+    function shellChromeHiddenOnOutput(screenOrName) {
+        if (root.overviewOpen)
+            return false;
+        return root.activeFullscreenOnOutput(screenOrName);
     }
 
     function scheduleLayoutPatch() {
@@ -611,6 +639,12 @@ Item {
                     event.WorkspaceActiveWindowChanged.workspace_id,
                     event.WorkspaceActiveWindowChanged.active_window_id
                 ), { "mode": "activation" });
+            } else if (event.OverviewOpenedOrClosed) {
+                root.setValue(
+                    "overviewOpen",
+                    !!(event.OverviewOpenedOrClosed.is_open
+                        || event.OverviewOpenedOrClosed.isOpen)
+                );
             }
         } catch (error) {
             root.setValue("lastError", String(error));

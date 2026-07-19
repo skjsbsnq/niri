@@ -97,6 +97,8 @@ process.stdout.write(JSON.stringify(names));
 
     def test_persistent_top_layers_unmap_on_their_fullscreen_output(self) -> None:
         shell = SHELL.read_text(encoding="utf-8")
+        windows = WINDOWS.read_text(encoding="utf-8")
+        model = WINDOW_MODEL.read_text(encoding="utf-8")
         for path in (TOPBAR, DOCK):
             source = path.read_text(encoding="utf-8")
             self.assertIn("property bool fullscreenActive: false", source, path.name)
@@ -111,13 +113,74 @@ process.stdout.write(JSON.stringify(names));
         island = ISLAND.read_text(encoding="utf-8")
         self.assertIn("property bool fullscreenActive: false", island)
         self.assertIn("visible: !root.fullscreenActive", island)
-        self.assertGreaterEqual(shell.count("fullscreenActive: niri.fullscreenOnOutput(modelData)"), 3)
+        # Chrome hide: active-workspace fullscreen only, and never while overview open.
+        self.assertIn("function fullscreenOutputsOnActiveWorkspaces(", model)
+        self.assertIn("activeFullscreenOutputNames", windows)
+        self.assertIn("function activeFullscreenOnOutput(", windows)
+        self.assertIn("property bool overviewOpen: false", windows)
+        self.assertIn("shellChromeHiddenByFullscreen", windows)
+        self.assertIn("function shellChromeHiddenOnOutput(", windows)
+        self.assertIn("OverviewOpenedOrClosed", windows)
+        self.assertIn("activeFullscreenOnOutput", function_body(windows, "shellChromeHiddenOnOutput"))
+        self.assertNotIn(
+            "fullscreenOnOutput(screenOrName)",
+            function_body(windows, "shellChromeHiddenOnOutput"),
+        )
+        self.assertGreaterEqual(
+            shell.count("fullscreenActive: niri.shellChromeHiddenOnOutput(modelData)"), 3
+        )
+        self.assertNotIn("fullscreenActive: niri.fullscreenOnOutput(modelData)", shell)
         self.assertIn("function onAnyFullscreenChanged()", shell)
         self.assertRegex(
             shell,
             r"onAnyFullscreenChanged\(\)\s*\{\s*if \(niri\.anyFullscreen\)\s*"
             r"shell\.closeMotionSamplingSurfaces\(\);",
         )
+
+    @unittest.skipUnless(shutil.which("node"), "node is required")
+    def test_active_workspace_fullscreen_ignores_other_workspace_games(self) -> None:
+        runner = r'''
+const fs = require("fs");
+const vm = require("vm");
+const source = fs.readFileSync(process.argv[1], "utf8").replace(/^\s*\.pragma library\s*\n/, "");
+const context = { Array, Boolean, Date, JSON, Math, Number, Object, String, console, isFinite };
+vm.createContext(context);
+vm.runInContext(source, context, { filename: process.argv[1] });
+const workspaces = [
+  { id: 1, output: "eDP-2", isActive: false },
+  { id: 2, output: "eDP-2", isActive: true },
+];
+const windows = [
+  {
+    workspaceId: 1,
+    output: "eDP-2",
+    toplevel: { fullscreen: true, screens: [{ name: "eDP-2" }] },
+  },
+  {
+    workspaceId: 2,
+    output: "eDP-2",
+    toplevel: { fullscreen: false, screens: [{ name: "eDP-2" }] },
+  },
+];
+const names = context.fullscreenOutputsOnActiveWorkspaces(windows, workspaces);
+const withGameOnActive = context.fullscreenOutputsOnActiveWorkspaces([
+  {
+    workspaceId: 2,
+    output: "eDP-2",
+    toplevel: { fullscreen: true, screens: [{ name: "eDP-2" }] },
+  },
+], workspaces);
+process.stdout.write(JSON.stringify({ away: names, active: withGameOnActive }));
+'''
+        result = subprocess.run(
+            ["node", "-e", runner, str(WINDOW_MODEL)],
+            check=True,
+            text=True,
+            stdout=subprocess.PIPE,
+        )
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["away"], [])
+        self.assertEqual(payload["active"], ["eDP-2"])
 
     def test_wallpaper_keeps_surface_while_renderer_handles_fullscreen_pause(self) -> None:
         wallpaper = WALLPAPER.read_text(encoding="utf-8")

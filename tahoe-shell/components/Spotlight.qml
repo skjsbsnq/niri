@@ -621,6 +621,14 @@ PanelWindow {
                             spacing: 2
                             z: 1
 
+                            move: Transition {
+                                NumberAnimation {
+                                    properties: "x,y"
+                                    duration: Motion.elementMove(root.settingsService)
+                                    easing.type: Motion.emphasizedDecel
+                                }
+                            }
+
                             Repeater {
                                 model: ScriptModel {
                                     objectProp: "modelKey"
@@ -681,6 +689,10 @@ PanelWindow {
                                             color: resultMouse.containsMouse && !parent.selected
                                                 ? root.rowHover
                                                 : "transparent"
+
+                                            Behavior on color {
+                                                ColorAnimation { duration: Motion.fadeFast(root.settingsService); easing.type: Motion.standardDecel }
+                                            }
                                         }
 
                                         Image {

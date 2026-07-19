@@ -61,6 +61,7 @@ PanelWindow {
         && !dynamicActive
         && !dynamicSuppressesStatic
         && !externalSuppressesStatic
+    readonly property bool liveWallpaperVisible: settingsReady && !showStaticWallpaper
     readonly property bool yieldToDynamicWallpaper: !settingsReady
         || dynamicActive
         || dynamicSuppressesStatic
@@ -503,6 +504,41 @@ PanelWindow {
             anchors.fill: parent
             color: "#000000"
             opacity: staticLayer.dimOpacity
+
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: Motion.launchpadWallpaperDuration(root.settingsService)
+                    easing.type: Motion.emphasizedDecel
+                }
+            }
+        }
+    }
+
+    // Live wallpapers render in an independent background-layer process, so
+    // they cannot be transformed by staticLayer. A short-lived bottom-layer
+    // surface supplies the same launchpad dim above either dynamic backend
+    // without restarting or pausing the wallpaper process.
+    PanelWindow {
+        id: liveWallpaperLaunchpadOverlay
+        screen: root.screen
+        visible: root.liveWallpaperVisible && (root.launchpadOpen || liveWallpaperDim.opacity > 0.01)
+        exclusionMode: ExclusionMode.Ignore
+        color: "transparent"
+        WlrLayershell.layer: WlrLayer.Bottom
+        WlrLayershell.namespace: "tahoe-wallpaper-launchpad-overlay"
+
+        anchors {
+            left: true
+            right: true
+            top: true
+            bottom: true
+        }
+
+        Rectangle {
+            id: liveWallpaperDim
+            anchors.fill: parent
+            color: "#000000"
+            opacity: root.launchpadOpen ? Motion.launchpadWallpaperDim : 0
 
             Behavior on opacity {
                 NumberAnimation {

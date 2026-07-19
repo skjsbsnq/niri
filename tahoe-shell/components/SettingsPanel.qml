@@ -307,45 +307,117 @@ PanelWindow {
                     spacing: 8
 
                     // T15: sub-page back chevron (SettingsModel.parentId).
-                    Controls.TahoeButton {
-                        theme: root
-                        iconOnly: true
-                        iconCode: "\ue5c4"
-                        visible: root.canGoBack()
-                        onActivated: root.goBack()
+                    Item {
+                        id: backButtonHost
+                        readonly property bool shown: root.canGoBack()
+                        Layout.preferredWidth: 32
+                        Layout.preferredHeight: 32
+                        visible: shown || opacity > 0.01
+                        opacity: shown ? 1 : 0
+
+                        Behavior on opacity {
+                            NumberAnimation { duration: Motion.fadeFast(root.settingsService); easing.type: Motion.standardDecel }
+                        }
+
+                        Controls.TahoeButton {
+                            anchors.fill: parent
+                            theme: root
+                            iconOnly: true
+                            iconCode: "\ue5c4"
+                            enabled: backButtonHost.shown
+                            onActivated: root.goBack()
+                        }
                     }
 
-                    ColumnLayout {
+                    Item {
+                        id: headerTransition
                         Layout.fillWidth: true
-                        spacing: 2
+                        Layout.preferredHeight: 40
+                        clip: true
 
-                        Text {
-                            Layout.fillWidth: true
-                            text: root.pageTitle()
-                            color: root.textPrimary
-                            font.pixelSize: 20
-                            font.weight: Font.DemiBold
-                            elide: Text.ElideRight
+                        Item {
+                            id: outgoingHeader
+                            property string pageId: pageHost.fromId
+                            anchors.fill: parent
+                            opacity: pageHost.layerOpacity(pageId)
+                            visible: pageId.length > 0 && opacity > 0.01
+                            transform: Translate { x: pageHost.layerX(outgoingHeader.pageId) }
+
+                            Text {
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.top: parent.top
+                                text: root.pageTitle(outgoingHeader.pageId)
+                                color: root.textPrimary
+                                font.pixelSize: 20
+                                font.weight: Font.DemiBold
+                                elide: Text.ElideRight
+                            }
+
+                            Text {
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.bottom: parent.bottom
+                                text: root.pageSubtitle(outgoingHeader.pageId)
+                                color: root.textSecondary
+                                font.pixelSize: 12
+                                elide: Text.ElideRight
+                            }
                         }
 
-                        Text {
-                            Layout.fillWidth: true
-                            text: root.pageSubtitle()
-                            color: root.textSecondary
-                            font.pixelSize: 12
-                            elide: Text.ElideRight
+                        Item {
+                            id: incomingHeader
+                            property string pageId: pageHost.toId
+                            anchors.fill: parent
+                            opacity: pageHost.layerOpacity(pageId)
+                            visible: opacity > 0.01
+                            transform: Translate { x: pageHost.layerX(incomingHeader.pageId) }
+
+                            Text {
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.top: parent.top
+                                text: root.pageTitle(incomingHeader.pageId)
+                                color: root.textPrimary
+                                font.pixelSize: 20
+                                font.weight: Font.DemiBold
+                                elide: Text.ElideRight
+                            }
+
+                            Text {
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.bottom: parent.bottom
+                                text: root.pageSubtitle(incomingHeader.pageId)
+                                color: root.textSecondary
+                                font.pixelSize: 12
+                                elide: Text.ElideRight
+                            }
                         }
                     }
 
-                    Controls.TahoeButton {
-                        theme: root
-                        visible: root.currentPageId === "health" || root.currentPageId === "about" || root.currentPageId === "system"
-                        iconCode: "\ue5d5"
-                        label: "刷新"
-                        enabled: !!root.systemStatusService && !root.systemStatusService.refreshing
-                        onActivated: {
-                            if (root.systemStatusService)
-                                root.systemStatusService.refresh();
+                    Item {
+                        id: refreshButtonHost
+                        readonly property bool shown: root.currentPageId === "health" || root.currentPageId === "about" || root.currentPageId === "system"
+                        Layout.preferredWidth: 70
+                        Layout.preferredHeight: 30
+                        visible: shown || opacity > 0.01
+                        opacity: shown ? 1 : 0
+
+                        Behavior on opacity {
+                            NumberAnimation { duration: Motion.fadeFast(root.settingsService); easing.type: Motion.standardDecel }
+                        }
+
+                        Controls.TahoeButton {
+                            anchors.fill: parent
+                            theme: root
+                            iconCode: "\ue5d5"
+                            label: "刷新"
+                            enabled: refreshButtonHost.shown && !!root.systemStatusService && !root.systemStatusService.refreshing
+                            onActivated: {
+                                if (root.systemStatusService)
+                                    root.systemStatusService.refresh();
+                            }
                         }
                     }
 
@@ -369,12 +441,16 @@ PanelWindow {
                     property string fromId: ""
                     property string toId: SettingsModel.resolveId(root.selectedPage)
                     property real progress: 1
+                    property real fromOpacityStart: 1
+                    property real toOpacityStart: 0
 
                     function snapTo(id) {
                         var key = SettingsModel.resolveId(id);
                         progressAnim.stop();
                         fromId = "";
                         toId = key;
+                        fromOpacityStart = 1;
+                        toOpacityStart = 0;
                         progress = 1;
                     }
 
@@ -382,25 +458,46 @@ PanelWindow {
                     function navigateTo(id) {
                         var key = SettingsModel.resolveId(id);
                         if (key === toId && progress >= 0.999) {
-                            fromId = "";
-                            progress = 1;
-                            return;
-                        }
-
-                        var leaveId = toId;
-                        if (leaveId === key) {
                             snapTo(key);
                             return;
                         }
 
-                        fromId = leaveId;
+                        // Preserve the two currently rendered weights when a
+                        // second navigation arrives mid-flight. Reusing only
+                        // `toId` would pull a partially visible page back to
+                        // opacity 1 for one frame.
+                        var oldFromId = fromId;
+                        var oldToId = toId;
+                        var oldFromOpacity = oldFromId.length > 0 ? layerOpacity(oldFromId) : 0;
+                        var oldToOpacity = oldToId.length > 0 ? layerOpacity(oldToId) : 0;
+                        var nextFromId = oldFromId;
+                        var nextFromOpacity = oldFromOpacity;
+                        var nextToOpacity = 0;
+                        if (key === oldFromId) {
+                            nextFromId = oldToId;
+                            nextFromOpacity = oldToOpacity;
+                            nextToOpacity = oldFromOpacity;
+                        } else if (key === oldToId) {
+                            nextFromId = oldFromId;
+                            nextFromOpacity = oldFromOpacity;
+                            nextToOpacity = oldToOpacity;
+                        } else if (oldToOpacity > oldFromOpacity) {
+                            nextFromId = oldToId;
+                            nextFromOpacity = oldToOpacity;
+                        }
+
+                        fromId = nextFromId;
                         toId = key;
+                        fromOpacityStart = nextFromOpacity;
+                        toOpacityStart = nextToOpacity;
                         progress = 0;
                         progressAnim.stop();
                         progressAnim.duration = Motion.settingsPageTransition(root.settingsService);
                         if (progressAnim.duration <= 0) {
                             progress = 1;
                             fromId = "";
+                            fromOpacityStart = 1;
+                            toOpacityStart = 0;
                             return;
                         }
                         progressAnim.start();
@@ -408,9 +505,9 @@ PanelWindow {
 
                     function layerOpacity(pageId) {
                         if (pageId === toId)
-                            return progress;
+                            return toOpacityStart + (1 - toOpacityStart) * progress;
                         if (pageId === fromId)
-                            return 1 - progress;
+                            return fromOpacityStart * (1 - progress);
                         return 0;
                     }
 
@@ -436,6 +533,8 @@ PanelWindow {
                         easing.type: Motion.emphasizedDecel
                         onFinished: {
                             pageHost.fromId = "";
+                            pageHost.fromOpacityStart = 1;
+                            pageHost.toOpacityStart = 0;
                             pageHost.progress = 1;
                         }
                     }

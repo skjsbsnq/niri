@@ -30,6 +30,9 @@ Item {
     readonly property bool hasData: hasWeatherData()
     readonly property bool updating: !!(weatherService && weatherService.updating)
     readonly property string status: weatherService ? String(weatherService.status || "idle") : "idle"
+    readonly property bool showContent: hasData || updating
+    readonly property bool showEmptyState: !hasData && !updating
+    readonly property bool showStatusBanner: status === "error" || (status === "stale" && lastErrorText().length > 0)
 
     readonly property string accentId: settingsService ? settingsService.accentColor : "blue"
     readonly property color textPrimary: Theme.label(darkMode)
@@ -108,9 +111,11 @@ Item {
                 spacing: 4
 
                 Controls.IconButton {
+                    id: weatherRefreshButton
                     width: 28
                     height: 28
                     iconCode: root.updating ? "\ue863" : "\ue5d5"
+                    iconSpinning: root.updating && !Motion.reducedMotion(root.settingsService)
                     enabled: !!root.weatherService && !root.updating
                     flat: true
                     hoverColor: root.cardHover
@@ -144,7 +149,12 @@ Item {
             boundsBehavior: Flickable.StopAtBounds
             contentWidth: width
             contentHeight: contentColumn.implicitHeight
-            visible: root.hasData || root.updating
+            opacity: root.showContent ? 1 : 0
+            visible: root.showContent || opacity > 0.01
+
+            Behavior on opacity {
+                NumberAnimation { duration: Motion.fadeFast(root.settingsService); easing.type: Motion.standardDecel }
+            }
 
             Column {
                 id: contentColumn
@@ -185,6 +195,7 @@ Item {
                                 night: root.currentIsNight()
                                 windSpeedMs: root.weatherNumber("currentWindSpeedMs", 0)
                                 windGustsMs: root.weatherNumber("currentWindGustMs", 0)
+                                settingsService: root.settingsService
                                 animate: root.sidebarOpen && root.active && root.visible
                                     && root.backgroundEffectsAllowed
                                     && !Motion.reducedMotion(root.settingsService)
@@ -305,6 +316,7 @@ Item {
                             weatherCode: root.currentWeatherCode()
                             night: root.currentIsNight()
                             color: root.heroText
+                            settingsService: root.settingsService
                         }
                     }
 
@@ -336,7 +348,7 @@ Item {
 
                 StatusBanner {
                     width: parent.width
-                    visible: root.status === "error" || (root.status === "stale" && root.lastErrorText().length > 0)
+                    shown: root.showStatusBanner
                     title: root.status === "error" ? "更新失败" : "显示缓存"
                     message: root.lastErrorText().length > 0 ? root.lastErrorText() : "最近一次天气数据不可用"
                     iconCode: root.status === "error" ? "\ue001" : "\ue86a"
@@ -481,16 +493,27 @@ Item {
     }
 
     EmptyState {
+        id: emptyState
         anchors.fill: parent
         anchors.topMargin: 52
-        visible: !root.hasData && !root.updating
+        opacity: root.showEmptyState ? 1 : 0
+        visible: root.showEmptyState || opacity > 0.01
+
+        Behavior on opacity {
+            NumberAnimation { duration: Motion.fadeFast(root.settingsService); easing.type: Motion.standardDecel }
+        }
     }
 
     BusyStripe {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.bottom: parent.bottom
-        visible: root.updating
+        opacity: root.updating ? 1 : 0
+        visible: root.updating || opacity > 0.01
+
+        Behavior on opacity {
+            NumberAnimation { duration: Motion.fadeFast(root.settingsService); easing.type: Motion.standardDecel }
+        }
     }
 
     // --- helpers (service / format) — unchanged semantics ---
@@ -1107,6 +1130,7 @@ Item {
                             weatherCode: root.valueAt(root.hourlyAt(index), "weatherCode", -1)
                             night: !root.valueAt(root.hourlyAt(index), "isDay", true)
                             color: root.textPrimary
+                            settingsService: root.settingsService
                         }
                         Text {
                             width: parent.width
@@ -1159,6 +1183,7 @@ Item {
             weatherCode: root.valueAt(row.item, "weatherCode", -1)
             night: false
             color: root.textPrimary
+            settingsService: root.settingsService
         }
 
         Text {
@@ -1188,6 +1213,7 @@ Item {
 
             // Gradient temperature bar (no stroke).
             Rectangle {
+                id: temperatureRangeFill
                 x: Math.max(0, Math.min(parent.width - width, parent.width * row.barOffset))
                 width: Math.max(12, Math.min(parent.width, parent.width * row.barWidth))
                 height: parent.height
@@ -1196,6 +1222,14 @@ Item {
                     orientation: Gradient.Horizontal
                     GradientStop { position: 0.0; color: root.precipBlue }
                     GradientStop { position: 1.0; color: root.warningYellow }
+                }
+
+                Behavior on x {
+                    NumberAnimation { duration: Motion.elementMove(root.settingsService); easing.type: Motion.emphasizedDecel }
+                }
+
+                Behavior on width {
+                    NumberAnimation { duration: Motion.elementResize(root.settingsService); easing.type: Motion.emphasizedDecel }
                 }
             }
         }
@@ -1281,10 +1315,21 @@ Item {
         property string title: ""
         property string message: ""
         property color accent: root.warningYellow
-        height: 52
+        property bool shown: false
+        height: shown ? 52 : 0
+        opacity: shown ? 1 : 0
+        visible: shown || height > 0.01 || opacity > 0.01
         radius: 14
         color: Qt.rgba(accent.r, accent.g, accent.b, root.darkMode ? 0.16 : 0.11)
         // No stroke.
+
+        Behavior on height {
+            NumberAnimation { duration: Motion.elementResize(root.settingsService); easing.type: Motion.emphasizedDecel }
+        }
+
+        Behavior on opacity {
+            NumberAnimation { duration: Motion.fadeFast(root.settingsService); easing.type: Motion.standardDecel }
+        }
 
         Row {
             anchors.fill: parent

@@ -13,7 +13,11 @@ Item {
     property var settingsService
     property bool darkMode: false
     readonly property int itemCount: SystemTray.items ? SystemTray.items.values.length : 0
-    readonly property var orderedItems: sortedItems(itemCount)
+    readonly property var orderedEntries: sortedEntries(itemCount)
+    readonly property real targetWidth: orderedEntries.length > 0
+        ? orderedEntries.length * 24 + Math.max(0, orderedEntries.length - 1) * 6
+        : 0
+    property real animatedWidth: targetWidth
     readonly property color trayText: darkMode ? "#f5f7fb" : "#1d1d1f"
     readonly property color trayHoverFill: darkMode ? "#24ffffff" : "#26ffffff"
     readonly property color trayAttention: "#ff453a"
@@ -33,9 +37,18 @@ Item {
         };
     }
 
-    implicitWidth: trayRow.implicitWidth
+    implicitWidth: animatedWidth
     implicitHeight: 22
-    visible: itemCount > 0
+    opacity: itemCount > 0 ? 1 : 0
+    visible: animatedWidth > 0.01 || opacity > 0.01
+
+    Behavior on animatedWidth {
+        NumberAnimation { duration: Motion.elementResize(root.settingsService); easing.type: Motion.emphasizedDecel }
+    }
+
+    Behavior on opacity {
+        NumberAnimation { duration: Motion.fadeFast(root.settingsService); easing.type: Motion.standardDecel }
+    }
 
     function displayMenu(item, sourceItem, mouseX, mouseY) {
         if (!item || !item.hasMenu)
@@ -99,7 +112,16 @@ Item {
             || text.indexOf("键盘") >= 0;
     }
 
-    function sortedItems(count) {
+    function trayItemKey(item, fallbackIndex) {
+        try {
+            var id = String(item && item.id || "").trim();
+            if (id.length > 0)
+                return id;
+        } catch (e) {}
+        return "tray-fallback-" + fallbackIndex + ":" + itemText(item);
+    }
+
+    function sortedEntries(count) {
         var values = SystemTray.items ? SystemTray.items.values : [];
         var decorated = [];
         for (var i = 0; i < values.length; i++) {
@@ -118,97 +140,136 @@ Item {
         });
 
         var result = [];
-        for (var j = 0; j < decorated.length; j++)
-            result.push(decorated[j].item);
+        for (var j = 0; j < decorated.length; j++) {
+            var entry = decorated[j];
+            result.push({
+                "modelKey": trayItemKey(entry.item, entry.index),
+                "item": entry.item
+            });
+        }
         return result;
     }
 
-    Row {
-        id: trayRow
-
+    ListView {
+        id: trayList
+        width: root.animatedWidth
+        height: root.implicitHeight
         anchors.verticalCenter: parent.verticalCenter
+        orientation: ListView.Horizontal
+        interactive: false
+        clip: false
         spacing: 6
 
-        Repeater {
-            model: ScriptModel {
-                values: root.orderedItems
+        model: ScriptModel {
+            objectProp: "modelKey"
+            values: root.orderedEntries
+        }
+
+        delegate: Item {
+            id: trayItem
+
+            required property var modelData
+            readonly property var trayObject: modelData ? modelData.item : null
+            property real lifecycleOpacity: 1
+            property real lifecycleScale: 1
+            property real pressScale: Motion.pressScaleFor(root.settingsService, trayMouse.pressed)
+            property real pressOpacity: trayMouse.pressed ? 0.75 : 1
+
+            width: 24
+            height: 22
+            scale: lifecycleScale * pressScale
+            opacity: lifecycleOpacity * pressOpacity
+
+            Behavior on pressScale { NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing } }
+            Behavior on pressOpacity { NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing } }
+
+            Rectangle {
+                anchors.fill: parent
+                radius: 7
+                color: trayMouse.containsMouse ? root.trayHoverFill : "transparent"
+                border.color: root.isAttention(trayItem.trayObject)
+                    ? root.trayAttention
+                    : "transparent"
+                border.width: root.isAttention(trayItem.trayObject) ? 1 : 0
+
+                Behavior on color {
+                    ColorAnimation { duration: Motion.fadeFast(root.settingsService); easing.type: Motion.standardDecel }
+                }
             }
 
-            delegate: Item {
-                id: trayItem
+            IconImage {
+                id: trayIcon
 
-                required property var modelData
+                anchors.centerIn: parent
+                width: 16
+                height: 16
+                implicitSize: 16
+                source: root.iconSource(trayItem.trayObject)
+                mipmap: true
+                visible: root.iconSource(trayItem.trayObject).length > 0 && status !== Image.Error
+            }
 
-                width: 24
-                height: 22
-                scale: Motion.pressScaleFor(root.settingsService, trayMouse.pressed)
-                opacity: trayMouse.pressed ? 0.75 : 1
+            Text {
+                anchors.centerIn: parent
+                text: root.fallbackLabel(trayItem.trayObject)
+                color: root.trayText
+                font.pixelSize: 11
+                font.weight: Font.DemiBold
+                visible: !trayIcon.visible
+            }
 
-                Behavior on scale { NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing } }
-                Behavior on opacity { NumberAnimation { duration: Motion.pressDurationFor(root.settingsService); easing.type: Motion.pressEasing } }
+            MouseArea {
+                id: trayMouse
 
-                Rectangle {
-                    anchors.fill: parent
-                    radius: 7
-                    color: trayMouse.containsMouse ? root.trayHoverFill : "transparent"
-                    border.color: root.isAttention(trayItem.modelData)
-                        ? root.trayAttention
-                        : "transparent"
-                    border.width: root.isAttention(trayItem.modelData) ? 1 : 0
-                }
+                anchors.fill: parent
+                acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
 
-                IconImage {
-                    id: trayIcon
+                onClicked: function(mouse) {
+                    if (!trayItem.trayObject)
+                        return;
 
-                    anchors.centerIn: parent
-                    width: 16
-                    height: 16
-                    implicitSize: 16
-                    source: root.iconSource(trayItem.modelData)
-                    mipmap: true
-                    visible: root.iconSource(trayItem.modelData).length > 0 && status !== Image.Error
-                }
+                    if (mouse.button === Qt.RightButton) {
+                        if (trayItem.trayObject.hasMenu)
+                            root.displayMenu(trayItem.trayObject, trayItem, mouse.x, mouse.y);
+                        return;
+                    }
 
-                Text {
-                    anchors.centerIn: parent
-                    text: root.fallbackLabel(trayItem.modelData)
-                    color: root.trayText
-                    font.pixelSize: 11
-                    font.weight: Font.DemiBold
-                    visible: !trayIcon.visible
-                }
+                    if (mouse.button === Qt.MiddleButton) {
+                        trayItem.trayObject.secondaryActivate();
+                        return;
+                    }
 
-                MouseArea {
-                    id: trayMouse
-
-                    anchors.fill: parent
-                    acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-
-                    onClicked: function(mouse) {
-                        if (!trayItem.modelData)
-                            return;
-
-                        if (mouse.button === Qt.RightButton) {
-                            if (trayItem.modelData.hasMenu)
-                                root.displayMenu(trayItem.modelData, trayItem, mouse.x, mouse.y);
-                            return;
-                        }
-
-                        if (mouse.button === Qt.MiddleButton) {
-                            trayItem.modelData.secondaryActivate();
-                            return;
-                        }
-
-                        if (trayItem.modelData.onlyMenu && trayItem.modelData.hasMenu) {
-                            root.displayMenu(trayItem.modelData, trayItem, mouse.x, mouse.y);
-                        } else {
-                            trayItem.modelData.activate();
-                        }
+                    if (trayItem.trayObject.onlyMenu && trayItem.trayObject.hasMenu) {
+                        root.displayMenu(trayItem.trayObject, trayItem, mouse.x, mouse.y);
+                    } else {
+                        trayItem.trayObject.activate();
                     }
                 }
             }
+        }
+
+        add: Transition {
+            ParallelAnimation {
+                NumberAnimation { property: "lifecycleOpacity"; from: 0; to: 1; duration: Motion.fadeFast(root.settingsService); easing.type: Motion.standardDecel }
+                NumberAnimation { property: "lifecycleScale"; from: 0.82; to: 1; duration: Motion.elementResize(root.settingsService); easing.type: Motion.emphasizedDecel }
+            }
+        }
+
+        remove: Transition {
+            ParallelAnimation {
+                NumberAnimation { property: "lifecycleOpacity"; to: 0; duration: Motion.fadeFast(root.settingsService); easing.type: Motion.standardDecel }
+                NumberAnimation { property: "lifecycleScale"; to: 0.82; duration: Motion.elementResize(root.settingsService); easing.type: Motion.emphasizedDecel }
+            }
+        }
+
+        move: Transition {
+            NumberAnimation { properties: "x,y"; duration: Motion.elementMove(root.settingsService); easing.type: Motion.emphasizedDecel }
+        }
+
+        displaced: Transition {
+            NumberAnimation { properties: "x,y"; duration: Motion.elementMove(root.settingsService); easing.type: Motion.emphasizedDecel }
         }
     }
 }

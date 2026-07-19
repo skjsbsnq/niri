@@ -262,8 +262,14 @@ PanelWindow {
                     Rectangle {
                         anchors.fill: parent
                         radius: 12
-                        color: root.appMenuOpen ? "#32ffffff" : "transparent"
+                        color: root.appMenuOpen
+                            ? "#32ffffff"
+                            : (niriMenuMouse.containsMouse ? root.buttonHover : "transparent")
                         border.width: 0
+
+                        Behavior on color {
+                            ColorAnimation { duration: Motion.fadeFast(root.settingsService); easing.type: Motion.standardDecel }
+                        }
                     }
 
                     Image {
@@ -279,6 +285,7 @@ PanelWindow {
                     MouseArea {
                         id: niriMenuMouse
                         anchors.fill: parent
+                        hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
                         onClicked: root.toggleAppMenu(root.anchorRectFor(niriMenuButton))
                     }
@@ -300,6 +307,10 @@ PanelWindow {
                         radius: 12
                         color: root.leftSidebarOpen ? root.buttonOpen : (leftSidebarMouse.containsMouse ? root.buttonHover : "transparent")
                         border.width: 0
+
+                        Behavior on color {
+                            ColorAnimation { duration: Motion.fadeFast(root.settingsService); easing.type: Motion.standardDecel }
+                        }
                     }
 
                     TahoeSymbol {
@@ -345,6 +356,10 @@ PanelWindow {
                         radius: 12
                         color: root.applicationMenuOpen ? "#32ffffff" : (applicationMenuMouse.containsMouse ? "#24ffffff" : "transparent")
                         border.width: 0
+
+                        Behavior on color {
+                            ColorAnimation { duration: Motion.fadeFast(root.settingsService); easing.type: Motion.standardDecel }
+                        }
                     }
 
                     Text {
@@ -392,9 +407,15 @@ PanelWindow {
                             Rectangle {
                                 anchors.fill: parent
                                 radius: 10
-                                color: modelData.active ? "#32ffffff" : "#18ffffff"
+                                color: modelData.active
+                                    ? "#32ffffff"
+                                    : (workspaceMouse.containsMouse ? root.buttonHover : "#18ffffff")
                                 border.color: modelData.urgent ? "#ccff453a" : "#36ffffff"
                                 border.width: 1
+
+                                Behavior on color {
+                                    ColorAnimation { duration: Motion.fadeFast(root.settingsService); easing.type: Motion.standardDecel }
+                                }
                             }
 
                             Text {
@@ -408,6 +429,7 @@ PanelWindow {
                             MouseArea {
                                 id: workspaceMouse
                                 anchors.fill: parent
+                                hoverEnabled: true
                                 cursorShape: modelData.canActivate ? Qt.PointingHandCursor : Qt.ArrowCursor
                                 onClicked: {
                                     if (root.niriService)
@@ -463,6 +485,10 @@ PanelWindow {
                     radius: root.statusRadius
                     color: root.notificationCenterOpen ? root.buttonOpen : (badgeMouse.containsMouse ? root.buttonHover : root.buttonFill)
                     border.width: 0
+
+                    Behavior on color {
+                        ColorAnimation { duration: Motion.fadeFast(root.settingsService); easing.type: Motion.standardDecel }
+                    }
                 }
 
                 TahoeSymbol {
@@ -474,6 +500,8 @@ PanelWindow {
                 }
 
                 Rectangle {
+                    id: notificationBadge
+                    readonly property bool hasBadge: root.notificationCount > 0
                     // Count pip, top-right of the bell.
                     x: parent.width - width - 3
                     y: 1
@@ -483,7 +511,17 @@ PanelWindow {
                     color: root.statusAttention
                     border.color: "#ffffff"
                     border.width: 1
-                    visible: root.notificationCount > 0
+                    opacity: hasBadge ? 1 : 0
+                    scale: hasBadge ? 1 : 0.76
+                    visible: hasBadge || opacity > 0.01
+
+                    Behavior on opacity {
+                        NumberAnimation { duration: Motion.fadeFast(root.settingsService); easing.type: Motion.standardDecel }
+                    }
+
+                    Behavior on scale {
+                        NumberAnimation { duration: Motion.elementResize(root.settingsService); easing.type: Motion.emphasizedDecel }
+                    }
 
                     Text {
                         id: countLabel
@@ -522,6 +560,10 @@ PanelWindow {
                     radius: root.statusRadius
                     color: root.clipboardPopupOpen ? root.buttonOpen : (clipboardMouse.containsMouse ? root.buttonHover : root.buttonFill)
                     border.width: 0
+
+                    Behavior on color {
+                        ColorAnimation { duration: Motion.fadeFast(root.settingsService); easing.type: Motion.standardDecel }
+                    }
                 }
 
                 TahoeSymbol {
@@ -533,6 +575,8 @@ PanelWindow {
                 }
 
                 Rectangle {
+                    id: clipboardBadge
+                    readonly property bool hasBadge: root.clipboardCount > 0
                     width: countText.implicitWidth + 7
                     height: 13
                     radius: 6.5
@@ -541,7 +585,17 @@ PanelWindow {
                     color: root.statusAttention
                     border.color: "#ffffff"
                     border.width: 1
-                    visible: root.clipboardCount > 0
+                    opacity: hasBadge ? 1 : 0
+                    scale: hasBadge ? 1 : 0.76
+                    visible: hasBadge || opacity > 0.01
+
+                    Behavior on opacity {
+                        NumberAnimation { duration: Motion.fadeFast(root.settingsService); easing.type: Motion.standardDecel }
+                    }
+
+                    Behavior on scale {
+                        NumberAnimation { duration: Motion.elementResize(root.settingsService); easing.type: Motion.emphasizedDecel }
+                    }
 
                     Text {
                         id: countText
@@ -580,6 +634,10 @@ PanelWindow {
                     radius: root.statusRadius
                     color: root.fanPopupOpen ? root.buttonOpen : (fanMouse.containsMouse ? root.buttonHover : root.buttonFill)
                     border.width: 0
+
+                    Behavior on color {
+                        ColorAnimation { duration: Motion.fadeFast(root.settingsService); easing.type: Motion.standardDecel }
+                    }
                 }
 
                 TahoeSymbol {
@@ -617,6 +675,10 @@ PanelWindow {
                     radius: root.statusRadius
                     color: root.batteryPopupOpen ? root.buttonOpen : (batteryMouse.containsMouse ? root.buttonHover : root.buttonFill)
                     border.width: 0
+
+                    Behavior on color {
+                        ColorAnimation { duration: Motion.fadeFast(root.settingsService); easing.type: Motion.standardDecel }
+                    }
                 }
 
                 RowLayout {
@@ -650,6 +712,7 @@ PanelWindow {
                             border.width: 1
 
                             Rectangle {
+                                id: batteryFill
                                 x: 2
                                 y: 2
                                 width: root.batteryService ? Math.max(2, (parent.width - 4) * root.batteryService.roundedPercentage / 100) : 2
@@ -658,6 +721,14 @@ PanelWindow {
                                 color: root.batteryService && root.batteryService.roundedPercentage <= 15 && root.batteryService.onBattery
                                     ? root.statusAttention
                                     : root.statusText
+
+                                Behavior on width {
+                                    NumberAnimation { duration: Motion.elementResize(root.settingsService); easing.type: Motion.emphasizedDecel }
+                                }
+
+                                Behavior on color {
+                                    ColorAnimation { duration: Motion.fadeFast(root.settingsService); easing.type: Motion.standardDecel }
+                                }
                             }
                         }
 
@@ -699,6 +770,10 @@ PanelWindow {
                     radius: root.statusRadius
                     color: inputMethodMouse.containsMouse ? root.buttonHover : root.buttonFill
                     border.width: 0
+
+                    Behavior on color {
+                        ColorAnimation { duration: Motion.fadeFast(root.settingsService); easing.type: Motion.standardDecel }
+                    }
                 }
 
                 Text {
@@ -738,6 +813,10 @@ PanelWindow {
                     radius: root.statusRadius
                     color: root.wifiPopupOpen ? root.buttonOpen : (wifiMouse.containsMouse ? root.buttonHover : root.buttonFill)
                     border.width: 0
+
+                    Behavior on color {
+                        ColorAnimation { duration: Motion.fadeFast(root.settingsService); easing.type: Motion.standardDecel }
+                    }
                 }
 
                 TahoeSymbol {
@@ -773,6 +852,10 @@ PanelWindow {
                     radius: root.statusRadius
                     color: root.spotlightOpen ? root.buttonOpen : (spotlightMouse.containsMouse ? root.buttonHover : root.buttonFill)
                     border.width: 0
+
+                    Behavior on color {
+                        ColorAnimation { duration: Motion.fadeFast(root.settingsService); easing.type: Motion.standardDecel }
+                    }
                 }
 
                 TahoeSymbol {
@@ -807,6 +890,10 @@ PanelWindow {
                     radius: root.statusRadius
                     color: root.controlCenterOpen ? root.buttonOpen : (statusMouse.containsMouse ? root.buttonHover : root.buttonFill)
                     border.width: 0
+
+                    Behavior on color {
+                        ColorAnimation { duration: Motion.fadeFast(root.settingsService); easing.type: Motion.standardDecel }
+                    }
                 }
 
                 Item {

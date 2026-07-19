@@ -29,7 +29,7 @@
 | R15 | KDL 参数修正包 | #6 #89 #95 #96 #97 #100 | S | DONE | [R15](acceptance/R15-kdl-motion-parameters-2026-07-19.md)：Spotlight/状态弹窗/窗口参数收敛，795 tests 全绿，双 config validate、完整部署与 nested 回归通过 |
 | R16 | Overview / 切换器收尾 | #42 #43 #44 #45 #46 | S | DONE | [R16](acceptance/R16-overview-task-switcher-2026-07-19.md)：795 tests 全绿，独立审查 CLEAN，nested 10 窗口 Overview 与真实 QML confirm 生命周期验收通过 |
 | R17 | Dock 布局动画 | #72 #73 #76 #77 #78 #79 #80 #81 #82 #90 | M | DONE | [R17](acceptance/R17-dock-layout-motion-2026-07-19.md)：803 tests 全绿，独立复审 CLEAN，nested 窗口/最小化/全屏与 pointer-origin 菜单验收通过 |
-| R18 | 外围收尾（顶栏/设置/侧栏细节/壁纸/托盘） | #51 #52 #60–#65 #70 #71 #87 #88 #91–#94 | M | PENDING | |
+| R18 | 外围收尾（顶栏/设置/侧栏细节/壁纸/托盘） | #51 #52 #60–#65 #70 #71 #87 #88 #91–#94 | M | DONE | [R18](acceptance/R18-peripheral-motion-2026-07-19.md)：811 tests + 234 subtests 全绿，独立复审 CLEAN；动态壁纸 zoom 架构边界与 dim 方案已记录 |
 | R19 | 治理收尾与总验收 | 复测全量 | S | PENDING | |
 
 **范围外（本轮不做，另立任务）**：#41（有意设计）、#53 设置页懒加载（性能专项）、#98 快照跳过（运行期复现后再修）、#99（既有权衡）、#101/#102 图标体系（视觉基因专项，改动面大需单独立项）。

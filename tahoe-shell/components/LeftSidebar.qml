@@ -231,7 +231,8 @@ PanelWindow {
                 LeftSidebarSystem {
                     id: systemView
                     anchors.fill: parent
-                    visible: root.currentTab === "system"
+                    opacity: root.currentTab === "system" ? 1 : 0
+                    visible: root.currentTab === "system" || opacity > 0.01
                     systemStats: root.systemStatsService
                     batteryService: root.batteryService
                     settingsService: root.settingsService
@@ -244,11 +245,16 @@ PanelWindow {
                     onOpenProcessMenu: function(proc, anchorRect) {
                         root.openProcessMenuRequested(proc, anchorRect);
                     }
+
+                    Behavior on opacity {
+                        NumberAnimation { duration: Motion.fadeFast(root.settingsService); easing.type: Motion.standardDecel }
+                    }
                 }
 
                 LeftSidebarWeather {
                     anchors.fill: parent
-                    visible: root.currentTab === "weather"
+                    opacity: root.currentTab === "weather" ? 1 : 0
+                    visible: root.currentTab === "weather" || opacity > 0.01
                     weatherService: root.weatherService
                     settingsService: root.settingsService
                     sidebarOpen: root.open
@@ -259,6 +265,10 @@ PanelWindow {
                     useSpring: root.useSpring
                     backgroundEffectsAllowed: root.backgroundEffectsAllowed
                     onOpenWeatherSettingsRequested: root.openWeatherSettingsRequested()
+
+                    Behavior on opacity {
+                        NumberAnimation { duration: Motion.fadeFast(root.settingsService); easing.type: Motion.standardDecel }
+                    }
                 }
             }
         }
@@ -284,6 +294,10 @@ PanelWindow {
             color: seg.active ? root.textPrimary : root.textSecondary
             font.pixelSize: 13
             font.weight: seg.active ? Font.DemiBold : Font.Medium
+
+            Behavior on color {
+                ColorAnimation { duration: Motion.fadeFast(root.settingsService); easing.type: Motion.standardDecel }
+            }
         }
     }
 }

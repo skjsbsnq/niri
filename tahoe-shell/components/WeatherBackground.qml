@@ -34,6 +34,7 @@ Item {
     property bool animate: true           // 动效总开关；切走/关闭时父级置 false
     property bool darkMode: false         // Tahoe UI 暗色主题（与天文 night 不同维度）
     property real scrollProgress: 0       // 0=顶部，1=滚到底；渐隐粒子（参考同款）
+    property var settingsService
 
     // --- 派生分类 ---
     readonly property string weatherType: classifyWeatherType()
@@ -864,9 +865,27 @@ Item {
         opacity: Math.max(0.46, 0.96 - root.scrollProgress * 0.28)
         gradient: Gradient {
             orientation: Qt.Vertical
-            GradientStop { position: 0.0; color: root.skyPalette().top }
-            GradientStop { position: 0.54; color: root.skyPalette().mid }
-            GradientStop { position: 1.0; color: root.skyPalette().bottom }
+            GradientStop {
+                position: 0.0
+                color: root.skyPalette().top
+                Behavior on color {
+                    ColorAnimation { duration: Motion.fadeFast(root.settingsService); easing.type: Motion.standardDecel }
+                }
+            }
+            GradientStop {
+                position: 0.54
+                color: root.skyPalette().mid
+                Behavior on color {
+                    ColorAnimation { duration: Motion.fadeFast(root.settingsService); easing.type: Motion.standardDecel }
+                }
+            }
+            GradientStop {
+                position: 1.0
+                color: root.skyPalette().bottom
+                Behavior on color {
+                    ColorAnimation { duration: Motion.fadeFast(root.settingsService); easing.type: Motion.standardDecel }
+                }
+            }
         }
     }
 
@@ -875,8 +894,20 @@ Item {
         opacity: Math.max(0, 0.20 - root.scrollProgress * 0.08)
         gradient: Gradient {
             orientation: Qt.Vertical
-            GradientStop { position: 0.0; color: root.alphaColor(root.skyPalette().glow, 0.18) }
-            GradientStop { position: 0.44; color: root.alphaColor(root.skyPalette().glow, 0.04) }
+            GradientStop {
+                position: 0.0
+                color: root.alphaColor(root.skyPalette().glow, 0.18)
+                Behavior on color {
+                    ColorAnimation { duration: Motion.fadeFast(root.settingsService); easing.type: Motion.standardDecel }
+                }
+            }
+            GradientStop {
+                position: 0.44
+                color: root.alphaColor(root.skyPalette().glow, 0.04)
+                Behavior on color {
+                    ColorAnimation { duration: Motion.fadeFast(root.settingsService); easing.type: Motion.standardDecel }
+                }
+            }
             GradientStop { position: 1.0; color: "transparent" }
         }
     }
@@ -937,7 +968,13 @@ Item {
             orientation: Qt.Vertical
             GradientStop { position: 0.0; color: "transparent" }
             GradientStop { position: 0.62; color: "transparent" }
-            GradientStop { position: 1.0; color: root.alphaColor("#0d1220", root.night ? 0.12 : 0.09) }
+            GradientStop {
+                position: 1.0
+                color: root.alphaColor("#0d1220", root.night ? 0.12 : 0.09)
+                Behavior on color {
+                    ColorAnimation { duration: Motion.fadeFast(root.settingsService); easing.type: Motion.standardDecel }
+                }
+            }
         }
     }
 

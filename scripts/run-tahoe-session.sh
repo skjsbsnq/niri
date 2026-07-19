@@ -288,6 +288,8 @@ main() {
     require_cmd "$QUICKSHELL_BIN"
     [[ -d "$TAHOE_CONFIG_DIR" ]] || die "Tahoe shell config directory does not exist: $TAHOE_CONFIG_DIR"
     [[ -f "$TAHOE_CONFIG_DIR/shell.qml" ]] || die "Tahoe shell entry not found: $TAHOE_CONFIG_DIR/shell.qml"
+    [[ -r "$TAHOE_CONFIG_DIR/scripts/start-quickshell.sh" ]] \
+      || die "Tahoe shell launcher not found: $TAHOE_CONFIG_DIR/scripts/start-quickshell.sh"
   fi
 
   niri_args=("$niri_bin")
@@ -300,7 +302,7 @@ main() {
     niri_args+=("--config" "$NIRI_CONFIG")
   fi
 
-  shell_args=("$QUICKSHELL_BIN" "-p" "$TAHOE_CONFIG_DIR")
+  shell_args=("bash" "$TAHOE_CONFIG_DIR/scripts/start-quickshell.sh")
 
   export __GLX_VENDOR_LIBRARY_NAME="${__GLX_VENDOR_LIBRARY_NAME:-nvidia}"
   resolve_icon_theme_setting

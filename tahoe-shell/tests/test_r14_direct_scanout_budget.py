@@ -145,8 +145,11 @@ process.stdout.write(JSON.stringify(names));
         self.assertIn("def system_on_battery():", prestart)
         self.assertIn("startup_fps_budget()", prestart)
         self.assertIn("Fullscreen does not own the live process lifecycle", wallpaper)
-        self.assertNotIn("--no-fullscreen-pause", wallpaper)
-        self.assertNotIn("--no-fullscreen-pause", prestart)
+        self.assertIn("wallpaperPauseWhenFullscreen", wallpaper)
+        self.assertIn("function applyWallpaperFullscreenPause(", wallpaper)
+        self.assertIn("--no-fullscreen-pause", wallpaper)
+        self.assertIn("settings_pause_when_fullscreen", prestart)
+        self.assertIn("--no-fullscreen-pause", prestart)
 
     def test_auto_power_policy_never_defaults_to_performance(self) -> None:
         for path in (RUN_SESSION, LOGIN_SESSION):

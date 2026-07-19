@@ -34,6 +34,7 @@ Item {
     readonly property int wallpaperEngineIdleFps: settingsAdapter.wallpaperEngineIdleFps
     readonly property int wallpaperEngineIdleSeconds: settingsAdapter.wallpaperEngineIdleSeconds
     readonly property bool wallpaperPauseWhenIdle: settingsAdapter.wallpaperPauseWhenIdle
+    readonly property bool wallpaperPauseWhenFullscreen: settingsAdapter.wallpaperPauseWhenFullscreen
     readonly property string screenshotDirectory: settingsAdapter.screenshotDirectory
     readonly property string effectiveScreenshotDirectory: normalizedDirectory(screenshotDirectory).length > 0
         ? normalizedDirectory(screenshotDirectory)
@@ -396,6 +397,14 @@ Item {
         if (settingsAdapter.wallpaperPauseWhenIdle === next)
             return;
         settingsAdapter.wallpaperPauseWhenIdle = next;
+        settingsFile.writeAdapter();
+    }
+
+    function setWallpaperPauseWhenFullscreen(enabled) {
+        var next = !!enabled;
+        if (settingsAdapter.wallpaperPauseWhenFullscreen === next)
+            return;
+        settingsAdapter.wallpaperPauseWhenFullscreen = next;
         settingsFile.writeAdapter();
     }
 
@@ -884,7 +893,7 @@ Item {
             property string wallpaperMode: "static"
             property string staticWallpaperPath: ""
             property string dynamicWallpaperCommand: ""
-            // Static wallpaper, or the Wallpaper Engine project's preview image.
+            // Static wallpaper, or a full-size frame captured by the live renderer.
             property bool lockScreenFollowWallpaper: true
             // Active/idle fps for linux-wallpaperengine (external + dynamic modes).
             property int wallpaperEngineFps: 15
@@ -892,6 +901,8 @@ Item {
             property int wallpaperEngineIdleSeconds: 60
             // When true, stop the engine while idle and show static wallpaper.
             property bool wallpaperPauseWhenIdle: false
+            // Keep linux-wallpaperengine's native fullscreen pause unless disabled.
+            property bool wallpaperPauseWhenFullscreen: true
             property string screenshotDirectory: ""
             property bool screenshotCopyToClipboard: true
             property bool screenshotOfferActions: true

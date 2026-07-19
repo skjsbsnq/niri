@@ -191,50 +191,18 @@ TestCase {
         compare(Qt.formatDateTime(lock.clockNow, "yyyy年M月d日"), "2026年1月5日");
     }
 
-    function test_wallpaper_preview_resolver_is_output_aware() {
-        lock.activeWallpaperEntries = {
-            "eDP-2": { "backgroundId": "/tmp/wallpapers/one" },
-            "HDMI-A-1": { "backgroundId": "/tmp/wallpapers/two" }
-        };
-        lock.activeWallpaperRevision += 1;
-        compare(lock.wallpaperProjectForOutput("eDP-2"), "/tmp/wallpapers/one");
-        compare(lock.wallpaperProjectForOutput("HDMI-A-1"), "/tmp/wallpapers/two");
-        compare(lock.wallpaperProjectForOutput("missing"), "");
-
-        lock.activeWallpaperEntries = {
-            "eDP-2": { "backgroundId": "/tmp/wallpapers/only" }
-        };
-        lock.activeWallpaperRevision += 1;
-        compare(lock.wallpaperProjectForOutput("HDMI-A-1"), "");
-        compare(lock.wallpaperProjectForOutput(""), "/tmp/wallpapers/only");
-    }
-
-    function test_wallpaper_preview_resolver_reads_project_metadata() {
+    function test_wallpaper_capture_cache_is_output_aware_and_sanitized() {
         compare(
-            lock.wallpaperPreviewFromProject(
-                "/tmp/wallpapers/one",
-                '{"preview":"preview.gif"}'
-            ),
-            "/tmp/wallpapers/one/preview.gif"
-        );
-        compare(lock.wallpaperPreviewFromProject("/tmp/wallpapers/one", "{}"), "");
-        compare(lock.wallpaperPreviewFromProject("/tmp/wallpapers/one", "not-json"), "");
-    }
-
-    function test_dynamic_wallpaper_command_resolves_project_path() {
-        compare(
-            lock.wallpaperProjectFromDynamicCommand(
-                "linux-wallpaperengine --screen-root eDP-2 --bg '/tmp/wallpapers/three'"
-            ),
-            "/tmp/wallpapers/three"
+            lock.lockWallpaperCapturePath("eDP-2"),
+            "/tmp/tahoe-shell-test-state/lock-wallpaper/eDP-2.png"
         );
         compare(
-            lock.wallpaperProjectFromDynamicCommand("linux-wallpaperengine 3286906338"),
-            "/tmp/tahoe-shell-test-home/.local/share/Steam/steamapps/workshop/content/431960/3286906338"
+            lock.lockWallpaperCapturePath("DP/1 weird"),
+            "/tmp/tahoe-shell-test-state/lock-wallpaper/DP_1_weird.png"
         );
         compare(
-            lock.wallpaperProjectFromDynamicCommand("linux-wallpaperengine '/tmp/wallpapers/four'"),
-            "/tmp/wallpapers/four"
+            lock.lockWallpaperCapturePath(""),
+            "/tmp/tahoe-shell-test-state/lock-wallpaper/default.png"
         );
     }
 
@@ -246,8 +214,7 @@ TestCase {
         wait(0);
         var surface = lock.surfaceInstances[0];
         verify(surface !== null);
-        surface.wallpaperPreviewSource = "/definitely/missing/tahoe-preview.png";
-        tryCompare(surface, "wallpaperPreviewSource", "", 1000);
+        compare(surface.capturedWallpaperReady, false);
         compare(surface.lockWallpaperSource, surface.defaultWallpaperSource);
         lock.unlock();
 

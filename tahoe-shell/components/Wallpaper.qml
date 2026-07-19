@@ -15,6 +15,7 @@ PanelWindow {
     property bool launchpadOpen: false
     property bool fullscreenActive: false
     property bool onBattery: false
+    readonly property bool nestedSession: String(Quickshell.env("TAHOE_NESTED_SESSION") || "") === "1"
 
     readonly property bool settingsReady: settingsService && settingsService.loaded
     // Idle state for the next safe wallpaperengine start (or optional pause), short of lock timeout.
@@ -28,6 +29,9 @@ PanelWindow {
         ? Math.max(1, Math.min(wallpaperActiveFps, Number(settingsService.wallpaperEngineIdleFps) || 8))
         : 8
     readonly property bool wallpaperPauseWhenIdle: !!(settingsService && settingsService.wallpaperPauseWhenIdle)
+    readonly property bool wallpaperPauseWhenFullscreen: !settingsService
+        || settingsService.wallpaperPauseWhenFullscreen === undefined
+        || !!settingsService.wallpaperPauseWhenFullscreen
     property bool sessionIdle: false
     readonly property int effectiveWallpaperFps: (sessionIdle || onBattery)
         ? wallpaperIdleFps
@@ -35,29 +39,25 @@ PanelWindow {
     // --fps is a process-start option. Keep the running budget stable so an idle transition does
     // not tear down and recreate the wallpaper layer on the first pointer event.
     property int appliedWallpaperFps: 15
-    // Fullscreen does not own the live process lifecycle. Generated linux-wallpaperengine
-    // commands retain its default renderer pause, while custom commands keep their existing
-    // process and layer surface instead of exposing a fallback during a forced cold-start.
+    // Fullscreen does not own the live process lifecycle. Wallpaper Engine handles the pause in-place
+    // when enabled, while the renderer and its layer surface remain alive either way.
     readonly property bool liveWallpaperAllowed: !sessionIdle || !wallpaperPauseWhenIdle
 
     readonly property bool dynamicDesired: settingsReady
+        && !nestedSession
         && settingsService.wallpaperMode === "dynamic"
         && settingsService.effectiveDynamicWallpaperCommand.length > 0
         && liveWallpaperAllowed
     readonly property string dynamicCommand: dynamicDesired
-        ? applyWallpaperFpsBudget(resolveDynamicCommand(settingsService.effectiveDynamicWallpaperCommand), appliedWallpaperFps)
+        ? preparedDynamicCommand(settingsService.effectiveDynamicWallpaperCommand)
         : ""
     readonly property bool externalDesired: settingsReady
+        && !nestedSession
         && settingsService.wallpaperMode === "external"
         && liveWallpaperAllowed
-    readonly property bool dynamicSuppressesStatic: settingsReady
-        && settingsService.wallpaperMode === "dynamic"
-        && settingsService.effectiveDynamicWallpaperCommand.length > 0
-        && liveWallpaperAllowed
+    readonly property bool dynamicSuppressesStatic: dynamicDesired
         && !dynamicLaunchFailed
-    readonly property bool externalSuppressesStatic: settingsReady
-        && settingsService.wallpaperMode === "external"
-        && liveWallpaperAllowed
+    readonly property bool externalSuppressesStatic: externalDesired
         && (!externalStateLoaded || (externalCommand.length > 0 && !externalLaunchFailed))
     readonly property bool showStaticWallpaper: settingsReady
         && !dynamicActive
@@ -76,11 +76,20 @@ PanelWindow {
     property bool externalLaunchFailed: false
     property bool externalStateLoaded: false
     property bool completed: false
+    property bool restartCoverVisible: false
+    property bool prestartStateLoaded: false
+    property bool prestartedWallpaperStopPending: false
+    property var prestartedWallpaperRecord: null
     property bool prestartedWallpaperAdopted: false
     property bool prestartedWallpaperReleased: false
     property string prestartedWallpaperMode: ""
-    property string adoptedDynamicCommand: ""
-    readonly property string prestartedWallpaperPidFile: Quickshell.stateDir + "/wallpaper-prestart.pids"
+    property string adoptedWallpaperCommand: ""
+    readonly property string prestartedWallpaperRecordDir: Quickshell.stateDir + "/wallpaper-prestart"
+    readonly property string prestartedWallpaperRecordPath: nestedSession ? ""
+        : prestartedWallpaperRecordDir + "/" + safeOutputName(screenName()) + ".json"
+    readonly property string lockWallpaperCaptureDir: Quickshell.stateDir + "/lock-wallpaper"
+    readonly property int availableScreenCount: Quickshell.screens
+        ? Quickshell.screens.length : 0
 
     anchors {
         left: true
@@ -118,6 +127,67 @@ PanelWindow {
         return resolved;
     }
 
+    function safeOutputName(value) {
+        var safe = String(value || "").trim().replace(/[^A-Za-z0-9_.-]/g, "_");
+        return safe.length > 0 ? safe : "default";
+    }
+
+    function lockWallpaperCapturePath(output) {
+        return lockWallpaperCaptureDir + "/" + safeOutputName(output) + ".png";
+    }
+
+    function isDirectWallpaperEngineCommand(command) {
+        var text = String(command || "").trim();
+        var match = text.match(/^("[^"]+"|'[^']+'|[^\s]+)/);
+        if (!match)
+            return false;
+        var executable = String(match[1]);
+        if ((executable.charAt(0) === "'" && executable.charAt(executable.length - 1) === "'")
+                || (executable.charAt(0) === "\"" && executable.charAt(executable.length - 1) === "\""))
+            executable = executable.substring(1, executable.length - 1);
+        var slash = executable.lastIndexOf("/");
+        if (slash >= 0)
+            executable = executable.substring(slash + 1);
+        return executable === "linux-wallpaperengine";
+    }
+
+    function applyWallpaperFullscreenPause(command, pauseWhenFullscreen) {
+        var text = String(command || "").trim();
+        if (!isDirectWallpaperEngineCommand(text))
+            return text;
+        text = text.replace(/(^|\s)--no-fullscreen-pause(?=\s|$)/g, "$1");
+        text = text.replace(/\s+/g, " ").trim();
+        return pauseWhenFullscreen ? text : text + " --no-fullscreen-pause";
+    }
+
+    function applyLockWallpaperCapture(command, output) {
+        var text = String(command || "").trim();
+        if (!isDirectWallpaperEngineCommand(text))
+            return text;
+        text = text.replace(/(^|\s)--screenshot(?:\s+|=)(?:"[^"]*"|'[^']*'|[^\s]+)/g, "$1");
+        text = text.replace(/(^|\s)--screenshot-delay(?:\s+|=)\d+/g, "$1");
+        text = text.replace(/\s+/g, " ").trim();
+        return text
+            + " --screenshot " + shellQuote(lockWallpaperCapturePath(output))
+            + " --screenshot-delay 5";
+    }
+
+    function wrapWallpaperCommand(command) {
+        var text = String(command || "").trim();
+        if (text.length === 0)
+            return "";
+        return "mkdir -p " + shellQuote(lockWallpaperCaptureDir) + " && exec " + text;
+    }
+
+    function preparedDynamicCommand(command) {
+        var output = screenName();
+        var text = resolveDynamicCommand(command);
+        text = applyWallpaperFullscreenPause(text, wallpaperPauseWhenFullscreen);
+        text = applyLockWallpaperCapture(text, output);
+        text = applyWallpaperFpsBudget(text, appliedWallpaperFps);
+        return wrapWallpaperCommand(text);
+    }
+
     function staticWallpaperSource() {
         var configured = settingsService ? settingsService.effectiveStaticWallpaper : "";
         if (configured.length > 0)
@@ -147,18 +217,18 @@ PanelWindow {
 
         var parts = [
             "linux-wallpaperengine",
-            "--screen-root", shellQuote(screen),
-            "--bg", shellQuote(backgroundId),
+            "--screen-root", screen,
+            "--bg", backgroundId,
             "--layer", "background"
         ];
 
         var scaling = String(entry.scaling || "").trim();
         if (scaling.length > 0)
-            parts.push("--scaling", shellQuote(scaling));
+            parts.push("--scaling", scaling);
 
         var clamp = String(entry.clamp || "").trim();
         if (clamp.length > 0)
-            parts.push("--clamp", shellQuote(clamp));
+            parts.push("--clamp", clamp);
 
         // Budget from DesktopSettings (active/idle). Hard cap 20 for background.
         var fps = Math.max(1, Math.min(20, Math.round(numberValue(entry.fps, root.wallpaperActiveFps))));
@@ -183,11 +253,19 @@ PanelWindow {
             parts.push("--disable-parallax");
         if (entry.disableParticles || entry.disableParticles === undefined)
             parts.push("--disable-particles");
+        if (!root.wallpaperPauseWhenFullscreen)
+            parts.push("--no-fullscreen-pause");
+        parts.push(
+            "--screenshot", lockWallpaperCapturePath(screen),
+            "--screenshot-delay", "5"
+        );
         var assetsDir = wallpaperEngineAssetsDir();
         if (assetsDir.length > 0)
-            parts.push("--assets-dir", shellQuote(assetsDir));
+            parts.push("--assets-dir", assetsDir);
 
-        return parts.join(" ");
+        return wrapWallpaperCommand(parts.map(function(part) {
+            return shellQuote(part);
+        }).join(" "));
     }
 
     // Rewrite or inject --fps so idle/active budget always wins over UX JSON.
@@ -220,7 +298,7 @@ PanelWindow {
             var active = state && state.activeWallpapers ? state.activeWallpapers : {};
             var output = screenName();
             var entry = active[output] || null;
-            if (!entry) {
+            if (!entry && root.availableScreenCount === 1) {
                 var keys = Object.keys(active);
                 if (keys.length === 1)
                     entry = active[keys[0]];
@@ -247,94 +325,155 @@ PanelWindow {
         return true;
     }
 
+    function showRestartCover() {
+        restartCoverVisible = true;
+    }
+
+    function prestartedRecordProcessMatches(record) {
+        if (!record)
+            return false;
+        var pid = Number(record.pid);
+        var expectedStart = String(record.startTime || "");
+        if (!isFinite(pid) || pid <= 0 || !/^[0-9]+$/.test(expectedStart))
+            return false;
+        prestartedWallpaperProcessFile.path = "/proc/" + String(Math.round(pid)) + "/stat";
+        try {
+            prestartedWallpaperProcessFile.reload();
+            prestartedWallpaperProcessFile.waitForJob();
+            var text = String(prestartedWallpaperProcessFile.text() || "").trim();
+            var close = text.lastIndexOf(")");
+            if (close < 0)
+                return false;
+            var fields = text.substring(close + 1).trim().split(/\s+/);
+            return fields.length > 19 && String(fields[19]) === expectedStart;
+        } catch (e) {
+            return false;
+        }
+    }
+
     function stopPrestartedWallpaper() {
+        var record = prestartedWallpaperRecord;
+        if (!record)
+            return;
+
+        var pid = Number(record.pid);
+        if (!isFinite(pid) || pid <= 0 || !prestartedRecordProcessMatches(record)) {
+            Quickshell.execDetached({
+                command: ["rm", "-f", "--", prestartedWallpaperRecordPath],
+                workingDirectory: ""
+            });
+            return;
+        }
+
         Quickshell.execDetached({
             command: [
                 "sh",
                 "-lc",
-                "pidfile=\"$1\"; [ -f \"$pidfile\" ] || exit 0; " +
-                "pids=''; " +
-                "while IFS= read -r pid; do " +
-                "case \"$pid\" in ''|*[!0-9]*) continue ;; esac; " +
-                "pids=\"$pids $pid\"; " +
-                "kill -TERM -- -\"$pid\" 2>/dev/null || kill \"$pid\" 2>/dev/null || true; " +
-                "done < \"$pidfile\"; " +
-                "i=0; while [ \"$i\" -lt 20 ]; do alive=0; " +
-                "for pid in $pids; do kill -0 \"$pid\" 2>/dev/null && alive=1; done; " +
-                "[ \"$alive\" -eq 0 ] && break; sleep 0.05; i=$((i + 1)); done; " +
-                "for pid in $pids; do if kill -0 \"$pid\" 2>/dev/null; then " +
-                "kill -KILL -- -\"$pid\" 2>/dev/null || kill -KILL \"$pid\" 2>/dev/null || true; " +
-                "fi; done; rm -f \"$pidfile\"",
+                "pid=\"$1\"; record=\"$2\"; " +
+                "kill -TERM -- -\"$pid\" 2>/dev/null || kill -TERM \"$pid\" 2>/dev/null || true; " +
+                "i=0; while [ \"$i\" -lt 20 ] && kill -0 \"$pid\" 2>/dev/null; do " +
+                "sleep 0.05; i=$((i + 1)); done; " +
+                "if kill -0 \"$pid\" 2>/dev/null; then " +
+                "kill -KILL -- -\"$pid\" 2>/dev/null || kill -KILL \"$pid\" 2>/dev/null || true; fi; " +
+                "rm -f -- \"$record\"",
                 "sh",
-                prestartedWallpaperPidFile
+                String(Math.round(pid)),
+                prestartedWallpaperRecordPath
             ],
             workingDirectory: ""
         });
     }
 
-    function schedulePrestartedWallpaperCleanup() {
-        prestartedWallpaperCleanupTimer.restart();
+    function reloadPrestartedWallpaperState() {
+        var wasAdopted = prestartedWallpaperAdopted;
+        var wasStopPending = prestartedWallpaperStopPending;
+        var shouldResync = false;
+        prestartStateLoaded = false;
+        prestartedWallpaperRecord = null;
+        try {
+            prestartedWallpaperFile.reload();
+            prestartedWallpaperFile.waitForJob();
+            var parsed = JSON.parse(prestartedWallpaperFile.text());
+            if (parsed && Number(parsed.pid) > 0
+                    && String(parsed.output || "") === screenName()
+                    && prestartedRecordProcessMatches(parsed)) {
+                prestartedWallpaperRecord = parsed;
+            } else if (parsed && prestartedWallpaperRecordPath.length > 0) {
+                Quickshell.execDetached({
+                    command: ["rm", "-f", "--", prestartedWallpaperRecordPath],
+                    workingDirectory: ""
+                });
+            }
+        } catch (e) {
+            prestartedWallpaperRecord = null;
+        }
+        prestartStateLoaded = true;
+
+        if (prestartedWallpaperStopPending && !prestartedWallpaperRecord) {
+            prestartedWallpaperStopPending = false;
+            shouldResync = wasStopPending;
+        }
+
+        if (wasAdopted && !prestartedRecordMatches(prestartedWallpaperMode)) {
+            prestartedWallpaperAdopted = false;
+            prestartedWallpaperMode = "";
+            adoptedWallpaperCommand = "";
+            root.dynamicActive = false;
+            shouldResync = true;
+        }
+        if (root.completed && !prestartedWallpaperStopPending)
+            prestartStopTimer.stop();
+        if (root.completed && shouldResync) {
+            Qt.callLater(function() {
+                root.syncDynamicProcess();
+                root.syncExternalProcess();
+            });
+        }
     }
 
-    function hasPrestartedWallpaper() {
-        var text = "";
-        try {
-            text = prestartedWallpaperFile.text();
-        } catch (e) {
+    function prestartedRecordMatches(mode) {
+        if (!prestartStateLoaded || !prestartedWallpaperRecord)
             return false;
-        }
-
-        var lines = String(text || "").split(/\r?\n/);
-        for (var i = 0; i < lines.length; i++) {
-            if (/^[0-9]+$/.test(String(lines[i]).trim()))
-                return true;
-        }
-
-        return false;
+        if (String(prestartedWallpaperRecord.mode || "") !== mode)
+            return false;
+        if (String(prestartedWallpaperRecord.output || "") !== screenName())
+            return false;
+        var expected = mode === "dynamic" ? dynamicCommand : externalCommand;
+        return expected.length > 0
+            && String(prestartedWallpaperRecord.command || "") === expected;
     }
 
     function tryAdoptPrestartedWallpaper(mode) {
         if (prestartedWallpaperAdopted)
             return prestartedWallpaperMode === mode;
 
-        if (prestartedWallpaperReleased)
-            return false;
-
-        if (!hasPrestartedWallpaper())
+        if (prestartedWallpaperReleased || !prestartStateLoaded
+                || !prestartedRecordMatches(mode))
             return false;
 
         prestartedWallpaperAdopted = true;
         prestartedWallpaperMode = mode;
-        adoptedDynamicCommand = mode === "dynamic" ? dynamicCommand : "";
-        // A prestarted process only bridges shell startup. Start a managed process on the next
-        // event-loop turn, then clean up the bridge after the managed surface has settled.
-        dynamicActive = false;
-        prestartedWallpaperTakeoverTimer.restart();
+        adoptedWallpaperCommand = mode === "dynamic" ? dynamicCommand : externalCommand;
+        // The serialized launcher started this exact renderer before Quickshell. Keep that
+        // surface for the session instead of creating a second background surface to take over.
+        dynamicActive = true;
+        restartCoverVisible = true;
+        prestartedWallpaperReadyTimer.restart();
         return true;
     }
 
     function releasePrestartedWallpaper() {
-        if (!prestartedWallpaperAdopted)
+        if (!prestartedWallpaperAdopted && !prestartedWallpaperRecord)
             return;
 
-        prestartedWallpaperTakeoverTimer.stop();
+        prestartedWallpaperStopPending = true;
         prestartedWallpaperAdopted = false;
         prestartedWallpaperReleased = true;
         prestartedWallpaperMode = "";
-        adoptedDynamicCommand = "";
+        adoptedWallpaperCommand = "";
         stopPrestartedWallpaper();
-    }
-
-    function takeOverPrestartedWallpaper() {
-        if (!prestartedWallpaperAdopted)
-            return;
-
-        prestartedWallpaperAdopted = false;
-        prestartedWallpaperReleased = true;
-        prestartedWallpaperMode = "";
-        adoptedDynamicCommand = "";
-        syncDynamicProcess();
-        syncExternalProcess();
+        prestartedWallpaperRecord = null;
+        prestartStopTimer.restart();
     }
 
     function syncDynamicProcess() {
@@ -347,10 +486,16 @@ PanelWindow {
             dynamicRestartPending = false;
             dynamicLaunchFailed = false;
             dynamicProcess.running = false;
+            if (!externalDesired && !externalProcess.running
+                    && !prestartedWallpaperAdopted)
+                restartCoverVisible = false;
             if (!externalProcess.running && !prestartedWallpaperAdopted)
                 dynamicActive = false;
             return;
         }
+
+        if (dynamicRestartPending)
+            return;
 
         if (!dynamicProcess.running
                 && !prestartedWallpaperAdopted
@@ -359,8 +504,25 @@ PanelWindow {
 
         if (prestartedWallpaperMode === "dynamic"
                 && prestartedWallpaperAdopted
-                && adoptedDynamicCommand !== dynamicCommand)
+                && adoptedWallpaperCommand !== dynamicCommand) {
+            showRestartCover();
             releasePrestartedWallpaper();
+        }
+
+        if (prestartStateLoaded && prestartedWallpaperRecord
+                && !prestartedRecordMatches("dynamic")) {
+            showRestartCover();
+            releasePrestartedWallpaper();
+        }
+
+        if (prestartedWallpaperRecord && !prestartedWallpaperAdopted
+                && (dynamicProcess.running || externalProcess.running)) {
+            showRestartCover();
+            releasePrestartedWallpaper();
+        }
+
+        if (prestartedWallpaperStopPending)
+            return;
 
         if (tryAdoptPrestartedWallpaper("dynamic")) {
             dynamicLaunchFailed = false;
@@ -368,6 +530,7 @@ PanelWindow {
         }
 
         if (dynamicProcess.running) {
+            showRestartCover();
             dynamicRestartPending = true;
             dynamicProcess.running = false;
             return;
@@ -375,6 +538,7 @@ PanelWindow {
 
         dynamicActive = false;
         dynamicLaunchFailed = false;
+        showRestartCover();
         dynamicProcess.running = true;
     }
 
@@ -388,14 +552,42 @@ PanelWindow {
             externalRestartPending = false;
             externalLaunchFailed = false;
             externalProcess.running = false;
+            if (!dynamicDesired && !dynamicProcess.running
+                    && !prestartedWallpaperAdopted)
+                restartCoverVisible = false;
             if (!dynamicProcess.running && !prestartedWallpaperAdopted)
                 dynamicActive = false;
             return;
         }
 
+        if (externalRestartPending)
+            return;
+
         if (!externalProcess.running
                 && !prestartedWallpaperAdopted
                 && prepareWallpaperProcessStart())
+            return;
+
+        if (prestartedWallpaperMode === "external"
+                && prestartedWallpaperAdopted
+                && adoptedWallpaperCommand !== externalCommand) {
+            showRestartCover();
+            releasePrestartedWallpaper();
+        }
+
+        if (prestartStateLoaded && prestartedWallpaperRecord
+                && !prestartedRecordMatches("external")) {
+            showRestartCover();
+            releasePrestartedWallpaper();
+        }
+
+        if (prestartedWallpaperRecord && !prestartedWallpaperAdopted
+                && (dynamicProcess.running || externalProcess.running)) {
+            showRestartCover();
+            releasePrestartedWallpaper();
+        }
+
+        if (prestartedWallpaperStopPending)
             return;
 
         if (tryAdoptPrestartedWallpaper("external")) {
@@ -404,6 +596,7 @@ PanelWindow {
         }
 
         if (externalProcess.running) {
+            showRestartCover();
             externalRestartPending = true;
             externalProcess.running = false;
             return;
@@ -411,6 +604,7 @@ PanelWindow {
 
         dynamicActive = false;
         externalLaunchFailed = false;
+        showRestartCover();
         externalProcess.running = true;
     }
 
@@ -431,6 +625,20 @@ PanelWindow {
         externalLaunchFailed = false;
         syncExternalProcess();
     }
+    onAvailableScreenCountChanged: {
+        if (root.completed && root.externalDesired) {
+            root.refreshExternalCommand();
+            root.syncExternalProcess();
+        }
+    }
+    onScreenChanged: {
+        if (root.completed) {
+            root.reloadPrestartedWallpaperState();
+            root.refreshExternalCommand();
+            root.syncDynamicProcess();
+            root.syncExternalProcess();
+        }
+    }
     onLiveWallpaperAllowedChanged: {
         if (!root.completed)
             return;
@@ -438,10 +646,17 @@ PanelWindow {
         root.syncDynamicProcess();
         root.syncExternalProcess();
     }
+    onWallpaperPauseWhenFullscreenChanged: {
+        if (root.completed) {
+            root.refreshExternalCommand();
+            root.syncDynamicProcess();
+            root.syncExternalProcess();
+        }
+    }
     Component.onCompleted: {
         appliedWallpaperFps = effectiveWallpaperFps;
         completed = true;
-        prestartedWallpaperFile.reload();
+        reloadPrestartedWallpaperState();
         activeWallpaperFile.reload();
         syncDynamicProcess();
         syncExternalProcess();
@@ -516,6 +731,48 @@ PanelWindow {
         }
     }
 
+    // Intentional command changes (including the fullscreen-pause setting) require a
+    // renderer restart. Hold the renderer's own full-size captured frame over the gap
+    // so the desktop never falls through to a default image or an empty background.
+    Item {
+        id: restartCover
+        anchors.fill: parent
+        visible: opacity > 0.01
+        opacity: root.restartCoverVisible ? 1 : 0
+
+        Behavior on opacity {
+            NumberAnimation {
+                duration: 120
+                easing.type: Motion.emphasizedDecel
+            }
+        }
+
+        Rectangle {
+            anchors.fill: parent
+            color: "#1c1d20"
+        }
+
+        Image {
+            anchors.fill: parent
+            source: root.staticWallpaperSource()
+            fillMode: Image.PreserveAspectCrop
+            asynchronous: true
+            smooth: true
+        }
+
+        Image {
+            id: restartCoverCapture
+            anchors.fill: parent
+            source: root.restartCoverVisible || restartCover.opacity > 0.01
+                ? root.lockWallpaperCapturePath(root.screenName()) : ""
+            fillMode: Image.PreserveAspectFit
+            asynchronous: true
+            cache: false
+            smooth: true
+            mipmap: false
+        }
+    }
+
     // Live wallpapers render in an independent background-layer process, so
     // they cannot be transformed by staticLayer. A short-lived bottom-layer
     // surface supplies the same launchpad dim above either dynamic backend
@@ -558,7 +815,6 @@ PanelWindow {
         onStarted: {
             root.dynamicLaunchFailed = false;
             liveWallpaperReadyTimer.restart();
-            root.schedulePrestartedWallpaperCleanup();
         }
         onRunningChanged: {
             if (!running && root.dynamicRestartPending)
@@ -581,7 +837,6 @@ PanelWindow {
         onStarted: {
             root.externalLaunchFailed = false;
             liveWallpaperReadyTimer.restart();
-            root.schedulePrestartedWallpaperCleanup();
         }
         onRunningChanged: {
             if (!running && root.externalRestartPending)
@@ -599,19 +854,68 @@ PanelWindow {
 
     Timer {
         id: liveWallpaperReadyTimer
-        interval: 1000
+        interval: 1600
         repeat: false
         onTriggered: {
-            if (dynamicProcess.running || externalProcess.running)
+            if (dynamicProcess.running || externalProcess.running) {
                 root.dynamicActive = true;
+                root.restartCoverVisible = false;
+            }
         }
     }
 
     Timer {
-        id: prestartedWallpaperTakeoverTimer
-        interval: 50
+        id: prestartedWallpaperReadyTimer
+        interval: 1600
         repeat: false
-        onTriggered: root.takeOverPrestartedWallpaper()
+        onTriggered: {
+            if (root.prestartedWallpaperAdopted) {
+                root.dynamicActive = true;
+                root.restartCoverVisible = false;
+            }
+        }
+    }
+
+    Timer {
+        id: prestartedWallpaperHealthTimer
+        interval: 5000
+        repeat: true
+        running: root.prestartedWallpaperAdopted
+        onTriggered: {
+            if (!root.prestartedWallpaperAdopted
+                    || root.prestartedRecordProcessMatches(root.prestartedWallpaperRecord))
+                return;
+            Quickshell.execDetached({
+                command: ["rm", "-f", "--", root.prestartedWallpaperRecordPath],
+                workingDirectory: ""
+            });
+            root.prestartedWallpaperRecord = null;
+            root.prestartedWallpaperAdopted = false;
+            root.prestartedWallpaperReleased = true;
+            root.prestartedWallpaperMode = "";
+            root.adoptedWallpaperCommand = "";
+            root.dynamicActive = false;
+            root.showRestartCover();
+            Qt.callLater(function() {
+                root.syncDynamicProcess();
+                root.syncExternalProcess();
+            });
+        }
+    }
+
+    Timer {
+        id: prestartStopTimer
+        interval: 80
+        repeat: false
+        onTriggered: {
+            if (!root.prestartedWallpaperStopPending)
+                return;
+            root.reloadPrestartedWallpaperState();
+            if (root.prestartedWallpaperStopPending) {
+                restart();
+                return;
+            }
+        }
     }
 
     Timer {
@@ -636,27 +940,35 @@ PanelWindow {
         }
     }
 
-    Timer {
-        id: prestartedWallpaperCleanupTimer
-        interval: 2500
-        repeat: false
-        onTriggered: root.stopPrestartedWallpaper()
+    FileView {
+        id: prestartedWallpaperFile
+        path: root.prestartedWallpaperRecordPath
+        blockLoading: true
+        printErrors: false
+        watchChanges: true
+        onFileChanged: root.reloadPrestartedWallpaperState()
+        onPathChanged: {
+            if (root.completed)
+                root.reloadPrestartedWallpaperState();
+        }
     }
 
     FileView {
-        id: prestartedWallpaperFile
-        path: root.prestartedWallpaperPidFile
+        id: prestartedWallpaperProcessFile
+        path: ""
         blockLoading: true
         printErrors: false
     }
 
     FileView {
         id: activeWallpaperFile
-        path: root.settingsService && root.settingsService.homeDir.length > 0
+        path: !root.nestedSession && root.settingsService && root.settingsService.homeDir.length > 0
             ? root.settingsService.homeDir + "/.config/Linux Wallpaper Engine/active-wallpapers.json"
             : ""
         blockLoading: true
         printErrors: false
+        watchChanges: true
+        onFileChanged: reload()
         onLoaded: {
             root.externalStateLoaded = true;
             root.refreshExternalCommand();

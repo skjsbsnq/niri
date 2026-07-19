@@ -11,6 +11,9 @@ SETTINGS = SHELL_ROOT / "services" / "DesktopSettings.qml"
 PAGE = SHELL_ROOT / "components" / "settings" / "pages" / "WallpaperPage.qml"
 LOCK_SCREEN = SHELL_ROOT / "components" / "LockScreen.qml"
 PRESTART = SHELL_ROOT / "scripts" / "prestart-wallpaper.sh"
+START = SHELL_ROOT / "scripts" / "start-quickshell.sh"
+SESSION = SHELL_ROOT.parent / "scripts" / "run-tahoe-session.sh"
+NIRI_CONFIG = SHELL_ROOT.parent / "config" / "niri" / "tahoe-phase0.kdl"
 
 
 class WallpaperIdleBudgetTests(unittest.TestCase):
@@ -20,9 +23,11 @@ class WallpaperIdleBudgetTests(unittest.TestCase):
         self.assertIn("property int wallpaperEngineIdleFps: 8", text)
         self.assertIn("property int wallpaperEngineIdleSeconds: 60", text)
         self.assertIn("property bool wallpaperPauseWhenIdle: false", text)
+        self.assertIn("property bool wallpaperPauseWhenFullscreen: true", text)
         self.assertIn("function setWallpaperEngineFps(", text)
         self.assertIn("function setWallpaperEngineIdleFps(", text)
         self.assertIn("function setWallpaperPauseWhenIdle(", text)
+        self.assertIn("function setWallpaperPauseWhenFullscreen(", text)
         # Active fps hard-capped at 20 (glass sampling budget).
         self.assertIn("clampInt(value, 1, 20, 15)", text)
 
@@ -33,17 +38,22 @@ class WallpaperIdleBudgetTests(unittest.TestCase):
         self.assertIn("readonly property bool lockScreenFollowWallpaper", settings)
         self.assertIn("function setLockScreenFollowWallpaper(", settings)
         self.assertIn("锁屏跟随壁纸", page)
-        self.assertIn("动态壁纸显示项目预览图", page)
+        self.assertIn("动态壁纸使用引擎渲染的高清静态帧", page)
         self.assertIn("setLockScreenFollowWallpaper", page)
 
-    def test_lock_screen_preview_has_static_and_builtin_fallbacks(self) -> None:
+    def test_lock_screen_uses_renderer_capture_without_crop(self) -> None:
         text = LOCK_SCREEN.read_text(encoding="utf-8")
-        self.assertIn("active-wallpapers.json", text)
-        self.assertIn('wallpaperProjectPath + "/project.json"', text)
-        self.assertIn("metadata.preview", text)
-        self.assertIn("source: surface.lockWallpaperSource", text)
+        self.assertIn('Quickshell.stateDir + "/lock-wallpaper"', text)
+        self.assertIn("function lockWallpaperCapturePath(", text)
+        self.assertIn("source: surface.captureLoadSource", text)
+        self.assertIn("capturedWallpaperReady", text)
+        self.assertIn("requestCapturedWallpaperReload", text)
+        self.assertIn("fillMode: Image.PreserveAspectFit", text)
+        self.assertIn("fillMode: Image.PreserveAspectCrop", text)
+        self.assertIn("cache: false", text)
+        self.assertNotIn("project.json", text)
+        self.assertNotIn("metadata.preview", text)
         self.assertIn("status !== Image.Error", text)
-        self.assertIn('surface.wallpaperPreviewSource = ""', text)
         self.assertIn("surface.configuredStaticWallpaperFailed = true", text)
 
     def test_wallpaper_idle_monitor_and_fps_rewrite(self) -> None:
@@ -52,14 +62,31 @@ class WallpaperIdleBudgetTests(unittest.TestCase):
         self.assertIn("wallpaperIdleMonitor", text)
         self.assertIn("property bool sessionIdle:", text)
         self.assertIn("effectiveWallpaperFps", text)
+        self.assertIn("prestartStateLoaded", text)
+        self.assertIn("prestartedWallpaperStopPending", text)
+        self.assertIn("reloadPrestartedWallpaperState", text)
+        self.assertIn("prestartedWallpaperRecordPath", text)
+        self.assertIn("prestartedRecordProcessMatches", text)
+        self.assertIn("prestartedWallpaperHealthTimer", text)
+        self.assertIn("nestedSession", text)
+        self.assertRegex(text, re.compile(r"dynamicDesired:.*?&& !nestedSession", re.S))
+        self.assertRegex(text, re.compile(r"externalDesired:.*?&& !nestedSession", re.S))
+        self.assertIn('nestedSession ? ""', text)
+        self.assertIn("watchChanges: true", text)
+        self.assertIn("onFileChanged: reload()", text)
         self.assertIn("property int appliedWallpaperFps:", text)
         self.assertIn("liveWallpaperAllowed", text)
         self.assertIn("function applyWallpaperFpsBudget(", text)
         self.assertIn("function prepareWallpaperProcessStart(", text)
         self.assertIn("wallpaperPauseWhenIdle", text)
+        self.assertIn("wallpaperPauseWhenFullscreen", text)
         self.assertIn("liveWallpaperReadyTimer", text)
-        self.assertIn("prestartedWallpaperTakeoverTimer", text)
-        self.assertIn("function takeOverPrestartedWallpaper(", text)
+        self.assertNotIn("prestartedWallpaperTakeoverTimer", text)
+        self.assertNotIn("function takeOverPrestartedWallpaper(", text)
+        self.assertNotIn("prestartedWallpaperCleanupTimer", text)
+        self.assertNotIn('Quickshell.stateDir + "/wallpaper-prestart.pids"', text)
+        self.assertIn("dynamicActive = true", text)
+        self.assertIn("Keep that", text)
         self.assertIn("kill -KILL", text)
         self.assertNotIn("onSessionIdleChanged:", text)
         self.assertNotIn("onEffectiveWallpaperFpsChanged:", text)
@@ -97,6 +124,8 @@ class WallpaperIdleBudgetTests(unittest.TestCase):
         self.assertIn("setWallpaperEngineFps", text)
         self.assertIn("setWallpaperEngineIdleFps", text)
         self.assertIn("setWallpaperPauseWhenIdle", text)
+        self.assertIn("全屏时暂停动态壁纸", text)
+        self.assertIn("setWallpaperPauseWhenFullscreen", text)
         self.assertIn("checkable: true", text)
 
     def test_prestart_respects_settings_fps_budget(self) -> None:
@@ -105,8 +134,31 @@ class WallpaperIdleBudgetTests(unittest.TestCase):
         self.assertIn("inject_fps", text)
         self.assertIn("settings_fps_budget", text)
         self.assertIn("terminate_recorded_wallpapers", text)
+        self.assertIn('record_dir="$state_dir/wallpaper-prestart"', text)
+        self.assertIn("spawn_supervised", text)
+        self.assertIn("process_start_time", text)
+        self.assertIn('"startTime"', text)
+        self.assertIn('"token"', text)
+        self.assertIn("if not outputs:", text)
+        self.assertNotIn('inject_lock_capture(prepared, "default")', text)
+        self.assertIn("wallpaperPauseWhenFullscreen", text)
+        self.assertIn("--no-fullscreen-pause", text)
+        self.assertIn("--screenshot", text)
+        self.assertIn("--screenshot-delay", text)
+        self.assertIn("lock_capture_path", text)
         self.assertIn("kill -KILL", text)
         self.assertRegex(text, r"min\(20")
+
+    def test_wallpaper_prestart_is_serialized_before_quickshell(self) -> None:
+        start = START.read_text(encoding="utf-8")
+        session = SESSION.read_text(encoding="utf-8")
+        config = NIRI_CONFIG.read_text(encoding="utf-8")
+        self.assertIn("prestart_wallpaper()", start)
+        self.assertIn("prestart_wallpaper\nexec", start)
+        self.assertIn("TAHOE_SKIP_WALLPAPER_PRESTART", start)
+        self.assertIn("TAHOE_NESTED_SESSION", start)
+        self.assertIn('shell_args=("bash" "$TAHOE_CONFIG_DIR/scripts/start-quickshell.sh")', session)
+        self.assertEqual(config.count("prestart-wallpaper.sh"), 0)
 
 
 if __name__ == "__main__":

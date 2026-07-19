@@ -57,7 +57,10 @@ class LockScreenSystemClockContractTests(unittest.TestCase):
         src = LOCK_SCREEN.read_text(encoding="utf-8")
         self.assertNotIn("minuteTimer", src)
         self.assertNotIn("msecsToNextMinute", src)
-        self.assertEqual(len(re.findall(r"\bTimer\s*\{", src)), 0)
+        # A bounded retry timer is allowed for a renderer frame that may still
+        # be finishing; the wall clock itself remains SystemClock-owned.
+        self.assertEqual(len(re.findall(r"\bTimer\s*\{", src)), 1)
+        self.assertIn("captureRetryTimer", src)
 
     def test_uses_system_clock_minutes(self) -> None:
         src = LOCK_SCREEN.read_text(encoding="utf-8")

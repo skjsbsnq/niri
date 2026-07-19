@@ -87,5 +87,20 @@ resolve_quickshell_bin() {
   printf 'quickshell\n'
 }
 
+prestart_wallpaper() {
+  local prestart="$TAHOE_CONFIG_DIR/scripts/prestart-wallpaper.sh"
+
+  # Nested previews share the real user's state directory and must never stop
+  # or replace the live desktop's supervised wallpaper renderer.
+  [[ "${TAHOE_NESTED_SESSION:-0}" != "1" ]] || return 0
+  [[ "${TAHOE_SKIP_WALLPAPER_PRESTART:-0}" != "1" ]] || return 0
+  [[ -r "$prestart" ]] || return 0
+
+  if ! TAHOE_STATE_DIR="$TAHOE_STATE_DIR" bash "$prestart"; then
+    printf 'Tahoe wallpaper prestart failed; continuing with managed startup.\n' >&2
+  fi
+}
+
 resolve_icon_theme_setting
+prestart_wallpaper
 exec "$(resolve_quickshell_bin)" -p "$TAHOE_CONFIG_DIR"

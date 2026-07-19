@@ -115,7 +115,7 @@ Flickable {
             Controls.TahoeListRow {
                 theme: page.theme
                 label: "锁屏跟随壁纸"
-                detail: "静态壁纸直接沿用；动态壁纸显示项目预览图"
+                detail: "静态壁纸直接沿用；动态壁纸使用引擎渲染的高清静态帧"
                 iconCode: "\ue897"
                 checkable: true
                 enabled: !!(page.panel && page.panel.settingsService)
@@ -131,7 +131,7 @@ Flickable {
         Controls.TahoeSection {
             theme: page.theme
             title: "动态壁纸"
-            subtitle: "用命令托管，或交给 Linux Wallpaper Engine UX 切换。动态模式空闲时自动降帧；UX 模式全屏时原地暂停，不会重启壁纸。"
+            subtitle: "用命令托管，或交给 Linux Wallpaper Engine UX 切换。全屏策略交给引擎原生处理，Shell 不销毁壁纸进程。"
 
             Controls.TahoeListRow {
                 theme: page.theme
@@ -237,6 +237,22 @@ Flickable {
                 onToggled: function(next) {
                     if (page.panel && page.panel.settingsService)
                         page.panel.settingsService.setWallpaperPauseWhenIdle(next);
+                }
+            }
+
+            Controls.TahoeListRow {
+                theme: page.theme
+                label: "全屏时暂停动态壁纸"
+                detail: "开启时使用 Wallpaper Engine 默认暂停；关闭时保持播放。非 Wallpaper Engine 自定义命令需自行处理。"
+                iconCode: "\ue037"
+                checkable: true
+                enabled: !!(page.panel && page.panel.settingsService
+                    && page.panel.settingsService.wallpaperMode !== "static")
+                checked: !!(page.panel && page.panel.settingsService
+                    && page.panel.settingsService.wallpaperPauseWhenFullscreen)
+                onToggled: function(next) {
+                    if (page.panel && page.panel.settingsService)
+                        page.panel.settingsService.setWallpaperPauseWhenFullscreen(next);
                 }
             }
 

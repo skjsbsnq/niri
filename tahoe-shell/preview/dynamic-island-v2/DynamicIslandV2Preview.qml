@@ -250,6 +250,8 @@ Window {
             item.accentColor = root.accentColor;
         if (item.trackColor !== undefined)
             item.trackColor = Theme.islandProgressTrack(root.darkMode);
+        if (item.progressFillColor !== undefined)
+            item.progressFillColor = Theme.islandProgressFill(root.darkMode);
         if (item.controlFill !== undefined)
             item.controlFill = Theme.islandControlFill(root.darkMode);
         if (item.criticalColor !== undefined)

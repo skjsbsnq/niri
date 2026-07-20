@@ -146,6 +146,20 @@ class DynamicIslandTimerTests(unittest.TestCase):
         self.assertIn("cancelRequested", self.view)
         self.assertNotIn("Date.now", self.view)
 
+    def test_timer_progress_fill_is_monochrome_not_accent(self) -> None:
+        # Timer rails share islandProgressFill; accent is not used for bar paint.
+        self.assertIn("progressFillColor", self.view)
+        self.assertIn("progressFillColor: root.progressFillColor", self.content)
+        fills = re.findall(r"color:\s*root\.(accentColor|progressFillColor)", self.view)
+        self.assertIn("progressFillColor", fills)
+        # Progress fill rectangles must not use accent.
+        for m in re.finditer(
+            r"width:\s*parent\.width\s*\*\s*root\.safeProgress[\s\S]{0,120}?color:\s*([^\n]+)",
+            self.view,
+        ):
+            self.assertIn("progressFillColor", m.group(1))
+            self.assertNotIn("accentColor", m.group(1))
+
 
 if __name__ == "__main__":
     raise SystemExit(unittest.main())

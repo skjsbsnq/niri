@@ -408,6 +408,12 @@ function islandProgressTrack(darkMode) {
     return "#30ffffff";
 }
 
+// Island progress fill is monochrome by design (media / timer / OSD share this).
+// Independent of user accent — accent remains for transport chrome (play button).
+function islandProgressFill(darkMode) {
+    return islandTextPrimary(darkMode);
+}
+
 function islandControlFill(darkMode) {
     return "#20ffffff";
 }

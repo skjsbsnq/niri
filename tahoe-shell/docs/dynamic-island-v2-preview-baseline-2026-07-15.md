@@ -44,8 +44,9 @@ Preview guarantees:
 | `islandSurfaceFill(expanded)` | `#df10141a` (~87%) |
 | `islandSurfaceStroke` | `#24ffffff` → `#30ffffff` by role |
 | `islandProgressTrack` | `#30ffffff` |
+| `islandProgressFill` | `#f7f8fa` (monochrome; same as `islandTextPrimary`) |
 | `islandControlFill` | `#20ffffff` |
-| accent | `SettingsTheme.accent(darkMode, accentId)` — no hard-coded `#b56cff` |
+| accent | `SettingsTheme.accent(darkMode, accentId)` — transport chrome only; progress rails use `islandProgressFill` |
 
 ## Geometry / radius (DynamicIslandMotion `v2*`)
 

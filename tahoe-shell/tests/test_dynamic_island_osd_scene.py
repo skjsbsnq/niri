@@ -166,8 +166,11 @@ class DynamicIslandOsdSceneTests(unittest.TestCase):
     def test_osd_bar_is_monochrome_not_accent_colored(self) -> None:
         self.assertNotIn("accentColor", self.osd)
         self.assertNotIn("Theme.accent", self.osd)
-        self.assertIn(": root.textPrimary", self.osd)
+        # Active fill uses shared island progress token; muted stays neutral gray.
+        self.assertIn("progressFillColor", self.osd)
+        self.assertIn(": root.progressFillColor", self.osd)
         self.assertIn('"#70000000"', self.osd)
+        self.assertIn("progressFillColor: root.progressFillColor", self.content)
 
     def test_osd_entry_is_fast_eased_and_exit_is_retained(self) -> None:
         # R08 #23: OSD geometry expands quickly (~80ms) on first appearance —

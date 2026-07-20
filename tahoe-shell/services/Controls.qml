@@ -1836,7 +1836,16 @@ Item {
     }
 
     onActivePlayerChanged: {
+        // Single handler: player memory + seek lifecycle (do not add a second
+        // onActivePlayerChanged — QML overwrites rather than stacking).
         var name = MediaPlayerSelection.playerDbusName(root.activePlayer);
+        // Cancel optimistic scrub when the player disappears or switches mid-drag.
+        if (root.trackSeeking) {
+            if (!root.activePlayer || name.length === 0
+                    || (root.lastActivePlayerDbusName.length > 0
+                        && name !== root.lastActivePlayerDbusName))
+                root.cancelTrackSeek();
+        }
         if (name.length === 0)
             return;
         if (root.lastActivePlayerDbusName !== name)
@@ -1948,6 +1957,31 @@ Item {
         return !!p && !!p.canGoPrevious;
     }
 
+    readonly property bool canSeek: {
+        var p = root.activePlayer;
+        try {
+            return !!(p && p.canSeek && p.positionSupported && root.trackLength > 0);
+        } catch (e) {
+            return false;
+        }
+    }
+
+    // Optimistic scrub state (island / CC timeline). While seeking, UI reads
+    // trackPositionDisplay / trackProgressDisplay so the 1s poll cannot yank
+    // the bar back under the finger.
+    property bool trackSeeking: false
+    property real trackSeekPreviewSec: -1
+
+    readonly property real trackPositionDisplay: root.trackSeeking && root.trackSeekPreviewSec >= 0
+        ? root.trackSeekPreviewSec
+        : root.trackPosition
+
+    readonly property real trackProgressDisplay: {
+        if (root.trackSeeking && root.trackSeekPreviewSec >= 0 && root.trackLength > 0)
+            return Math.max(0, Math.min(1, root.trackSeekPreviewSec / root.trackLength));
+        return root.trackProgress;
+    }
+
     function togglePlayPause() {
         var p = root.activePlayer;
         if (!p)
@@ -1976,9 +2010,94 @@ Item {
         try { p.previous(); } catch (e) {}
     }
 
+    function beginTrackSeek() {
+        if (!root.canSeek)
+            return false;
+        root.trackSeeking = true;
+        root.trackSeekPreviewSec = root.trackPosition;
+        return true;
+    }
+
+    function previewTrackPosition(seconds) {
+        if (!root.trackSeeking || !root.canSeek)
+            return;
+        var length = root.trackLength;
+        var sec = Number(seconds);
+        if (!isFinite(sec))
+            return;
+        if (length > 0)
+            sec = Math.max(0, Math.min(length, sec));
+        else
+            sec = Math.max(0, sec);
+        root.trackSeekPreviewSec = sec;
+    }
+
+    function previewTrackProgress(ratio) {
+        if (!root.canSeek || root.trackLength <= 0)
+            return;
+        var r = Number(ratio);
+        if (!isFinite(r))
+            return;
+        r = Math.max(0, Math.min(1, r));
+        if (!root.trackSeeking)
+            root.beginTrackSeek();
+        root.previewTrackPosition(r * root.trackLength);
+    }
+
+    function setTrackPosition(seconds) {
+        var p = root.activePlayer;
+        if (!p || !root.canSeek)
+            return false;
+        var sec = Number(seconds);
+        if (!isFinite(sec))
+            return false;
+        var length = root.trackLength;
+        if (length > 0)
+            sec = Math.max(0, Math.min(length, sec));
+        else
+            sec = Math.max(0, sec);
+        try {
+            // Quickshell MprisPlayer.position is writable when canSeek.
+            p.position = sec;
+            root.trackSeekPreviewSec = sec;
+            return true;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    function commitTrackPosition(seconds) {
+        var ok = root.setTrackPosition(seconds);
+        root.trackSeeking = false;
+        // Keep preview until the next MPRIS position sample so the bar does
+        // not jump back one frame after release.
+        if (!ok)
+            root.trackSeekPreviewSec = -1;
+        return ok;
+    }
+
+    function commitTrackProgress(ratio) {
+        if (root.trackLength <= 0) {
+            root.cancelTrackSeek();
+            return false;
+        }
+        var r = Number(ratio);
+        if (!isFinite(r)) {
+            root.cancelTrackSeek();
+            return false;
+        }
+        r = Math.max(0, Math.min(1, r));
+        return root.commitTrackPosition(r * root.trackLength);
+    }
+
+    function cancelTrackSeek() {
+        root.trackSeeking = false;
+        root.trackSeekPreviewSec = -1;
+    }
+
     Timer {
         interval: 1000
-        running: root.activePlayer && root.isPlaying && root.trackPositionSupported
+        running: root.activePlayer && root.isPlaying && root.trackPositionSupported && !root.trackSeeking
         repeat: true
         triggeredOnStart: true
         onTriggered: {

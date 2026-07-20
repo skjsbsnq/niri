@@ -16,6 +16,9 @@ Item {
     property color textPrimary: "#f7f8fa"
     property color textSecondary: "#aeb6c2"
     property color trackColor: darkMode ? "#30ffffff" : "#30000000"
+    // Shared island monochrome progress fill (SettingsTheme.islandProgressFill).
+    // Falls back to textPrimary so un-wired callers stay monochrome.
+    property color progressFillColor: textPrimary
 
     function clampedProgressOf(value) {
         var number = Number(value);
@@ -77,9 +80,10 @@ Item {
                     radius: parent.radius
                     // OSD feedback is monochrome by design, independent of the
                     // user accent color. Muted remains neutral, never danger red.
+                    // Active fill uses the shared island progress token.
                     color: root.muted
                         ? (root.darkMode ? "#70ffffff" : "#70000000")
-                        : root.textPrimary
+                        : root.progressFillColor
                 }
             }
         }

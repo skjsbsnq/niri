@@ -132,14 +132,30 @@ Item {
         return String(root.controlsService.trackTitle || "").trim();
     }
     readonly property bool mediaPlaying: controlsService ? !!controlsService.isPlaying : false
-    readonly property real mediaPosition: controlsService ? Number(controlsService.trackPosition) : 0
+    // Prefer display (optimistic scrub) fields while seeking so the island
+    // timeline follows the finger instead of the 1s MPRIS poll.
+    readonly property real mediaPosition: {
+        if (!root.controlsService)
+            return 0;
+        if (root.controlsService.trackSeeking)
+            return Number(root.controlsService.trackPositionDisplay) || 0;
+        return Number(root.controlsService.trackPosition) || 0;
+    }
     readonly property real mediaLength: controlsService ? Number(controlsService.trackLength) : 0
-    readonly property real mediaProgress: controlsService ? Number(controlsService.trackProgress) : 0
+    readonly property real mediaProgress: {
+        if (!root.controlsService)
+            return 0;
+        if (root.controlsService.trackSeeking)
+            return Number(root.controlsService.trackProgressDisplay) || 0;
+        return Number(root.controlsService.trackProgress) || 0;
+    }
     readonly property bool mediaPositionSupported: controlsService ? !!controlsService.trackPositionSupported : false
     readonly property bool mediaLengthSupported: controlsService ? !!controlsService.trackLengthSupported : false
     readonly property bool canPlayPause: controlsService ? !!controlsService.canPlayPause : false
     readonly property bool canNext: controlsService ? !!controlsService.canNext : false
     readonly property bool canPrev: controlsService ? !!controlsService.canPrev : false
+    readonly property bool canSeek: controlsService ? !!controlsService.canSeek : false
+    readonly property bool mediaSeeking: controlsService ? !!controlsService.trackSeeking : false
     // T12: split clock presentation (weekday secondary + 24h time primary).
     // fallbackTimeText remains the single TopBar disabled/legacy plain-text owner.
     readonly property string clockWeekdayText: formatClockWeekday()
@@ -170,6 +186,24 @@ Item {
     function mediaPrevious() {
         if (root.controlsService)
             root.controlsService.previous();
+    }
+    function mediaBeginSeek() {
+        if (!root.controlsService)
+            return false;
+        return !!root.controlsService.beginTrackSeek();
+    }
+    function mediaPreviewSeekProgress(ratio) {
+        if (root.controlsService)
+            root.controlsService.previewTrackProgress(ratio);
+    }
+    function mediaCommitSeekProgress(ratio) {
+        if (!root.controlsService)
+            return false;
+        return !!root.controlsService.commitTrackProgress(ratio);
+    }
+    function mediaCancelSeek() {
+        if (root.controlsService)
+            root.controlsService.cancelTrackSeek();
     }
     // Presentation fields for the Overlay. For continuous OSD ramps, bind
     // transient* fields directly so each volume/brightness tick updates

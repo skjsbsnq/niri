@@ -91,21 +91,56 @@ class DynamicIslandExpandedMediaTests(unittest.TestCase):
 
     def test_accent_not_hardcoded_purple(self) -> None:
         self.assertNotIn("#b56cff", self.view)
+        # Accent remains for transport chrome (play button); progress is monochrome.
         self.assertIn("accentColor", self.view)
         self.assertIn("accentColor: root.accentColor", self.content)
 
-    def test_timeline_readonly_without_seek_api(self) -> None:
-        # T17 optional scrubber only if Controls has seek — we keep read-only.
-        self.assertNotIn("seek(", self.view)
-        self.assertNotIn("setPosition", self.view)
+    def test_timeline_progress_is_monochrome_not_accent(self) -> None:
+        # Progress rail shares islandProgressFill with OSD/timer; not user accent.
+        self.assertIn("progressFillColor", self.view)
+        self.assertIn("color: root.progressFillColor", self.view)
+        self.assertIn("progressFillColor: root.progressFillColor", self.content)
+        self.assertIn("progressFillColor: root.progressFillColor", self.overlay)
+        self.assertIn("Theme.islandProgressFill", self.overlay)
+        # Play button still uses accent fill (transport chrome).
+        self.assertIn("accentColor", self.view)
+        self.assertIn("filled: true", self.view)
+        # Timeline fill must not paint with accentColor.
+        timeline = re.search(
+            r"id:\s*progressTrack[\s\S]*?Behavior on width",
+            self.view,
+        )
+        self.assertIsNotNone(timeline)
+        self.assertIn("progressFillColor", timeline.group(0))
+        self.assertNotIn("accentColor", timeline.group(0))
+
+    def test_timeline_seek_when_controls_supports(self) -> None:
+        # Full scrubber: UI + Controls MPRIS seek (no second media controller).
+        self.assertIn("canSeek", self.view)
+        self.assertIn("scrubInteractive", self.view)
+        self.assertIn("seekBeginRequested", self.view)
+        self.assertIn("seekPreviewRequested", self.view)
+        self.assertIn("seekCommitRequested", self.view)
+        self.assertIn("seekCancelRequested", self.view)
+        self.assertIn("id: seekArea", self.view)
+        self.assertIn("preventStealing: true", self.view)
+        # Width Behavior disabled while scrubbing.
+        self.assertIn("enabled: !root.localSeeking && !root.seeking", self.view)
         self.assertIn("safeProgress", self.view)
         self.assertIn("showTimeline", self.view)
+        # Controls owns seek — view must not walk MPRIS itself.
+        code = re.sub(r"//[^\n]*", "", self.view)
+        self.assertNotIn("Mpris.players", code)
+        self.assertNotIn("activePlayer", code)
 
     def test_no_second_media_controller(self) -> None:
         self.assertNotIn("IslandMprisController", self.view)
         self.assertNotIn("IslandMprisController", self.content)
         self.assertIn("mediaTogglePlayPause", self.island)
         self.assertIn("togglePlayPause", self.controls)
+        self.assertIn("canSeek", self.controls)
+        self.assertIn("setTrackPosition", self.controls)
+        self.assertIn("mediaBeginSeek", self.island)
 
     def test_content_wires_controls_lifecycle(self) -> None:
         self.assertIn("onMediaControlPressed:", self.overlay)

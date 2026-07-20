@@ -6,6 +6,7 @@ Item {
     property color textPrimary: "#f7f8fa"
     property color textSecondary: "#aeb6c2"
     property color trackColor: "#30ffffff"
+    property color progressFillColor: "#f7f8fa"
 
     readonly property real value: Math.max(0, Math.min(1, Number(model && model.value) || 0))
     readonly property bool muted: !!(model && model.muted)
@@ -49,7 +50,7 @@ Item {
                     width: parent.width * (root.muted ? 0 : root.value)
                     height: parent.height
                     radius: 3
-                    color: root.muted ? "#70ffffff" : root.textPrimary
+                    color: root.muted ? "#70ffffff" : root.progressFillColor
                 }
             }
         }

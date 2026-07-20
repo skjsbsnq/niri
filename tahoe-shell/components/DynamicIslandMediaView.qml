@@ -23,11 +23,17 @@ Item {
     property bool canPlayPause: false
     property bool canPrev: false
     property bool canNext: false
+    // Interactive scrub only when Controls reports canSeek (MPRIS CanSeek +
+    // position + length). Timeline remains painted when only position is known.
+    property bool canSeek: false
+    property bool seeking: false
     property var settingsService
     property color textPrimary: "#f7f8fa"
     property color textSecondary: "#aeb6c2"
     property color accentColor: "#0a84ff"
     property color trackColor: "#30ffffff"
+    // Progress rail fill is monochrome (islandProgressFill); accent is transport only.
+    property color progressFillColor: "#f7f8fa"
     property color controlFill: "#20ffffff"
     property color artFallbackFill: "#28ffffff"
     readonly property bool reducedMotion: Motion.reducedMotion(root.settingsService)
@@ -37,6 +43,10 @@ Item {
     signal nextRequested()
     signal controlPressed()
     signal controlReleased()
+    signal seekBeginRequested()
+    signal seekPreviewRequested(real ratio)
+    signal seekCommitRequested(real ratio)
+    signal seekCancelRequested()
 
     readonly property int badgeSize: 64
     readonly property int playSize: 36
@@ -55,8 +65,22 @@ Item {
             return url;
         return "";
     }
-    readonly property real safeProgress: Math.max(0, Math.min(1, Number(progress) || 0))
+    // Local scrub preview so the bar tracks the finger even before Controls
+    // rebinds mediaProgress (and while width Behavior is disabled).
+    property bool localSeeking: false
+    property real localSeekRatio: 0
+    readonly property real safeProgress: {
+        if (root.localSeeking || root.seeking)
+            return Math.max(0, Math.min(1, Number(root.localSeeking ? root.localSeekRatio : root.progress) || 0));
+        return Math.max(0, Math.min(1, Number(progress) || 0));
+    }
+    readonly property real displayPosition: {
+        if ((root.localSeeking || root.seeking) && root.duration > 0)
+            return root.safeProgress * root.duration;
+        return root.positionSupported ? root.position : 0;
+    }
     readonly property bool showTimeline: positionSupported || durationSupported || duration > 0
+    readonly property bool scrubInteractive: root.canSeek && root.showTimeline && root.duration > 0
     readonly property int progressDurationMs: root.reducedMotion
         ? IslandMotion.v2ReducedContentMs
         : IslandMotion.overlayProgressDuration
@@ -149,6 +173,8 @@ Item {
             leftMargin: 16
             rightMargin: 16
         }
+        // Full 22px hit band for scrub (paint is 4px). Prevents capsule
+        // swipe/click from stealing mid-seek.
         height: 22
         opacity: root.showTimeline ? 1 : 0.45
 
@@ -157,19 +183,29 @@ Item {
             anchors {
                 left: parent.left
                 right: parent.right
-                top: parent.top
+                verticalCenter: parent.verticalCenter
             }
-            height: 4
-            radius: 2
+            height: root.localSeeking || root.seeking ? 6 : 4
+            radius: height / 2
             color: root.trackColor
 
+            Behavior on height {
+                NumberAnimation {
+                    duration: root.reducedMotion ? 0 : IslandMotion.v2ReducedContentMs
+                    easing.type: IslandMotion.v2ContentEasing
+                }
+            }
+
             Rectangle {
+                id: progressFill
                 width: parent.width * root.safeProgress
                 height: parent.height
                 radius: parent.radius
-                color: root.accentColor
+                color: root.progressFillColor
 
                 Behavior on width {
+                    // Disable follow animation while scrubbing so the bar is 1:1.
+                    enabled: !root.localSeeking && !root.seeking
                     NumberAnimation {
                         duration: root.progressDurationMs
                         easing.type: IslandMotion.overlayProgressEasing
@@ -183,7 +219,7 @@ Item {
                 left: parent.left
                 bottom: parent.bottom
             }
-            text: root.formatTime(root.positionSupported ? root.position : 0)
+            text: root.formatTime(root.displayPosition)
             color: root.textSecondary
             font.pixelSize: 10
             font.letterSpacing: 0
@@ -202,6 +238,88 @@ Item {
             font.pixelSize: 10
             font.letterSpacing: 0
             horizontalAlignment: Text.AlignRight
+        }
+
+        MouseArea {
+            id: seekArea
+            anchors.fill: parent
+            enabled: root.scrubInteractive && root.visible
+            preventStealing: true
+            hoverEnabled: false
+            cursorShape: root.scrubInteractive ? Qt.PointingHandCursor : Qt.ArrowCursor
+
+            function ratioAt(mx) {
+                var w = Math.max(1, progressTrack.width);
+                // Map into track coordinates (MouseArea fills timeline).
+                var x = Math.max(0, Math.min(w, mx - progressTrack.x));
+                return Math.max(0, Math.min(1, x / w));
+            }
+
+            function beginSeek(mx) {
+                if (!root.scrubInteractive)
+                    return;
+                var r = ratioAt(mx);
+                root.localSeeking = true;
+                root.localSeekRatio = r;
+                root.seekBeginRequested();
+                root.controlPressed();
+                root.seekPreviewRequested(r);
+            }
+
+            function moveSeek(mx) {
+                if (!root.localSeeking)
+                    return;
+                var r = ratioAt(mx);
+                root.localSeekRatio = r;
+                root.seekPreviewRequested(r);
+            }
+
+            function endSeek(commit) {
+                if (!root.localSeeking)
+                    return;
+                var r = root.localSeekRatio;
+                root.localSeeking = false;
+                if (commit)
+                    root.seekCommitRequested(r);
+                else
+                    root.seekCancelRequested();
+                root.controlReleased();
+            }
+
+            onPressed: function(mouse) {
+                beginSeek(mouse.x);
+                mouse.accepted = true;
+            }
+            onPositionChanged: function(mouse) {
+                if (!pressed)
+                    return;
+                moveSeek(mouse.x);
+                mouse.accepted = true;
+            }
+            onReleased: function(mouse) {
+                endSeek(true);
+                mouse.accepted = true;
+            }
+            onCanceled: {
+                endSeek(false);
+            }
+        }
+
+        Connections {
+            target: root
+            function onVisibleChanged() {
+                if (!root.visible && root.localSeeking)
+                    seekArea.endSeek(false);
+            }
+            function onCanSeekChanged() {
+                if (!root.canSeek && root.localSeeking)
+                    seekArea.endSeek(false);
+            }
+        }
+
+        Component.onDestruction: {
+            if (root.localSeeking)
+                seekArea.endSeek(false);
         }
     }
 

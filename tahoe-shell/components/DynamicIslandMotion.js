@@ -47,8 +47,14 @@ var v2OsdExitMs = 110;
 // the surface binds clamp(driver, min, max) and the TahoeGlass region submits
 // quantized clamped values, so the region can never leave the layer surface
 // even at full overshoot (guardrail 0704ea4 satisfied by construction).
-// Feel token: Motion.springBouncy is documented for "dynamic island morph".
-var v2GeometrySpring = Motion.springBouncy;
+// Island morph uses springBouncy stiffness with slightly higher damping so
+// the content-reveal threshold (~0.55 height progress) is not followed by a
+// long rubber-band tail around the already-revealed layout. Dock bounce keeps
+// Motion.springBouncy unchanged.
+var v2GeometrySpring = {
+    spring: Motion.springBouncy.spring,
+    damping: 0.28
+};
 // Stop the spring tail early so the settled snap engages promptly (protocol
 // settle threshold in the overlay is 0.6 > this epsilon).
 var v2GeometrySpringEpsilon = 0.25;
@@ -67,6 +73,33 @@ var v2ContentEnterMs = 170;
 var v2ContentMaxTravelPx = 6;
 var v2GeometryEasing = QtQuick.Easing.OutCubic;
 var v2ContentEasing = QtQuick.Easing.OutCubic;
+
+// Expanded content (media/timer) must not paint the full expanded layout
+// inside a still-compact clip. Reveal only after geometry morph progress
+// crosses this threshold (or the protocol region has settled).
+// 0.55 ≈ mid-band of compact→expanded height (36→166) so the pill is
+// already large enough for 64px art + timeline without a squashed frame.
+var v2ExpandedContentRevealThreshold = 0.55;
+// Minimum height growth (px) before reveal gating engages. Tiny retargets
+// (e.g. measured width-only tweaks while already expanded) must not hide
+// expanded chrome.
+var v2ExpandedContentRevealMinDeltaPx = 12;
+
+// Pure helper: should expanded media/timer content paint yet?
+// progress is 0..1 geometryRevealProgress; heightDelta is target-base height.
+function expandedContentRevealAllowed(settingsService, settled, progress, heightDelta) {
+    if (settled)
+        return true;
+    if (Motion.reducedMotion(settingsService))
+        return true;
+    var delta = Number(heightDelta) || 0;
+    if (!(delta >= v2ExpandedContentRevealMinDeltaPx))
+        return true;
+    var p = Number(progress);
+    if (!isFinite(p))
+        return !!settled;
+    return p >= v2ExpandedContentRevealThreshold;
+}
 
 // reduced motion: geometry 0-100, content opacity only (no spatial travel).
 var v2ReducedGeometryMs = 80;

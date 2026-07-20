@@ -81,6 +81,8 @@ PanelWindow {
     readonly property string accentId: settingsService ? String(settingsService.accentColor || "blue") : "blue"
     readonly property color accentColor: Theme.accent(root.darkMode, root.accentId)
     readonly property color progressTrackColor: Theme.islandProgressTrack(root.darkMode)
+    // Media/timer/OSD progress fills share one monochrome token (not accent).
+    readonly property color progressFillColor: Theme.islandProgressFill(root.darkMode)
     readonly property real progress: (!!screenRole && screenRole.showActivity && dynamicIslandService)
         ? Number(dynamicIslandService.progress)
         : -1
@@ -129,9 +131,17 @@ PanelWindow {
             IslandMotion.v2NotificationExpandedHeightMax,
             220),
         Math.max(1, screenHeight - IslandMotion.v2CompactTopInset - IslandMotion.v2ScreenMargin)))
-    readonly property int requestedCapsuleWidth: (swipePreviewWidth > 0 && activeForScreen)
-        ? Math.round(swipePreviewWidth)
-        : widthForState(effectiveGeometryState)
+    readonly property int requestedCapsuleWidth: {
+        // Swipe preview owns width while interactive / settling.
+        if (swipePreviewWidth > 0 && activeForScreen)
+            return Math.round(swipePreviewWidth);
+        // Collapse freeze: hold the first resting_media width until settle.
+        if (root.collapseWidthFrozen
+                && String(root.effectiveGeometryState || "") === "resting_media"
+                && root.collapseFrozenMediaWidth > 0)
+            return root.collapseFrozenMediaWidth;
+        return widthForState(effectiveGeometryState);
+    }
     readonly property int capsuleTargetWidth: clampInt(requestedCapsuleWidth, 1, maxCapsuleWidth)
     // Geometry duration uses V2 morph tokens (T19); swipe settle keeps own token.
     readonly property string geometryMorphKind: {
@@ -152,6 +162,18 @@ PanelWindow {
     property real islandDriverWidth: 1
     property real islandDriverHeight: 1
     property real islandDriverRadius: 1
+    // Morph base (pre-retarget driver values) for geometryRevealProgress.
+    // Latched inside retarget* so content reveal can track morph progress
+    // without a second animation clock.
+    property real morphBaseWidth: 1
+    property real morphBaseHeight: 1
+    // Collapse width freeze: resting_media width is content-measured; if the
+    // compact scene remeasures mid-collapse the width driver retargets a second
+    // time and the pill jitters. Freeze the first collapse target until settle.
+    property int collapseFrozenMediaWidth: -1
+    property bool collapseWidthFrozen: false
+    // Last known compact-media measured width (updated while compact is live).
+    property int lastCompactMediaWidth: 0
     // Hard clamp bounds: width within screen margins; height must also fit the
     // layer surface below the top inset so overshoot can never push the glass
     // region past the window bounds.
@@ -167,6 +189,33 @@ PanelWindow {
         root.islandAnimatedWidth / 2,
         root.islandAnimatedHeight / 2))
 
+    // Geometry morph progress 0→1 along the dominant height axis (media expand
+    // is mostly a height morph 36→166). Used to gate expanded content reveal.
+    readonly property real geometryRevealProgress: {
+        var base = Number(root.morphBaseHeight) || 0;
+        var target = Number(root.capsuleTargetHeight) || 0;
+        var cur = Number(root.islandAnimatedHeight) || 0;
+        var span = target - base;
+        if (Math.abs(span) < 0.5)
+            return root.protocolGeometrySettled ? 1 : 0;
+        var p = (cur - base) / span;
+        if (!isFinite(p))
+            return root.protocolGeometrySettled ? 1 : 0;
+        return Math.max(0, Math.min(1, p));
+    }
+
+    // Expanded media/timer layout must wait until the pill is large enough.
+    // Reduced motion and settled geometry reveal immediately.
+    readonly property bool geometryAllowsExpandedContent: {
+        if (!root.geometryDriversReady)
+            return true;
+        return IslandMotion.expandedContentRevealAllowed(
+            root.settingsService,
+            root.protocolGeometrySettled,
+            root.geometryRevealProgress,
+            Number(root.capsuleTargetHeight) - Number(root.morphBaseHeight));
+    }
+
     function geometryEaseDurationMs() {
         // OSD entry: fast eased expansion (R08 #23). While OSD stays active,
         // targets do not change between ticks, so nothing re-animates.
@@ -178,8 +227,11 @@ PanelWindow {
     function retargetWidthDriver() {
         if (!root.geometryDriversReady) {
             root.islandDriverWidth = root.capsuleTargetWidth;
+            root.morphBaseWidth = root.capsuleTargetWidth;
             return;
         }
+        // Latch pre-retarget size so reveal progress is measured from here.
+        root.morphBaseWidth = root.islandDriverWidth;
         driverWidthSpring.stop();
         driverWidthEase.stop();
         // Swipe drag: width follows the pointer 1:1 (no animation lag).
@@ -209,8 +261,10 @@ PanelWindow {
     function retargetHeightDriver() {
         if (!root.geometryDriversReady) {
             root.islandDriverHeight = root.capsuleTargetHeight;
+            root.morphBaseHeight = root.capsuleTargetHeight;
             return;
         }
+        root.morphBaseHeight = root.islandDriverHeight;
         driverHeightSpring.stop();
         driverHeightEase.stop();
         if (!root.osdImmediateGeometry
@@ -246,11 +300,76 @@ PanelWindow {
         root.islandDriverWidth = root.capsuleTargetWidth;
         root.islandDriverHeight = root.capsuleTargetHeight;
         root.islandDriverRadius = root.capsuleTargetRadius;
+        root.morphBaseWidth = root.capsuleTargetWidth;
+        root.morphBaseHeight = root.capsuleTargetHeight;
+    }
+
+    function armCollapseWidthFreeze() {
+        // Capture the compact media width once when leaving expanded geometry
+        // so content remeasure cannot restart the width spring mid-collapse.
+        var measured = 0;
+        if (root.lastCompactMediaWidth > 0)
+            measured = root.lastCompactMediaWidth;
+        else if (islandContent && islandContent.compactMediaContentWidth > 0)
+            measured = Math.round(islandContent.compactMediaContentWidth) + root.compactMediaHorizontalPad;
+        if (measured <= 0)
+            measured = Math.round((IslandMotion.v2CompactMediaWidthMin + IslandMotion.v2CompactMediaWidthMax) / 2);
+        root.collapseFrozenMediaWidth = clampInt(
+            measured,
+            IslandMotion.v2CompactMediaWidthMin,
+            IslandMotion.v2CompactMediaWidthMax);
+        root.collapseWidthFrozen = true;
+    }
+
+    function clearCollapseWidthFreeze() {
+        root.collapseWidthFrozen = false;
+        root.collapseFrozenMediaWidth = -1;
     }
 
     onCapsuleTargetWidthChanged: retargetWidthDriver()
     onCapsuleTargetHeightChanged: retargetHeightDriver()
     onCapsuleTargetRadiusChanged: retargetRadiusDriver()
+
+    // Arm collapse width freeze when leaving expanded geometry for
+    // resting_media. Clear once geometry has settled, or when leaving media.
+    property string previousGeometryState: "resting_time"
+    onEffectiveGeometryStateChanged: {
+        var next = String(root.effectiveGeometryState || "");
+        var prev = String(root.previousGeometryState || "");
+        root.previousGeometryState = next;
+        if (next === "resting_media"
+                && prev.indexOf("expanded_") === 0
+                && !root.collapseWidthFrozen)
+            root.armCollapseWidthFreeze();
+        if (next !== "resting_media" && root.collapseWidthFrozen)
+            root.clearCollapseWidthFreeze();
+    }
+
+    onProtocolGeometrySettledChanged: {
+        if (root.protocolGeometrySettled && root.collapseWidthFrozen
+                && String(root.effectiveGeometryState || "") === "resting_media")
+            root.clearCollapseWidthFreeze();
+    }
+
+    // Track live compact media width while compact is the active geometry so
+    // collapse freeze has a stable measurement without mid-collapse remeasure.
+    Connections {
+        target: islandContent
+        function onCompactMediaContentWidthChanged() {
+            if (!islandContent)
+                return;
+            if (String(root.effectiveGeometryState || "") !== "resting_media")
+                return;
+            if (root.collapseWidthFrozen)
+                return;
+            var measured = Math.round(islandContent.compactMediaContentWidth) + root.compactMediaHorizontalPad;
+            if (measured > 0)
+                root.lastCompactMediaWidth = clampInt(
+                    measured,
+                    IslandMotion.v2CompactMediaWidthMin,
+                    IslandMotion.v2CompactMediaWidthMax);
+        }
+    }
 
     Component.onCompleted: {
         root.syncGeometryDriversImmediately();
@@ -330,9 +449,23 @@ PanelWindow {
             Math.floor(protocolCapsuleWidth / 2),
             Math.floor(protocolCapsuleHeight / 2))
     readonly property bool compactResting: effectiveContentState === "resting_time" || effectiveContentState === "resting_media" || effectiveContentState === "resting_timer"
-    readonly property bool compactContentVisible: compactResting && capsuleShown
-    // Expanded media only on the owner screen.
-    readonly property bool mediaContentVisible: effectiveContentState === "expanded_media" && activeForScreen
+    // Expand hold: keep compact chrome painted while geometry is mid-morph so
+    // mediaExpandHoldCompact is not defeated by compactResting going false.
+    readonly property bool mediaExpandHoldCompact: effectiveContentState === "expanded_media"
+        && activeForScreen
+        && !root.geometryAllowsExpandedContent
+    readonly property bool compactContentVisible: (compactResting || root.mediaExpandHoldCompact) && capsuleShown
+    // Expanded media only on the owner screen, and only once geometry has
+    // grown enough that the full player layout is not clipped into a compact
+    // pill (see geometryAllowsExpandedContent / v2ExpandedContentReveal*).
+    readonly property bool mediaContentVisible: effectiveContentState === "expanded_media"
+        && activeForScreen
+        && root.geometryAllowsExpandedContent
+    // Expanded timer shares the same reveal gate so compact→expanded timer
+    // does not paint tall chrome inside a still-small capsule.
+    readonly property bool timerExpandedContentVisible: effectiveContentState === "expanded_timer"
+        && activeForScreen
+        && root.geometryAllowsExpandedContent
     // T11: SettingsTheme island tokens (single color owner). No DynamicIslandTheme.js.
     readonly property string surfaceFillRole: fillRoleForState(effectiveGeometryState)
     readonly property color glassFill: Theme.islandSurfaceFill(root.darkMode, root.surfaceFillRole)
@@ -359,6 +492,8 @@ PanelWindow {
     readonly property bool canPlayPause: dynamicIslandService ? !!dynamicIslandService.canPlayPause : false
     readonly property bool canPrev: dynamicIslandService ? !!dynamicIslandService.canPrev : false
     readonly property bool canNext: dynamicIslandService ? !!dynamicIslandService.canNext : false
+    readonly property bool canSeek: dynamicIslandService ? !!dynamicIslandService.canSeek : false
+    readonly property bool mediaSeeking: dynamicIslandService ? !!dynamicIslandService.mediaSeeking : false
     readonly property int workspaceDirection: (activeForScreen && dynamicIslandService)
         ? Number(dynamicIslandService.transientWorkspaceDirection) || 0
         : 0
@@ -581,13 +716,18 @@ PanelWindow {
         top: true
     }
 
+    // Input mask follows the *painted* animated capsule (not the settled
+    // target). Target-sized mask during morph made expand hit a huge empty
+    // region and collapse leave visible chrome unclickable.
     mask: Region {
         Region {
-            x: root.capsuleTargetLeft
+            x: root.capsuleShown
+               ? Math.round((root.screenWidth - root.islandAnimatedWidth) / 2)
+               : 0
             y: root.capsuleTargetTop
-            width: root.capsuleShown ? root.capsuleTargetWidth : 0
-            height: root.capsuleShown ? root.capsuleTargetHeight : 0
-            radius: Math.round(root.capsuleTargetRadius)
+            width: root.capsuleShown ? Math.round(root.islandAnimatedWidth) : 0
+            height: root.capsuleShown ? Math.round(root.islandAnimatedHeight) : 0
+            radius: Math.round(root.islandAnimatedRadius)
         }
     }
 
@@ -675,6 +815,10 @@ PanelWindow {
                 compactResting: root.compactResting
                 compactContentVisible: root.compactContentVisible
                 mediaExpandedContentVisible: root.mediaContentVisible
+                // Geometry-gated expand: keep compact media painted until the
+                // expanded layout is allowed (avoids blank mid-morph frames).
+                mediaExpandHoldCompact: root.mediaExpandHoldCompact
+                timerExpandedContentVisible: root.timerExpandedContentVisible
                 textPrimary: root.textPrimary
                 textSecondary: root.textSecondary
                 darkMode: root.darkMode
@@ -690,9 +834,12 @@ PanelWindow {
                 canPlayPause: root.canPlayPause
                 canPrev: root.canPrev
                 canNext: root.canNext
+                canSeek: root.canSeek
+                mediaSeeking: root.mediaSeeking
                 settingsService: root.settingsService
                 accentColor: root.accentColor
                 progressTrackColor: root.progressTrackColor
+                progressFillColor: root.progressFillColor
                 workspaceDirection: root.workspaceDirection
                 workspaceLabel: root.workspaceLabel
                 workspaceCount: root.workspaceCount
@@ -710,6 +857,28 @@ PanelWindow {
                 onMediaNextRequested: if (root.dynamicIslandService) root.dynamicIslandService.mediaNext()
                 onMediaControlPressed: if (root.dynamicIslandService) root.dynamicIslandService.setUserInteracting(true)
                 onMediaControlReleased: if (root.dynamicIslandService) root.dynamicIslandService.setUserInteracting(false)
+                onMediaSeekBeginRequested: {
+                    if (!root.dynamicIslandService)
+                        return;
+                    root.dynamicIslandService.setUserInteracting(true);
+                    root.dynamicIslandService.mediaBeginSeek();
+                }
+                onMediaSeekPreviewRequested: function(ratio) {
+                    if (root.dynamicIslandService)
+                        root.dynamicIslandService.mediaPreviewSeekProgress(ratio);
+                }
+                onMediaSeekCommitRequested: function(ratio) {
+                    if (!root.dynamicIslandService)
+                        return;
+                    root.dynamicIslandService.mediaCommitSeekProgress(ratio);
+                    root.dynamicIslandService.setUserInteracting(false);
+                }
+                onMediaSeekCancelRequested: {
+                    if (!root.dynamicIslandService)
+                        return;
+                    root.dynamicIslandService.mediaCancelSeek();
+                    root.dynamicIslandService.setUserInteracting(false);
+                }
                 onTimerPauseResumeRequested: {
                     if (!root.dynamicIslandService) return;
                     if (root.dynamicIslandService.timerPaused || !root.dynamicIslandService.timerRunning)

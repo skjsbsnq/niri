@@ -233,12 +233,23 @@ class DynamicIslandV2SurfaceTests(unittest.TestCase):
         self.assertNotIn("DynamicIslandV2", self.overlay)
         self.assertNotIn("MaterialIsland", self.overlay)
 
-    def test_mask_uses_stable_target_geometry(self) -> None:
+    def test_mask_follows_animated_painted_geometry(self) -> None:
+        # Input mask tracks the painted morph (islandAnimated*), not the
+        # settled target — target-sized mask desynced hit testing mid-morph.
         self.assertIn("mask: Region", self.overlay)
-        self.assertIn("width: root.capsuleShown ? root.capsuleTargetWidth : 0", self.overlay)
-        self.assertIn("height: root.capsuleShown ? root.capsuleTargetHeight : 0", self.overlay)
-        self.assertIn("x: root.capsuleTargetLeft", self.overlay)
+        self.assertIn("islandAnimatedWidth", self.overlay)
+        self.assertIn("islandAnimatedHeight", self.overlay)
+        self.assertIn("islandAnimatedRadius", self.overlay)
+        self.assertIn("width: root.capsuleShown ? Math.round(root.islandAnimatedWidth) : 0", self.overlay)
+        self.assertIn("height: root.capsuleShown ? Math.round(root.islandAnimatedHeight) : 0", self.overlay)
         self.assertIn("y: root.capsuleTargetTop", self.overlay)
+        # Must not bind mask size to settled capsuleTarget* (historical bug).
+        mask = re.search(r"mask:\s*Region\s*\{([\s\S]*?)\n    \}", self.overlay)
+        self.assertIsNotNone(mask)
+        mask_body = mask.group(1)
+        self.assertNotIn("capsuleTargetWidth", mask_body)
+        self.assertNotIn("capsuleTargetHeight", mask_body)
+        self.assertNotIn("capsuleTargetLeft", mask_body)
         self.assertIn("useItemRegion: false", self.overlay)
         self.assertIn("protocolCapsuleWidth", self.overlay)
         # R08 #22: 2px quantum with floor semantics for size (region never

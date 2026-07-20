@@ -34,6 +34,7 @@ ISLAND_THEME_FUNCS = [
     "islandSurfaceFill",
     "islandSurfaceStroke",
     "islandProgressTrack",
+    "islandProgressFill",
     "islandControlFill",
     "islandRecording",
     "islandCriticalEdge",

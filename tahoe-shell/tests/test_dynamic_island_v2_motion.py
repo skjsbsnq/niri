@@ -36,6 +36,8 @@ class DynamicIslandV2MotionTests(unittest.TestCase):
         self.assertIn("var v2ContentMaxTravelPx = 6", self.motion)
         self.assertIn("var v2ReducedGeometryMs = 80", self.motion)
         self.assertIn("var v2ReducedContentMs = 80", self.motion)
+        self.assertIn("var v2ExpandedContentRevealThreshold = 0.55", self.motion)
+        self.assertIn("function expandedContentRevealAllowed", self.motion)
         # Legacy 380 morph and whole-content scale 0.9 removed.
         self.assertNotIn("var overlayMorphDuration = 380", self.motion)
         self.assertNotIn("overlayMorphDuration", self.motion)

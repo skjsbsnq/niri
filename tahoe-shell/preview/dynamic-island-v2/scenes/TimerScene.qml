@@ -6,6 +6,7 @@ Item {
     property color textPrimary: "#f7f8fa"
     property color textSecondary: "#aeb6c2"
     property color accentColor: "#0a84ff"
+    property color progressFillColor: "#f7f8fa"
     property color trackColor: "#30ffffff"
     property color controlFill: "#20ffffff"
 
@@ -69,7 +70,7 @@ Item {
                 width: parent.width * root.progress
                 height: parent.height
                 radius: 2
-                color: root.accentColor
+                color: root.progressFillColor
             }
         }
 

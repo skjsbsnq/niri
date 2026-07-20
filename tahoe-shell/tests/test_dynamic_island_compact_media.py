@@ -117,8 +117,16 @@ class DynamicIslandCompactMediaTests(unittest.TestCase):
         self.assertNotIn("id: compactLabel", self.content)
         # R07: clock and compact media each own a crossfading opacity so
         # clock↔media morph has no black frame (in-place fade, no shared latch).
-        self.assertIn("opacity: root.compactMediaActive && root.compactContentVisible ? 1 : 0", self.content)
+        # Expand hold may keep compact media painted while geometry morphs.
+        self.assertIn("compactMediaActive", self.content)
+        self.assertIn("mediaExpandHoldCompact", self.content)
         self.assertIn("opacity: root.restingClockActive && root.compactContentVisible ? 1 : 0", self.content)
+        # Compact media opacity must honor expand hold (not only compactContentVisible).
+        self.assertRegex(
+            self.content,
+            r"opacity:\s*root\.compactMediaActive\s*\n"
+            r"\s*&&\s*\(root\.compactContentVisible\s*\|\|\s*root\.mediaExpandHoldCompact\)",
+        )
 
     def test_media_title_not_bound_to_display_text_or_clock(self) -> None:
         # Overlay must mirror Controls title, not contentDisplayText / fallbackTimeText.
@@ -192,6 +200,21 @@ class DynamicIslandCompactMediaTests(unittest.TestCase):
         self.assertIn("islandProgressTrack", self.overlay)
         self.assertNotIn("#b56cff", self.view)
         self.assertNotIn("#b56cff", self.content)
+
+    def test_progress_fill_is_monochrome_not_accent(self) -> None:
+        # Compact bottom progress shares islandProgressFill with expanded/OSD.
+        self.assertIn("progressFillColor", self.view)
+        self.assertIn("color: root.progressFillColor", self.view)
+        self.assertIn("progressFillColor: root.progressFillColor", self.content)
+        self.assertIn("Theme.islandProgressFill", self.overlay)
+        # Progress paint path must not use accentColor.
+        progress = re.search(
+            r"id:\s*progressTrack[\s\S]*?\n    \}",
+            self.view,
+        )
+        self.assertIsNotNone(progress)
+        self.assertIn("progressFillColor", progress.group(0))
+        self.assertNotIn("accentColor", progress.group(0))
 
     def test_media_unavailable_smooth_clock_restore_path(self) -> None:
         # R07: clock and media crossfade in place (opacity swap), so media→clock

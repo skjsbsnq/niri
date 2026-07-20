@@ -45,6 +45,12 @@ Item {
     signal notificationInteractionEnded()
     property bool compactContentVisible: compactResting
     property bool mediaExpandedContentVisible: mediaExpanded
+    // Overlay sets this while geometry is still mid-expand so compact media
+    // stays painted until the expanded layout may reveal.
+    property bool mediaExpandHoldCompact: false
+    // Geometry-gated expanded timer (same reveal threshold as media).
+    // Default true so Content hosts without Overlay still show expanded layout.
+    property bool timerExpandedContentVisible: true
     property color textPrimary: "#f7f8fa"
     property color textSecondary: "#aeb6c2"
     property bool darkMode: true
@@ -66,14 +72,22 @@ Item {
     property bool canPlayPause: false
     property bool canPrev: false
     property bool canNext: false
+    property bool canSeek: false
+    property bool mediaSeeking: false
     property var settingsService
     property color accentColor: "#0a84ff"
     property color progressTrackColor: "#30ffffff"
+    // Monochrome progress fill (SettingsTheme.islandProgressFill); not accent.
+    property color progressFillColor: "#f7f8fa"
     signal mediaPreviousRequested()
     signal mediaPlayPauseRequested()
     signal mediaNextRequested()
     signal mediaControlPressed()
     signal mediaControlReleased()
+    signal mediaSeekBeginRequested()
+    signal mediaSeekPreviewRequested(real ratio)
+    signal mediaSeekCommitRequested(real ratio)
+    signal mediaSeekCancelRequested()
     property int workspaceDirection: 0
     property string workspaceLabel: ""
     property int workspaceCount: 0
@@ -90,7 +104,10 @@ Item {
     signal timerControlPressed()
     signal timerControlReleased()
     readonly property bool mediaExpanded: islandState === "expanded_media"
+    // Compact media stays active during resting_media and while expand is
+    // holding compact chrome until geometry allows the full player.
     readonly property bool compactMediaActive: islandState === "resting_media"
+        || root.mediaExpandHoldCompact
     // Measured compact media content width (no capsule padding). Overlay clamps.
     // While compact media is exiting (still visible mid-fade), freeze measured
     // width on the latch so the capsule does not shrink mid-fade when the
@@ -122,7 +139,9 @@ Item {
     readonly property bool timerActiveScene: islandState === "resting_timer"
         || islandState === "expanded_timer"
         || islandState === "transient_timer_complete"
+    // Overlay gates timerExpandedContentVisible during compact→expanded morph.
     readonly property bool timerExpanded: islandState === "expanded_timer"
+        && root.timerExpandedContentVisible
 
     // T13: horizontal bar OSD; ring removed. Scene visible whenever OSD active.
     readonly property bool osdSceneVisible: osdActive && !osdExiting
@@ -302,7 +321,13 @@ Item {
         textSecondary: root.textSecondary
         accentColor: root.accentColor
         trackColor: root.progressTrackColor
-        opacity: root.compactMediaActive && root.compactContentVisible ? 1 : 0
+        progressFillColor: root.progressFillColor
+        // Hold-compact during geometry-gated expand: paint while active even
+        // if Overlay briefly reports compactContentVisible false (defense in
+        // depth — Overlay also ORs mediaExpandHoldCompact into visibility).
+        opacity: root.compactMediaActive
+                 && (root.compactContentVisible || root.mediaExpandHoldCompact)
+                 ? 1 : 0
         visible: opacity > 0.01
         // Release the latch once the exit fade has fully completed.
         onVisibleChanged: {
@@ -445,6 +470,7 @@ Item {
         darkMode: root.darkMode
         textPrimary: root.textPrimary
         textSecondary: root.textSecondary
+        progressFillColor: root.progressFillColor
         opacity: root.osdLayerOpacity
         // Stay in the tree while OSD is active so progress rebinds without recreate.
         visible: root.osdActive || root.osdLayerOpacity > 0.01
@@ -506,6 +532,7 @@ Item {
         textSecondary: root.textSecondary
         accentColor: root.accentColor
         trackColor: root.progressTrackColor
+        progressFillColor: root.progressFillColor
         opacity: root.timerActiveScene ? 1 : 0
         visible: opacity > 0.01
         enabled: opacity > 0.5
@@ -549,11 +576,14 @@ Item {
             canPlayPause: root.canPlayPause
             canPrev: root.canPrev
             canNext: root.canNext
+            canSeek: root.canSeek
+            seeking: root.mediaSeeking
             settingsService: root.settingsService
             textPrimary: root.textPrimary
             textSecondary: root.textSecondary
             accentColor: root.accentColor
             trackColor: root.progressTrackColor
+            progressFillColor: root.progressFillColor
             // R07: collapse fades out (no hard cut). Loader hold keeps the
             // scene mounted through the exit fade; enabled gate keeps the
             // fading scene from stealing hits mid-collapse.
@@ -565,6 +595,10 @@ Item {
             onNextRequested: root.mediaNextRequested()
             onControlPressed: root.mediaControlPressed()
             onControlReleased: root.mediaControlReleased()
+            onSeekBeginRequested: root.mediaSeekBeginRequested()
+            onSeekPreviewRequested: function(ratio) { root.mediaSeekPreviewRequested(ratio); }
+            onSeekCommitRequested: function(ratio) { root.mediaSeekCommitRequested(ratio); }
+            onSeekCancelRequested: root.mediaSeekCancelRequested()
 
             Behavior on opacity {
                 NumberAnimation {

@@ -18,6 +18,8 @@ Item {
     property color textSecondary: "#aeb6c2"
     property color accentColor: "#0a84ff"
     property color trackColor: "#30ffffff"
+    // Progress rail fill is monochrome (islandProgressFill); accent not used for bars.
+    property color progressFillColor: "#f7f8fa"
     property color controlFill: "#20ffffff"
 
     signal pauseResumeRequested()
@@ -76,7 +78,7 @@ Item {
             width: parent.width * root.safeProgress
             height: parent.height
             radius: 1
-            color: root.accentColor
+            color: root.progressFillColor
         }
     }
 
@@ -116,7 +118,7 @@ Item {
                 width: parent.width * root.safeProgress
                 height: parent.height
                 radius: 2
-                color: root.accentColor
+                color: root.progressFillColor
             }
         }
 

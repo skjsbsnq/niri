@@ -6,6 +6,7 @@ Item {
     property color textPrimary: "#f7f8fa"
     property color textSecondary: "#aeb6c2"
     property color accentColor: "#0a84ff"
+    property color progressFillColor: "#f7f8fa"
     property color trackColor: "#30ffffff"
 
     readonly property bool playing: !!(model && model.playing)
@@ -76,7 +77,7 @@ Item {
                 width: parent.width * root.progress
                 height: parent.height
                 radius: 1
-                color: root.accentColor
+                color: root.progressFillColor
             }
         }
     }

@@ -19,6 +19,8 @@ Item {
     property color textSecondary: "#aeb6c2"
     property color accentColor: "#0a84ff"
     property color trackColor: "#30ffffff"
+    // Progress rail fill is monochrome (islandProgressFill); accent reserved for chrome.
+    property color progressFillColor: "#f7f8fa"
     property color artFallbackFill: "#28ffffff"
     property var settingsService
 
@@ -201,7 +203,7 @@ Item {
             width: parent.width * root.safeProgress
             height: parent.height
             radius: parent.radius
-            color: root.accentColor
+            color: root.progressFillColor
         }
     }
 }

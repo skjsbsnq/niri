@@ -44,10 +44,23 @@ Item {
     signal notificationInteractionBegan()
     signal notificationInteractionEnded()
     property bool compactContentVisible: compactResting
+    // True while owner shows the unified media scene (resting_media or expanded_media).
     property bool mediaExpandedContentVisible: mediaExpanded
-    // Overlay sets this while geometry is still mid-expand so compact media
-    // stays painted until the expanded layout may reveal.
+    // Legacy hold flag (always false with continuous morph); kept for test/API compat.
     property bool mediaExpandHoldCompact: false
+    // 0..1 continuous morph progress from Overlay capsule height.
+    // Negative = auto from islandState (for tests/hosts without Overlay).
+    property real mediaExpandProgress: -1
+    readonly property real resolvedMediaExpandProgress: {
+        var p = Number(root.mediaExpandProgress);
+        if (isFinite(p) && p >= 0)
+            return Math.max(0, Math.min(1, p));
+        if (String(root.islandState || "") === "expanded_media")
+            return 1;
+        if (String(root.islandState || "") === "resting_media")
+            return 0;
+        return 0;
+    }
     // Geometry-gated expanded timer (same reveal threshold as media).
     // Default true so Content hosts without Overlay still show expanded layout.
     property bool timerExpandedContentVisible: true
@@ -104,26 +117,28 @@ Item {
     signal timerControlPressed()
     signal timerControlReleased()
     readonly property bool mediaExpanded: islandState === "expanded_media"
-    // Compact media stays active during resting_media and while expand is
-    // holding compact chrome until geometry allows the full player.
-    readonly property bool compactMediaActive: islandState === "resting_media"
-        || root.mediaExpandHoldCompact
+        || islandState === "resting_media"
+    // CompactMediaView is retired for production media morph; width measure
+    // comes from the unified MediaView compactContentWidth.
+    readonly property bool compactMediaActive: false
     // Measured compact media content width (no capsule padding). Overlay clamps.
-    // While compact media is exiting (still visible mid-fade), freeze measured
-    // width on the latch so the capsule does not shrink mid-fade when the
-    // player disappears.
-    readonly property int compactMediaContentWidth: (root.compactMediaActive || compactMedia.visible)
-        ? Math.max(compactMedia.contentWidth, root.latchedCompactMediaWidth)
-        : compactMedia.contentWidth
-    // Last non-empty title/width while compact media is shown or fading so
-    // player disappear does not rewrite the fading scene with fallback text.
+    // Prefer live unified media measure; fall back to latch while fading out.
+    readonly property int compactMediaContentWidth: {
+        var live = 0;
+        if (mediaLoader.item && mediaLoader.item.compactContentWidth > 0)
+            live = Math.round(mediaLoader.item.compactContentWidth);
+        if (root.mediaExpandedContentVisible || (mediaLoader.item && mediaLoader.item.visible))
+            return Math.max(live, root.latchedCompactMediaWidth);
+        return live > 0 ? live : root.latchedCompactMediaWidth;
+    }
+    // Last non-empty title/width while media is shown or fading so player
+    // disappear does not rewrite the fading scene with fallback text.
     property string latchedCompactMediaTitle: ""
     property int latchedCompactMediaWidth: 0
     readonly property string compactMediaTitle: {
         var live = String(root.mediaTrackTitle || "").trim();
         if (live.length > 0)
             return live;
-        // Keep latched title through the exit fade.
         return root.latchedCompactMediaTitle;
     }
     // Compact exits under OSD must be immediate: hardware feedback owns the
@@ -205,9 +220,18 @@ Item {
         if (root.mediaExpandedContentVisible) {
             mediaUnloadHold.stop();
             root.mediaLoaderActive = true;
+            var live = String(root.mediaTrackTitle || "").trim();
+            if (live.length > 0)
+                root.latchedCompactMediaTitle = live;
         } else {
             mediaUnloadHold.restart();
         }
+    }
+
+    onMediaTrackTitleChanged: {
+        var live = String(root.mediaTrackTitle || "").trim();
+        if (live.length > 0 && root.mediaExpandedContentVisible)
+            root.latchedCompactMediaTitle = live;
     }
 
     Timer {
@@ -215,9 +239,27 @@ Item {
         interval: root.expandedUnloadHoldMs
         repeat: false
         onTriggered: {
-            if (!root.mediaExpandedContentVisible)
+            if (!root.mediaExpandedContentVisible) {
                 root.mediaLoaderActive = false;
+                root.latchedCompactMediaTitle = "";
+                root.latchedCompactMediaWidth = 0;
+            }
         }
+    }
+
+    Connections {
+        target: mediaLoader
+        function onItemChanged() {
+            root.syncMediaWidthLatch();
+        }
+    }
+
+    function syncMediaWidthLatch() {
+        if (!mediaLoader.item)
+            return;
+        var w = Math.round(Number(mediaLoader.item.compactContentWidth) || 0);
+        if (w > 0 && root.mediaExpandedContentVisible)
+            root.latchedCompactMediaWidth = w;
     }
 
     onNotificationActiveChanged: {
@@ -270,86 +312,9 @@ Item {
         }
     }
 
-    // Latch non-empty compact title/width while media is active so exit fades
-    // keep the last track identity (never clock displayText).
-    onMediaTrackTitleChanged: {
-        var live = String(root.mediaTrackTitle || "").trim();
-        if (live.length > 0)
-            root.latchedCompactMediaTitle = live;
-    }
-
-    onCompactMediaActiveChanged: {
-        if (root.compactMediaActive) {
-            var live = String(root.mediaTrackTitle || "").trim();
-            if (live.length > 0)
-                root.latchedCompactMediaTitle = live;
-            if (compactMedia.contentWidth > 0)
-                root.latchedCompactMediaWidth = compactMedia.contentWidth;
-        }
-    }
-
-    Connections {
-        target: compactMedia
-        function onContentWidthChanged() {
-            if (root.compactMediaActive
-                    && compactMedia.contentWidth > 0
-                    && String(root.mediaTrackTitle || "").trim().length > 0)
-                root.latchedCompactMediaWidth = compactMedia.contentWidth;
-        }
-    }
-
-    // T16: V2 compact media (art + title + play/pause). Same compact-layer
-    // motion vocabulary as the resting clock so clock↔media morph crossfades
-    // in place with no black frame.
-    DynamicIslandCompactMediaView {
-        id: compactMedia
-
-        anchors.horizontalCenter: parent.horizontalCenter
-        anchors.top: parent.top
-        anchors.topMargin: root.compactMediaActive ? 0 : -root.sceneTravelPx
-        width: Math.min(parent.width - 8, Math.max(contentWidth, IslandMotion.v2CompactMediaWidthMin))
-        height: IslandMotion.v2CompactMediaHeight
-        artUrl: root.mediaArtUrl
-        // Never fall back to displayText (clock) — use live or latched title only.
-        trackTitle: root.compactMediaTitle
-        isPlaying: root.mediaPlaying
-        progress: root.mediaProgress
-        // Show progress only when Controls reports position support (and length > 0).
-        progressSupported: root.mediaPositionSupported && root.mediaLength > 0
-        settingsService: root.settingsService
-        textPrimary: root.textPrimary
-        textSecondary: root.textSecondary
-        accentColor: root.accentColor
-        trackColor: root.progressTrackColor
-        progressFillColor: root.progressFillColor
-        // Hold-compact during geometry-gated expand: paint while active even
-        // if Overlay briefly reports compactContentVisible false (defense in
-        // depth — Overlay also ORs mediaExpandHoldCompact into visibility).
-        opacity: root.compactMediaActive
-                 && (root.compactContentVisible || root.mediaExpandHoldCompact)
-                 ? 1 : 0
-        visible: opacity > 0.01
-        // Release the latch once the exit fade has fully completed.
-        onVisibleChanged: {
-            if (!visible && !root.compactMediaActive) {
-                root.latchedCompactMediaTitle = "";
-                root.latchedCompactMediaWidth = 0;
-            }
-        }
-
-        Behavior on opacity {
-            NumberAnimation {
-                duration: root.compactMediaActive ? root.sceneEnterMs : root.compactContentMotionMs
-                easing.type: IslandMotion.v2ContentEasing
-            }
-        }
-        Behavior on anchors.topMargin {
-            NumberAnimation {
-                duration: root.compactMediaActive ? root.sceneEnterMs : root.compactContentMotionMs
-                easing.type: IslandMotion.v2ContentEasing
-            }
-        }
-    }
+    // Compact media is rendered by the unified DynamicIslandMediaView
+    // (expandProgress=0). DynamicIslandCompactMediaView remains in-tree for
+    // preview/tests but is not hosted here.
 
     DynamicIslandBluetoothView {
         id: bluetoothView
@@ -549,7 +514,8 @@ Item {
         }
     }
 
-    // Expanded media: Loader only while visible or exit-hold (no hidden Timer).
+    // Unified media scene (compact + expanded via expandProgress). Loader
+    // holds through exit fade when leaving media for clock/OSD/etc.
     Loader {
         id: mediaLoader
         objectName: "mediaLoader"
@@ -565,7 +531,13 @@ Item {
         DynamicIslandMediaView {
             anchors.fill: parent
             artUrl: root.mediaArtUrl
-            trackTitle: root.mediaTrackTitle
+            // Prefer live title; latch only during exit fade when player is gone.
+            trackTitle: {
+                var live = String(root.mediaTrackTitle || "").trim();
+                if (live.length > 0)
+                    return live;
+                return root.latchedCompactMediaTitle;
+            }
             trackArtist: root.mediaTrackArtist
             isPlaying: root.mediaPlaying
             position: root.mediaPosition
@@ -578,15 +550,15 @@ Item {
             canNext: root.canNext
             canSeek: root.canSeek
             seeking: root.mediaSeeking
+            expandProgress: root.resolvedMediaExpandProgress
             settingsService: root.settingsService
             textPrimary: root.textPrimary
             textSecondary: root.textSecondary
             accentColor: root.accentColor
             trackColor: root.progressTrackColor
             progressFillColor: root.progressFillColor
-            // R07: collapse fades out (no hard cut). Loader hold keeps the
-            // scene mounted through the exit fade; enabled gate keeps the
-            // fading scene from stealing hits mid-collapse.
+            // Scene opacity only for enter/exit of the whole media presentation
+            // (media↔clock). Compact↔expanded is expandProgress, not opacity.
             opacity: root.mediaExpandedContentVisible ? 1 : 0
             visible: root.mediaExpandedContentVisible || opacity > 0.01
             enabled: opacity > 0.5
@@ -599,6 +571,7 @@ Item {
             onSeekPreviewRequested: function(ratio) { root.mediaSeekPreviewRequested(ratio); }
             onSeekCommitRequested: function(ratio) { root.mediaSeekCommitRequested(ratio); }
             onSeekCancelRequested: root.mediaSeekCancelRequested()
+            onCompactContentWidthChanged: root.syncMediaWidthLatch()
 
             Behavior on opacity {
                 NumberAnimation {

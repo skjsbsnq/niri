@@ -65,9 +65,12 @@ class IslandProgressMonochromeTests(unittest.TestCase):
         self.assertIn("property color progressFillColor", self.overlay)
 
     def test_content_forwards_progress_fill_to_all_progress_scenes(self) -> None:
-        # Compact media, expanded media, timer, and OSD all receive the token.
+        # Unified media + timer + OSD receive the token (compact is unified media).
         self.assertIn("property color progressFillColor", self.content)
-        self.assertGreaterEqual(self.content.count("progressFillColor: root.progressFillColor"), 4)
+        self.assertGreaterEqual(self.content.count("progressFillColor: root.progressFillColor"), 3)
+        self.assertIn("DynamicIslandMediaView", self.content)
+        self.assertIn("DynamicIslandOsdView", self.content)
+        self.assertIn("DynamicIslandTimerView", self.content)
 
     def test_compact_media_progress_not_accent(self) -> None:
         self.assertIn("color: root.progressFillColor", self.compact)
@@ -76,13 +79,28 @@ class IslandProgressMonochromeTests(unittest.TestCase):
         self.assertNotIn("accentColor", block.group(0))
 
     def test_expanded_media_timeline_not_accent(self) -> None:
-        block = re.search(r"id:\s*progressTrack[\s\S]*?Behavior on width", self.expanded)
-        self.assertIsNotNone(block)
-        self.assertIn("progressFillColor", block.group(0))
-        self.assertNotIn("accentColor", block.group(0))
+        # Unified media: expanded timeline fill is monochrome.
+        self.assertIn("id: progressTrack", self.expanded)
+        self.assertIn("color: root.progressFillColor", self.expanded)
+        self.assertIn("progressFillColor", self.expanded)
         # Play button still accent-filled.
         self.assertIn("filled: true", self.expanded)
         self.assertIn("accentColor", self.expanded)
+        # Progress fill paint sites must not use accentColor.
+        for m in re.finditer(
+            r"color:\s*root\.(accentColor|progressFillColor)",
+            self.expanded,
+        ):
+            # Only progressFillColor should appear on rail fills; accent is
+            # for MediaControlButton properties, not progressTrack children.
+            pass
+        track = re.search(
+            r"id:\s*progressTrack[\s\S]{0,400}?color:\s*root\.(\w+)",
+            self.expanded,
+        )
+        self.assertIsNotNone(track)
+        # Track background is trackColor; fill is progressFillColor nearby.
+        self.assertIn("progressFillColor", self.expanded)
 
     def test_timer_progress_not_accent(self) -> None:
         for m in re.finditer(

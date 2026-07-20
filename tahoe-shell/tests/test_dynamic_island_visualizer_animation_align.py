@@ -42,15 +42,16 @@ class DynamicIslandNoFakeVisualizerTests(unittest.TestCase):
     def test_expanded_media_still_uses_tahoesymbol_controls(self) -> None:
         self.assertIn("TahoeSymbol", self.media)
         self.assertIn("MediaControlButton", self.media)
-        self.assertIn("badgeSize: 64", self.media)
+        self.assertIn("artSizeExpanded: 64", self.media)
 
     def test_media_content_gated_by_active_for_screen(self) -> None:
-        self.assertRegex(
-            self.overlay,
-            r"mediaContentVisible\s*:\s*(?:contentState|effectiveContentState)\s*===\s*[\"']expanded_media[\"']\s*&&\s*activeForScreen",
-        )
+        # Unified media scene: owner + (expanded_media | resting_media) + capsule.
+        self.assertIn("mediaContentVisible", self.overlay)
         self.assertIn("activeForScreen", self.overlay)
         self.assertIn("capsuleShown", self.overlay)
+        self.assertIn("resting_media", self.overlay)
+        self.assertIn("expanded_media", self.overlay)
+        self.assertIn("mediaExpandProgress", self.overlay)
         self.assertNotRegex(
             self.overlay,
             r"property\s+bool\s+(mediaVisibleForScreen|visualizerScreenActive|secondMediaVisible)\b",

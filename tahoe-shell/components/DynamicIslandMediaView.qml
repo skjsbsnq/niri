@@ -4,10 +4,10 @@ import QtQuick
 import "DynamicIslandMotion.js" as IslandMotion
 import "Motion.js" as Motion
 
-// V2 expanded media (T17): 64×64 art, 16px title / 12px artist, timeline,
-// 36px accent play/pause + 32px prev/next (44px hit). TahoeSymbol only.
-// No hand-drawn path glyphs, no fake sine spectrum, no album-art blur.
-// Active player / capabilities come from Controls via DynamicIsland.
+// Unified media scene: one layout morphs compact (expandProgress=0) → expanded (1).
+// expandProgress is driven by capsule height so art, timeline, and transport
+// grow/fade with geometry instead of hard scene swaps.
+// Transport glyphs: TahoeSymbol only. Seek when canSeek. No second MPRIS owner.
 Item {
     id: root
 
@@ -23,16 +23,17 @@ Item {
     property bool canPlayPause: false
     property bool canPrev: false
     property bool canNext: false
-    // Interactive scrub only when Controls reports canSeek (MPRIS CanSeek +
-    // position + length). Timeline remains painted when only position is known.
     property bool canSeek: false
     property bool seeking: false
+    // 0 = compact pill chrome, 1 = full expanded player. Continuous morph.
+    // Default 1 so bare MediaView hosts (lifecycle tests) get full transport;
+    // production Content/Overlay always drive this from capsule height.
+    property real expandProgress: 1
     property var settingsService
     property color textPrimary: "#f7f8fa"
     property color textSecondary: "#aeb6c2"
     property color accentColor: "#0a84ff"
     property color trackColor: "#30ffffff"
-    // Progress rail fill is monochrome (islandProgressFill); accent is transport only.
     property color progressFillColor: "#f7f8fa"
     property color controlFill: "#20ffffff"
     property color artFallbackFill: "#28ffffff"
@@ -48,10 +49,46 @@ Item {
     signal seekCommitRequested(real ratio)
     signal seekCancelRequested()
 
-    readonly property int badgeSize: 64
+    // Design endpoints (compact T16 / expanded T17).
+    readonly property int artSizeCompact: 22
+    readonly property int artSizeExpanded: 64
+    readonly property int artRadiusCompact: 6
+    readonly property int artRadiusExpanded: 12
+    readonly property int titleSizeCompact: 13
+    readonly property int titleSizeExpanded: 16
+    readonly property int artistSize: 12
     readonly property int playSize: 36
     readonly property int skipSize: 32
     readonly property int controlHit: 44
+    readonly property int statusSize: 16
+    readonly property int compactPadH: 10
+    readonly property int expandedPadH: 16
+    readonly property int compactPadV: 0
+    readonly property int expandedPadTop: 16
+
+    readonly property real p: Math.max(0, Math.min(1, Number(root.expandProgress) || 0))
+    // Ease curves for staged reveal (still continuous — no hard cuts).
+    // Art/title lead the morph; timeline mid; transport late so buttons never
+    // pop at full size inside a half-height pill.
+    readonly property real pArt: root.smoothstep(root.p, 0.0, 0.85)
+    readonly property real pTimeline: root.smoothstep(root.p, 0.28, 0.92)
+    readonly property real pControls: root.smoothstep(root.p, 0.42, 1.0)
+    readonly property real pArtist: root.smoothstep(root.p, 0.35, 0.9)
+    readonly property real pCompactChrome: 1.0 - root.smoothstep(root.p, 0.0, 0.45)
+
+    readonly property real artSize: root.artSizeCompact
+        + (root.artSizeExpanded - root.artSizeCompact) * root.pArt
+    readonly property real artRadius: root.artRadiusCompact
+        + (root.artRadiusExpanded - root.artRadiusCompact) * root.pArt
+    readonly property real titlePx: root.titleSizeCompact
+        + (root.titleSizeExpanded - root.titleSizeCompact) * root.pArt
+    readonly property real padH: root.compactPadH
+        + (root.expandedPadH - root.compactPadH) * root.pArt
+    readonly property real padTop: root.compactPadV
+        + (root.expandedPadTop - root.compactPadV) * root.pArt
+    readonly property real titleLeftGap: 8 + 6 * root.pArt
+    readonly property real topRowHeight: Math.max(root.artSize, 22)
+
     readonly property bool showArt: root.safeArtUrl.length > 0
     readonly property string safeArtUrl: {
         var url = String(root.artUrl || "").trim();
@@ -65,8 +102,11 @@ Item {
             return url;
         return "";
     }
-    // Local scrub preview so the bar tracks the finger even before Controls
-    // rebinds mediaProgress (and while width Behavior is disabled).
+    readonly property string resolvedTitle: {
+        var t = String(root.trackTitle || "").trim();
+        return t.length > 0 ? t : "正在播放";
+    }
+
     property bool localSeeking: false
     property real localSeekRatio: 0
     readonly property real safeProgress: {
@@ -80,37 +120,70 @@ Item {
         return root.positionSupported ? root.position : 0;
     }
     readonly property bool showTimeline: positionSupported || durationSupported || duration > 0
-    readonly property bool scrubInteractive: root.canSeek && root.showTimeline && root.duration > 0
+    // Scrub only once expanded enough that the timeline is interactive.
+    readonly property bool scrubInteractive: root.canSeek
+        && root.showTimeline
+        && root.duration > 0
+        && root.pTimeline > 0.85
+        && root.visible
     readonly property int progressDurationMs: root.reducedMotion
         ? IslandMotion.v2ReducedContentMs
         : IslandMotion.overlayProgressDuration
 
-    // Visibility/opacity owned by DynamicIslandContent (mediaExpandedContentVisible).
+    // Compact width measure (for Overlay resting_media band) — art+title+status.
+    readonly property int compactContentWidth: Math.ceil(
+        root.compactPadH * 2
+        + root.artSizeCompact
+        + 8
+        + Math.min(titleLabel.implicitWidth, 140)
+        + 8
+        + root.statusSize)
+
+    function smoothstep(t, edge0, edge1) {
+        var x = Number(t);
+        var a = Number(edge0);
+        var b = Number(edge1);
+        if (!isFinite(x))
+            return 0;
+        if (b <= a)
+            return x >= b ? 1 : 0;
+        var u = Math.max(0, Math.min(1, (x - a) / (b - a)));
+        return u * u * (3 - 2 * u);
+    }
+
+    function formatTime(seconds) {
+        var total = Math.max(0, Math.floor(Number(seconds) || 0));
+        var minutes = Math.floor(total / 60);
+        var secs = total % 60;
+        return minutes + ":" + (secs < 10 ? "0" : "") + secs;
+    }
+
     anchors.fill: parent
 
+    // ---- Top: art + title (+ artist when expanded) ----
     Item {
         id: topRow
         anchors {
             left: parent.left
             right: parent.right
             top: parent.top
-            leftMargin: 16
-            rightMargin: 16
-            topMargin: 16
+            leftMargin: root.padH
+            rightMargin: root.padH
+            topMargin: root.padTop
         }
-        height: root.badgeSize
+        height: root.topRowHeight
 
         Rectangle {
             id: artBadge
-            width: root.badgeSize
-            height: root.badgeSize
-            radius: 12
+            width: root.artSize
+            height: root.artSize
+            radius: root.artRadius
             color: root.artFallbackFill
             clip: true
             anchors.left: parent.left
+            // Compact: vertical center of 36px row; expanded: top-aligned in 64 band.
             anchors.verticalCenter: parent.verticalCenter
 
-            // Only load while this expanded scene is visible (hidden outputs stay cold).
             Image {
                 id: artImage
                 anchors.fill: parent
@@ -123,27 +196,35 @@ Item {
 
             TahoeSymbol {
                 anchors.centerIn: parent
-                name: "\ue405" // music_note
+                name: "\ue405"
                 color: root.textSecondary
-                size: 28
+                size: 14 + 14 * root.pArt
                 visible: !artImage.visible
             }
         }
 
-        Column {
+        // Title + artist column (expands from single-line compact title).
+        Item {
+            id: textBlock
             anchors {
                 left: artBadge.right
-                leftMargin: 14
-                right: parent.right
+                leftMargin: root.titleLeftGap
+                right: statusIcon.left
+                rightMargin: 8
                 verticalCenter: parent.verticalCenter
             }
-            spacing: 4
+            height: titleLabel.height + (artistLabel.visible ? (4 + artistLabel.height) : 0)
 
             Text {
-                width: parent.width
-                text: root.trackTitle.length > 0 ? root.trackTitle : "正在播放"
+                id: titleLabel
+                anchors {
+                    left: parent.left
+                    right: parent.right
+                    top: parent.top
+                }
+                text: root.resolvedTitle
                 color: root.textPrimary
-                font.pixelSize: 16
+                font.pixelSize: root.titlePx
                 font.weight: Font.DemiBold
                 font.letterSpacing: 0
                 elide: Text.ElideRight
@@ -151,50 +232,92 @@ Item {
             }
 
             Text {
-                width: parent.width
+                id: artistLabel
+                anchors {
+                    left: parent.left
+                    right: parent.right
+                    top: titleLabel.bottom
+                    topMargin: 4
+                }
                 text: root.trackArtist
                 color: root.textSecondary
-                font.pixelSize: 12
+                font.pixelSize: root.artistSize
                 font.letterSpacing: 0
                 elide: Text.ElideRight
                 maximumLineCount: 1
-                visible: text.length > 0
+                opacity: root.pArtist
+                visible: text.length > 0 && opacity > 0.02
             }
+        }
+
+        // Compact trailing play/pause glyph — fades out as transport row appears.
+        TahoeSymbol {
+            id: statusIcon
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            name: root.isPlaying ? "\ue034" : "\ue037"
+            color: root.textSecondary
+            size: root.statusSize
+            opacity: root.pCompactChrome
+            visible: opacity > 0.02
         }
     }
 
+    // ---- Compact bottom progress (2px) — fades out as expanded timeline appears ----
+    Rectangle {
+        id: compactProgress
+        anchors {
+            left: parent.left
+            right: parent.right
+            bottom: parent.bottom
+            leftMargin: root.compactPadH
+            rightMargin: root.compactPadH
+            bottomMargin: 0
+        }
+        height: 2
+        radius: 1
+        color: root.trackColor
+        opacity: root.pCompactChrome * ((root.positionSupported && root.duration > 0) ? 1 : 0)
+        visible: opacity > 0.02
+
+        Rectangle {
+            width: parent.width * root.safeProgress
+            height: parent.height
+            radius: parent.radius
+            color: root.progressFillColor
+        }
+    }
+
+    // ---- Expanded timeline — fades/slides in with geometry ----
     Item {
         id: timeline
         anchors {
             left: parent.left
             right: parent.right
             top: topRow.bottom
-            topMargin: 12
-            leftMargin: 16
-            rightMargin: 16
+            topMargin: 4 + 8 * root.pTimeline
+            leftMargin: root.padH
+            rightMargin: root.padH
         }
-        // Full 22px hit band for scrub (paint is 4px). Prevents capsule
-        // swipe/click from stealing mid-seek.
-        height: 22
-        opacity: root.showTimeline ? 1 : 0.45
+        height: 10 + 12 * root.pTimeline
+        opacity: root.pTimeline * (root.showTimeline ? 1 : 0.45)
+        visible: opacity > 0.02
+        // Soft rise from below as the pill grows.
+        transform: Translate {
+            y: (1.0 - root.pTimeline) * 8
+        }
 
         Rectangle {
             id: progressTrack
             anchors {
                 left: parent.left
                 right: parent.right
-                verticalCenter: parent.verticalCenter
+                top: parent.top
+                topMargin: 2
             }
-            height: root.localSeeking || root.seeking ? 6 : 4
+            height: (root.localSeeking || root.seeking) ? 6 : (2 + 2 * root.pTimeline)
             radius: height / 2
             color: root.trackColor
-
-            Behavior on height {
-                NumberAnimation {
-                    duration: root.reducedMotion ? 0 : IslandMotion.v2ReducedContentMs
-                    easing.type: IslandMotion.v2ContentEasing
-                }
-            }
 
             Rectangle {
                 id: progressFill
@@ -204,7 +327,6 @@ Item {
                 color: root.progressFillColor
 
                 Behavior on width {
-                    // Disable follow animation while scrubbing so the bar is 1:1.
                     enabled: !root.localSeeking && !root.seeking
                     NumberAnimation {
                         duration: root.progressDurationMs
@@ -223,6 +345,7 @@ Item {
             color: root.textSecondary
             font.pixelSize: 10
             font.letterSpacing: 0
+            opacity: root.pTimeline
             horizontalAlignment: Text.AlignLeft
         }
 
@@ -237,20 +360,20 @@ Item {
             color: root.textSecondary
             font.pixelSize: 10
             font.letterSpacing: 0
+            opacity: root.pTimeline
             horizontalAlignment: Text.AlignRight
         }
 
         MouseArea {
             id: seekArea
             anchors.fill: parent
-            enabled: root.scrubInteractive && root.visible
+            enabled: root.scrubInteractive
             preventStealing: true
             hoverEnabled: false
             cursorShape: root.scrubInteractive ? Qt.PointingHandCursor : Qt.ArrowCursor
 
             function ratioAt(mx) {
                 var w = Math.max(1, progressTrack.width);
-                // Map into track coordinates (MouseArea fills timeline).
                 var x = Math.max(0, Math.min(w, mx - progressTrack.x));
                 return Math.max(0, Math.min(1, x / w));
             }
@@ -315,6 +438,10 @@ Item {
                 if (!root.canSeek && root.localSeeking)
                     seekArea.endSeek(false);
             }
+            function onExpandProgressChanged() {
+                if (root.pTimeline < 0.8 && root.localSeeking)
+                    seekArea.endSeek(false);
+            }
         }
 
         Component.onDestruction: {
@@ -323,15 +450,25 @@ Item {
         }
     }
 
+    // ---- Transport: scales + fades in late so buttons never hard-pop ----
     Item {
         id: controlRow
         anchors {
             left: parent.left
             right: parent.right
             bottom: parent.bottom
-            bottomMargin: 10
+            bottomMargin: 4 + 6 * root.pControls
         }
         height: root.controlHit
+        opacity: root.pControls
+        visible: opacity > 0.02
+        // Keep hits off until mostly revealed (avoids mid-morph mis-taps).
+        enabled: root.pControls > 0.55
+        transform: Translate {
+            y: (1.0 - root.pControls) * 10
+        }
+        scale: 0.88 + 0.12 * root.pControls
+        transformOrigin: Item.Bottom
 
         Row {
             anchors.centerIn: parent
@@ -390,19 +527,11 @@ Item {
         }
     }
 
-    function formatTime(seconds) {
-        var total = Math.max(0, Math.floor(Number(seconds) || 0));
-        var minutes = Math.floor(total / 60);
-        var secs = total % 60;
-        return minutes + ":" + (secs < 10 ? "0" : "") + secs;
-    }
-
     component MediaControlButton: Item {
         id: btn
         property int size: 32
         property int hit: 44
         property bool controlEnabled: true
-        // "prev" | "play" | "pause" | "next"
         property string role: "play"
         property color primaryColor: "#ffffff"
         property color accentColor: "#0a84ff"
@@ -419,7 +548,6 @@ Item {
 
         Behavior on scale {
             NumberAnimation {
-                // Press feedback: shorter than content enter; still tokenized.
                 duration: root.reducedMotion ? 0 : IslandMotion.v2ReducedContentMs
                 easing.type: IslandMotion.v2ContentEasing
             }
@@ -427,6 +555,8 @@ Item {
 
         function beginInteraction() {
             if (!btn.controlEnabled || !btn.visible || !root.visible || btn.interactionActive)
+                return false;
+            if (!controlRow.enabled)
                 return false;
             btn.interactionActive = true;
             btn.pressed();
@@ -454,6 +584,10 @@ Item {
                 if (!root.visible)
                     btn.endInteraction(true);
             }
+            function onExpandProgressChanged() {
+                if (root.pControls < 0.5)
+                    btn.endInteraction(true);
+            }
         }
 
         Component.onDestruction: {
@@ -472,7 +606,6 @@ Item {
                    : "transparent"
             opacity: btn.controlEnabled ? 1 : 0.45
 
-            // Match ControlCenter + compact island media transport glyphs.
             TahoeSymbol {
                 anchors.centerIn: parent
                 name: {
@@ -482,7 +615,7 @@ Item {
                         return "\ue044";
                     if (btn.role === "pause")
                         return "\ue034";
-                    return "\ue037"; // play
+                    return "\ue037";
                 }
                 color: btn.filled
                        ? btn.primaryColor
@@ -494,8 +627,6 @@ Item {
         MouseArea {
             id: mouse
             anchors.fill: parent
-            // Always enabled so the hit rect absorbs presses when disabled
-            // (prevents fall-through to capsule click/swipe).
             enabled: true
             preventStealing: true
             cursorShape: btn.controlEnabled ? Qt.PointingHandCursor : Qt.ArrowCursor

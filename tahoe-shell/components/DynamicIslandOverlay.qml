@@ -189,8 +189,29 @@ PanelWindow {
         root.islandAnimatedWidth / 2,
         root.islandAnimatedHeight / 2))
 
-    // Geometry morph progress 0→1 along the dominant height axis (media expand
-    // is mostly a height morph 36→166). Used to gate expanded content reveal.
+    // Continuous media expand progress from live capsule height.
+    // 0 at compact media height, 1 at expanded media height — same clock as
+    // the geometry spring so art/timeline/controls morph with the pill.
+    readonly property real mediaExpandProgress: {
+        var compactH = IslandMotion.v2CompactMediaHeight;
+        var expandedH = Math.round(
+            (IslandMotion.v2MediaExpandedHeightMin + IslandMotion.v2MediaExpandedHeightMax) / 2);
+        var span = expandedH - compactH;
+        if (span <= 1)
+            return root.effectiveContentState === "expanded_media" ? 1 : 0;
+        var h = Number(root.islandAnimatedHeight) || compactH;
+        // When presentation is not media, force endpoints so non-media scenes
+        // never leave residual expanded chrome.
+        var state = String(root.effectiveContentState || "");
+        if (state === "resting_media")
+            return Math.max(0, Math.min(1, (h - compactH) / span));
+        if (state === "expanded_media")
+            return Math.max(0, Math.min(1, (h - compactH) / span));
+        return 0;
+    }
+
+    // Geometry morph progress 0→1 along the dominant height axis (used by
+    // timer reveal gate and collapse diagnostics).
     readonly property real geometryRevealProgress: {
         var base = Number(root.morphBaseHeight) || 0;
         var target = Number(root.capsuleTargetHeight) || 0;
@@ -204,8 +225,8 @@ PanelWindow {
         return Math.max(0, Math.min(1, p));
     }
 
-    // Expanded media/timer layout must wait until the pill is large enough.
-    // Reduced motion and settled geometry reveal immediately.
+    // Timer expanded chrome still waits for height growth (timer is not the
+    // continuous media morph path).
     readonly property bool geometryAllowsExpandedContent: {
         if (!root.geometryDriversReady)
             return true;
@@ -449,20 +470,18 @@ PanelWindow {
             Math.floor(protocolCapsuleWidth / 2),
             Math.floor(protocolCapsuleHeight / 2))
     readonly property bool compactResting: effectiveContentState === "resting_time" || effectiveContentState === "resting_media" || effectiveContentState === "resting_timer"
-    // Expand hold: keep compact chrome painted while geometry is mid-morph so
-    // mediaExpandHoldCompact is not defeated by compactResting going false.
-    readonly property bool mediaExpandHoldCompact: effectiveContentState === "expanded_media"
-        && activeForScreen
-        && !root.geometryAllowsExpandedContent
-    readonly property bool compactContentVisible: (compactResting || root.mediaExpandHoldCompact) && capsuleShown
-    // Expanded media only on the owner screen, and only once geometry has
-    // grown enough that the full player layout is not clipped into a compact
-    // pill (see geometryAllowsExpandedContent / v2ExpandedContentReveal*).
-    readonly property bool mediaContentVisible: effectiveContentState === "expanded_media"
-        && activeForScreen
-        && root.geometryAllowsExpandedContent
-    // Expanded timer shares the same reveal gate so compact→expanded timer
-    // does not paint tall chrome inside a still-small capsule.
+    // Unified media scene owns both resting_media and expanded_media on the
+    // owner screen. expandProgress interpolates layout; no dual-scene hold.
+    readonly property bool mediaExpandHoldCompact: false
+    readonly property bool compactContentVisible: compactResting && capsuleShown
+        && String(root.effectiveContentState || "") !== "resting_media"
+        && String(root.effectiveContentState || "") !== "expanded_media"
+    // Media scene visible for compact + expanded media on owner (continuous morph).
+    readonly property bool mediaContentVisible: activeForScreen
+        && (effectiveContentState === "expanded_media"
+            || effectiveContentState === "resting_media")
+        && capsuleShown
+    // Expanded timer shares the geometry reveal gate (not continuous morph).
     readonly property bool timerExpandedContentVisible: effectiveContentState === "expanded_timer"
         && activeForScreen
         && root.geometryAllowsExpandedContent
@@ -815,9 +834,8 @@ PanelWindow {
                 compactResting: root.compactResting
                 compactContentVisible: root.compactContentVisible
                 mediaExpandedContentVisible: root.mediaContentVisible
-                // Geometry-gated expand: keep compact media painted until the
-                // expanded layout is allowed (avoids blank mid-morph frames).
                 mediaExpandHoldCompact: root.mediaExpandHoldCompact
+                mediaExpandProgress: root.mediaExpandProgress
                 timerExpandedContentVisible: root.timerExpandedContentVisible
                 textPrimary: root.textPrimary
                 textSecondary: root.textSecondary

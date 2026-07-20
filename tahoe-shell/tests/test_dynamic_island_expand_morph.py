@@ -59,40 +59,31 @@ class DynamicIslandExpandMorphTests(unittest.TestCase):
         # Still top-anchored.
         self.assertIn("capsuleTargetTop", body)
 
-    def test_media_content_gated_by_geometry_reveal(self) -> None:
-        self.assertIn("geometryAllowsExpandedContent", self.overlay)
-        self.assertIn("geometryRevealProgress", self.overlay)
-        self.assertIn("expandedContentRevealAllowed", self.overlay)
-        # mediaContentVisible requires geometry gate, not state alone.
-        self.assertRegex(
-            self.overlay,
-            r"mediaContentVisible:\s*effectiveContentState\s*===\s*\"expanded_media\"[\s\S]*?"
-            r"geometryAllowsExpandedContent",
-        )
-        self.assertIn("mediaExpandHoldCompact", self.overlay)
-        self.assertIn("mediaExpandHoldCompact", self.content)
-        # Compact stays active while expand hold is on.
-        self.assertIn("root.mediaExpandHoldCompact", self.content)
+    def test_media_content_uses_continuous_expand_progress(self) -> None:
+        # Unified media scene for resting_media + expanded_media on owner.
+        self.assertIn("mediaExpandProgress", self.overlay)
+        self.assertIn("mediaExpandProgress", self.content)
+        self.assertIn("expandProgress", self.content)
+        self.assertIn("resting_media", self.overlay)
+        self.assertIn("expanded_media", self.overlay)
         self.assertIn("mediaExpandedContentVisible: root.mediaContentVisible", self.overlay)
+        # MediaView morphs art/timeline/controls from expandProgress.
+        media = (SHELL / "components" / "DynamicIslandMediaView.qml").read_text(encoding="utf-8")
+        self.assertIn("property real expandProgress", media)
+        self.assertIn("pArt", media)
+        self.assertIn("pTimeline", media)
+        self.assertIn("pControls", media)
+        self.assertIn("artSizeCompact", media)
+        self.assertIn("artSizeExpanded", media)
 
-    def test_hold_compact_actually_paints(self) -> None:
-        # Critical: mediaExpandHoldCompact must keep compact chrome *visible*,
-        # not only "active". compactContentVisible must OR the hold, and the
-        # compact media opacity expression must honor hold as a paint path.
-        self.assertRegex(
-            self.overlay,
-            r"compactContentVisible:\s*\(compactResting\s*\|\|\s*root\.mediaExpandHoldCompact\)\s*&&\s*capsuleShown",
-        )
-        self.assertIn("mediaExpandHoldCompact:", self.overlay)
-        # Content opacity must not require compactContentVisible alone.
-        compact_opacity = re.search(
-            r"DynamicIslandCompactMediaView\s*\{[\s\S]*?opacity:\s*([^\n]+(?:\n\s+[^\n]+){0,4})",
-            self.content,
-        )
-        self.assertIsNotNone(compact_opacity)
-        expr = compact_opacity.group(1)
-        self.assertIn("mediaExpandHoldCompact", expr)
-        self.assertIn("compactMediaActive", expr)
+    def test_unified_media_scene_not_dual_crossfade(self) -> None:
+        # Production Content must not host a second CompactMediaView for morph.
+        self.assertNotRegex(self.content, r"DynamicIslandCompactMediaView\s*\{")
+        self.assertIn("DynamicIslandMediaView", self.content)
+        self.assertIn("resolvedMediaExpandProgress", self.content)
+        # Timer still uses geometry reveal gate (not continuous media morph).
+        self.assertIn("geometryAllowsExpandedContent", self.overlay)
+        self.assertIn("timerExpandedContentVisible", self.overlay)
 
     def test_timer_expanded_also_geometry_gated(self) -> None:
         self.assertIn("timerExpandedContentVisible", self.overlay)

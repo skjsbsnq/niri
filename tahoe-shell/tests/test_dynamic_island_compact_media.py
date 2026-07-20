@@ -67,18 +67,11 @@ class DynamicIslandCompactMediaTests(unittest.TestCase):
         self.assertIn('\\ue037"', self.view)  # play when paused
 
     def test_no_artist_in_compact(self) -> None:
-        # Compact view must not render artist metadata properties.
+        # Standalone CompactMediaView must not render artist (expanded-only).
         self.assertNotIn("trackArtist", self.view)
         self.assertNotIn("property string artist", self.view)
-        # Content must not pass artist into compact media.
-        compact_block = re.search(
-            r"DynamicIslandCompactMediaView\s*\{[\s\S]*?\n    \}",
-            self.content,
-        )
-        self.assertIsNotNone(compact_block)
-        block = compact_block.group(0)
-        self.assertNotIn("mediaTrackArtist", block)
-        self.assertNotIn("trackArtist", block)
+        # Production Content no longer hosts CompactMediaView; unified MediaView
+        # shows artist only via expandProgress (pArtist).
 
     def test_no_fake_visualizer(self) -> None:
         # No bar spectrum / sine fake audio (comments may mention the ban).
@@ -99,49 +92,46 @@ class DynamicIslandCompactMediaTests(unittest.TestCase):
         self.assertIn("file://", self.view)
 
     def test_progress_optional_and_supported(self) -> None:
+        # Standalone compact view still has optional progress rail.
         self.assertIn("progressSupported", self.view)
         self.assertIn("showProgress", self.view)
-        # Content wires position support from Controls via service fields.
-        self.assertIn(
-            "progressSupported: root.mediaPositionSupported && root.mediaLength > 0",
-            self.content,
-        )
-        # Unsupported progress: view hides bar when progressSupported false.
         self.assertIn("visible: root.showProgress", self.view)
+        # Production unified media uses positionSupported + duration for rails.
+        self.assertIn("positionSupported", self.media_view)
+        self.assertIn("mediaPositionSupported", self.content)
 
     def test_content_hosts_compact_media_not_plain_label(self) -> None:
-        self.assertIn("DynamicIslandCompactMediaView", self.content)
+        # Production: unified DynamicIslandMediaView owns compact+expanded.
+        self.assertIn("DynamicIslandMediaView", self.content)
         self.assertIn("compactMediaContentWidth", self.content)
-        self.assertIn("compactMediaActive", self.content)
+        self.assertIn("mediaExpandProgress", self.content)
+        self.assertIn("expandProgress", self.content)
         # Old single-line compactLabel path is gone.
         self.assertNotIn("id: compactLabel", self.content)
-        # R07: clock and compact media each own a crossfading opacity so
-        # clock↔media morph has no black frame (in-place fade, no shared latch).
-        # Expand hold may keep compact media painted while geometry morphs.
-        self.assertIn("compactMediaActive", self.content)
-        self.assertIn("mediaExpandHoldCompact", self.content)
+        # Clock still crossfades; media is Loader-hosted unified scene.
         self.assertIn("opacity: root.restingClockActive && root.compactContentVisible ? 1 : 0", self.content)
-        # Compact media opacity must honor expand hold (not only compactContentVisible).
-        self.assertRegex(
+        self.assertIn("mediaLoaderActive", self.content)
+        # CompactMediaView is not hosted in production Content.
+        self.assertNotRegex(
             self.content,
-            r"opacity:\s*root\.compactMediaActive\s*\n"
-            r"\s*&&\s*\(root\.compactContentVisible\s*\|\|\s*root\.mediaExpandHoldCompact\)",
+            r"DynamicIslandCompactMediaView\s*\{",
         )
 
     def test_media_title_not_bound_to_display_text_or_clock(self) -> None:
         # Overlay must mirror Controls title, not contentDisplayText / fallbackTimeText.
         self.assertIn("dynamicIslandService.mediaTrackTitle", self.overlay)
         self.assertNotIn("mediaTrackTitle: contentDisplayText", self.overlay)
-        # Content never feeds displayText into compact title.
-        compact_block = re.search(
-            r"DynamicIslandCompactMediaView\s*\{[\s\S]*?\n    \}",
+        # Unified media scene never feeds displayText into track title.
+        media_block = re.search(
+            r"DynamicIslandMediaView\s*\{[\s\S]*?\n        \}",
             self.content,
         )
-        self.assertIsNotNone(compact_block)
-        block = re.sub(r"//[^\n]*", "", compact_block.group(0))
+        self.assertIsNotNone(media_block)
+        block = re.sub(r"//[^\n]*", "", media_block.group(0))
         self.assertNotIn("displayText", block)
         self.assertNotIn("fallbackTimeText", block)
-        self.assertIn("trackTitle: root.compactMediaTitle", block)
+        self.assertIn("trackTitle:", block)
+        self.assertIn("mediaTrackTitle", block)
         # Service exposes stable Controls field.
         self.assertIn("mediaTrackTitle:", self.island)
         self.assertIn("controlsService.trackTitle", self.island)

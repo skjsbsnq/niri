@@ -471,6 +471,7 @@ Item {
     }
 
     // ---- Compact bottom progress (2px) — fades out as expanded timeline appears ----
+    // No width Behavior: fill is always safeProgress × track (same ratio as expanded).
     Rectangle {
         id: compactProgress
         anchors {
@@ -531,13 +532,21 @@ Item {
 
             Rectangle {
                 id: progressFill
+                // Always ratio of live track width. Do not animate pixel width
+                // during capsule morph — that re-tweened compact→expanded width
+                // and looked like progress "catching up" after open.
                 width: parent.width * root.safeProgress
                 height: parent.height
                 radius: parent.radius
                 color: root.progressFillColor
 
                 Behavior on width {
-                    enabled: !root.localSeeking && !root.seeking
+                    // Scrub: 1:1. Morph (p < ~1): 1:1. Settled expanded only:
+                    // ease 1s MPRIS poll steps.
+                    enabled: !root.localSeeking
+                             && !root.seeking
+                             && root.p >= 0.98
+                             && root.pTimeline >= 0.98
                     NumberAnimation {
                         duration: root.progressDurationMs
                         easing.type: IslandMotion.overlayProgressEasing

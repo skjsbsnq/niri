@@ -127,8 +127,10 @@ class DynamicIslandExpandedMediaTests(unittest.TestCase):
         self.assertIn("seekCancelRequested", self.view)
         self.assertIn("id: seekArea", self.view)
         self.assertIn("preventStealing: true", self.view)
-        # Width Behavior disabled while scrubbing.
-        self.assertIn("enabled: !root.localSeeking && !root.seeking", self.view)
+        # Width Behavior disabled while scrubbing and while expand morph runs.
+        self.assertIn("!root.localSeeking", self.view)
+        self.assertIn("!root.seeking", self.view)
+        self.assertIn("root.p >= 0.98", self.view)
         self.assertIn("safeProgress", self.view)
         self.assertIn("showTimeline", self.view)
         # Controls owns seek — view must not walk MPRIS itself.

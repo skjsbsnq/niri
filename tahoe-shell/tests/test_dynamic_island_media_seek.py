@@ -128,8 +128,12 @@ class DynamicIslandMediaSeekTests(unittest.TestCase):
         self.assertIn("function endSeek", self.view)
         self.assertIn("localSeeking", self.view)
         self.assertIn("localSeekRatio", self.view)
-        # Behavior off while scrubbing.
-        self.assertIn("enabled: !root.localSeeking && !root.seeking", self.view)
+        # Behavior off while scrubbing AND while expand morph is in flight
+        # (morph re-tween of pixel width looked like progress catching up).
+        self.assertIn("!root.localSeeking", self.view)
+        self.assertIn("!root.seeking", self.view)
+        self.assertIn("root.p >= 0.98", self.view)
+        self.assertIn("root.pTimeline >= 0.98", self.view)
         # Only interactive when canSeek.
         self.assertIn("root.canSeek", self.view)
         self.assertIn("root.scrubInteractive", self.view)

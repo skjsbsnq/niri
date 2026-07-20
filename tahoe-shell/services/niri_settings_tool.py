@@ -16,6 +16,9 @@ from typing import Any
 NUMBER_RE = r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)"
 MANAGED_BEGIN_RE = re.compile(r"^\s*//\s*tahoe-managed:\s*begin\s+([A-Za-z0-9_-]+)\s*$")
 MANAGED_END_RE = re.compile(r"^\s*//\s*tahoe-managed:\s*end\s+([A-Za-z0-9_-]+)\s*$")
+LAYER_ANIMATION_MARKER_RE = re.compile(
+    r"^\s*//\s*tahoe-managed:\s*layer-animation\s+([A-Za-z0-9_-]+)\s*$"
+)
 
 
 class KdlEditError(RuntimeError):
@@ -815,7 +818,7 @@ LAYER_PROFILE_GROUPS = {
     "spotlight": ("tahoe-spotlight",),
     # T04-fix2 / T21: status popups and tray menus stay edge-reveal; app and
     # shell menus share one pop-slide layer-rule (pointer origin). Keep these
-    # tuples equal to the namespace sets of their animation rules.
+    # tuples equal to the namespace sets of their marked animation rules.
     "small_popup": (
         "tahoe-battery-popup",
         "tahoe-wifi-popup",
@@ -832,6 +835,7 @@ LAYER_PROFILE_GROUPS = {
     ),
     "toast": ("tahoe-notification-toast",),
 }
+TOP_EDGE_PANEL_GROUPS = ("control_center", "notification_center", "small_popup")
 LAYER_PHASES = ("layer-open", "layer-close")
 
 
@@ -884,15 +888,46 @@ def spring_phase(
     return values
 
 
+TOP_EDGE_PANEL_CLOSE_PHASES = {
+    "balanced": {
+        **layer_phase(210, 0, "opacity-to", 1.0),
+        "style": "edge-reveal",
+        "opacity-curve": None,
+    },
+    "fast": {
+        **layer_phase(140, 0, "opacity-to", 1.0),
+        "style": "edge-reveal",
+        "opacity-curve": None,
+    },
+    "liquid": {
+        **layer_phase(210, 0, "opacity-to", 1.0),
+        "style": "edge-reveal",
+        "opacity-curve": None,
+    },
+    # With a zero-duration edge reveal the snapshot is moved entirely outside
+    # its crop on the first close frame, hiding the intended reduced-motion
+    # fade. Use the compositor's fade style so the 60ms opacity path is visible.
+    "reduced": {
+        **layer_phase(0, 60, "opacity-to", 0.0, "emphasized-accel"),
+        "style": "fade",
+    },
+}
+
+
+def top_edge_panel_close_phase(profile: str) -> dict[str, int | float | str | None]:
+    """Return the shared close policy for top-edge panels and status popups."""
+    return dict(TOP_EDGE_PANEL_CLOSE_PHASES[profile])
+
+
 MOTION_PROFILE_LAYERS = {
     "balanced": {
         "control_center": {
             "layer-open": spring_phase(0.85, 380, 0.0005, 110, "opacity-from", 0.84, "standard-decel"),
-            "layer-close": {**layer_phase(210, 0, "opacity-to", 1.0), "opacity-curve": None},
+            "layer-close": top_edge_panel_close_phase("balanced"),
         },
         "notification_center": {
             "layer-open": spring_phase(0.85, 380, 0.0005, 100, "opacity-from", 0.86, "standard-decel"),
-            "layer-close": {**layer_phase(210, 0, "opacity-to", 1.0), "opacity-curve": None},
+            "layer-close": top_edge_panel_close_phase("balanced"),
         },
         "left_sidebar": {
             "layer-open": spring_phase(0.85, 380, 0.0005, 0, "opacity-from", 1.0),
@@ -904,7 +939,7 @@ MOTION_PROFILE_LAYERS = {
         },
         "small_popup": {
             "layer-open": spring_phase(0.85, 380, 0.0005, 110, "opacity-from", 0.68, "standard-decel"),
-            "layer-close": layer_phase(210, 120, "opacity-to", 0.0, "emphasized-accel"),
+            "layer-close": top_edge_panel_close_phase("balanced"),
         },
         "menu": {
             "layer-open": spring_phase(0.88, 500, 0.001, 90, "opacity-from", 0.0, "standard-decel"),
@@ -918,11 +953,11 @@ MOTION_PROFILE_LAYERS = {
     "fast": {
         "control_center": {
             "layer-open": spring_phase(0.9, 520, 0.0005, 80, "opacity-from", 0.84, "standard-decel"),
-            "layer-close": {**layer_phase(140, 0, "opacity-to", 1.0), "opacity-curve": None},
+            "layer-close": top_edge_panel_close_phase("fast"),
         },
         "notification_center": {
             "layer-open": spring_phase(0.9, 520, 0.0005, 80, "opacity-from", 0.86, "standard-decel"),
-            "layer-close": {**layer_phase(140, 0, "opacity-to", 1.0), "opacity-curve": None},
+            "layer-close": top_edge_panel_close_phase("fast"),
         },
         "left_sidebar": {
             "layer-open": spring_phase(0.9, 520, 0.0005, 0, "opacity-from", 1.0),
@@ -934,7 +969,7 @@ MOTION_PROFILE_LAYERS = {
         },
         "small_popup": {
             "layer-open": spring_phase(0.9, 520, 0.0005, 80, "opacity-from", 0.68, "standard-decel"),
-            "layer-close": layer_phase(140, 90, "opacity-to", 0.0, "emphasized-accel"),
+            "layer-close": top_edge_panel_close_phase("fast"),
         },
         "menu": {
             "layer-open": spring_phase(0.95, 750, 0.001, 70, "opacity-from", 0.0, "standard-decel"),
@@ -948,11 +983,11 @@ MOTION_PROFILE_LAYERS = {
     "liquid": {
         "control_center": {
             "layer-open": spring_phase(0.82, 300, 0.0005, 130, "opacity-from", 0.84, "standard-decel"),
-            "layer-close": {**layer_phase(210, 0, "opacity-to", 1.0), "opacity-curve": None},
+            "layer-close": top_edge_panel_close_phase("liquid"),
         },
         "notification_center": {
             "layer-open": spring_phase(0.82, 300, 0.0005, 130, "opacity-from", 0.86, "standard-decel"),
-            "layer-close": {**layer_phase(210, 0, "opacity-to", 1.0), "opacity-curve": None},
+            "layer-close": top_edge_panel_close_phase("liquid"),
         },
         "left_sidebar": {
             "layer-open": spring_phase(0.82, 300, 0.0005, 0, "opacity-from", 1.0),
@@ -964,7 +999,7 @@ MOTION_PROFILE_LAYERS = {
         },
         "small_popup": {
             "layer-open": spring_phase(0.82, 300, 0.0005, 130, "opacity-from", 0.68, "standard-decel"),
-            "layer-close": layer_phase(210, 140, "opacity-to", 0.0, "emphasized-accel"),
+            "layer-close": top_edge_panel_close_phase("liquid"),
         },
         "menu": {
             "layer-open": spring_phase(0.82, 420, 0.001, 110, "opacity-from", 0.0, "standard-decel"),
@@ -978,11 +1013,11 @@ MOTION_PROFILE_LAYERS = {
     "reduced": {
         "control_center": {
             "layer-open": layer_phase(0, 80, "opacity-from", 0.0, "standard-decel"),
-            "layer-close": layer_phase(0, 60, "opacity-to", 0.0, "emphasized-accel"),
+            "layer-close": top_edge_panel_close_phase("reduced"),
         },
         "notification_center": {
             "layer-open": layer_phase(0, 80, "opacity-from", 0.0, "standard-decel"),
-            "layer-close": layer_phase(0, 60, "opacity-to", 0.0, "emphasized-accel"),
+            "layer-close": top_edge_panel_close_phase("reduced"),
         },
         "left_sidebar": {
             "layer-open": layer_phase(0, 0, "opacity-from", 1.0),
@@ -994,7 +1029,7 @@ MOTION_PROFILE_LAYERS = {
         },
         "small_popup": {
             "layer-open": layer_phase(0, 80, "opacity-from", 0.0, "standard-decel"),
-            "layer-close": layer_phase(0, 60, "opacity-to", 0.0, "emphasized-accel"),
+            "layer-close": top_edge_panel_close_phase("reduced"),
         },
         "menu": {
             "layer-open": layer_phase(0, 70, "opacity-from", 0.0, "standard-decel"),
@@ -1210,35 +1245,138 @@ def valid_motion_profile(raw_value: str) -> str:
     return profile
 
 
-def layer_rule_namespaces(lines: list[str], block: tuple[int, int]) -> tuple[str, ...]:
-    namespaces: list[str] = []
+def layer_rule_namespace_patterns(
+    lines: list[str],
+    block: tuple[int, int],
+    node: str = "match",
+) -> tuple[str, ...]:
+    patterns: list[str] = []
     for index in iter_depth_lines(lines, block[0], block[1], 1):
         body = uncommented_body(lines[index])
-        match = re.match(r'^\s*match\s+namespace\s*=\s*"([^"]+)"\s*$', body)
-        if not match:
+        if not re.match(rf"^\s*{re.escape(node)}\b", body):
             continue
-        namespace = match.group(1)
-        if namespace.startswith("^"):
-            namespace = namespace[1:]
-        if namespace.endswith("$"):
-            namespace = namespace[:-1]
-        namespaces.append(namespace)
-    return tuple(namespaces)
+        namespace = re.search(r'\bnamespace\s*=\s*"([^"]+)"', body)
+        if namespace:
+            patterns.append(namespace.group(1))
+    return tuple(patterns)
+
+
+def exact_namespace_pattern(pattern: str) -> str | None:
+    match = re.fullmatch(r"\^([A-Za-z0-9_-]+)\$", pattern)
+    return match.group(1) if match else None
+
+
+def layer_rule_namespaces(lines: list[str], block: tuple[int, int]) -> tuple[str, ...]:
+    return tuple(
+        namespace
+        for pattern in layer_rule_namespace_patterns(lines, block)
+        if (namespace := exact_namespace_pattern(pattern)) is not None
+    )
+
+
+def layer_animation_marker_registry(
+    lines: list[str],
+    animation_rules: list[tuple[int, int]],
+) -> dict[str, tuple[int, int]]:
+    rules_by_start = {block[0]: block for block in animation_rules}
+    registry: dict[str, tuple[int, int]] = {}
+
+    for index, line in enumerate(lines):
+        marker = LAYER_ANIMATION_MARKER_RE.match(line.rstrip("\n"))
+        if not marker:
+            continue
+        group = marker.group(1)
+        if group not in LAYER_PROFILE_GROUPS:
+            raise KdlEditError(f"unknown managed layer animation group: {group}")
+
+        rule_index = index + 1
+        while rule_index < len(lines) and not lines[rule_index].strip():
+            rule_index += 1
+        rule = rules_by_start.get(rule_index)
+        if rule is None:
+            raise KdlEditError(
+                f"managed layer animation marker {group} is not bound to an animation layer-rule"
+            )
+        if group in registry:
+            raise KdlEditError(f"duplicate managed layer animation marker: {group}")
+        registry[group] = rule
+
+    missing = [group for group in LAYER_PROFILE_GROUPS if group not in registry]
+    if missing:
+        raise KdlEditError(f"missing managed layer animation markers: {missing!r}")
+    return registry
+
+
+def validate_managed_animation_rule(
+    lines: list[str],
+    block: tuple[int, int],
+    group: str,
+) -> tuple[str, ...]:
+    match_nodes = [
+        uncommented_body(lines[index]).strip()
+        for index in iter_depth_lines(lines, block[0], block[1], 1)
+        if re.match(r"^\s*match\b", uncommented_body(lines[index]))
+    ]
+    if not match_nodes:
+        raise KdlEditError(f"managed layer animation rule {group} has no match nodes")
+    if any(
+        re.match(r"^\s*exclude\b", uncommented_body(lines[index]))
+        for index in iter_depth_lines(lines, block[0], block[1], 1)
+    ):
+        raise KdlEditError(f"managed layer animation rule {group} does not support exclude nodes")
+
+    patterns: list[str] = []
+    node_re = re.compile(r'^match\s+namespace\s*=\s*"([^"]+)"$')
+    for node in match_nodes:
+        match = node_re.fullmatch(node)
+        if not match:
+            raise KdlEditError(
+                f"managed layer animation rule {group} requires canonical namespace-only match nodes; "
+                f"got {node!r}"
+            )
+        pattern = match.group(1)
+        if exact_namespace_pattern(pattern) is None:
+            raise KdlEditError(
+                f"managed layer animation rule {group} requires exact anchored literal namespaces; "
+                f"got {pattern!r}"
+            )
+        patterns.append(pattern)
+
+    return tuple(patterns)
 
 
 def find_layer_rule_for_group(lines: list[str], group: str) -> tuple[int, int]:
     expected = LAYER_PROFILE_GROUPS[group]
-    matches = [
+    expected_set = set(expected)
+    animation_rules = [
         block
         for block in find_top_level_blocks(lines, "layer-rule")
-        if layer_rule_namespaces(lines, block) == expected
-        and find_child_block(lines, block[0], block[1], "animations") is not None
+        if find_child_block(lines, block[0], block[1], "animations") is not None
     ]
-    if len(matches) != 1:
+    managed_rule = layer_animation_marker_registry(lines, animation_rules)[group]
+    validate_managed_animation_rule(lines, managed_rule, group)
+    actual = layer_rule_namespaces(lines, managed_rule)
+    if len(actual) != len(expected) or set(actual) != expected_set:
         raise KdlEditError(
-            f"refusing profile write: expected exactly one layer-rule for {group}, found {len(matches)}"
+            f"refusing profile write: marked layer-rule for {group} has namespaces {actual}, "
+            f"expected {expected}"
         )
-    return matches[0]
+
+    # Exact custom rules are cheap to check structurally. Arbitrary unmarked
+    # Rust regex rules remain user-owned and are deliberately not reinterpreted
+    # by this Python writer.
+    overlapping = [
+        block
+        for block in animation_rules
+        if block != managed_rule
+        and expected_set.intersection(layer_rule_namespaces(lines, block))
+    ]
+    if overlapping:
+        raise KdlEditError(
+            f"refusing profile write: expected exclusive animation ownership for {group}, "
+            f"found {len(overlapping)} additional overlapping layer-rules"
+        )
+    return managed_rule
 
 
 def find_layer_phase_block(lines: list[str], layer_rule: tuple[int, int], phase: str) -> tuple[int, int]:

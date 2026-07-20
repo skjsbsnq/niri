@@ -23,6 +23,12 @@ TOPBAR_STATUS_POPUP_NAMESPACES = {
     "tahoe-tray-menu",
 }
 
+TOP_EDGE_PANEL_NAMESPACE_GROUPS = (
+    {"tahoe-control-center"},
+    {"tahoe-notification-center"},
+    TOPBAR_STATUS_POPUP_NAMESPACES,
+)
+
 TOPBAR_MENU_NAMESPACES = {
     "tahoe-menu-popup",
     "tahoe-application-menu",
@@ -195,9 +201,33 @@ class EdgeRevealSemanticsTests(unittest.TestCase):
                     self.assertNotIn(forbidden, block)
 
         self.assertRegex(layer_open, r"(?m)^\s*opacity-from\s+0\.68\s*$")
-        self.assertRegex(layer_close, r"(?m)^\s*opacity-to\s+0\s*$")
-        self.assertRegex(layer_close, r"(?m)^\s*opacity-duration-ms\s+120\s*$")
-        self.assertRegex(layer_close, r'(?m)^\s*opacity-curve\s+"emphasized-accel"\s*$')
+
+    def test_top_edge_panels_keep_close_snapshot_opaque(self) -> None:
+        text = CONFIG.read_text(encoding="utf-8")
+        layer_rules = extract_blocks(text, r"(?m)^\s*layer-rule\s*\{")
+
+        for namespaces in TOP_EDGE_PANEL_NAMESPACE_GROUPS:
+            with self.subTest(namespaces=sorted(namespaces)):
+                rules = [
+                    rule
+                    for rule in layer_rules
+                    if layer_rule_namespaces(rule) == namespaces
+                    and extract_blocks(rule, r"(?m)^\s*animations\s*\{")
+                ]
+                self.assertEqual(len(rules), 1)
+                animations = extract_one_block(rules[0], r"(?m)^\s*animations\s*\{")
+                layer_close = extract_one_block(animations, r"(?m)^\s*layer-close\s*\{")
+
+                self.assertRegex(layer_close, r'(?m)^\s*style\s+"edge-reveal"\s*$')
+                self.assertRegex(layer_close, r'(?m)^\s*edge\s+"top"\s*$')
+                self.assertRegex(layer_close, r"(?m)^\s*opacity-to\s+1(?:\.0+)?\s*$")
+                self.assertRegex(layer_close, r"(?m)^\s*transform-duration-ms\s+210\s*$")
+                self.assertRegex(
+                    layer_close,
+                    r'(?m)^\s*transform-curve\s+"emphasized-accel"\s*$',
+                )
+                self.assertRegex(layer_close, r"(?m)^\s*opacity-duration-ms\s+0\s*$")
+                self.assertNotRegex(layer_close, r"(?m)^\s*opacity-curve\b")
 
     def test_spotlight_close_scale_is_symmetric_with_open(self) -> None:
         text = CONFIG.read_text(encoding="utf-8")
@@ -311,7 +341,7 @@ class DockRestoreRectangleTests(unittest.TestCase):
         )
         self.assertNotIn("root.mapToItem(null, 0, 0)", rectangle)
 
-        assert_in_order(self, restore, "updateDockRectangle()", "windowsService.restore")
+        assert_in_order(self, restore, "updateDockRectangle(true)", "windowsService.restore")
         self.assertEqual(clicked.count("root.restoreOrActivate()"), 1)
         self.assertLess(clicked.index("root.restoreOrActivate()"), clicked.rfind("root.bounce()"))
 

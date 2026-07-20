@@ -15,6 +15,36 @@ REPO_ROOT = ROOT.parent
 TOOL_PATH = ROOT / "services" / "niri_settings_tool.py"
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "niri-settings"
 TAHOE_PHASE0 = REPO_ROOT / "config" / "niri" / "tahoe-phase0.kdl"
+TOP_EDGE_CLOSE_EXPECTED = {
+    "balanced": {
+        "style": "edge-reveal",
+        "transform-duration-ms": 210,
+        "opacity-duration-ms": 0,
+        "opacity-to": 1.0,
+        "opacity-curve": None,
+    },
+    "fast": {
+        "style": "edge-reveal",
+        "transform-duration-ms": 140,
+        "opacity-duration-ms": 0,
+        "opacity-to": 1.0,
+        "opacity-curve": None,
+    },
+    "liquid": {
+        "style": "edge-reveal",
+        "transform-duration-ms": 210,
+        "opacity-duration-ms": 0,
+        "opacity-to": 1.0,
+        "opacity-curve": None,
+    },
+    "reduced": {
+        "style": "fade",
+        "transform-duration-ms": 0,
+        "opacity-duration-ms": 60,
+        "opacity-to": 0.0,
+        "opacity-curve": "emphasized-accel",
+    },
+}
 
 spec = importlib.util.spec_from_file_location("niri_settings_tool", TOOL_PATH)
 assert spec and spec.loader
@@ -24,6 +54,13 @@ spec.loader.exec_module(niri_settings_tool)
 
 def read_fixture(name: str) -> str:
     return (FIXTURES / name).read_text(encoding="utf-8")
+
+
+def replace_marked_layer_text(text: str, group: str, old: str, new: str) -> str:
+    marker = f"// tahoe-managed: layer-animation {group}"
+    marker_index = text.index(marker)
+    target_index = text.index(old, marker_index)
+    return text[:target_index] + new + text[target_index + len(old):]
 
 
 def write_fake_niri(path: Path, exit_code: int, message: str) -> None:
@@ -147,25 +184,241 @@ class NiriSettingsToolTests(unittest.TestCase):
                 close = niri_settings_tool.MOTION_PROFILE_LAYERS[profile]["toast"]["layer-close"]
                 self.assertEqual(close["opacity-to"], 0.0)
 
-    def test_all_motion_profiles_preserve_small_popup_fade_remediation(self) -> None:
+    def test_top_edge_panel_close_policy_is_shared_across_profiles(self) -> None:
+        self.assertEqual(
+            set(niri_settings_tool.TOP_EDGE_PANEL_CLOSE_PHASES),
+            set(niri_settings_tool.MOTION_PROFILE_NAMES),
+        )
+        self.assertEqual(niri_settings_tool.TOP_EDGE_PANEL_CLOSE_PHASES, TOP_EDGE_CLOSE_EXPECTED)
+        self.assertLessEqual(
+            set(niri_settings_tool.TOP_EDGE_PANEL_GROUPS),
+            set(niri_settings_tool.LAYER_PROFILE_GROUPS),
+        )
+
         for profile in niri_settings_tool.MOTION_PROFILE_NAMES:
             with self.subTest(profile=profile):
+                expected = TOP_EDGE_CLOSE_EXPECTED[profile]
+                closes = [
+                    niri_settings_tool.MOTION_PROFILE_LAYERS[profile][group]["layer-close"]
+                    for group in niri_settings_tool.TOP_EDGE_PANEL_GROUPS
+                ]
+                self.assertTrue(all(close == expected for close in closes))
+
                 popup = niri_settings_tool.MOTION_PROFILE_LAYERS[profile]["small_popup"]
-                self.assertEqual(popup["layer-close"]["opacity-to"], 0.0)
-                self.assertEqual(popup["layer-close"]["opacity-curve"], "emphasized-accel")
                 if profile != "reduced":
                     self.assertEqual(popup["layer-open"]["opacity-from"], 0.68)
+
+    def test_motion_profile_writer_preserves_shared_top_edge_panel_close_policy(self) -> None:
+        original = TAHOE_PHASE0.read_text(encoding="utf-8")
+
+        for profile in niri_settings_tool.MOTION_PROFILE_NAMES:
+            with self.subTest(profile=profile):
+                written = niri_settings_tool.update_field(original, "animations.profile", profile)
+                self.assertEqual(niri_settings_tool.detect_motion_profile(written), profile)
+                lines = written.splitlines(True)
+                expected = TOP_EDGE_CLOSE_EXPECTED[profile]
+
+                for group in niri_settings_tool.TOP_EDGE_PANEL_GROUPS:
+                    rule = niri_settings_tool.find_layer_rule_for_group(lines, group)
+                    close = niri_settings_tool.find_layer_phase_block(lines, rule, "layer-close")
+                    self.assertEqual(
+                        niri_settings_tool.phase_string(lines, close, "style"),
+                        expected["style"],
+                    )
+                    self.assertEqual(
+                        niri_settings_tool.phase_number(lines, close, "transform-duration-ms"),
+                        expected["transform-duration-ms"],
+                    )
+                    self.assertEqual(
+                        niri_settings_tool.phase_number(lines, close, "opacity-duration-ms"),
+                        expected["opacity-duration-ms"],
+                    )
+                    self.assertEqual(
+                        niri_settings_tool.phase_number(lines, close, "opacity-to"),
+                        expected["opacity-to"],
+                    )
+                    self.assertEqual(
+                        niri_settings_tool.phase_string(lines, close, "opacity-curve"),
+                        expected["opacity-curve"],
+                    )
+
+                balanced = niri_settings_tool.update_field(written, "animations.profile", "balanced")
+                self.assertEqual(balanced, original)
+
+    def test_layer_profile_namespaces_have_single_animation_owner(self) -> None:
+        namespaces = [
+            namespace
+            for group in niri_settings_tool.LAYER_PROFILE_GROUPS.values()
+            for namespace in group
+        ]
+        self.assertEqual(len(namespaces), len(set(namespaces)))
+
+        lines = TAHOE_PHASE0.read_text(encoding="utf-8").splitlines(True)
+        animation_rules = [
+            block
+            for block in niri_settings_tool.find_top_level_blocks(lines, "layer-rule")
+            if niri_settings_tool.find_child_block(lines, block[0], block[1], "animations") is not None
+        ]
+        registry = niri_settings_tool.layer_animation_marker_registry(lines, animation_rules)
+        self.assertEqual(set(registry), set(niri_settings_tool.LAYER_PROFILE_GROUPS))
+        for namespace in namespaces:
+            with self.subTest(namespace=namespace):
+                owners = [
+                    block
+                    for block in animation_rules
+                    if namespace in niri_settings_tool.layer_rule_namespaces(lines, block)
+                ]
+                self.assertEqual(len(owners), 1)
+
+    def test_motion_profile_write_rejects_invalid_layer_animation_markers(self) -> None:
+        original = TAHOE_PHASE0.read_text(encoding="utf-8")
+        probes = (
+            (
+                original + """
+
+// tahoe-managed: layer-animation mystery
+layer-rule {
+    match namespace="^tahoe-mystery$"
+    animations {
+        layer-open { off }
+        layer-close { off }
+    }
+}
+""",
+                "unknown",
+                "unknown managed layer animation group: mystery",
+            ),
+            (
+                original.replace(
+                    "// tahoe-managed: layer-animation control_center\n",
+                    "// tahoe-managed: layer-animation control_center\n"
+                    "// tahoe-managed: layer-animation control_center\n",
+                    1,
+                ),
+                "stacked",
+                "is not bound to an animation layer-rule",
+            ),
+            (
+                original + "\n// tahoe-managed: layer-animation control_center\n",
+                "dangling",
+                "is not bound to an animation layer-rule",
+            ),
+            (
+                original + """
+
+// tahoe-managed: layer-animation control_center
+layer-rule {
+    match namespace="^tahoe-control-center-copy$"
+    animations {
+        layer-open { off }
+        layer-close { off }
+    }
+}
+""",
+                "duplicate",
+                "duplicate managed layer animation marker: control_center",
+            ),
+        )
+
+        for broken, label, expected_error in probes:
+            with self.subTest(label=label):
+                with self.assertRaises(niri_settings_tool.KdlEditError) as raised:
+                    niri_settings_tool.update_field(broken, "animations.profile", "fast")
+                self.assertIn(expected_error, str(raised.exception))
+
+    def test_motion_profile_write_rejects_overlapping_layer_animation_owner(self) -> None:
+        original = TAHOE_PHASE0.read_text(encoding="utf-8")
+        overlapping = original + """
+
+layer-rule {
+    match namespace="^tahoe-control-center$" at-startup=true
+    match namespace="^tahoe-overlap-probe$"
+    animations {
+        layer-open { off }
+        layer-close { off }
+    }
+}
+"""
+
+        with self.assertRaises(niri_settings_tool.KdlEditError) as raised:
+            niri_settings_tool.update_field(overlapping, "animations.profile", "fast")
+
+        self.assertIn("exclusive animation ownership for control_center", str(raised.exception))
+
+    def test_managed_animation_rule_rejects_noncanonical_match_contracts(self) -> None:
+        original = TAHOE_PHASE0.read_text(encoding="utf-8")
+        canonical = '    match namespace="^tahoe-control-center$"'
+        probes = (
+            ('    match namespace="^tahoe-control-.*$"', "wildcard", "exact anchored literal namespaces"),
+            (
+                '    match namespace="^(?:tahoe-control-center|overlap-probe)$"',
+                "alternation",
+                "exact anchored literal namespaces",
+            ),
+            ('    match namespace="tahoe-control-center"', "unanchored", "exact anchored literal namespaces"),
+            ('    match namespace="^tahoe.control-center$"', "dot-meta", "exact anchored literal namespaces"),
+            (
+                '    match namespace="^tahoe-control-center$" at-startup=true',
+                "match-property",
+                "canonical namespace-only match nodes",
+            ),
+            ('    match at-startup=true', "match-without-namespace", "canonical namespace-only match nodes"),
+            (
+                canonical + '\n    exclude at-startup=true',
+                "exclude-without-namespace",
+                "does not support exclude nodes",
+            ),
+        )
+
+        for replacement, label, expected_error in probes:
+            with self.subTest(label=label):
+                broken = replace_marked_layer_text(original, "control_center", canonical, replacement)
+                with self.assertRaises(niri_settings_tool.KdlEditError) as raised:
+                    niri_settings_tool.update_field(broken, "animations.profile", "fast")
+                self.assertIn(expected_error, str(raised.exception))
+
+    def test_motion_profile_write_accepts_unrelated_exact_animation_rule(self) -> None:
+        original = TAHOE_PHASE0.read_text(encoding="utf-8")
+        custom = original + """
+
+layer-rule {
+    match namespace="^unrelated-.*$"
+    animations {
+        layer-open { off }
+        layer-close { off }
+    }
+}
+"""
+
+        fast = niri_settings_tool.update_field(custom, "animations.profile", "fast")
+        self.assertEqual(niri_settings_tool.detect_motion_profile(fast), "fast")
+
+    def test_motion_profile_write_accepts_reordered_exact_namespace_matches(self) -> None:
+        original = TAHOE_PHASE0.read_text(encoding="utf-8")
+        first = '    match namespace="^tahoe-battery-popup$"\n'
+        second = '    match namespace="^tahoe-wifi-popup$"\n'
+        reordered = replace_marked_layer_text(original, "small_popup", first + second, second + first)
+
+        fast = niri_settings_tool.update_field(reordered, "animations.profile", "fast")
+        self.assertEqual(niri_settings_tool.detect_motion_profile(fast), "fast")
+        balanced = niri_settings_tool.update_field(fast, "animations.profile", "balanced")
+        self.assertEqual(balanced, reordered)
 
     def test_motion_profile_write_requires_known_layer_animation_groups(self) -> None:
         original = TAHOE_PHASE0.read_text(encoding="utf-8")
         # T21/T22: process menu lives in the unified `menu` layer-rule; renaming
         # any of its namespaces makes the exact-tuple match fail.
-        broken = original.replace('match namespace="^tahoe-process-menu$"', 'match namespace="^tahoe-other-menu$"')
+        broken = replace_marked_layer_text(
+            original,
+            "menu",
+            'match namespace="^tahoe-process-menu$"',
+            'match namespace="^tahoe-other-menu$"',
+        )
 
         with self.assertRaises(niri_settings_tool.KdlEditError) as raised:
             niri_settings_tool.update_field(broken, "animations.profile", "fast")
 
-        self.assertIn("expected exactly one layer-rule for menu", str(raised.exception))
+        self.assertIn("marked layer-rule for menu has namespaces", str(raised.exception))
 
     def test_layout_write_matches_golden_and_preserves_unmanaged_block(self) -> None:
         original = read_fixture("managed.kdl")

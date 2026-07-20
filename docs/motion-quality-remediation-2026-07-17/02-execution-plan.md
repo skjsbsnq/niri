@@ -26,7 +26,7 @@
 | R12 | 控制中心收尾（滑块插值/模块列表） | #47 #48 #49 #50 | S–M | DONE | [R12](acceptance/R12-control-center-motion-2026-07-19.md)：滑块外部 follow/拖拽直跟，WiFi/蓝牙稳定列表与 PSK 动画，784 tests 全绿，双终审 CLEAN，用户宿主截图确认正常 |
 | R13 | 弹窗控件合并统一（防腐化） | #5(余) #11 #12 #18 #40 #66 #67 #68 #69 + S4/S5 | M–L | DONE | [R13](acceptance/R13-popup-controls-2026-07-19.md)：共享按钮/开关层收敛，790 tests 全绿，独立审查 CLEAN，宿主 IPC/嵌套/部署 parity 通过 |
 | R14 | 锁屏动效包 | #38 #39 #40(余) | S–M | DONE | [R14](acceptance/R14-lock-screen-motion-2026-07-19.md)：双屏 secure 时序与凭据清理覆盖，793 tests 全绿，终审 FINAL CLEAN，真实 nested session lock 通过 |
-| R15 | KDL 参数修正包 | #6 #89 #95 #96 #97 #100 | S | DONE | [R15](acceptance/R15-kdl-motion-parameters-2026-07-19.md)：Spotlight/状态弹窗/窗口参数收敛，795 tests 全绿，双 config validate、完整部署与 nested 回归通过 |
+| R15 | KDL 参数修正包 | #6 #89 #95 #96 #97 #100 | S | DONE | [R15](acceptance/R15-kdl-motion-parameters-2026-07-19.md)：原验收；[2026-07-20 follow-up](acceptance/R15-followup-topbar-popup-close-2026-07-20.md)：撤销状态弹窗 close fade 回归，统一顶边关闭策略与 ownership 门禁 |
 | R16 | Overview / 切换器收尾 | #42 #43 #44 #45 #46 | S | DONE | [R16](acceptance/R16-overview-task-switcher-2026-07-19.md)：795 tests 全绿，独立审查 CLEAN，nested 10 窗口 Overview 与真实 QML confirm 生命周期验收通过 |
 | R17 | Dock 布局动画 | #72 #73 #76 #77 #78 #79 #80 #81 #82 #90 | M | DONE | [R17](acceptance/R17-dock-layout-motion-2026-07-19.md)：803 tests 全绿，独立复审 CLEAN，nested 窗口/最小化/全屏与 pointer-origin 菜单验收通过 |
 | R18 | 外围收尾（顶栏/设置/侧栏细节/壁纸/托盘） | #51 #52 #60–#65 #70 #71 #87 #88 #91–#94 | M | DONE | [R18](acceptance/R18-peripheral-motion-2026-07-19.md)：811 tests + 234 subtests 全绿，独立复审 CLEAN；动态壁纸 zoom 架构边界与 dim 方案已记录 |

@@ -201,19 +201,15 @@ class R17DockLayoutMotionTests(unittest.TestCase):
         self.assertIn("Behavior on y", label.group(0))
         self.assertIn("Motion.elementMove", label.group(0))
 
-    def test_fullscreen_qml_transition_unmaps_without_layer_rule(self) -> None:
-        for name, source, opacity_owner in (
-            ("Dock.qml", self.dock, "dockChrome"),
-            ("TopBar.qml", self.topbar, "barSurface"),
-        ):
+    def test_fullscreen_qml_transitions_keep_intentional_surface_lifecycles(self) -> None:
+        for name, source in (("Dock.qml", self.dock), ("TopBar.qml", self.topbar)):
             self.assertIn("property real fullscreenTransition: fullscreenActive ? 1 : 0", source, name)
             self.assertIn("Behavior on fullscreenTransition", source, name)
             self.assertIn("Motion.elementResize(root.settingsService)", source, name)
-            self.assertIn(
-                f"visible: !root.fullscreenActive || {opacity_owner}.opacity > 0.01",
-                source,
-                name,
-            )
+        self.assertIn("visible: !root.fullscreenActive || dockChrome.opacity > 0.01", self.dock)
+        self.assertIn("visible: !root.fullscreenActive", self.topbar)
+        self.assertNotIn("visible: !root.fullscreenActive || barSurface.opacity > 0.01", self.topbar)
+        self.assertIn("Hard unmap with fullscreen chrome hide", self.topbar)
         self.assertIn("y: root.fullscreenTransition * root.dockSurfaceHeight", self.dock)
         self.assertIn("materialAlpha: 1.0 - root.fullscreenTransition", self.dock)
         self.assertIn("y: -root.fullscreenTransition * root.height", self.topbar)

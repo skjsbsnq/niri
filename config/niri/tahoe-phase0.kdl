@@ -409,6 +409,7 @@ layer-rule {
 // using edge-attached motion instead of scaling the whole glass surface.
 // The open transform channel deliberately has no transform-duration-ms /
 // transform-curve override: it inherits the main-channel spring below.
+// tahoe-managed: layer-animation control_center
 layer-rule {
     match namespace="^tahoe-control-center$"
 
@@ -435,6 +436,7 @@ layer-rule {
 
 // Layer animation Notification Center profile. Keep it consistent with other
 // top-bar panels: it opens from the top bar rather than sliding in sideways.
+// tahoe-managed: layer-animation notification_center
 layer-rule {
     match namespace="^tahoe-notification-center$"
 
@@ -461,6 +463,7 @@ layer-rule {
 // Layer animation Left Sidebar profile. This is a full-height, left-anchored
 // surface, so use compositor edge reveal with no opacity fade: the glass is
 // already blurred from the first visible frame instead of fading in late.
+// tahoe-managed: layer-animation left_sidebar
 layer-rule {
     match namespace="^tahoe-left-sidebar$"
 
@@ -485,6 +488,7 @@ layer-rule {
 
 // Layer animation Spotlight profile. Launchpad stays on the QML path because
 // compositor scaling makes the app grid and glass blur look soft.
+// tahoe-managed: layer-animation spotlight
 layer-rule {
     match namespace="^tahoe-spotlight$"
 
@@ -544,9 +548,10 @@ layer-rule {
     }
 }
 
-// Top-bar status popups and tray menus keep Control Center's full top
-// edge-reveal: their layer-shell anchor is the popup's left edge, not the
-// clicked button, so popin/pop-slide from anchor would stretch glass wrong.
+// Top-bar status popups and tray menus keep the same full, opaque top-edge
+// close as Control Center and Notification Center. Their layer-shell anchor is
+// the popup's left edge, so popin/pop-slide from anchor would stretch glass.
+// tahoe-managed: layer-animation small_popup
 layer-rule {
     match namespace="^tahoe-battery-popup$"
     match namespace="^tahoe-wifi-popup$"
@@ -566,11 +571,10 @@ layer-rule {
         layer-close {
             style "edge-reveal"
             edge "top"
-            opacity-to 0
+            opacity-to 1.0
             transform-duration-ms 210
             transform-curve "emphasized-accel"
-            opacity-duration-ms 120
-            opacity-curve "emphasized-accel"
+            opacity-duration-ms 0
         }
     }
 }
@@ -578,6 +582,7 @@ layer-rule {
 // T21/T22: app and shell menus use pop-slide (scale + 4px edge travel) with
 // origin "pointer" so they grow from the click that opened them (seat pointer
 // at map time; no new protocol). Falls back to center if unavailable.
+// tahoe-managed: layer-animation menu
 layer-rule {
     match namespace="^tahoe-menu-popup$"
     match namespace="^tahoe-application-menu$"
@@ -615,6 +620,7 @@ layer-rule {
 // Layer animation Toast profile. Toasts slide from the right on a spring
 // (the transform channel inherits the main-channel spring) with a short fade
 // so they register without pulling focus from the current work.
+// tahoe-managed: layer-animation toast
 layer-rule {
     match namespace="^tahoe-notification-toast$"
 

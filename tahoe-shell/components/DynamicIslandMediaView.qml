@@ -120,10 +120,21 @@ Item {
             return url;
         return "";
     }
+    // Full MPRIS title (expanded). Compact uses compactDisplayTitle.
     readonly property string resolvedTitle: {
         var t = String(root.trackTitle || "").trim();
         return t.length > 0 ? t : "正在播放";
     }
+    // Compact: prefer cleaned primary name so long remix/version suffixes do
+    // not hard-elide into ugly half-parentheses (e.g. "琵琶曲(DJKK0.9…").
+    // Expanded (pArt high) keeps the full resolvedTitle.
+    readonly property string compactDisplayTitle: {
+        var cleaned = root.compactPrimaryTitle(root.resolvedTitle);
+        return cleaned.length > 0 ? cleaned : root.resolvedTitle;
+    }
+    readonly property string displayTitle: root.pArt < 0.45
+        ? root.compactDisplayTitle
+        : root.resolvedTitle
 
     property bool localSeeking: false
     property real localSeekRatio: 0
@@ -150,7 +161,8 @@ Item {
 
     // Compact width measure (for Overlay resting_media band) — art+title+status.
     // Cap title contribution so long Chinese titles do not blow the 200–224 band
-    // and crush status glyph spacing.
+    // and crush status glyph spacing. Prefer cleaned compact title for measure
+    // so the pill does not reserve width for stripped remix suffixes.
     readonly property int compactTitleMax: Math.max(
         48,
         IslandMotion.v2CompactMediaWidthMax
@@ -163,9 +175,20 @@ Item {
         root.compactPadH * 2
         + root.artSizeCompact
         + root.titleGapCompact
-        + Math.min(titleLabel.implicitWidth, root.compactTitleMax)
+        + Math.min(compactTitleMeasure.implicitWidth, root.compactTitleMax)
         + root.statusGapCompact
         + root.statusSize)
+
+    // Off-tree measure for cleaned compact title (titleLabel may show full
+    // title mid-morph; width reserve should stay compact-stable).
+    Text {
+        id: compactTitleMeasure
+        visible: false
+        text: root.compactDisplayTitle
+        font.pixelSize: root.titleSizeCompact
+        font.weight: Font.Medium
+        font.letterSpacing: 0.2
+    }
 
     function smoothstep(t, edge0, edge1) {
         var x = Number(t);
@@ -184,6 +207,126 @@ Item {
         var minutes = Math.floor(total / 60);
         var secs = total % 60;
         return minutes + ":" + (secs < 10 ? "0" : "") + secs;
+    }
+
+    // Compact primary-name cleaner. Pure string transform — no second media
+    // owner. Safe fallbacks: empty/too-aggressive clean → original.
+    //
+    // Strips trailing version/remix/DJ/live/official markers in () [] 【】 so a
+    // 36px pill shows "琵琶曲" instead of "琵琶曲(DJKK0.9…".
+    // QML JS: avoid unicode-flag regex; use char-code / simple patterns only.
+    function compactPrimaryTitle(raw) {
+        var s = String(raw || "").trim();
+        if (s.length === 0)
+            return "";
+        if (s === "正在播放" || s === "Unknown" || s === "unknown")
+            return s;
+
+        var original = s;
+        for (var pass = 0; pass < 4; pass++) {
+            var prev = s;
+            s = root.stripTrailingBracketGroup(s);
+            s = root.stripTrailingDashTag(s);
+            s = s.replace(/\s+$/g, "").replace(/^\s+/g, "");
+            if (s === prev)
+                break;
+            if (s.length === 0 || (s.length < 2 && original.length >= 2)) {
+                s = original;
+                break;
+            }
+        }
+
+        if (s.length === 0)
+            return original;
+
+        s = s.replace(/\s{2,}/g, " ").trim();
+
+        // Safety: cleaned must be a leading core of the original.
+        if (s !== original && original.indexOf(s) !== 0) {
+            var oFlat = original.replace(/\s+/g, "");
+            var sFlat = s.replace(/\s+/g, "");
+            if (oFlat.indexOf(sFlat) !== 0)
+                return original;
+        }
+
+        return s.length > 0 ? s : original;
+    }
+
+    function isOpenBracket(ch) {
+        return ch === "(" || ch === "[" || ch === "（" || ch === "【";
+    }
+
+    function isCloseBracket(ch) {
+        return ch === ")" || ch === "]" || ch === "）" || ch === "】";
+    }
+
+    // Peel one trailing (...) / [...] / （…） / 【…】 group.
+    function stripTrailingBracketGroup(s) {
+        var t = String(s || "");
+        if (t.length < 3)
+            return t;
+        var end = t.length - 1;
+        // Trim trailing spaces.
+        while (end >= 0 && (t.charAt(end) === " " || t.charAt(end) === "\t"))
+            end--;
+        if (end < 2 || !root.isCloseBracket(t.charAt(end)))
+            return t;
+        var depth = 0;
+        for (var i = end; i >= 0; i--) {
+            var c = t.charAt(i);
+            if (root.isCloseBracket(c))
+                depth++;
+            else if (root.isOpenBracket(c)) {
+                depth--;
+                if (depth === 0) {
+                    // Require some content inside brackets.
+                    if (end - i < 2)
+                        return t;
+                    var head = t.substring(0, i).replace(/\s+$/g, "");
+                    // Safety: keep at least 1 char of head.
+                    if (head.length < 1)
+                        return t;
+                    return head;
+                }
+            }
+        }
+        return t;
+    }
+
+    // Peel trailing " - Remix" / " - Official Audio" style English tags.
+    function stripTrailingDashTag(s) {
+        var t = String(s || "");
+        var m = t.match(/^(.*?)[\s]*[-–—|]\s*(.+)$/);
+        if (!m)
+            return t;
+        var head = String(m[1] || "").replace(/\s+$/g, "");
+        var tag = String(m[2] || "").toLowerCase();
+        if (head.length < 1)
+            return t;
+        // Only strip known non-title suffixes (not arbitrary "Artist - Song").
+        var known = (
+            tag.indexOf("remix") === 0
+            || tag.indexOf("mix") === 0
+            || tag.indexOf("edit") === 0
+            || tag.indexOf("version") === 0
+            || tag.indexOf("ver.") === 0
+            || tag.indexOf("ver ") === 0
+            || tag.indexOf("live") === 0
+            || tag.indexOf("acoustic") === 0
+            || tag.indexOf("instrumental") === 0
+            || tag.indexOf("official") === 0
+            || tag.indexOf("remaster") === 0
+            || tag.indexOf("extended") === 0
+            || tag.indexOf("deluxe") === 0
+            || tag.indexOf("explicit") === 0
+            || tag.indexOf("radio") === 0
+            || tag.indexOf("feat") === 0
+            || tag.indexOf("ft.") === 0
+            || tag.indexOf("ft ") === 0
+        );
+        if (!known)
+            return t;
+        return head;
     }
 
     anchors.fill: parent
@@ -263,7 +406,10 @@ Item {
                 Text {
                     id: titleLabel
                     width: parent.width
-                    text: root.resolvedTitle
+                    // Compact: cleaned primary name. Expanded: full MPRIS title.
+                    // Mid-morph (pArt ≥ 0.45) switches to full so expand does
+                    // not keep a truncated-looking clean name after layout grows.
+                    text: root.displayTitle
                     color: root.textPrimary
                     font.pixelSize: root.titlePx
                     // Medium reads cleaner for dense CJK in a 36px pill than DemiBold.

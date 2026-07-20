@@ -46,7 +46,8 @@ var HexToName = {
     "e313": "laptop",
     "e322": "speaker",
     "e323": "tablet",
-    "e332": "fan",
+    // e332 is Material "toys" (toy car) — never map it to fan.
+    // Classic Material Icons has no mode_fan; fan is PNG-only (fan.png).
     "e333": "display",
     "e338": "watch",
     "e3a3": "sunny",
@@ -420,14 +421,35 @@ function isKnown(value) {
     return resolveName(value).length > 0;
 }
 
+// Semantic names that ship a correct bitmap but have no matching glyph in the
+// bundled classic Material Icons font (or whose historical codepoint mapping
+// was wrong). Force the PNG path so TahoeSymbol never falls back to a
+// look-alike font glyph (e.g. e332 toys/car for "fan").
+var BitmapOnlyNames = {
+    "fan": true
+};
+
+function isBitmapOnly(value) {
+    var name = resolveName(value);
+    if (name.length === 0)
+        name = normalizeKey(value);
+    return name.length > 0 && Object.prototype.hasOwnProperty.call(BitmapOnlyNames, name);
+}
+
 function glyph(value) {
     var key = normalizeKey(value);
     if (key.length === 0)
         return "";
 
+    // Bitmap-only symbols must never resolve to a font codepoint.
+    if (isBitmapOnly(key))
+        return "";
+
     var hex = hexFromValue(key);
     if (hex.length === 0) {
         var name = resolveName(key);
+        if (isBitmapOnly(name))
+            return "";
         for (var candidate in HexToName) {
             if (Object.prototype.hasOwnProperty.call(HexToName, candidate)
                     && HexToName[candidate] === name) {

@@ -106,6 +106,58 @@ class TahoeSymbolMigrationTests(unittest.TestCase):
         self.assertIn("width: 20", topbar)
         self.assertIn("height: 11", topbar)
 
+    def test_fan_is_bitmap_only_not_toys_car_glyph(self) -> None:
+        """Fan UI must use a real fan.png; e332 is Material toys (car), not a fan."""
+        js = SYMBOLS_JS.read_text(encoding="utf-8")
+        self.assertIn("BitmapOnlyNames", js)
+        self.assertIn('"fan": true', js)
+        self.assertIn("function isBitmapOnly", js)
+        # Must not reintroduce the toys/car codepoint as fan.
+        self.assertNotRegex(js, r'"e332"\s*:\s*"fan"')
+
+        fan_png = ASSETS_SYMBOLS / "fan.png"
+        self.assertTrue(fan_png.exists())
+
+        # Pixel-level guard: the historical bug shipped toys/car as fan.png.
+        # A car silhouette is bottom-heavy (body + wheels); a mode_fan glyph is
+        # center-heavy with blades around a hub. Reject car-like mass distribution.
+        try:
+            from PIL import Image
+        except ImportError as exc:  # pragma: no cover
+            self.skipTest(f"Pillow required for fan asset check: {exc}")
+
+        im = Image.open(fan_png).convert("RGBA")
+        self.assertEqual(im.size, (128, 128))
+        w, h = im.size
+        opaque = [
+            (x, y)
+            for y in range(h)
+            for x in range(w)
+            if im.getpixel((x, y))[3] > 160
+        ]
+        self.assertGreater(len(opaque), 800, "fan.png looks empty")
+        # Pure white silhouette (MultiEffect colorization contract).
+        sample = opaque[:: max(1, len(opaque) // 40)]
+        for x, y in sample:
+            r, g, b, a = im.getpixel((x, y))
+            self.assertGreaterEqual(r, 240)
+            self.assertGreaterEqual(g, 240)
+            self.assertGreaterEqual(b, 240)
+
+        bottom = sum(1 for x, y in opaque if y >= int(h * 0.70))
+        center = sum(1 for x, y in opaque if int(h * 0.30) <= y < int(h * 0.70))
+        # Car assets put most mass in the lower body; fan blades concentrate mid-frame.
+        self.assertGreater(center, bottom * 1.5, "fan.png mass looks car-like (bottom-heavy)")
+
+        topbar = (COMPONENTS / "TopBar.qml").read_text(encoding="utf-8")
+        fan_popup = (COMPONENTS / "FanPopup.qml").read_text(encoding="utf-8")
+        # Actual glyph escapes only — comments may still mention e332 as the
+        # toys/car pitfall we deliberately avoid.
+        codepoint_use = re.compile(r'\\ue332|"e332"')
+        for text, label in ((topbar, "TopBar"), (fan_popup, "FanPopup")):
+            self.assertIn('name: "fan"', text, label)
+            self.assertIsNone(codepoint_use.search(text), f"{label} still uses e332 glyph")
+
 
 if __name__ == "__main__":
     unittest.main()

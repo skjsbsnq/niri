@@ -119,7 +119,8 @@ PanelWindow {
 
                         TahoeSymbol {
                             anchors.centerIn: parent
-                            name: "\ue332"
+                            // Semantic "fan" PNG (not e332 toys/car).
+                            name: "fan"
                             color: root.available ? "#ffffff" : "#731d1d1f"
                             size: 24
                         }
@@ -350,7 +351,7 @@ PanelWindow {
                         anchors.right: parent.right
                         anchors.rightMargin: 10
                         anchors.verticalCenter: parent.verticalCenter
-                        name: "\ue332"
+                        name: "fan"
                         color: "#731d1d1f"
                         size: 15
                     }

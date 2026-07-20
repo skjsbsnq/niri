@@ -108,6 +108,40 @@ class ServicePollingActivityTests(unittest.TestCase):
             self.sources["Sound"],
         )
 
+    def test_fan_control_bootstraps_availability_without_popup(self) -> None:
+        """Top-bar fan icon must not stay grey until the popup opens.
+
+        Continuous 5s polling stays gated on shell.servicePollingActive, but a
+        one-shot bootstrap probe chain must run at startup so available/control
+        state is known without user interaction.
+        """
+        fan = self.sources["FanControl"]
+        self.assertIn("property bool bootstrapPending: true", fan)
+        self.assertIn("readonly property bool canProbe: root.pollingActive || root.bootstrapPending", fan)
+        self.assertIn("function finishBootstrap()", fan)
+        # Continuous timer remains activity-gated (not canProbe).
+        self.assertRegex(
+            fan,
+            r"id:\s*statusRefreshTimer\b[\s\S]{0,220}running:\s*root\.pollingActive",
+        )
+        # Startup always begins detectBackend when canProbe (bootstrap).
+        self.assertIn("root.detectBackend()", fan)
+        self.assertIn("if (root.canProbe)", fan)
+        # Closing activity must not cancel an in-flight bootstrap chain.
+        self.assertIn("else if (!root.bootstrapPending)", fan)
+        # Probe gates use canProbe rather than only pollingActive.
+        self.assertGreaterEqual(fan.count("root.canProbe"), 6)
+        # Bootstrap must terminate on every probe terminal path + watchdog.
+        for marker in (
+            "bootstrapWatchdog",
+            "bootstrapServiceRetryTimer",
+            'state === "activating"',
+            "root.finishBootstrap()",
+        ):
+            self.assertIn(marker, fan, marker)
+        self.assertGreaterEqual(fan.count("root.finishBootstrap()"), 5)
+        self.assertIn('name: "fan"', (ROOT / "components" / "TopBar.qml").read_text(encoding="utf-8"))
+
     def test_search_and_apps_follow_their_ui_lifecycle(self) -> None:
         self.assertIn("active: shell.spotlightOpen", self.shell)
         self.assertIn("active: shell.settingsPanelOpen", self.shell)

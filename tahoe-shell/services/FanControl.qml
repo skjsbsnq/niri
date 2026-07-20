@@ -6,12 +6,24 @@ import Quickshell.Io
 // Fan control service using the open-source NBFC/NBFC-Linux command line.
 // The UI remains visible when NBFC is missing so the user can see which
 // backend must be installed/configured for their laptop model.
+//
+// Shell gates continuous polling via pollingActive (popups open). Top-bar
+// availability still needs a one-shot bootstrap on startup so the icon is not
+// stuck grey until the first hover/click opens the fan popup.
 Item {
     id: root
     visible: false
 
     property bool backendAvailable: false
     property bool pollingActive: true
+    // One-shot startup probe chain: allows detect/service/status even while
+    // shell.servicePollingActive is false. Cleared after the first complete
+    // probe path so continuous timers stay activity-gated.
+    property bool bootstrapPending: true
+    // During bootstrap, briefly re-check systemd if nbfc is still activating
+    // so a racing boot does not freeze the icon grey until the user opens the popup.
+    property int bootstrapServiceRetries: 0
+    readonly property int bootstrapServiceRetryLimit: 4
     property bool controlEnabled: false
     property bool available: false
     property bool updating: false
@@ -26,6 +38,7 @@ Item {
     property string errorText: ""
 
     readonly property int effectivePercent: targetPercent > 0 ? targetPercent : speedPercent
+    readonly property bool canProbe: root.pollingActive || root.bootstrapPending
 
     function setValue(name, value) {
         if (root[name] !== value)
@@ -39,13 +52,24 @@ Item {
         return Math.max(0, Math.min(100, n));
     }
 
+    function finishBootstrap() {
+        if (!root.bootstrapPending)
+            return;
+        root.bootstrapPending = false;
+        root.bootstrapServiceRetries = 0;
+        if (bootstrapServiceRetryTimer.running)
+            bootstrapServiceRetryTimer.stop();
+        if (bootstrapWatchdog.running)
+            bootstrapWatchdog.stop();
+    }
+
     function detectBackend() {
-        if (root.pollingActive && !backendProbe.running)
+        if (root.canProbe && !backendProbe.running)
             backendProbe.running = true;
     }
 
     function refresh() {
-        if (!root.pollingActive)
+        if (!root.canProbe)
             return;
 
         if (!root.backendAvailable) {
@@ -61,37 +85,68 @@ Item {
     }
 
     function refreshServiceState() {
-        if (root.pollingActive && !serviceProbe.running)
+        if (root.canProbe && !serviceProbe.running)
             serviceProbe.running = true;
     }
 
     function parseBackend(path) {
-        if (!root.pollingActive)
+        if (!root.canProbe)
             return;
 
         var value = String(path || "").trim();
         var detected = value.length > 0;
+        // Only clear control/available when the backend result actually changes
+        // the picture — avoid a grey flash if we already know the service is up.
         root.setValue("backendAvailable", detected);
-        root.setValue("controlEnabled", false);
-        root.setValue("available", false);
-        root.setValue("backendName", detected ? "NBFC" : "");
-        root.setValue("errorText", detected ? "" : "需要安装并配置 nbfc-linux");
-        root.setValue("statusText", detected ? "NBFC 已安装" : "未检测到 NBFC");
-        if (detected)
-            Qt.callLater(root.refreshServiceState);
+        if (!detected) {
+            root.setValue("controlEnabled", false);
+            root.setValue("available", false);
+            root.setValue("backendName", "");
+            root.setValue("errorText", "需要安装并配置 nbfc-linux");
+            root.setValue("statusText", "未检测到 NBFC");
+            root.finishBootstrap();
+            return;
+        }
+
+        root.setValue("backendName", "NBFC");
+        root.setValue("errorText", "");
+        if (!root.controlEnabled)
+            root.setValue("statusText", "NBFC 已安装");
+        Qt.callLater(root.refreshServiceState);
     }
 
     function parseServiceState(text) {
-        if (!root.pollingActive)
+        if (!root.canProbe)
             return;
 
-        var active = String(text || "").trim() === "active";
+        var state = String(text || "").trim().toLowerCase();
+        var active = state === "active";
+        // systemd may report activating/reloading during early boot.
+        var pending = state === "activating" || state === "reloading";
+
         root.setValue("controlEnabled", active);
         root.setValue("available", root.backendAvailable && active);
         root.setValue("errorText", "");
-        root.setValue("statusText", active ? "NBFC 控制中" : "BIOS 接管");
-        if (active)
+        if (active) {
+            root.setValue("statusText", "NBFC 控制中");
+            root.bootstrapServiceRetries = 0;
+            if (bootstrapServiceRetryTimer.running)
+                bootstrapServiceRetryTimer.stop();
             Qt.callLater(root.refresh);
+            return;
+        }
+
+        if (pending && root.bootstrapPending
+                && root.bootstrapServiceRetries < root.bootstrapServiceRetryLimit) {
+            root.bootstrapServiceRetries += 1;
+            root.setValue("statusText", "NBFC 启动中");
+            bootstrapServiceRetryTimer.restart();
+            return;
+        }
+
+        root.setValue("statusText", "BIOS 接管");
+        // BIOS takeover / inactive is a terminal bootstrap state (no status probe).
+        root.finishBootstrap();
     }
 
     function firstNumber(line) {
@@ -115,12 +170,14 @@ Item {
     }
 
     function parseStatus(text) {
-        if (!root.pollingActive)
+        if (!root.canProbe)
             return;
 
         var raw = String(text || "").trim();
-        if (raw.length === 0)
+        if (raw.length === 0) {
+            root.finishBootstrap();
             return;
+        }
 
         var lines = raw.split(/\r?\n/);
         var sawSpeed = false;
@@ -155,6 +212,7 @@ Item {
         root.setValue("available", true);
         root.setValue("errorText", "");
         root.setValue("statusText", sawSpeed ? "风扇状态已更新" : "NBFC 已连接");
+        root.finishBootstrap();
     }
 
     function setAutoMode(enabled) {
@@ -225,13 +283,16 @@ Item {
             onStreamFinished: root.parseBackend(backendProbeOut.text)
         }
         onExited: function(code, exitStatus) {
-            if (root.pollingActive && code !== 0) {
+            if (!root.canProbe)
+                return;
+            if (code !== 0) {
                 root.setValue("backendAvailable", false);
                 root.setValue("controlEnabled", false);
                 root.setValue("available", false);
                 root.setValue("backendName", "");
                 root.setValue("errorText", "需要安装并配置 nbfc-linux");
                 root.setValue("statusText", "未检测到 NBFC");
+                root.finishBootstrap();
             }
         }
     }
@@ -245,7 +306,11 @@ Item {
             onStreamFinished: root.parseServiceState(serviceProbeOut.text)
         }
         onExited: function(code, exitStatus) {
-            if (root.pollingActive && code !== 0 && String(serviceProbeOut.text || "").trim().length === 0)
+            if (!root.canProbe)
+                return;
+            // systemctl is-active exits non-zero for inactive/failed/unknown.
+            // Prefer stdout; fall back to inactive when empty so bootstrap ends.
+            if (code !== 0 && String(serviceProbeOut.text || "").trim().length === 0)
                 root.parseServiceState("inactive");
         }
     }
@@ -259,10 +324,16 @@ Item {
             onStreamFinished: root.parseStatus(statusProbeOut.text)
         }
         onExited: function(code, exitStatus) {
-            if (root.pollingActive && code !== 0) {
+            if (!root.bootstrapPending && !root.pollingActive)
+                return;
+            if (code !== 0) {
                 root.setValue("statusText", "NBFC 状态不可用");
                 root.setValue("errorText", "请确认 nbfc 服务已启动并选择了机型配置");
+                // Keep available=true when control is already known active so the
+                // top-bar icon stays solid; status text carries the error.
             }
+            // Always clear bootstrap on status exit (success path may have already).
+            root.finishBootstrap();
         }
     }
 
@@ -275,7 +346,7 @@ Item {
                 root.setValue("errorText", "风扇写入失败，请检查 NBFC 权限或服务状态");
             if (root.pendingManualPercent >= 0)
                 manualCommitTimer.restart();
-            if (root.pollingActive)
+            if (root.canProbe)
                 root.refresh();
         }
     }
@@ -287,7 +358,7 @@ Item {
             root.setValue("updating", false);
             if (code !== 0)
                 root.setValue("errorText", "NBFC 服务切换失败，请检查权限或服务状态");
-            if (root.pollingActive)
+            if (root.canProbe)
                 root.refreshServiceState();
         }
     }
@@ -300,8 +371,28 @@ Item {
     }
 
     Timer {
+        id: bootstrapServiceRetryTimer
+        interval: 700
+        repeat: false
+        onTriggered: {
+            if (root.bootstrapPending && root.backendAvailable)
+                root.refreshServiceState();
+        }
+    }
+
+    Timer {
+        id: bootstrapWatchdog
+        // Hard ceiling so a hung probe never leaves canProbe open forever.
+        interval: 12000
+        repeat: false
+        running: root.bootstrapPending
+        onTriggered: root.finishBootstrap()
+    }
+
+    Timer {
         id: statusRefreshTimer
         interval: 5000
+        // Continuous polling stays activity-gated; bootstrap is one-shot only.
         running: root.pollingActive
         repeat: true
         onTriggered: root.refresh()
@@ -310,7 +401,8 @@ Item {
     onPollingActiveChanged: {
         if (root.pollingActive) {
             root.refresh();
-        } else {
+        } else if (!root.bootstrapPending) {
+            // Do not cancel in-flight bootstrap probes when shell activity drops.
             if (backendProbe.running)
                 backendProbe.running = false;
             if (serviceProbe.running)
@@ -321,7 +413,9 @@ Item {
     }
 
     Component.onCompleted: {
-        if (root.pollingActive)
+        // Always start the one-shot availability probe so the top-bar icon
+        // reflects NBFC state without requiring the fan popup to open first.
+        if (root.canProbe)
             root.detectBackend();
     }
 }

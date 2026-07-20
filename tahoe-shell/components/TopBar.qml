@@ -646,10 +646,16 @@ PanelWindow {
 
                 TahoeSymbol {
                     anchors.centerIn: parent
-                    name: "\ue332"
-                    color: root.statusText
+                    // Semantic "fan" → assets/icons/symbols/fan.png (bitmap-only;
+                    // classic Material Icons has no mode_fan; e332 is toys/car).
+                    name: "fan"
+                    color: root.fanService && root.fanService.available
+                        ? root.statusText
+                        : root.statusTextDisabled
                     size: root.statusSymbolSize
-                    opacity: root.fanService && root.fanService.available ? (root.fanService.autoMode ? 0.76 : 1) : 0.45
+                    opacity: root.fanService && root.fanService.available
+                        ? (root.fanService.autoMode ? 0.76 : 1)
+                        : 0.5
                 }
 
                 MouseArea {

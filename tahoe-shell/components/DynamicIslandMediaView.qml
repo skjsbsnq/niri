@@ -50,9 +50,10 @@ Item {
     signal seekCancelRequested()
 
     // Design endpoints (compact T16 / expanded T17).
-    readonly property int artSizeCompact: 22
+    // Compact art 24 sits in 36px pill with ~6px vertical air; expanded 64.
+    readonly property int artSizeCompact: 24
     readonly property int artSizeExpanded: 64
-    readonly property int artRadiusCompact: 6
+    readonly property int artRadiusCompact: 7
     readonly property int artRadiusExpanded: 12
     readonly property int titleSizeCompact: 13
     readonly property int titleSizeExpanded: 16
@@ -60,11 +61,15 @@ Item {
     readonly property int playSize: 36
     readonly property int skipSize: 32
     readonly property int controlHit: 44
-    readonly property int statusSize: 16
-    readonly property int compactPadH: 10
+    // Trailing status glyph is quieter than transport chrome (14 vs old 16).
+    readonly property int statusSize: 14
+    readonly property int compactPadH: 12
     readonly property int expandedPadH: 16
     readonly property int compactPadV: 0
     readonly property int expandedPadTop: 16
+    readonly property int titleGapCompact: 10
+    readonly property int titleGapExpanded: 14
+    readonly property int statusGapCompact: 10
 
     readonly property real p: Math.max(0, Math.min(1, Number(root.expandProgress) || 0))
     // Ease curves for staged reveal (still continuous — no hard cuts).
@@ -86,8 +91,21 @@ Item {
         + (root.expandedPadH - root.compactPadH) * root.pArt
     readonly property real padTop: root.compactPadV
         + (root.expandedPadTop - root.compactPadV) * root.pArt
-    readonly property real titleLeftGap: 8 + 6 * root.pArt
-    readonly property real topRowHeight: Math.max(root.artSize, 22)
+    readonly property real titleLeftGap: root.titleGapCompact
+        + (root.titleGapExpanded - root.titleGapCompact) * root.pArt
+    // Compact: full pill height so art/title/status can vertical-center.
+    // Expanded: art-driven top band (64).
+    readonly property real topRowHeight: root.artSizeCompact
+        + (root.artSizeExpanded - root.artSizeCompact) * root.pArt
+        + (IslandMotion.v2CompactMediaHeight - root.artSizeCompact) * (1.0 - root.pArt)
+    // Compact centers the row in the capsule; expanded pins to top with pad.
+    readonly property real topRowY: {
+        if (root.pArt < 0.02)
+            return Math.max(0, (parent.height - root.topRowHeight) / 2);
+        // Lerp center → top pad as we expand.
+        var centered = Math.max(0, (parent.height - root.topRowHeight) / 2);
+        return centered * (1.0 - root.pArt) + root.padTop * root.pArt;
+    }
 
     readonly property bool showArt: root.safeArtUrl.length > 0
     readonly property string safeArtUrl: {
@@ -131,12 +149,22 @@ Item {
         : IslandMotion.overlayProgressDuration
 
     // Compact width measure (for Overlay resting_media band) — art+title+status.
+    // Cap title contribution so long Chinese titles do not blow the 200–224 band
+    // and crush status glyph spacing.
+    readonly property int compactTitleMax: Math.max(
+        48,
+        IslandMotion.v2CompactMediaWidthMax
+            - (root.compactPadH * 2)
+            - root.artSizeCompact
+            - root.statusSize
+            - root.titleGapCompact
+            - root.statusGapCompact)
     readonly property int compactContentWidth: Math.ceil(
         root.compactPadH * 2
         + root.artSizeCompact
-        + 8
-        + Math.min(titleLabel.implicitWidth, 140)
-        + 8
+        + root.titleGapCompact
+        + Math.min(titleLabel.implicitWidth, root.compactTitleMax)
+        + root.statusGapCompact
         + root.statusSize)
 
     function smoothstep(t, edge0, edge1) {
@@ -161,16 +189,13 @@ Item {
     anchors.fill: parent
 
     // ---- Top: art + title (+ artist when expanded) ----
+    // Position with y (not topMargin) so compact can vertical-center in the
+    // 36px pill — top-anchored 22px chrome left a dead strip and looked off.
     Item {
         id: topRow
-        anchors {
-            left: parent.left
-            right: parent.right
-            top: parent.top
-            leftMargin: root.padH
-            rightMargin: root.padH
-            topMargin: root.padTop
-        }
+        x: root.padH
+        y: root.topRowY
+        width: Math.max(1, parent.width - root.padH * 2)
         height: root.topRowHeight
 
         Rectangle {
@@ -178,11 +203,14 @@ Item {
             width: root.artSize
             height: root.artSize
             radius: root.artRadius
+            // Slightly stronger fill so art plate reads against dark glass.
             color: root.artFallbackFill
             clip: true
             anchors.left: parent.left
-            // Compact: vertical center of 36px row; expanded: top-aligned in 64 band.
             anchors.verticalCenter: parent.verticalCenter
+            // Soft edge so square art does not look pasted on the pill.
+            border.width: root.pArt < 0.5 ? 1 : 0
+            border.color: "#18ffffff"
 
             Image {
                 id: artImage
@@ -192,13 +220,16 @@ Item {
                 visible: root.showArt && status === Image.Ready
                 sourceSize: Qt.size(128, 128)
                 asynchronous: true
+                // Mild desaturation avoidance — keep full color; smooth edges.
+                smooth: true
+                mipmap: true
             }
 
             TahoeSymbol {
                 anchors.centerIn: parent
                 name: "\ue405"
                 color: root.textSecondary
-                size: 14 + 14 * root.pArt
+                size: 13 + 15 * root.pArt
                 visible: !artImage.visible
             }
         }
@@ -209,57 +240,87 @@ Item {
             anchors {
                 left: artBadge.right
                 leftMargin: root.titleLeftGap
-                right: statusIcon.left
-                rightMargin: 8
+                right: statusHit.left
+                rightMargin: root.statusGapCompact * (1.0 - root.pArt * 0.3)
                 verticalCenter: parent.verticalCenter
             }
-            height: titleLabel.height + (artistLabel.visible ? (4 + artistLabel.height) : 0)
-
-            Text {
-                id: titleLabel
-                anchors {
-                    left: parent.left
-                    right: parent.right
-                    top: parent.top
-                }
-                text: root.resolvedTitle
-                color: root.textPrimary
-                font.pixelSize: root.titlePx
-                font.weight: Font.DemiBold
-                font.letterSpacing: 0
-                elide: Text.ElideRight
-                maximumLineCount: 1
+            // Compact: single-line title height only so vertical center matches art.
+            // Expanded: title + artist stack.
+            height: {
+                if (root.pArtist > 0.05 && artistLabel.visible)
+                    return titleLabel.height + 4 + artistLabel.height;
+                return Math.max(titleLabel.height, root.artSizeCompact * 0.9);
             }
 
-            Text {
-                id: artistLabel
+            Column {
                 anchors {
                     left: parent.left
                     right: parent.right
-                    top: titleLabel.bottom
-                    topMargin: 4
+                    verticalCenter: parent.verticalCenter
                 }
-                text: root.trackArtist
-                color: root.textSecondary
-                font.pixelSize: root.artistSize
-                font.letterSpacing: 0
-                elide: Text.ElideRight
-                maximumLineCount: 1
-                opacity: root.pArtist
-                visible: text.length > 0 && opacity > 0.02
+                spacing: 4
+
+                Text {
+                    id: titleLabel
+                    width: parent.width
+                    text: root.resolvedTitle
+                    color: root.textPrimary
+                    font.pixelSize: root.titlePx
+                    // Medium reads cleaner for dense CJK in a 36px pill than DemiBold.
+                    font.weight: root.pArt < 0.35 ? Font.Medium : Font.DemiBold
+                    font.letterSpacing: root.pArt < 0.35 ? 0.2 : 0
+                    elide: Text.ElideRight
+                    maximumLineCount: 1
+                    verticalAlignment: Text.AlignVCenter
+                    opacity: 0.96 + 0.04 * root.pArt
+                }
+
+                Text {
+                    id: artistLabel
+                    width: parent.width
+                    text: root.trackArtist
+                    color: root.textSecondary
+                    font.pixelSize: root.artistSize
+                    font.letterSpacing: 0
+                    elide: Text.ElideRight
+                    maximumLineCount: 1
+                    opacity: root.pArtist
+                    // Keep height 0 when hidden so compact title stays centered.
+                    height: (text.length > 0 && opacity > 0.02) ? implicitHeight : 0
+                    visible: height > 0
+                }
             }
         }
 
-        // Compact trailing play/pause glyph — fades out as transport row appears.
-        TahoeSymbol {
-            id: statusIcon
+        // Compact trailing play/pause — quiet secondary chrome, not a loud control.
+        Item {
+            id: statusHit
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
-            name: root.isPlaying ? "\ue034" : "\ue037"
-            color: root.textSecondary
-            size: root.statusSize
+            width: Math.max(root.statusSize + 4, 20)
+            height: Math.max(root.statusSize + 4, 20)
             opacity: root.pCompactChrome
             visible: opacity > 0.02
+
+            // Soft circular plate so the glyph does not float raw on glass.
+            Rectangle {
+                anchors.centerIn: parent
+                width: 20
+                height: 20
+                radius: 10
+                color: "#14ffffff"
+                border.width: 1
+                border.color: "#12ffffff"
+            }
+
+            TahoeSymbol {
+                id: statusIcon
+                anchors.centerIn: parent
+                name: root.isPlaying ? "\ue034" : "\ue037"
+                color: root.textPrimary
+                size: root.statusSize
+                opacity: 0.72
+            }
         }
     }
 
@@ -272,12 +333,13 @@ Item {
             bottom: parent.bottom
             leftMargin: root.compactPadH
             rightMargin: root.compactPadH
-            bottomMargin: 0
+            // Sit just above the pill edge so it does not collide with art.
+            bottomMargin: 3
         }
         height: 2
         radius: 1
         color: root.trackColor
-        opacity: root.pCompactChrome * ((root.positionSupported && root.duration > 0) ? 1 : 0)
+        opacity: root.pCompactChrome * ((root.positionSupported && root.duration > 0) ? 0.9 : 0)
         visible: opacity > 0.02
 
         Rectangle {
@@ -285,6 +347,7 @@ Item {
             height: parent.height
             radius: parent.radius
             color: root.progressFillColor
+            opacity: 0.9
         }
     }
 
@@ -294,8 +357,9 @@ Item {
         anchors {
             left: parent.left
             right: parent.right
-            top: topRow.bottom
-            topMargin: 4 + 8 * root.pTimeline
+            // Use topRow bottom in parent coords (topRow is free-positioned).
+            top: parent.top
+            topMargin: root.topRowY + root.topRowHeight + (4 + 8 * root.pTimeline)
             leftMargin: root.padH
             rightMargin: root.padH
         }

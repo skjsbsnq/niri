@@ -30,9 +30,9 @@ class DynamicIslandExpandedMediaTests(unittest.TestCase):
         cls.controls = _read(CONTROLS)
 
     def test_layout_tokens(self) -> None:
-        # Unified morph endpoints (compact 22 → expanded 64 art).
+        # Unified morph endpoints (compact 24 → expanded 64 art).
         self.assertIn("artSizeExpanded: 64", self.view)
-        self.assertIn("artSizeCompact: 22", self.view)
+        self.assertIn("artSizeCompact: 24", self.view)
         self.assertIn("playSize: 36", self.view)
         self.assertIn("skipSize: 32", self.view)
         self.assertIn("controlHit: 44", self.view)

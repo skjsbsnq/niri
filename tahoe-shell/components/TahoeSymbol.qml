@@ -21,10 +21,15 @@ Item {
     property color color: "#1d1d1f"
     // Display size (width & height). ≤0 → fill parent when both sides known.
     property real size: 16
-    // Optional independent source pixel budget (defaults to min(128, size*2)).
+    // Optional independent source pixel budget (defaults to full 128px asset).
+    // Top-bar symbols are ~20px; decoding at only 2× (40px) made detailed PNGs
+    // (e.g. fan) look soft after MultiEffect colorization. Prefer the native
+    // 128 asset and let the GPU downsample from a sharp source.
     property int sourceSize: 0
     property bool asynchronous: true
-    property bool mipmap: true
+    // Mipmaps soften thin monochrome glyphs at ≤24px; default off for bitmap
+    // path. Font glyphs ignore this. Call sites can re-enable for large icons.
+    property bool mipmap: false
     property int fillMode: Image.PreserveAspectFit
     // Material's font line box sits slightly above the optical center at small
     // sizes. Keep one shared correction so popup and top-bar glyphs agree.
@@ -35,9 +40,9 @@ Item {
     readonly property bool usesFontGlyph: root.source.length === 0 && root.glyph.length > 0
     readonly property string resolvedName: Symbols.resolveName(root.name)
     readonly property string resolvedFile: {
-        if (root.source.length > 0)
-            return "";
-        return Symbols.fileName(root.name);
+        if (root.source.length === 0)
+            return Symbols.fileName(root.name);
+        return "";
     }
     readonly property string resolvedSource: {
         if (root.source.length > 0)
@@ -50,11 +55,13 @@ Item {
     }
     readonly property int pixelBudget: {
         if (root.sourceSize > 0)
-            return Math.min(128, root.sourceSize);
+            return Math.min(128, Math.max(16, root.sourceSize));
         var display = root.size > 0 ? root.size : Math.max(root.width, root.height);
         if (display <= 0)
             display = 16;
-        return Math.min(128, Math.max(16, Math.ceil(display * 2)));
+        // At least 4× display (capped at asset size) so 20px icons sample from
+        // ≥80px — still sharp after colorization. Full 128 when display ≥32.
+        return Math.min(128, Math.max(64, Math.ceil(display * 4)));
     }
     readonly property real displaySize: root.size > 0 ? root.size : Math.min(root.width, root.height)
 
@@ -91,14 +98,17 @@ Item {
         anchors.centerIn: parent
         anchors.horizontalCenterOffset: root.opticalOffsetX
         anchors.verticalCenterOffset: root.opticalOffsetY
-        width: root.displaySize > 0 ? root.displaySize : parent.width
-        height: root.displaySize > 0 ? root.displaySize : parent.height
+        // Integer pixel box avoids half-pixel sampling blur at top-bar sizes.
+        width: root.displaySize > 0 ? Math.round(root.displaySize) : parent.width
+        height: root.displaySize > 0 ? Math.round(root.displaySize) : parent.height
         source: root.usesFontGlyph ? "" : root.resolvedSource
         sourceSize.width: root.pixelBudget
         sourceSize.height: root.pixelBudget
         fillMode: root.fillMode
         asynchronous: root.asynchronous
         mipmap: root.mipmap
+        // Smooth downsample from high-res source; combined with full pixelBudget
+        // this stays sharper than 2× decode + mipmaps.
         smooth: true
         visible: false
         cache: true
@@ -109,6 +119,8 @@ Item {
         source: baseImage
         colorization: 1.0
         colorizationColor: root.color
+        // Avoid extra blur passes that mush thin symbol edges.
+        blurEnabled: false
         visible: !root.usesFontGlyph
             && baseImage.status === Image.Ready
             && root.resolvedSource.length > 0

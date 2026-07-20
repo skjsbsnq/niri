@@ -37,8 +37,11 @@ class TahoeSymbolMigrationTests(unittest.TestCase):
         self.assertIn("asynchronous", text)
         self.assertIn("iconPath", text)
         self.assertIn("TahoeSymbols.js", text)
-        # sourceSize budget ≤128
+        # sourceSize budget ≤128; decode ≥4× display (min 64) for sharp small icons
         self.assertIn("Math.min(128", text)
+        self.assertIn("Math.ceil(display * 4)", text)
+        self.assertIn("property bool mipmap: false", text)
+        self.assertIn("blurEnabled: false", text)
 
     def test_symbol_png_assets_and_registry(self) -> None:
         self.assertTrue(ASSETS_SYMBOLS.is_dir())

@@ -4,6 +4,8 @@ import QtQuick
 import QtQuick.Layouts
 import "../controls" as Controls
 
+// Desktop & multitasking hub: primary Dock / island toggles live here;
+// advanced niri domains open as sub-pages (no second sidebar entry for niri).
 Flickable {
     id: page
 
@@ -32,53 +34,48 @@ Flickable {
 
         Controls.TahoeSection {
             theme: page.theme
-            title: "窗口与工作区"
-            subtitle: "布局、工作区和窗口动画"
+            title: "Dock 与顶栏"
+            subtitle: "常用桌面行为可在此直接调整"
 
             Controls.TahoeListRow {
                 theme: page.theme
-                label: "布局与窗口"
-                detail: page.niri
-                    ? "间距 " + page.niri.gaps + " px · 焦点环/边框/阴影/Snap"
-                    : "niri 布局设置"
-                iconCode: "\ue871"
-
-                Controls.TahoeButton {
-                    theme: page.theme
-                    label: "打开"
-                    onActivated: page.open("niri-layout")
+                label: "自动隐藏 Dock"
+                detail: page.settings && page.settings.dockAutoHide
+                    ? "移到底部热区时显示"
+                    : "始终显示"
+                iconCode: "\ue5d2"
+                checkable: true
+                checked: page.settings && page.settings.dockAutoHide
+                enabled: !!page.settings
+                onToggled: function(checked) {
+                    if (page.settings)
+                        page.settings.setDockAutoHide(checked);
                 }
             }
 
             Controls.TahoeListRow {
                 theme: page.theme
-                label: "动画"
-                detail: page.niri && page.niri.layerAnimationsEnabled
-                    ? "面板交给 compositor layer animation；窗口动画由 niri 管理"
-                    : "面板外层显隐即时完成；窗口动画由 niri 管理"
-                iconCode: "\ue8c1"
-
-                Controls.TahoeButton {
-                    theme: page.theme
-                    label: "打开"
-                    onActivated: page.open("niri-animations")
+                label: "启用灵动岛"
+                detail: page.settings && page.settings.dynamicIslandEnabled
+                    ? "顶栏中心由灵动岛接管"
+                    : "使用顶栏时间"
+                iconCode: "\ueb81"
+                checkable: true
+                checked: page.settings && page.settings.dynamicIslandEnabled
+                enabled: !!page.settings
+                onToggled: function(checked) {
+                    if (page.settings)
+                        page.settings.setDynamicIslandEnabled(checked);
                 }
             }
-        }
-
-        Controls.TahoeSection {
-            theme: page.theme
-            title: "Shell 多任务"
-            subtitle: "Dock 和顶栏交互"
 
             Controls.TahoeListRow {
                 theme: page.theme
-                label: "Dock"
+                label: "Dock 详细设置"
                 detail: page.settings
-                    ? (page.settings.dockAutoHide ? "自动隐藏" : "始终显示")
-                        + " · " + page.settings.modeLabel(page.panel.dockTitleMode())
-                        + (page.settings.dockMinimizedShelfEnabled ? " · 缩略栏" : " · 旧式最小化")
-                    : "窗口按钮显示偏好"
+                    ? page.settings.modeLabel(page.panel.dockTitleMode())
+                        + (page.settings.dockMinimizedShelfEnabled ? " · 缩略栏" : "")
+                    : "标题模式、热区和最小化"
                 iconCode: "\ue8d0"
 
                 Controls.TahoeButton {
@@ -90,10 +87,8 @@ Flickable {
 
             Controls.TahoeListRow {
                 theme: page.theme
-                label: "灵动岛"
-                detail: page.settings && page.settings.dynamicIslandEnabled
-                    ? "顶栏中心胶囊已启用"
-                    : "使用顶栏时间 fallback"
+                label: "灵动岛详细设置"
+                detail: "点击行为、媒体展开与工作区反馈"
                 iconCode: "\ueb81"
 
                 Controls.TahoeButton {
@@ -106,13 +101,15 @@ Flickable {
 
         Controls.TahoeSection {
             theme: page.theme
-            title: "高级窗口管理"
-            subtitle: "niri 和 Tahoe 专用配置"
+            title: "窗口管理"
+            subtitle: "布局、动画、玻璃与快捷键"
 
             Controls.TahoeListRow {
                 theme: page.theme
-                label: "Niri / Window Manager"
-                detail: "玻璃材质、输入兼容页和其他无法归入 GNOME 标准域的设置。"
+                label: "窗口管理器"
+                detail: page.niri
+                    ? "间距 " + page.niri.gaps + " px · 布局/玻璃/动画"
+                    : "布局、玻璃、动画与快捷键"
                 iconCode: "\ue871"
 
                 Controls.TahoeButton {

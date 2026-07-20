@@ -34,23 +34,16 @@ Flickable {
             Controls.TahoeListRow {
                 theme: page.theme
                 label: "状态"
-                detail: page.info.statusBadge && page.info.statusBadge.length > 0
-                    ? "已纳入设置中心导航；功能实现排在 " + page.info.statusBadge
-                    : "已纳入设置中心导航"
+                detail: "此分类已预留，完整选项将在后续版本提供。"
                 iconCode: page.info.icon
             }
 
             Controls.TahoeListRow {
                 theme: page.theme
-                label: "范围"
-                detail: "已保留在 GNOME 型信息架构中；后续阶段会接入完整后端。"
-                iconCode: "\ue8b8"
-            }
-
-            Controls.TahoeListRow {
-                theme: page.theme
-                label: "相关入口"
-                detail: page.info.related && page.info.related.length > 0 ? "可先打开现有 Tahoe 页面" : "后续阶段会补齐内置功能页"
+                label: "相关设置"
+                detail: page.info.related && page.info.related.length > 0
+                    ? "可先打开已提供的相关页面"
+                    : "暂无相关页面"
                 iconCode: "\ue89e"
                 visible: true
 

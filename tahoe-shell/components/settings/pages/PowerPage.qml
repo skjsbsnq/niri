@@ -94,11 +94,10 @@ Flickable {
 
             Controls.TahoeListRow {
                 theme: page.theme
-                label: "亮度后端"
-                detail: page.controls && page.controls.brightnessAvailable
-                    ? "brightnessctl 可用"
-                    : (page.controls && page.controls.brightnessErrorText.length > 0 ? page.controls.brightnessErrorText : "未检测到可写背光")
+                label: "亮度"
+                detail: "当前设备不支持调节亮度"
                 iconCode: "\ue1ad"
+                visible: !(page.controls && page.controls.brightnessAvailable)
             }
         }
 

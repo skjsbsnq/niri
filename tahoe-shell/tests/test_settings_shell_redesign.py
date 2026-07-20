@@ -1,4 +1,4 @@
-"""T15: Settings shell redesign — opaque fill, sidebar, page transition, back nav."""
+"""Settings shell redesign — fill, sidebar, page transition, back nav, P1 polish."""
 
 from __future__ import annotations
 
@@ -13,31 +13,43 @@ SIDEBAR_BTN = ROOT / "components" / "settings" / "controls" / "TahoeSidebarButto
 THEME = ROOT / "components" / "settings" / "SettingsTheme.js"
 MOTION = ROOT / "components" / "Motion.js"
 MODEL = ROOT / "components" / "settings" / "SettingsModel.js"
+CATEGORY_ICON = ROOT / "components" / "settings" / "controls" / "TahoeCategoryIcon.qml"
 
 
 class SettingsShellRedesignTests(unittest.TestCase):
     def test_panel_fill_near_opaque(self) -> None:
         text = THEME.read_text(encoding="utf-8")
-        # ~0.92 alpha → 0xEB prefix on ARGB hex
-        self.assertIn("#eb1d1f24", text)
-        self.assertIn("#ebf5f6f8", text)
+        # P1 near-solid system surface (~0.96 → 0xF5 prefix)
+        self.assertIn("#f51c1c1e", text)
+        self.assertIn("#f5f2f2f7", text)
 
-    def test_sidebar_width_230(self) -> None:
+    def test_sidebar_width_neutral_rows(self) -> None:
         text = SIDEBAR.read_text(encoding="utf-8")
-        self.assertIn("Layout.preferredWidth: 230", text)
-        self.assertNotIn("Layout.preferredWidth: 210", text)
+        self.assertIn("Layout.preferredWidth: 236", text)
 
-    def test_sidebar_uses_category_icon(self) -> None:
+    def test_sidebar_uses_neutral_symbolic_icon(self) -> None:
         btn = SIDEBAR_BTN.read_text(encoding="utf-8")
-        self.assertIn("TahoeCategoryIcon", btn)
-        self.assertIn("categoryColor", btn)
-        # Selected = solid accent capsule + white label
+        # P1: monochrome TahoeSymbol, not rainbow TahoeCategoryIcon squares.
+        self.assertIn("TahoeSymbol", btn)
+        self.assertNotIn("TahoeCategoryIcon", btn)
         self.assertIn("btn.active ? btn.accentBlue", btn)
-        self.assertIn('btn.active ? "#ffffff"', btn)
+        self.assertIn("activeFill", btn)
+        # API keeps categoryColor for call-site stability.
+        self.assertIn("property color categoryColor", btn)
 
         sidebar = SIDEBAR.read_text(encoding="utf-8")
         self.assertIn("categoryColorFor", sidebar)
         self.assertIn("categoryColor:", sidebar)
+
+    def test_category_color_is_neutral(self) -> None:
+        text = THEME.read_text(encoding="utf-8")
+        self.assertIn("function categoryColor(", text)
+        # Rainbow per-domain brands must not return from categoryColor.
+        body_start = text.index("function categoryColor(")
+        body = text[body_start : text.index("\n}", body_start) + 2]
+        self.assertNotIn("case \"wifi\"", body)
+        self.assertIn("#a1a1a6", body)
+        self.assertIn("#636366", body)
 
     def test_page_host_replaces_stack_layout(self) -> None:
         panel = PANEL.read_text(encoding="utf-8")
@@ -89,6 +101,16 @@ class SettingsShellRedesignTests(unittest.TestCase):
         self.assertIn("NumberAnimation", host)
         self.assertNotIn("SpringAnimation", host)
         self.assertIn("emphasizedDecel", host)
+
+    def test_panel_window_like_geometry(self) -> None:
+        panel = PANEL.read_text(encoding="utf-8")
+        self.assertIn("Math.min(screenWidth - 48, 980)", panel)
+        self.assertIn("Math.min(screenHeight - 72, 640)", panel)
+        self.assertIn("RadiusPanelCompact", panel)
+
+    def test_category_icon_component_still_exists_for_legacy(self) -> None:
+        # Do not delete the component (no parallel replacement file); sidebar just stops using it.
+        self.assertTrue(CATEGORY_ICON.is_file())
 
 
 if __name__ == "__main__":

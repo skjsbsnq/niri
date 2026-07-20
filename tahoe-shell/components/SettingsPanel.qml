@@ -40,14 +40,13 @@ PanelWindow {
     readonly property bool darkMode: appearanceService && appearanceService.darkMode
     readonly property int screenWidth: Math.max(1, numberOr(root.screen && root.screen.width, root.width))
     readonly property int screenHeight: Math.max(1, numberOr(root.screen && root.screen.height, root.height))
-    // macOS System Settings converges toward ~900x540; clamp the overlay there
-    // on typical screens while keeping a usable floor on small displays. The
-    // glass region follows panelSurface geometry, so shrinking the panel keeps
-    // the region inside the safe area (no spring on geometry, guardrail 0704ea4).
-    readonly property int panelWidth: Math.max(320, Math.min(screenWidth - 32, 900))
-    readonly property int panelHeight: Math.max(420, Math.min(screenHeight - 64, 540))
-    readonly property int panelLeft: Math.round(Math.max(8, (screenWidth - panelWidth) / 2))
-    readonly property int panelTop: Math.round(Math.max(42, (screenHeight - panelHeight) / 2))
+    // P1: closer to a system settings window (~980x640 GNOME-like), still an
+    // overlay. Glass region follows panelSurface geometry (no spring on
+    // geometry, guardrail 0704ea4).
+    readonly property int panelWidth: Math.max(360, Math.min(screenWidth - 48, 980))
+    readonly property int panelHeight: Math.max(440, Math.min(screenHeight - 72, 640))
+    readonly property int panelLeft: Math.round(Math.max(12, (screenWidth - panelWidth) / 2))
+    readonly property int panelTop: Math.round(Math.max(48, (screenHeight - panelHeight) / 2))
     readonly property color textPrimary: SettingsTheme.textPrimary(darkMode)
     readonly property color textSecondary: SettingsTheme.textSecondary(darkMode)
     readonly property color textMuted: SettingsTheme.textMuted(darkMode)
@@ -273,7 +272,8 @@ PanelWindow {
 
             anchors.fill: parent
             material: GlassStyle.MaterialPanel
-            radius: GlassStyle.RadiusPanel
+            // Tighter radius reads more like a system window than a floating pill.
+            radius: GlassStyle.RadiusPanelCompact
             fillColor: root.panelFill
             strokeColor: root.panelStroke
             useItemRegion: false
@@ -288,8 +288,8 @@ PanelWindow {
 
         RowLayout {
             anchors.fill: parent
-            anchors.margins: 14
-            spacing: 14
+            anchors.margins: 12
+            spacing: 12
 
             Settings.SettingsSidebar {
                 panel: root

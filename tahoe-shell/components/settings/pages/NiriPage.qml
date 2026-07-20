@@ -4,12 +4,8 @@ import QtQuick
 import QtQuick.Layouts
 import "../controls" as Controls
 
-// S5.0: the niri hub. The sidebar's "布局与窗口" entry now opens this hub,
-// which links to one page per niri config domain. Each domain page reads the
-// NiriSettings service mirror and writes through setX (optimistic update +
-// queued KDL write + hot-reload). Tiles are appended as each S5 sub-step
-// lands its page; this first batch wires only the layout domain (moved here
-// from the old single NiriPage into NiriLayoutPage).
+// Window-manager hub under 桌面与多任务. Domain pages parent to "niri" so
+// back navigation returns here; sidebar highlight walks to multitasking.
 Flickable {
     id: page
 
@@ -49,7 +45,7 @@ Flickable {
 
         Text {
             Layout.fillWidth: true
-            text: "这些设置写入 niri 的 config.kdl，写入后立即热重载，重启 niri 后仍然生效。选择一个分类开始。"
+            text: "高级窗口管理选项。更改会立即生效，并在重启后保留。"
             color: page.theme ? page.theme.textSecondary : "#721d1d1f"
             font.pixelSize: 11
             wrapMode: Text.WordWrap
@@ -66,9 +62,12 @@ Flickable {
                 Layout.fillWidth: true
                 iconCode: "\ue871"
                 title: "布局与窗口"
-                detail: page.svc ? "间距 " + page.svc.gaps + " px · 焦点环/边框/阴影/Snap" : "niri 布局设置"
+                detail: page.svc ? "间距 " + page.svc.gaps + " px · 焦点环/边框/阴影/Snap" : "布局设置"
                 accentColor: page.panel ? page.panel.categoryColor("niri") : "#30b0c8"
-                onActivated: page.panel.selectedPage = "niri-layout"
+                onActivated: {
+                    if (page.panel)
+                        page.panel.openPage("niri-layout");
+                }
             }
 
             Controls.TahoeSummaryTile {
@@ -76,29 +75,38 @@ Flickable {
                 Layout.fillWidth: true
                 iconCode: "\ue3a3"
                 title: "玻璃材质"
-                detail: page.svc ? "全局模糊 + 7 种材质的折射/边缘光" : "tahoe-glass 材质"
+                detail: page.svc ? "全局模糊与折射材质" : "玻璃材质"
                 accentColor: page.panel ? page.panel.categoryColor("niri-glass") : "#5e5ce6"
-                onActivated: page.panel.selectedPage = "niri-glass"
+                onActivated: {
+                    if (page.panel)
+                        page.panel.openPage("niri-glass");
+                }
             }
 
             Controls.TahoeSummaryTile {
                 theme: page.theme
                 Layout.fillWidth: true
-                iconCode: "\e312"
+                iconCode: "\ue312"
                 title: "输入与显示"
-                detail: page.svc ? "键盘/触摸板手感，输出只读" : "niri 输入设置"
+                detail: page.svc ? "键盘/触摸板手感，输出只读" : "输入设置"
                 accentColor: page.panel ? page.panel.categoryColor("niri-input") : "#0a84ff"
-                onActivated: page.panel.selectedPage = "niri-input"
+                onActivated: {
+                    if (page.panel)
+                        page.panel.openPage("niri-input");
+                }
             }
 
             Controls.TahoeSummaryTile {
                 theme: page.theme
                 Layout.fillWidth: true
-                iconCode: "\e8c1"
+                iconCode: "\ue8c1"
                 title: "动画"
-                detail: page.svc ? "工作区/窗口/概览的弹簧手感" : "niri 动画设置"
+                detail: page.svc ? "工作区/窗口/概览的弹簧手感" : "动画设置"
                 accentColor: page.panel ? page.panel.categoryColor("niri-animations") : "#ff9f0a"
-                onActivated: page.panel.selectedPage = "niri-animations"
+                onActivated: {
+                    if (page.panel)
+                        page.panel.openPage("niri-animations");
+                }
             }
 
             Controls.TahoeSummaryTile {
@@ -106,9 +114,12 @@ Flickable {
                 Layout.fillWidth: true
                 iconCode: "\ue8ef"
                 title: "快捷键"
-                detail: page.svc ? "niri binds 只读查看" : "niri 键位"
+                detail: page.svc ? "当前快捷键只读查看" : "快捷键"
                 accentColor: page.panel ? page.panel.categoryColor("niri-keyboard") : "#8e8e93"
-                onActivated: page.panel.selectedPage = "niri-keyboard"
+                onActivated: {
+                    if (page.panel)
+                        page.panel.openPage("niri-keyboard");
+                }
             }
         }
     }

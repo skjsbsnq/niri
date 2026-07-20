@@ -124,7 +124,7 @@ Flickable {
             Controls.TahoeListRow {
                 theme: page.theme
                 label: "键盘快捷键"
-                detail: "niri binds 只读查看；改键请编辑 config.kdl。"
+                detail: "查看当前快捷键（只读）"
                 iconCode: "\ue8ef"
 
                 Controls.TahoeButton {

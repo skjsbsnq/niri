@@ -113,8 +113,8 @@ Flickable {
 
         Controls.TahoeSection {
             theme: page.theme
-            title: "壁纸"
-            subtitle: "背景图片和动态壁纸"
+            title: "壁纸与天气"
+            subtitle: "背景图片、动态壁纸和天气小组件"
 
             Controls.TahoeListRow {
                 theme: page.theme
@@ -130,6 +130,24 @@ Flickable {
                     onActivated: {
                         if (page.panel)
                             page.panel.openPage("wallpaper");
+                    }
+                }
+            }
+
+            Controls.TahoeListRow {
+                theme: page.theme
+                label: "天气"
+                detail: page.panel && page.panel.weatherService
+                    ? page.panel.weatherService.locationName + " · " + page.panel.weatherService.status
+                    : "定位、手动覆盖和温度单位"
+                iconCode: "\ue2bd"
+
+                Controls.TahoeButton {
+                    theme: page.theme
+                    label: "打开"
+                    onActivated: {
+                        if (page.panel)
+                            page.panel.openPage("weather");
                     }
                 }
             }

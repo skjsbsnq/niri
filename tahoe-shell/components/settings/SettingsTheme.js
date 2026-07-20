@@ -162,57 +162,57 @@ function danger(darkMode) {
 // --- Panel and grouping surfaces -------------------------------------------
 
 function panelFill(darkMode) {
-    // T15: content-dense settings shell wants near-opaque fill (~0.92) so
-    // body text stays readable over wallpaper; glass stroke still softens edge.
-    return darkMode ? "#eb1d1f24" : "#ebf5f6f8";
+    // P1: near-solid system-settings surface (~0.96) so the panel reads as a
+    // window, not a translucent popup over wallpaper.
+    return darkMode ? "#f51c1c1e" : "#f5f2f2f7";
 }
 
 function panelStroke(darkMode) {
-    return darkMode ? "#44ffffff" : "#90ffffff";
+    return darkMode ? "#28ffffff" : "#24000000";
 }
 
 function sectionFill(darkMode) {
-    return darkMode ? "#1cffffff" : "#5effffff";
+    // Quiet grouped list card — low contrast over the panel, not a second glass stack.
+    return darkMode ? "#14ffffff" : "#ffffffff";
 }
 
 function sectionStroke(darkMode) {
-    return darkMode ? "#2effffff" : "#80ffffff";
+    return darkMode ? "#18ffffff" : "#14000000";
 }
 
 function rowFill(darkMode) {
-    return darkMode ? "#1affffff" : "#66ffffff";
+    return darkMode ? "#12ffffff" : "#0a000000";
 }
 
 function rowFillHover(darkMode) {
-    return darkMode ? "#2affffff" : "#86ffffff";
+    return darkMode ? "#1cffffff" : "#12000000";
 }
 
 function rowStroke(darkMode) {
-    return darkMode ? "#22ffffff" : "#72ffffff";
+    return darkMode ? "#14ffffff" : "#10000000";
 }
 
 // --- Sidebar --------------------------------------------------------------
 
 function sidebarFill(darkMode) {
-    return darkMode ? "#16ffffff" : "#58ffffff";
+    return darkMode ? "#0cffffff" : "#0a000000";
 }
 
 function sidebarStroke(darkMode) {
-    return darkMode ? "#26ffffff" : "#80ffffff";
+    return darkMode ? "#14ffffff" : "#10000000";
 }
 
 function sidebarActiveFill(darkMode) {
-    // T15: selected row is a solid accent capsule (call sites use accentBlue).
-    // Keep a soft fill fallback for non-accent contexts.
-    return darkMode ? "#3affffff" : "#a6ffffff";
+    // Soft accent wash (not a solid brand capsule).
+    return darkMode ? "#3a0a84ff" : "#28007ff7";
 }
 
 function sidebarActiveStroke(darkMode) {
-    return darkMode ? "#30ffffff" : "#96ffffff";
+    return darkMode ? "#20ffffff" : "#14000000";
 }
 
 function sidebarHoverFill(darkMode) {
-    return darkMode ? "#26ffffff" : "#80ffffff";
+    return darkMode ? "#14ffffff" : "#0e000000";
 }
 
 // Solid secondary button fill (T16) — light gray pill, not glass wash.
@@ -276,19 +276,19 @@ function switchOff(darkMode) {
 // --- Summary tile ---------------------------------------------------------
 
 function tileFill(darkMode) {
-    return darkMode ? "#1cffffff" : "#6affffff";
+    return darkMode ? "#14ffffff" : "#ffffffff";
 }
 
 function tileFillHover(darkMode) {
-    return darkMode ? "#28ffffff" : "#88ffffff";
+    return darkMode ? "#1cffffff" : "#f5f5f7";
 }
 
 function tileStroke(darkMode) {
-    return darkMode ? "#26ffffff" : "#82ffffff";
+    return darkMode ? "#18ffffff" : "#14000000";
 }
 
 function tileStrokeHover(darkMode) {
-    return darkMode ? "#34ffffff" : "#a0ffffff";
+    return darkMode ? "#24ffffff" : "#1a000000";
 }
 
 // --- Shell surfaces (TopBar / CC / LeftSidebar shared) --------------------
@@ -355,87 +355,14 @@ function scrim(darkMode) {
     return darkMode ? "#33000000" : "#1a101418";
 }
 
-// --- Brand category colors ------------------------------------------------
-// One solid accent per settings category / sidebar row (T15 color blocks).
-// Used by TahoeCategoryIcon in the sidebar and overview summary tiles.
+// --- Category icon color --------------------------------------------------
+// Kept as a stable API for hub tiles / legacy call sites. P1 returns a single
+// muted symbolic color so settings no longer rainbow-codes every domain.
+// Status colors (ok/warn/danger) remain elsewhere via stateColor().
 
 function categoryColor(key, darkMode, accentId) {
-    switch (key) {
-    case "wifi":
-        return systemAccent("blue", darkMode);
-    case "network":
-        return "#64d2ff";     // light blue
-    case "bluetooth":
-        return systemAccent("blue", darkMode);
-    case "displays":
-        return "#5e5ce6";     // indigo
-    case "sound":
-        return systemAccent("pink", darkMode);
-    case "power":
-        return "#34c759";     // green
-    case "multitasking":
-        return "#ff9f0a";     // orange
-    case "overview":
-        return "#8e8e93";     // system gray (General)
-    case "appearance":
-        return "#5856d6";     // system indigo
-    case "apps":
-        return "#af52de";     // purple
-    case "wallpaper":
-        return "#30b0c8";     // teal
-    case "notifications":
-        return "#ff3b30";     // system red
-    case "search":
-        return "#8e8e93";
-    case "online-accounts":
-        return systemAccent("blue", darkMode);
-    case "sharing":
-        return "#30b0c8";
-    case "wellbeing":
-        return "#ff9f0a";
-    case "mouse-touchpad":
-        return "#8e8e93";
-    case "keyboard":
-        return "#636366";
-    case "color":
-        return "#ff2d55";
-    case "printers":
-        return "#8e8e93";
-    case "accessibility":
-        return systemAccent("blue", darkMode);
-    case "privacy":
-        return "#34c759";
-    case "system":
-        return "#8e8e93";
-    case "dynamic-island":
-        return "#5e5ce6";     // system indigo (top-bar dynamic island)
-    case "screenshot":
-        return "#ff7a59";     // coral
-    case "dock":
-        return systemAccent("blue", darkMode);
-    case "weather":
-        return "#32ade6";     // system light blue (weather)
-    case "niri":
-        return "#30b0c8";     // teal (niri layout & window appearance)
-    case "niri-layout":
-        return "#30b0c8";
-    case "niri-glass":
-        return "#5e5ce6";     // indigo (tahoe-glass materials & blur)
-    case "niri-input":
-        return systemAccent("blue", darkMode);
-    case "niri-animations":
-        return "#ff9f0a";     // system orange (spring animations)
-    case "niri-keyboard":
-        return "#8e8e93";     // system gray (read-only binds viewer)
-    case "startup":
-        return "#ff9f0a";     // system orange
-    case "health":
-        return "#34c759";     // system green
-    case "about":
-        return "#8e8e93";     // system gray
-    default:
-        return accent(darkMode, accentId);
-    }
+    // Neutral symbolic gray; accent only through selection / controls.
+    return darkMode ? "#a1a1a6" : "#636366";
 }
 
 // --- Dynamic Island V2 surface tokens (T10) --------------------------------

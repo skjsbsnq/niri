@@ -26,8 +26,8 @@ Rectangle {
     readonly property color accentBlue: theme ? theme.accentBlue : "#007ff7"
     readonly property bool searching: searchText.trim().length > 0
 
-    // T15: sidebar 210 → 230 for color-block icons + longer labels.
-    Layout.preferredWidth: 230
+    // P1/P2: width for symbolic rows + section headers.
+    Layout.preferredWidth: 236
     Layout.fillHeight: true
     radius: 10
     color: sidebar.sidebarFill
@@ -36,6 +36,12 @@ Rectangle {
     clip: true
 
     function parentPageFor(id) {
+        return SettingsModel.parentId(id);
+    }
+
+    function sidebarAncestorFor(id) {
+        if (typeof SettingsModel.sidebarAncestorId === "function")
+            return SettingsModel.sidebarAncestorId(id);
         return SettingsModel.parentId(id);
     }
 
@@ -56,7 +62,9 @@ Rectangle {
             return true;
         if (sidebar.searching)
             return false;
-        return parentPageFor(current) === info.id;
+        // One-level parent (direct child) or first sidebar ancestor (deep niri/*).
+        return parentPageFor(current) === info.id
+            || sidebarAncestorFor(current) === info.id;
     }
 
     function badgeFor(info) {
@@ -73,10 +81,18 @@ Rectangle {
         return "";
     }
 
+    function isSectionHeader(info) {
+        return !!(info && info.sectionHeader);
+    }
+
+    function isNavRow(info) {
+        return !!(info && !info.sectionHeader && !info.separator);
+    }
+
     function activeIndex() {
         for (var i = 0; i < navItems.length; i++) {
             var item = navItems[i];
-            if (item && !item.separator && activeFor(item))
+            if (isNavRow(item) && activeFor(item))
                 return i;
         }
         return -1;
@@ -111,10 +127,10 @@ Rectangle {
 
         Text {
             Layout.fillWidth: true
-            Layout.preferredHeight: 24
+            Layout.preferredHeight: 22
             text: "设置"
             color: sidebar.textPrimary
-            font.pixelSize: 17
+            font.pixelSize: 15
             font.weight: Font.DemiBold
             elide: Text.ElideRight
             verticalAlignment: Text.AlignVCenter
@@ -221,7 +237,28 @@ Rectangle {
                 required property var modelData
 
                 width: ListView.view.width
-                height: modelData && modelData.separator ? 11 : 34
+                height: {
+                    if (sidebar.isSectionHeader(navDelegate.modelData))
+                        return 26;
+                    if (navDelegate.modelData && navDelegate.modelData.separator)
+                        return 11;
+                    return 34;
+                }
+
+                Text {
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.bottom: parent.bottom
+                    anchors.leftMargin: 10
+                    anchors.rightMargin: 10
+                    anchors.bottomMargin: 2
+                    text: navDelegate.modelData && navDelegate.modelData.title ? navDelegate.modelData.title : ""
+                    color: sidebar.textMuted
+                    font.pixelSize: 11
+                    font.weight: Font.DemiBold
+                    elide: Text.ElideRight
+                    visible: sidebar.isSectionHeader(navDelegate.modelData)
+                }
 
                 Rectangle {
                     anchors.left: parent.left
@@ -242,7 +279,7 @@ Rectangle {
                     categoryColor: sidebar.categoryColorFor(navDelegate.modelData)
                     active: sidebar.activeFor(navDelegate.modelData)
                     badgeText: sidebar.badgeFor(navDelegate.modelData)
-                    visible: !(navDelegate.modelData && navDelegate.modelData.separator)
+                    visible: sidebar.isNavRow(navDelegate.modelData)
                     onActivated: {
                         if (sidebar.panel && navDelegate.modelData)
                             sidebar.panel.openPage(navDelegate.modelData.id);

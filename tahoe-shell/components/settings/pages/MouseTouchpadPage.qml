@@ -107,12 +107,12 @@ Flickable {
         Controls.TahoeSection {
             theme: page.theme
             title: "鼠标"
-            subtitle: "当前没有独立鼠标后端"
+            subtitle: "指针速度与按键选项即将提供"
 
             Controls.TahoeListRow {
                 theme: page.theme
                 label: "鼠标设置"
-                detail: "触摸板设置已内置；鼠标速度、主键和滚轮后续接入后端。"
+                detail: "触摸板选项已可调整；鼠标速度、主键和滚轮将在后续版本提供。"
                 iconCode: "\ue323"
             }
         }

@@ -86,11 +86,28 @@ var panels = [
         "related": [{"id": "health", "title": "系统健康"}]
     },
     {
+        "id": "appearance",
+        "title": "外观",
+        "subtitle": "深浅色、壁纸、图标和天气",
+        "icon": "\ue51c",
+        "keywords": ["appearance", "theme", "icons", "wallpaper", "background", "weather", "外观", "主题", "图标", "壁纸", "背景", "天气"],
+        "group": "personal",
+        "component": "appearance",
+        "statusBadge": "",
+        "sidebar": true,
+        "visible": true,
+        "enabled": true,
+        "related": [
+            {"id": "wallpaper", "title": "壁纸"},
+            {"id": "weather", "title": "天气"}
+        ]
+    },
+    {
         "id": "multitasking",
-        "title": "多任务",
-        "subtitle": "窗口、工作区、Dock 和动画",
+        "title": "桌面与多任务",
+        "subtitle": "Dock、灵动岛、窗口布局和动画",
         "icon": "\ue8f9",
-        "keywords": ["multitasking", "window", "workspace", "dock", "overview", "多任务", "窗口", "工作区", "dock", "动画"],
+        "keywords": ["multitasking", "desktop", "window", "workspace", "dock", "overview", "niri", "多任务", "桌面", "窗口", "工作区", "dock", "动画", "窗口管理"],
         "group": "personal",
         "component": "multitasking",
         "statusBadge": "",
@@ -98,25 +115,10 @@ var panels = [
         "visible": true,
         "enabled": true,
         "related": [
-            {"id": "niri-layout", "title": "布局与窗口"},
             {"id": "dock", "title": "Dock"},
-            {"id": "niri-animations", "title": "动画"},
-            {"id": "dynamic-island", "title": "灵动岛"}
+            {"id": "dynamic-island", "title": "灵动岛"},
+            {"id": "niri", "title": "窗口管理器"}
         ]
-    },
-    {
-        "id": "appearance",
-        "title": "外观",
-        "subtitle": "深浅色、壁纸和图标主题",
-        "icon": "\ue51c",
-        "keywords": ["appearance", "theme", "icons", "wallpaper", "background", "外观", "主题", "图标", "壁纸", "背景"],
-        "group": "personal",
-        "component": "appearance",
-        "statusBadge": "",
-        "sidebar": true,
-        "visible": true,
-        "enabled": true,
-        "related": [{"id": "wallpaper", "title": "壁纸"}]
     },
     {
         "id": "apps",
@@ -149,7 +151,7 @@ var panels = [
     {
         "id": "search",
         "title": "搜索",
-        "subtitle": "系统搜索和索引入口",
+        "subtitle": "搜索索引状态",
         "icon": "\ue8b6",
         "keywords": ["search", "index", "spotlight", "搜索", "索引"],
         "group": "apps",
@@ -162,33 +164,35 @@ var panels = [
     {
         "id": "online-accounts",
         "title": "在线账号",
-        "subtitle": "账号登录和同步服务",
+        "subtitle": "在系统设置中管理账号与同步",
         "icon": "\ue7fd",
         "keywords": ["online accounts", "accounts", "sync", "在线账号", "账户", "同步"],
-        "group": "apps",
+        "group": "legacy",
+        "parent": "system",
         "component": "feature",
         "statusBadge": "",
-        "sidebar": true,
+        "sidebar": false,
         "visible": true,
         "enabled": true
     },
     {
         "id": "sharing",
         "title": "共享",
-        "subtitle": "远程访问、文件共享和媒体共享",
+        "subtitle": "远程访问与文件共享相关状态",
         "icon": "\ue80d",
         "keywords": ["sharing", "remote", "file sharing", "共享", "远程", "文件共享"],
-        "group": "apps",
+        "group": "legacy",
+        "parent": "system",
         "component": "feature",
         "statusBadge": "",
-        "sidebar": true,
+        "sidebar": false,
         "visible": true,
         "enabled": true
     },
     {
         "id": "wellbeing",
         "title": "健康使用",
-        "subtitle": "屏幕时间和休息提醒",
+        "subtitle": "勿扰与空闲锁定",
         "icon": "\ue87d",
         "keywords": ["wellbeing", "screen time", "break", "健康使用", "屏幕时间", "休息"],
         "group": "apps",
@@ -234,40 +238,42 @@ var panels = [
     {
         "id": "color",
         "title": "色彩管理",
-        "subtitle": "显示器和设备色彩配置",
+        "subtitle": "在系统设置中管理显示器色彩配置",
         "icon": "\ue3b7",
         "keywords": ["color", "icc", "profile", "色彩", "颜色", "校色"],
-        "group": "input",
+        "group": "legacy",
+        "parent": "system",
         "component": "feature",
         "statusBadge": "",
-        "sidebar": true,
+        "sidebar": false,
         "visible": true,
         "enabled": true
     },
     {
         "id": "printers",
         "title": "打印机",
-        "subtitle": "打印设备和队列",
+        "subtitle": "在系统设置中管理打印设备和队列",
         "icon": "\ue8ad",
         "keywords": ["printers", "printing", "cups", "打印机", "打印", "队列"],
-        "group": "input",
+        "group": "legacy",
+        "parent": "system",
         "component": "feature",
         "statusBadge": "",
-        "sidebar": true,
+        "sidebar": false,
         "visible": true,
         "enabled": true
     },
     {
         "id": "accessibility",
         "title": "辅助功能",
-        "subtitle": "无障碍访问和交互辅助",
+        "subtitle": "在系统设置中管理无障碍选项",
         "icon": "\ue84e",
         "keywords": ["accessibility", "universal access", "a11y", "辅助功能", "无障碍"],
-        "group": "system",
-        "separatorBefore": true,
+        "group": "legacy",
+        "parent": "system",
         "component": "feature",
         "statusBadge": "",
-        "sidebar": true,
+        "sidebar": false,
         "visible": true,
         "enabled": true
     },
@@ -278,6 +284,7 @@ var panels = [
         "icon": "\ue897",
         "keywords": ["privacy", "security", "permissions", "camera", "microphone", "location", "隐私", "安全", "权限", "摄像头", "麦克风", "位置"],
         "group": "system",
+        "separatorBefore": true,
         "component": "feature",
         "statusBadge": "",
         "sidebar": true,
@@ -287,9 +294,9 @@ var panels = [
     {
         "id": "system",
         "title": "系统",
-        "subtitle": "系统健康、启动项、天气和关于",
+        "subtitle": "系统健康、启动项、关于与更多",
         "icon": "\ue88e",
-        "keywords": ["system", "about", "health", "startup", "weather", "系统", "关于", "健康", "启动项", "天气"],
+        "keywords": ["system", "about", "health", "startup", "系统", "关于", "健康", "启动项", "打印机", "辅助功能", "共享", "账号"],
         "group": "system",
         "component": "system",
         "statusBadge": "",
@@ -300,19 +307,24 @@ var panels = [
             {"id": "health", "title": "系统健康"},
             {"id": "about", "title": "关于"},
             {"id": "startup", "title": "启动项"},
-            {"id": "weather", "title": "天气"}
+            {"id": "online-accounts", "title": "在线账号"},
+            {"id": "sharing", "title": "共享"},
+            {"id": "color", "title": "色彩管理"},
+            {"id": "printers", "title": "打印机"},
+            {"id": "accessibility", "title": "辅助功能"}
         ]
     },
     {
         "id": "niri",
-        "title": "Niri / Window Manager",
-        "subtitle": "niri 和 Tahoe 专用窗口管理设置",
+        "title": "窗口管理器",
+        "subtitle": "布局、玻璃、输入与动画等高级选项",
         "icon": "\ue871",
         "keywords": ["niri", "window manager", "tahoe", "window", "layout", "niri", "窗口管理", "布局", "玻璃", "动画"],
-        "group": "system",
+        "group": "legacy",
+        "parent": "multitasking",
         "component": "niri",
         "statusBadge": "",
-        "sidebar": true,
+        "sidebar": false,
         "visible": true,
         "enabled": true
     },
@@ -379,7 +391,7 @@ var panels = [
         "icon": "\ue2bd",
         "keywords": ["weather", "forecast", "temperature", "天气", "定位", "温度"],
         "group": "legacy",
-        "parent": "system",
+        "parent": "appearance",
         "component": "weather",
         "statusBadge": "",
         "sidebar": false,
@@ -431,11 +443,11 @@ var panels = [
     {
         "id": "niri-layout",
         "title": "布局与窗口",
-        "subtitle": "niri 间距、焦点环、边框、阴影与 snap 助手",
+        "subtitle": "间距、焦点环、边框、阴影与 snap 助手",
         "icon": "\ue871",
         "keywords": ["niri", "layout", "focus", "border", "shadow", "snap", "布局", "窗口", "焦点环", "边框", "阴影"],
         "group": "legacy",
-        "parent": "multitasking",
+        "parent": "niri",
         "component": "niri-layout",
         "statusBadge": "",
         "sidebar": false,
@@ -445,7 +457,7 @@ var panels = [
     {
         "id": "niri-glass",
         "title": "玻璃材质",
-        "subtitle": "tahoe-glass 材质、折射与全局模糊",
+        "subtitle": "玻璃材质、折射与全局模糊",
         "icon": "\ue3a3",
         "keywords": ["glass", "blur", "refraction", "玻璃", "模糊", "折射"],
         "group": "legacy",
@@ -463,7 +475,7 @@ var panels = [
         "icon": "\ue312",
         "keywords": ["input", "display", "keyboard", "touchpad", "输入", "显示", "键盘", "触摸板"],
         "group": "legacy",
-        "parent": "keyboard",
+        "parent": "niri",
         "component": "niri-input",
         "statusBadge": "",
         "sidebar": false,
@@ -477,7 +489,7 @@ var panels = [
         "icon": "\ue8c1",
         "keywords": ["animation", "spring", "workspace", "动画", "弹簧", "工作区"],
         "group": "legacy",
-        "parent": "multitasking",
+        "parent": "niri",
         "component": "niri-animations",
         "statusBadge": "",
         "sidebar": false,
@@ -487,11 +499,11 @@ var panels = [
     {
         "id": "niri-keyboard",
         "title": "快捷键",
-        "subtitle": "niri binds 只读查看（任务切换 binds 受保护）",
+        "subtitle": "快捷键只读查看（任务切换绑定受保护）",
         "icon": "\ue8ef",
         "keywords": ["keyboard", "shortcuts", "binds", "快捷键", "键盘", "绑定"],
         "group": "legacy",
-        "parent": "keyboard",
+        "parent": "niri",
         "component": "niri-keyboard",
         "statusBadge": "",
         "sidebar": false,
@@ -560,7 +572,7 @@ var panelCapabilities = {
         "capability": CAPABILITY_NATIVE,
         "backend": "Tahoe settings and niri settings",
         "externalPanel": "",
-        "writeScope": "窗口、工作区、Dock、动画和灵动岛偏好入口"
+        "writeScope": "Dock、灵动岛、布局、动画和窗口管理器入口"
     },
     "appearance": {
         "capability": CAPABILITY_NATIVE,
@@ -651,13 +663,13 @@ var panelCapabilities = {
         "capability": CAPABILITY_NATIVE,
         "backend": "Tahoe settings and status services",
         "externalPanel": "info-overview",
-        "writeScope": "系统健康、启动项、天气和关于入口"
+        "writeScope": "系统健康、启动项、关于与更多入口"
     },
     "niri": {
         "capability": CAPABILITY_NATIVE,
         "backend": "niri_settings_tool.py whitelist writes",
         "externalPanel": "",
-        "writeScope": "niri 布局、玻璃、输入和动画白名单字段；binds 保持只读"
+        "writeScope": "布局、玻璃、输入和动画白名单字段；快捷键保持只读"
     },
     "wallpaper": {
         "capability": CAPABILITY_NATIVE,
@@ -753,8 +765,29 @@ var aliases = {
     "mouse": "mouse-touchpad",
     "touchpad": "mouse-touchpad",
     "universal-access": "accessibility",
-    "privacy-security": "privacy"
+    "privacy-security": "privacy",
+    "desktop": "multitasking",
+    "window-manager": "niri",
+    "wm": "niri"
 };
+
+// Sidebar section titles for primary groups (P2 IA).
+function groupLabel(group) {
+    var key = String(group || "");
+    if (key === "connectivity")
+        return "网络";
+    if (key === "hardware")
+        return "显示与声音";
+    if (key === "personal")
+        return "外观与桌面";
+    if (key === "apps")
+        return "应用";
+    if (key === "input")
+        return "输入";
+    if (key === "system")
+        return "系统";
+    return "";
+}
 
 function normalizeText(value) {
     return String(value || "").toLowerCase().trim();
@@ -858,6 +891,22 @@ function parentId(id) {
     return panel.id;
 }
 
+// Walk parents until a primary sidebar row is found (for selection highlight).
+function sidebarAncestorId(id) {
+    var current = resolveId(id);
+    var guard = 0;
+    while (current && guard < 8) {
+        var panel = resolvedPanel(current);
+        if (panel.sidebar === true)
+            return panel.id;
+        if (!panel.parent || resolveId(panel.parent) === panel.id)
+            return panel.id;
+        current = resolveId(panel.parent);
+        guard++;
+    }
+    return resolveId(id);
+}
+
 function pageIndex(id) {
     var key = resolveId(id);
     for (var i = 0; i < panels.length; i++) {
@@ -921,6 +970,7 @@ function matchesPanel(panel, query) {
 function sidebarItems(query) {
     var q = normalizeText(query);
     var out = [];
+    var lastGroup = "";
 
     for (var i = 0; i < panels.length; i++) {
         var panel = panels[i];
@@ -930,8 +980,17 @@ function sidebarItems(query) {
         if (q.length === 0) {
             if (panel.sidebar !== true)
                 continue;
-            if (panel.separatorBefore)
-                out.push({"separator": true, "id": "separator-" + panel.id});
+
+            var label = groupLabel(panel.group);
+            if (label.length > 0 && panel.group !== lastGroup) {
+                out.push({
+                    "sectionHeader": true,
+                    "id": "section-" + panel.group,
+                    "title": label,
+                    "group": panel.group
+                });
+                lastGroup = panel.group;
+            }
             out.push(decoratedPanel(panel));
         } else if (matchesPanel(panel, q)) {
             out.push(decoratedPanel(panel));

@@ -187,6 +187,9 @@ PanelWindow {
     property bool prestartedWallpaperReleased: false
     property string prestartedWallpaperMode: ""
     property string adoptedWallpaperCommand: ""
+    // Consecutive health misses required before tearing down an adopted
+    // prestart engine. One-shot /proc glitches must not kill live wallpaper.
+    property int prestartedHealthMisses: 0
     readonly property string prestartedWallpaperRecordDir: Quickshell.stateDir + "/wallpaper-prestart"
     readonly property string prestartedWallpaperRecordPath: nestedSession ? ""
         : prestartedWallpaperRecordDir + "/" + safeOutputName(screenName()) + ".json"
@@ -493,13 +496,19 @@ PanelWindow {
             prestartedWallpaperProcessFile.reload();
             prestartedWallpaperProcessFile.waitForJob();
             var text = String(prestartedWallpaperProcessFile.text() || "").trim();
+            // Missing /proc entry means the process is gone.
+            if (text.length === 0)
+                return false;
             var close = text.lastIndexOf(")");
             if (close < 0)
                 return false;
             var fields = text.substring(close + 1).trim().split(/\s+/);
             return fields.length > 19 && String(fields[19]) === expectedStart;
         } catch (e) {
-            return false;
+            // Transient FileView/IO errors must NOT count as death — a single
+            // false-negative used to kill a healthy prestart engine and black
+            // the desktop (adversarial finding S3).
+            return true;
         }
     }
 
@@ -595,8 +604,24 @@ PanelWindow {
         if (String(prestartedWallpaperRecord.output || "") !== screenName())
             return false;
         var expected = mode === "dynamic" ? dynamicCommand : externalCommand;
-        return expected.length > 0
-            && String(prestartedWallpaperRecord.command || "") === expected;
+        if (expected.length === 0)
+            return false;
+        // Exact match first. Then FPS-normalized match: prestart may embed
+        // battery/idle fps while QML still has the AC budget (or the reverse),
+        // which used to fail adopt and kill a healthy engine (adversarial S1).
+        var recorded = String(prestartedWallpaperRecord.command || "");
+        if (recorded === expected)
+            return true;
+        return normalizeWallpaperCommandForMatch(recorded)
+            === normalizeWallpaperCommandForMatch(expected);
+    }
+
+    function normalizeWallpaperCommandForMatch(command) {
+        var text = String(command || "").trim();
+        // Drop --fps so battery/AC budget skew cannot break adoption.
+        text = text.replace(/(^|\s)--fps(\s+|=)\d+/g, "$1");
+        text = text.replace(/\s+/g, " ").trim();
+        return text;
     }
 
     function tryAdoptPrestartedWallpaper(mode) {
@@ -615,6 +640,7 @@ PanelWindow {
         // wallpaper was already visible (gray/capture plate for ~1.6s then drop).
         dynamicActive = true;
         restartCoverVisible = false;
+        prestartedHealthMisses = 0;
         prestartedWallpaperReadyTimer.stop();
         return true;
     }
@@ -752,22 +778,21 @@ PanelWindow {
             if (externalProcess.running)
                 return;
             // Loaded state with no command for this output: fall through to stop.
+            // Do NOT raise a sticky restart cover here — that permanently
+            // blacks out anything under tahoe-wallpaper (adversarial finding).
+            // Mark launch failed so showStaticWallpaper can fall back instead.
             if (prestartedWallpaperMode === "external")
                 releasePrestartedWallpaper();
             externalRestartPending = false;
-            externalLaunchFailed = false;
+            externalLaunchFailed = true;
             externalProcess.running = false;
             if (!dynamicDesired && !dynamicProcess.running
                     && !prestartedWallpaperAdopted)
                 hideRestartCoverIfIdle();
             if (!dynamicProcess.running && !prestartedWallpaperAdopted)
                 dynamicActive = false;
-            // No command after full load. Keep cover if live mode is still the
-            // configured choice (missing UX entry) rather than flashing the
-            // default static asset; only true launch failure reveals static.
             externalSyncSettled = true;
-            if (configuredWallpaperMode === "external")
-                showRestartCover();
+            restartCoverVisible = false;
             return;
         }
 
@@ -1146,9 +1171,18 @@ PanelWindow {
         repeat: true
         running: root.prestartedWallpaperAdopted
         onTriggered: {
-            if (!root.prestartedWallpaperAdopted
-                    || root.prestartedRecordProcessMatches(root.prestartedWallpaperRecord))
+            if (!root.prestartedWallpaperAdopted)
                 return;
+            if (root.prestartedRecordProcessMatches(root.prestartedWallpaperRecord)) {
+                root.prestartedHealthMisses = 0;
+                return;
+            }
+            root.prestartedHealthMisses += 1;
+            // Require two consecutive misses (~10s) so a single /proc glitch
+            // cannot kill a healthy engine and leave a sticky cover.
+            if (root.prestartedHealthMisses < 2)
+                return;
+            root.prestartedHealthMisses = 0;
             Quickshell.execDetached({
                 command: ["rm", "-f", "--", root.prestartedWallpaperRecordPath],
                 workingDirectory: ""
@@ -1159,7 +1193,8 @@ PanelWindow {
             root.prestartedWallpaperMode = "";
             root.adoptedWallpaperCommand = "";
             root.dynamicActive = false;
-            root.showRestartCover();
+            // Prefer transparent yield + resync over a sticky opaque plate.
+            root.restartCoverVisible = false;
             Qt.callLater(function() {
                 root.syncDynamicProcess();
                 root.syncExternalProcess();

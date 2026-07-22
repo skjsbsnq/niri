@@ -149,8 +149,36 @@ class WallpaperIdleBudgetTests(unittest.TestCase):
         self.assertIn("!root.dynamicRestartPending", text)
         self.assertIn("!root.externalRestartPending", text)
         self.assertIn("root.restartCoverVisible = false", text)
-        # Valid prestart record reloads clear the sticky released flag.
-        self.assertIn("prestartedWallpaperReleased = false", text)
+        self.assertIn("prestartedHealthMisses", text)
+        # Empty external UX must not sticky-cover forever (black plate).
+        empty_path = re.search(
+            r"if \(externalCommand\.length === 0\) \{(.*?)\n        \}",
+            text,
+            re.S,
+        )
+        self.assertIsNotNone(empty_path)
+        empty_body = empty_path.group(1)
+        self.assertIn("externalLaunchFailed = true", empty_body)
+        self.assertIn("restartCoverVisible = false", empty_body)
+        self.assertNotIn("showRestartCover()", empty_body)
+        # Health false-negatives must not kill on a single miss / IO error.
+        health = re.search(
+            r"id: prestartedWallpaperHealthTimer(.*?)id: prestartStopTimer",
+            text,
+            re.S,
+        )
+        self.assertIsNotNone(health)
+        self.assertIn("prestartedHealthMisses", health.group(1))
+        match_fn = re.search(
+            r"function prestartedRecordProcessMatches\(record\) \{(.*?)\n    \}",
+            text,
+            re.S,
+        )
+        self.assertIsNotNone(match_fn)
+        self.assertIn("return true", match_fn.group(1))
+        # FPS budget skew must not break prestart adopt.
+        self.assertIn("function normalizeWallpaperCommandForMatch(", text)
+        self.assertIn("normalizeWallpaperCommandForMatch(recorded)", text)
 
     def test_live_wallpaper_startup_never_reveals_static_fallback(self) -> None:
         text = WALLPAPER.read_text(encoding="utf-8")

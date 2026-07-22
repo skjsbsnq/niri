@@ -193,9 +193,12 @@ class WallpaperIdleBudgetTests(unittest.TestCase):
         # failure, or intentional idle pause — never for mid-boot live gaps.
         self.assertIn("configuredWallpaperMode", text)
         self.assertIn("liveModeConfigured", text)
-        self.assertIn("liveBootCoverDesired", text)
+        self.assertIn("prestartLivePainting", text)
         self.assertIn("coverPlateVisible", text)
         self.assertIn("liveLaunchFailed", text)
+        # Permanent auto-boot cover was the black-screen regression: it stacked
+        # above linux-wallpaperengine and never cleared without adopt.
+        self.assertNotIn("liveBootCoverDesired", text)
         show_static = re.search(
             r"readonly property bool showStaticWallpaper:(.*?)"
             r"readonly property bool liveWallpaperVisible:",
@@ -208,23 +211,25 @@ class WallpaperIdleBudgetTests(unittest.TestCase):
         self.assertIn("liveLaunchFailed", body)
         self.assertIn("!liveWallpaperAllowed", body)
         self.assertIn("!coverPlateVisible", body)
-        # Cover plate must bind to coverPlateVisible (includes boot gap), not
-        # only the sticky restartCoverVisible latch.
+        self.assertIn("!prestartLivePainting", body)
+        # Cover is only the sticky restart latch — never a permanent boot plate.
+        cover_prop = re.search(
+            r"readonly property bool coverPlateVisible:(.*)",
+            text,
+        )
+        self.assertIsNotNone(cover_prop)
+        self.assertIn("restartCoverVisible", cover_prop.group(1))
+        self.assertNotIn("liveBootCoverDesired", cover_prop.group(1))
         cover = re.search(r"id: restartCover(.*?)// Live wallpapers", text, re.S)
         self.assertIsNotNone(cover)
         cover_body = cover.group(1)
         self.assertIn("root.coverPlateVisible", cover_body)
         self.assertIn("coverCapturePath", cover_body)
         self.assertNotIn("staticWallpaperSource()", cover_body)
-        # Show must be instantaneous: Behavior on opacity only when hiding.
-        self.assertIn("enabled: !root.coverPlateVisible", cover_body)
-        # Preload last engine frame (sync decode) so the first cover frame is
-        # not a blank dark plate over niri gray.
-        self.assertIn("asynchronous: false", cover_body)
-        self.assertIn("function coverCapturePath(", text)
-        self.assertIn("function coverCaptureOutputName(", text)
-        # Opaque layer surface while the cover is up — no transparent hole.
-        self.assertIn("color: coverPlateVisible", text)
+        # Layer must stay transparent while live paint is expected so the engine
+        # under tahoe-wallpaper remains visible.
+        self.assertIn('color: yieldToDynamicWallpaper ? "transparent"', text)
+        self.assertNotIn("color: coverPlateVisible", text)
         # No opacity fade of the static wallpaper plate over live — unmount.
         static_layer = re.search(r"id: staticLayer(.*?)// Intentional command", text, re.S)
         self.assertIsNotNone(static_layer)

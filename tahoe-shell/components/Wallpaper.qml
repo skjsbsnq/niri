@@ -119,26 +119,22 @@ PanelWindow {
     // never mount staticLayer.
     readonly property bool liveLaunchFailed: (configuredWallpaperMode === "dynamic" && dynamicLaunchFailed)
         || (configuredWallpaperMode === "external" && externalLaunchFailed)
-    // Capture plate over any gap before the live engine is considered active:
-    // settings mid-load, live mode cold-start, process starting (before the
-    // 1.6s ready latch), or intentional restart. Prefer this over transparent
-    // (compositor gray) or the default static asset. Bound into
-    // coverPlateVisible so the first frame is covered without waiting for a
-    // signal handler to set restartCoverVisible.
-    // Intentionally does NOT require !process.running — cold-start leaves the
-    // process running for up to liveWallpaperReadyTimer before dynamicActive
-    // flips, and that gap must stay covered.
-    readonly property bool liveBootCoverDesired: !nestedSession
-        && !dynamicActive
-        && !prestartedWallpaperAdopted
-        && !liveLaunchFailed
-        && liveWallpaperAllowed
-        && (!settingsReady || liveModeConfigured)
-    readonly property bool coverPlateVisible: restartCoverVisible || liveBootCoverDesired
+    // Prestart owns an independent background surface under tahoe-wallpaper.
+    // Treat a validated prestart record as live paint even before adopt settles,
+    // so we stay transparent and never plate an opaque cover over it forever.
+    readonly property bool prestartLivePainting: !!prestartedWallpaperRecord
+        && !prestartedWallpaperReleased
+        && !prestartedWallpaperStopPending
+    // Cover is ONLY the sticky latch set by showRestartCover() during intentional
+    // restarts. Do NOT auto-bind a permanent boot cover: tahoe-wallpaper stacks
+    // ABOVE linux-wallpaperengine in the Background layer, so a stuck opaque
+    // plate permanently blacks out the live engine (the 5f75b23 regression).
+    readonly property bool coverPlateVisible: restartCoverVisible
     readonly property bool showStaticWallpaper: settingsReady
         && !dynamicActive
         && !coverPlateVisible
         && !prestartedWallpaperAdopted
+        && !prestartLivePainting
         && !dynamicProcess.running
         && !externalProcess.running
         && !liveModePending
@@ -152,13 +148,13 @@ PanelWindow {
     readonly property bool liveWallpaperVisible: liveModeConfigured
         || dynamicActive
         || prestartedWallpaperAdopted
+        || prestartLivePainting
         || dynamicProcess.running
         || externalProcess.running
         || coverPlateVisible
         || liveModePending
     // Keep the background layer transparent whenever a live renderer is
-    // expected or a restart cover is up, so the compositor never composites
-    // the configured static image underneath a starting/restarting engine.
+    // expected, so the compositor can composite the engine under this plate.
     readonly property bool yieldToDynamicWallpaper: !settingsReady
         || dynamicActive
         || dynamicSuppressesStatic
@@ -166,6 +162,10 @@ PanelWindow {
         || liveModePending
         || coverPlateVisible
         || liveModeConfigured
+        || prestartLivePainting
+        || prestartedWallpaperAdopted
+        || dynamicProcess.running
+        || externalProcess.running
     property string externalCommand: ""
     property bool dynamicActive: false
     property bool dynamicRestartPending: false
@@ -204,13 +204,9 @@ PanelWindow {
     exclusionMode: ExclusionMode.Ignore
     WlrLayershell.layer: WlrLayer.Background
     WlrLayershell.namespace: "tahoe-wallpaper"
-    // Transparent only when the live engine is the intended paint (or static
-    // is showing its own plate). While the boot/restart cover is up, keep the
-    // layer surface opaque so a one-frame cover miss cannot fall through to
-    // niri's default gray clear color.
-    color: coverPlateVisible
-        ? "#1c1d20"
-        : (yieldToDynamicWallpaper ? "transparent" : "#1c1d20")
+    // Always transparent while live paint is expected. An opaque surface here
+    // stacks above linux-wallpaperengine and blacks out the desktop.
+    color: yieldToDynamicWallpaper ? "transparent" : "#1c1d20"
 
     function screenName() {
         if (!root.screen)
@@ -463,19 +459,24 @@ PanelWindow {
     }
 
     function showRestartCover() {
+        // Never plate over an already-painting live surface. tahoe-wallpaper
+        // stacks above linux-wallpaperengine; an opaque cover blacks it out.
+        if (dynamicActive || prestartedWallpaperAdopted || prestartLivePainting
+                || dynamicProcess.running || externalProcess.running)
+            return;
         restartCoverVisible = true;
     }
 
     function hideRestartCoverIfIdle() {
-        // Keep the capture plate up whenever live boot still needs a gap cover.
-        // Call sites that used to force-clear after settle must go through this
-        // so a just-settled external mode with a pending start does not flash.
-        // liveBootCoverDesired alone already keeps coverPlateVisible true; this
-        // only clears the sticky restartCoverVisible latch.
-        if (liveBootCoverDesired || prestartedWallpaperStopPending
-                || dynamicRestartPending || externalRestartPending
-                || dynamicProcess.running || externalProcess.running
-                || prestartedWallpaperAdopted)
+        // Anything that may already be painting under us → clear immediately.
+        if (dynamicActive || prestartedWallpaperAdopted || prestartLivePainting
+                || dynamicProcess.running || externalProcess.running) {
+            restartCoverVisible = false;
+            return;
+        }
+        // Keep only during intentional stop/restart with nothing painting yet.
+        if (prestartedWallpaperStopPending
+                || dynamicRestartPending || externalRestartPending)
             return;
         restartCoverVisible = false;
     }
@@ -1062,6 +1063,9 @@ PanelWindow {
         command: ["sh", "-lc", root.dynamicCommand]
         onStarted: {
             root.dynamicLaunchFailed = false;
+            // Drop any restart plate immediately so the engine surface under
+            // tahoe-wallpaper is not blacked out for the ready-timer duration.
+            root.restartCoverVisible = false;
             liveWallpaperReadyTimer.restart();
         }
         onRunningChanged: {
@@ -1076,7 +1080,7 @@ PanelWindow {
                 root.dynamicActive = false;
             }
             // Intentional restarts keep the cover; unexpected exit drops the latch so
-            // showStaticWallpaper (liveLaunchFailed) or liveBootCoverDesired can
+            // showStaticWallpaper (liveLaunchFailed) or a transparent yield can
             // take over instead of a permanent void or sticky plate.
             if (!root.dynamicRestartPending
                     && !externalProcess.running
@@ -1091,6 +1095,7 @@ PanelWindow {
         command: ["sh", "-lc", root.externalCommand]
         onStarted: {
             root.externalLaunchFailed = false;
+            root.restartCoverVisible = false;
             liveWallpaperReadyTimer.restart();
         }
         onRunningChanged: {

@@ -176,8 +176,45 @@ class WallpaperIdleBudgetTests(unittest.TestCase):
         self.assertIn("screenName().length === 0", external_suppression.group(1))
         self.assertIn("!prestartStateLoaded", external_suppression.group(1))
         self.assertIn("!dynamicLaunchFailed", dynamic_suppression.group(1))
+        # Binding-order race: settingsReady→externalDesired evaluates before
+        # onExternalDesiredChanged can refreshExternalCommand. Without a
+        # sync-settled gate, showStaticWallpaper is true for one frame and
+        # paints the default iridescence over the live engine.
+        self.assertIn("!externalSyncSettled", external_suppression.group(1))
+        self.assertIn("!dynamicSyncSettled", dynamic_suppression.group(1))
+        self.assertIn("property bool externalSyncSettled: false", text)
+        self.assertIn("property bool dynamicSyncSettled: false", text)
+        self.assertIn("externalSyncSettled = false", text)
+        self.assertIn("dynamicSyncSettled = false", text)
+        self.assertIn("externalSyncSettled = true", text)
+        self.assertIn("dynamicSyncSettled = true", text)
         self.assertIn("liveModePending", text)
-        self.assertIn("&& !liveModePending", text)
+        # Hard policy: static plate only for explicit static mode, live launch
+        # failure, or intentional idle pause — never for mid-boot live gaps.
+        self.assertIn("configuredWallpaperMode", text)
+        self.assertIn("liveModeConfigured", text)
+        self.assertIn("liveBootCoverDesired", text)
+        self.assertIn("coverPlateVisible", text)
+        self.assertIn("liveLaunchFailed", text)
+        show_static = re.search(
+            r"readonly property bool showStaticWallpaper:(.*?)"
+            r"readonly property bool liveWallpaperVisible:",
+            text,
+            re.S,
+        )
+        self.assertIsNotNone(show_static)
+        body = show_static.group(1)
+        self.assertIn("configuredWallpaperMode === \"static\"", body)
+        self.assertIn("liveLaunchFailed", body)
+        self.assertIn("!liveWallpaperAllowed", body)
+        self.assertIn("!coverPlateVisible", body)
+        # Cover plate must bind to coverPlateVisible (includes boot gap), not
+        # only the sticky restartCoverVisible latch.
+        cover = re.search(r"id: restartCover(.*?)// Live wallpapers", text, re.S)
+        self.assertIsNotNone(cover)
+        self.assertIn("root.coverPlateVisible", cover.group(1))
+        self.assertIn("lockWallpaperCapturePath", cover.group(1))
+        self.assertNotIn("staticWallpaperSource()", cover.group(1))
         # No opacity fade of the static wallpaper plate over live — unmount.
         static_layer = re.search(r"id: staticLayer(.*?)// Intentional command", text, re.S)
         self.assertIsNotNone(static_layer)

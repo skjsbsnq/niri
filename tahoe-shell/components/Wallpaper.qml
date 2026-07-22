@@ -43,9 +43,17 @@ PanelWindow {
     // when enabled, while the renderer and its layer surface remain alive either way.
     readonly property bool liveWallpaperAllowed: !sessionIdle || !wallpaperPauseWhenIdle
 
+    // Explicit mode string used by visibility policy. Empty while settings are
+    // still loading so we never treat the JsonAdapter default ("static") as a
+    // committed choice and flash iridescence before desktop-settings.json applies.
+    readonly property string configuredWallpaperMode: settingsReady
+        ? String(settingsService.wallpaperMode || "static")
+        : ""
+    readonly property bool liveModeConfigured: configuredWallpaperMode === "dynamic"
+        || configuredWallpaperMode === "external"
     readonly property bool dynamicDesired: settingsReady
         && !nestedSession
-        && settingsService.wallpaperMode === "dynamic"
+        && configuredWallpaperMode === "dynamic"
         && settingsService.effectiveDynamicWallpaperCommand.length > 0
         && liveWallpaperAllowed
     readonly property string dynamicCommand: dynamicDesired
@@ -53,25 +61,36 @@ PanelWindow {
         : ""
     readonly property bool externalDesired: settingsReady
         && !nestedSession
-        && settingsService.wallpaperMode === "external"
+        && configuredWallpaperMode === "external"
         && liveWallpaperAllowed
     readonly property bool dynamicSuppressesStatic: dynamicDesired
         && !dynamicLaunchFailed
+        // settingsReady→dynamicDesired can evaluate before the first sync runs.
+        // Keep static suppressed until syncDynamicProcess has settled a decision.
+        && (!dynamicSyncSettled || dynamicCommand.length > 0
+            || dynamicProcess.running || dynamicRestartPending
+            || prestartedWallpaperAdopted || prestartedWallpaperStopPending
+            || !!prestartedWallpaperRecord || screenName().length === 0)
     // Keep static suppressed for the whole live boot path: prestart may already
     // be painting while screen/UX command/prestart records are still resolving.
-    // The old condition went false for one frame when externalStateLoaded flipped
-    // true with an empty command (no screen yet) → default static flashed over
-    // the live engine, then faded out over 160ms.
+    // Critical race: when settingsReady flips wallpaperMode to external, QML
+    // re-evaluates showStaticWallpaper BEFORE onExternalDesiredChanged can call
+    // refreshExternalCommand(). With prestart/UX already "loaded" empty from
+    // Component.onCompleted, every previous guard was false for one frame and
+    // the default static image (iridescence) painted over the desktop.
     readonly property bool externalSuppressesStatic: externalDesired
         && !externalLaunchFailed
         && (
-            !externalStateLoaded
+            !externalSyncSettled
+            || !externalStateLoaded
             || !prestartStateLoaded
             || screenName().length === 0
             || externalCommand.length > 0
             || prestartedWallpaperAdopted
             || prestartedWallpaperStopPending
             || !!prestartedWallpaperRecord
+            || externalProcess.running
+            || externalRestartPending
         )
     // Live modes that are still starting also suppress static even before
     // dynamicDesired/externalDesired fully evaluate (settings mid-load).
@@ -81,25 +100,62 @@ PanelWindow {
         && !dynamicActive
         && !restartCoverVisible
         && (
-            (settingsService.wallpaperMode === "external" && !externalLaunchFailed
-                && (!externalStateLoaded || !prestartStateLoaded
+            (configuredWallpaperMode === "external" && !externalLaunchFailed
+                && (!externalSyncSettled || !externalStateLoaded || !prestartStateLoaded
                     || screenName().length === 0 || !!prestartedWallpaperRecord
                     || prestartedWallpaperAdopted || prestartedWallpaperStopPending
                     || externalCommand.length > 0
                     || externalProcess.running || externalRestartPending))
-            || (settingsService.wallpaperMode === "dynamic" && !dynamicLaunchFailed
-                && (screenName().length === 0 || dynamicCommand.length > 0
+            || (configuredWallpaperMode === "dynamic" && !dynamicLaunchFailed
+                && (!dynamicSyncSettled || screenName().length === 0
+                    || dynamicCommand.length > 0
                     || !!prestartedWallpaperRecord || prestartedWallpaperAdopted
                     || prestartedWallpaperStopPending
                     || dynamicProcess.running || dynamicRestartPending))
         )
+    // Hard policy: the apps default iridescence plate is only for explicit
+    // static mode, intentional live-idle pause, or a live mode that has fully
+    // failed. While settings are unknown / live is starting / live is running,
+    // never mount staticLayer.
+    readonly property bool liveLaunchFailed: (configuredWallpaperMode === "dynamic" && dynamicLaunchFailed)
+        || (configuredWallpaperMode === "external" && externalLaunchFailed)
+    // Capture plate over any gap before the live engine is considered active:
+    // settings mid-load, live mode cold-start, process starting (before the
+    // 1.6s ready latch), or intentional restart. Prefer this over transparent
+    // (compositor gray) or the default static asset. Bound into
+    // coverPlateVisible so the first frame is covered without waiting for a
+    // signal handler to set restartCoverVisible.
+    // Intentionally does NOT require !process.running — cold-start leaves the
+    // process running for up to liveWallpaperReadyTimer before dynamicActive
+    // flips, and that gap must stay covered.
+    readonly property bool liveBootCoverDesired: !nestedSession
+        && !dynamicActive
+        && !prestartedWallpaperAdopted
+        && !liveLaunchFailed
+        && liveWallpaperAllowed
+        && (!settingsReady || liveModeConfigured)
+    readonly property bool coverPlateVisible: restartCoverVisible || liveBootCoverDesired
     readonly property bool showStaticWallpaper: settingsReady
         && !dynamicActive
+        && !coverPlateVisible
+        && !prestartedWallpaperAdopted
+        && !dynamicProcess.running
+        && !externalProcess.running
+        && !liveModePending
         && !dynamicSuppressesStatic
         && !externalSuppressesStatic
-        && !liveModePending
-        && !restartCoverVisible
-    readonly property bool liveWallpaperVisible: settingsReady && !showStaticWallpaper
+        && (
+            configuredWallpaperMode === "static"
+            || liveLaunchFailed
+            || (liveModeConfigured && !liveWallpaperAllowed)
+        )
+    readonly property bool liveWallpaperVisible: liveModeConfigured
+        || dynamicActive
+        || prestartedWallpaperAdopted
+        || dynamicProcess.running
+        || externalProcess.running
+        || coverPlateVisible
+        || liveModePending
     // Keep the background layer transparent whenever a live renderer is
     // expected or a restart cover is up, so the compositor never composites
     // the configured static image underneath a starting/restarting engine.
@@ -108,7 +164,8 @@ PanelWindow {
         || dynamicSuppressesStatic
         || externalSuppressesStatic
         || liveModePending
-        || restartCoverVisible
+        || coverPlateVisible
+        || liveModeConfigured
     property string externalCommand: ""
     property bool dynamicActive: false
     property bool dynamicRestartPending: false
@@ -116,6 +173,11 @@ PanelWindow {
     property bool dynamicLaunchFailed: false
     property bool externalLaunchFailed: false
     property bool externalStateLoaded: false
+    // Set true only after the first completed sync pass for each live mode so
+    // showStaticWallpaper cannot race ahead of refreshExternalCommand /
+    // syncDynamicProcess when settingsReady flips wallpaperMode to live.
+    property bool externalSyncSettled: false
+    property bool dynamicSyncSettled: false
     property bool completed: false
     property bool restartCoverVisible: false
     property bool prestartStateLoaded: false
@@ -377,6 +439,20 @@ PanelWindow {
         restartCoverVisible = true;
     }
 
+    function hideRestartCoverIfIdle() {
+        // Keep the capture plate up whenever live boot still needs a gap cover.
+        // Call sites that used to force-clear after settle must go through this
+        // so a just-settled external mode with a pending start does not flash.
+        // liveBootCoverDesired alone already keeps coverPlateVisible true; this
+        // only clears the sticky restartCoverVisible latch.
+        if (liveBootCoverDesired || prestartedWallpaperStopPending
+                || dynamicRestartPending || externalRestartPending
+                || dynamicProcess.running || externalProcess.running
+                || prestartedWallpaperAdopted)
+            return;
+        restartCoverVisible = false;
+    }
+
     function prestartedRecordProcessMatches(record) {
         if (!record)
             return false;
@@ -546,9 +622,13 @@ PanelWindow {
             dynamicProcess.running = false;
             if (!externalDesired && !externalProcess.running
                     && !prestartedWallpaperAdopted)
-                restartCoverVisible = false;
+                hideRestartCoverIfIdle();
             if (!externalProcess.running && !prestartedWallpaperAdopted)
                 dynamicActive = false;
+            // Stay unsettled while still wanting dynamic (empty command / mid
+            // load). When fully off dynamic, clear settled so the next enter
+            // re-suppresses static for the first binding pass.
+            dynamicSyncSettled = false;
             return;
         }
 
@@ -585,6 +665,7 @@ PanelWindow {
 
         if (tryAdoptPrestartedWallpaper("dynamic")) {
             dynamicLaunchFailed = false;
+            dynamicSyncSettled = true;
             return;
         }
 
@@ -599,6 +680,7 @@ PanelWindow {
         dynamicLaunchFailed = false;
         showRestartCover();
         dynamicProcess.running = true;
+        dynamicSyncSettled = true;
     }
 
     function syncExternalProcess() {
@@ -615,9 +697,12 @@ PanelWindow {
             externalProcess.running = false;
             if (!dynamicDesired && !dynamicProcess.running
                     && !prestartedWallpaperAdopted)
-                restartCoverVisible = false;
+                hideRestartCoverIfIdle();
             if (!dynamicProcess.running && !prestartedWallpaperAdopted)
                 dynamicActive = false;
+            // Cleared so the next external enter suppresses static for the
+            // first binding pass (before refreshExternalCommand runs).
+            externalSyncSettled = false;
             return;
         }
 
@@ -630,6 +715,8 @@ PanelWindow {
             if (prestartedWallpaperRecord && !prestartedWallpaperAdopted
                     && tryAdoptPrestartedWallpaper("external")) {
                 externalLaunchFailed = false;
+                externalSyncSettled = true;
+                hideRestartCoverIfIdle();
                 return;
             }
             if (prestartedWallpaperAdopted && prestartedWallpaperMode === "external")
@@ -644,9 +731,15 @@ PanelWindow {
             externalProcess.running = false;
             if (!dynamicDesired && !dynamicProcess.running
                     && !prestartedWallpaperAdopted)
-                restartCoverVisible = false;
+                hideRestartCoverIfIdle();
             if (!dynamicProcess.running && !prestartedWallpaperAdopted)
                 dynamicActive = false;
+            // No command after full load. Keep cover if live mode is still the
+            // configured choice (missing UX entry) rather than flashing the
+            // default static asset; only true launch failure reveals static.
+            externalSyncSettled = true;
+            if (configuredWallpaperMode === "external")
+                showRestartCover();
             return;
         }
 
@@ -686,6 +779,7 @@ PanelWindow {
 
         if (tryAdoptPrestartedWallpaper("external")) {
             externalLaunchFailed = false;
+            externalSyncSettled = true;
             return;
         }
 
@@ -700,10 +794,15 @@ PanelWindow {
         externalLaunchFailed = false;
         showRestartCover();
         externalProcess.running = true;
+        externalSyncSettled = true;
     }
 
     onDynamicDesiredChanged: {
         dynamicLaunchFailed = false;
+        // Settings just entered (or left) dynamic mode. Force a fresh settle
+        // so the one-frame race against showStaticWallpaper cannot open.
+        if (dynamicDesired)
+            dynamicSyncSettled = false;
         syncDynamicProcess();
     }
     onDynamicCommandChanged: {
@@ -712,6 +811,8 @@ PanelWindow {
     }
     onExternalDesiredChanged: {
         externalLaunchFailed = false;
+        if (externalDesired)
+            externalSyncSettled = false;
         refreshExternalCommand();
         syncExternalProcess();
     }
@@ -851,8 +952,11 @@ PanelWindow {
     Item {
         id: restartCover
         anchors.fill: parent
+        // coverPlateVisible includes liveBootCoverDesired so the capture plate
+        // is up on the first frame of a live/unknown boot, not only after a
+        // signal handler sets restartCoverVisible.
         visible: opacity > 0.01
-        opacity: root.restartCoverVisible ? 1 : 0
+        opacity: root.coverPlateVisible ? 1 : 0
 
         Behavior on opacity {
             NumberAnimation {
@@ -869,7 +973,7 @@ PanelWindow {
         Image {
             id: restartCoverCapture
             anchors.fill: parent
-            source: root.restartCoverVisible || restartCover.opacity > 0.01
+            source: root.coverPlateVisible || restartCover.opacity > 0.01
                 ? root.lockWallpaperCapturePath(root.screenName()) : ""
             fillMode: Image.PreserveAspectCrop
             asynchronous: true
@@ -933,12 +1037,13 @@ PanelWindow {
                 liveWallpaperReadyTimer.stop();
                 root.dynamicActive = false;
             }
-            // Intentional restarts keep the cover; unexpected exit must drop it
-            // so showStaticWallpaper can fall back instead of a permanent void.
+            // Intentional restarts keep the cover; unexpected exit drops the latch so
+            // showStaticWallpaper (liveLaunchFailed) or liveBootCoverDesired can
+            // take over instead of a permanent void or sticky plate.
             if (!root.dynamicRestartPending
                     && !externalProcess.running
                     && !root.prestartedWallpaperAdopted)
-                root.restartCoverVisible = false;
+                root.hideRestartCoverIfIdle();
         }
     }
 
@@ -964,7 +1069,7 @@ PanelWindow {
             if (!root.externalRestartPending
                     && !dynamicProcess.running
                     && !root.prestartedWallpaperAdopted)
-                root.restartCoverVisible = false;
+                root.hideRestartCoverIfIdle();
         }
     }
 

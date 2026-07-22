@@ -143,7 +143,7 @@ class WallpaperIdleBudgetTests(unittest.TestCase):
         cover = re.search(r"id: restartCover(.*?)// Live wallpapers", text, re.S)
         self.assertIsNotNone(cover)
         self.assertNotIn("staticWallpaperSource()", cover.group(1))
-        self.assertIn("lockWallpaperCapturePath", cover.group(1))
+        self.assertIn("coverCapturePath", cover.group(1))
         self.assertIn("&& !restartCoverVisible", text)
         # Unexpected process exit must drop the cover so static can fall back.
         self.assertIn("!root.dynamicRestartPending", text)
@@ -212,9 +212,19 @@ class WallpaperIdleBudgetTests(unittest.TestCase):
         # only the sticky restartCoverVisible latch.
         cover = re.search(r"id: restartCover(.*?)// Live wallpapers", text, re.S)
         self.assertIsNotNone(cover)
-        self.assertIn("root.coverPlateVisible", cover.group(1))
-        self.assertIn("lockWallpaperCapturePath", cover.group(1))
-        self.assertNotIn("staticWallpaperSource()", cover.group(1))
+        cover_body = cover.group(1)
+        self.assertIn("root.coverPlateVisible", cover_body)
+        self.assertIn("coverCapturePath", cover_body)
+        self.assertNotIn("staticWallpaperSource()", cover_body)
+        # Show must be instantaneous: Behavior on opacity only when hiding.
+        self.assertIn("enabled: !root.coverPlateVisible", cover_body)
+        # Preload last engine frame (sync decode) so the first cover frame is
+        # not a blank dark plate over niri gray.
+        self.assertIn("asynchronous: false", cover_body)
+        self.assertIn("function coverCapturePath(", text)
+        self.assertIn("function coverCaptureOutputName(", text)
+        # Opaque layer surface while the cover is up — no transparent hole.
+        self.assertIn("color: coverPlateVisible", text)
         # No opacity fade of the static wallpaper plate over live — unmount.
         static_layer = re.search(r"id: staticLayer(.*?)// Intentional command", text, re.S)
         self.assertIsNotNone(static_layer)

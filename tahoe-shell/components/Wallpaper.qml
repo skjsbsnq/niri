@@ -204,7 +204,13 @@ PanelWindow {
     exclusionMode: ExclusionMode.Ignore
     WlrLayershell.layer: WlrLayer.Background
     WlrLayershell.namespace: "tahoe-wallpaper"
-    color: yieldToDynamicWallpaper ? "transparent" : "#1c1d20"
+    // Transparent only when the live engine is the intended paint (or static
+    // is showing its own plate). While the boot/restart cover is up, keep the
+    // layer surface opaque so a one-frame cover miss cannot fall through to
+    // niri's default gray clear color.
+    color: coverPlateVisible
+        ? "#1c1d20"
+        : (yieldToDynamicWallpaper ? "transparent" : "#1c1d20")
 
     function screenName() {
         if (!root.screen)
@@ -237,6 +243,27 @@ PanelWindow {
 
     function lockWallpaperCapturePath(output) {
         return lockWallpaperCaptureDir + "/" + safeOutputName(output) + ".png";
+    }
+
+    // Prefer the PanelWindow's bound screen; fall back to the first announced
+    // output so boot cover can load the real capture (eDP-2.png) before the
+    // window's screen property is set. An empty name used to resolve to
+    // default.png which does not exist → only the dark fill flashed.
+    function coverCaptureOutputName() {
+        var name = screenName();
+        if (name.length > 0)
+            return name;
+        if (Quickshell.screens && Quickshell.screens.length > 0) {
+            name = String(Quickshell.screens[0].name || "").trim();
+            if (name.length > 0)
+                return name;
+        }
+        return "";
+    }
+
+    function coverCapturePath() {
+        var name = coverCaptureOutputName();
+        return name.length > 0 ? lockWallpaperCapturePath(name) : "";
     }
 
     function isDirectWallpaperEngineCommand(command) {
@@ -947,18 +974,22 @@ PanelWindow {
     // Intentional command changes (including the fullscreen-pause setting) require a
     // renderer restart. Hold the renderer's own full-size captured frame over the gap
     // so the desktop never falls through to a default image or an empty background.
-    // Prefer the live capture only; the configured static path is a last-resort dim
-    // underlay so unlock/restart never flashes a mismatched default wallpaper.
+    // Prefer the live capture only. Never fade the cover *in* — the previous
+    // Behavior on opacity left opacity at 0 for ~120ms while the PanelWindow was
+    // transparent, so niri's default gray (or the dark fill) flashed after the
+    // iridescence flash was blocked.
     Item {
         id: restartCover
         anchors.fill: parent
-        // coverPlateVisible includes liveBootCoverDesired so the capture plate
-        // is up on the first frame of a live/unknown boot, not only after a
-        // signal handler sets restartCoverVisible.
-        visible: opacity > 0.01
+        // Mount immediately when the boot gap needs a plate; keep mounted during
+        // the hide fade so the engine can composite underneath without a hole.
+        visible: root.coverPlateVisible || opacity > 0.01
         opacity: root.coverPlateVisible ? 1 : 0
 
+        // Fade out only. Showing must be instantaneous so the first live-boot
+        // frame is never transparent over niri's clear color.
         Behavior on opacity {
+            enabled: !root.coverPlateVisible
             NumberAnimation {
                 duration: 120
                 easing.type: Motion.emphasizedDecel
@@ -967,17 +998,24 @@ PanelWindow {
 
         Rectangle {
             anchors.fill: parent
+            // Only visible while the capture is missing/decoding. Once the
+            // engine frame is ready the Image fully covers this.
             color: "#1c1d20"
+            visible: restartCoverCapture.status !== Image.Ready
         }
 
         Image {
             id: restartCoverCapture
             anchors.fill: parent
-            source: root.coverPlateVisible || restartCover.opacity > 0.01
-                ? root.lockWallpaperCapturePath(root.screenName()) : ""
+            // Always preload the last engine frame while the screen is known so
+            // the boot cover does not open on a blank dark plate. Path falls
+            // back to the first announced output when PanelWindow.screen is late.
+            source: root.coverCapturePath()
             fillMode: Image.PreserveAspectCrop
-            asynchronous: true
-            cache: false
+            // Sync decode on the shell thread is acceptable here: the capture is
+            // a single full-size PNG already on disk from the previous session.
+            asynchronous: false
+            cache: true
             smooth: true
             mipmap: false
         }

@@ -12,6 +12,7 @@ Item {
     property var appsService
     property var settingsService
     property var dockWindow
+    property var dockScreen: dockWindow && dockWindow.screen !== undefined ? dockWindow.screen : null
     property var dockSurfaceItem
     property real dockSlideOffset: 0
     // See Dock.qml useSpring — forwarded so the bounce down leg can use the
@@ -72,8 +73,11 @@ Item {
         );
     }
 
-    function updateDockRectangle() {
-        if (!root.dockWindow || !root.windowsService || !root.windowModel)
+    function updateDockRectangle(forcePublish) {
+        if (!root.dockWindow || !root.windowsService || !root.windowsService.submitDockRectangle)
+            return;
+        var toplevel = root.windowModel ? root.windowModel.toplevel : null;
+        if (!toplevel)
             return;
 
         // Report the visible preview at its stable, fully revealed Dock
@@ -86,21 +90,27 @@ Item {
         var top = Math.floor(Math.min(topLeft.y, bottomRight.y) - root.dockSlideOffset + root.bounceOffset);
         var right = Math.ceil(Math.max(topLeft.x, bottomRight.x));
         var bottom = Math.ceil(Math.max(topLeft.y, bottomRight.y) - root.dockSlideOffset + root.bounceOffset);
-        root.windowsService.setRectangle(
-            root.windowModel,
+        root.windowsService.submitDockRectangle(
+            toplevel,
             root.dockWindow,
+            root.dockScreen,
             left,
             top,
             Math.max(1, right - left),
-            Math.max(1, bottom - top)
+            Math.max(1, bottom - top),
+            { "force": !!forcePublish }
         );
+    }
+
+    function scheduleDockRectangleUpdate() {
+        dockRectangleRefresh.restart();
     }
 
     function restoreWindow() {
         if (!root.windowModel || !root.windowsService)
             return;
 
-        root.updateDockRectangle();
+        root.updateDockRectangle(true);
         root.windowsService.restore(root.windowModel);
         root.activated(root.windowModel);
     }
@@ -131,15 +141,43 @@ Item {
         }
     }
 
-    onWindowModelChanged: scheduleThumbnailRefresh()
+    onWindowModelChanged: {
+        scheduleThumbnailRefresh();
+        scheduleDockRectangleUpdate();
+    }
     onThumbnailProviderChanged: scheduleThumbnailRefresh()
-    Component.onCompleted: scheduleThumbnailRefresh()
+    onDockWindowChanged: scheduleDockRectangleUpdate()
+    onDockScreenChanged: scheduleDockRectangleUpdate()
+    onXChanged: scheduleDockRectangleUpdate()
+    onYChanged: scheduleDockRectangleUpdate()
+    onWidthChanged: scheduleDockRectangleUpdate()
+    onHeightChanged: scheduleDockRectangleUpdate()
+    onDockSlideOffsetChanged: scheduleDockRectangleUpdate()
+    onBounceOffsetChanged: scheduleDockRectangleUpdate()
+    Component.onCompleted: {
+        scheduleThumbnailRefresh();
+        scheduleDockRectangleUpdate();
+    }
+
+    Connections {
+        target: root.windowModel && root.windowModel.toplevel ? root.windowModel.toplevel : null
+        function onScreensChanged() {
+            root.scheduleDockRectangleUpdate();
+        }
+    }
 
     Timer {
         id: refreshTimer
         interval: 40
         repeat: false
         onTriggered: root.refreshThumbnail()
+    }
+
+    Timer {
+        id: dockRectangleRefresh
+        interval: 0
+        repeat: false
+        onTriggered: root.updateDockRectangle(false)
     }
 
     Rectangle {

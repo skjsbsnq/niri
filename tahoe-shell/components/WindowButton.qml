@@ -30,6 +30,8 @@ Item {
     property real pressScale: Motion.pressScaleFor(settingsService, windowMouse.pressed)
     property real bounceOffset: 0
     property var dockWindow
+    // QuickshellScreenInfo for this Dock instance; ownership uses handle.screens.
+    property var dockScreen: dockWindow && dockWindow.screen !== undefined ? dockWindow.screen : null
     property var dockSurfaceItem
     property real dockSlideOffset: 0
     property real dockFullscreenOffset: 0
@@ -100,7 +102,11 @@ Item {
         // a still-unmapped fullscreen Dock (compositor has no layer surface).
         if (forcePublish && root.dockFullscreenActive)
             return;
-        if (!root.windowModel && !root.toplevel)
+        // R04: always key by the actual wlr handle. Do not fall back to a bare
+        // setRectangle path that skips current-screen ownership.
+        if (!root.toplevel)
+            return;
+        if (!root.windowsService || !root.windowsService.submitDockRectangle)
             return;
 
         // The foreign-toplevel hint is the icon itself, not this delegate's
@@ -115,18 +121,16 @@ Item {
         var bottom = Math.ceil(Math.max(topLeft.y, bottomRight.y) - root.dockSlideOffset - root.dockFullscreenOffset);
         var targetWidth = Math.max(1, right - left);
         var targetHeight = Math.max(1, bottom - top);
-        if (root.windowsService && root.windowModel) {
-            root.windowsService.setRectangle(
-                root.windowModel,
-                root.dockWindow,
-                left,
-                top,
-                targetWidth,
-                targetHeight
-            );
-        } else if (root.toplevel && root.toplevel.setRectangle) {
-            root.toplevel.setRectangle(root.dockWindow, Qt.rect(left, top, targetWidth, targetHeight));
-        }
+        root.windowsService.submitDockRectangle(
+            root.toplevel,
+            root.dockWindow,
+            root.dockScreen,
+            left,
+            top,
+            targetWidth,
+            targetHeight,
+            { "force": !!forcePublish }
+        );
     }
 
     function scheduleDockRectangleUpdate() {
@@ -182,10 +186,15 @@ Item {
     onHeightChanged: scheduleDockRectangleUpdate()
     onIconSizeChanged: scheduleDockRectangleUpdate()
     onDockWindowChanged: scheduleDockRectangleUpdate()
+    onDockScreenChanged: scheduleDockRectangleUpdate()
     onWindowModelChanged: scheduleDockRectangleUpdate()
     onToplevelChanged: scheduleDockRectangleUpdate()
     onDockSceneOffsetXChanged: scheduleDockRectangleUpdate()
     onDockSceneOffsetYChanged: scheduleDockRectangleUpdate()
+    // F06: visual geometry (mag/push/bounce) must refresh the last-hint, not only slot layout.
+    onMagnificationChanged: scheduleDockRectangleUpdate()
+    onPushXChanged: scheduleDockRectangleUpdate()
+    onBounceOffsetChanged: scheduleDockRectangleUpdate()
     // Offset still animates after fullscreen ends; keep coordinates fresh for
     // minimize targets. While fullscreenActive, schedule is blocked above.
     onDockFullscreenOffsetChanged: scheduleDockRectangleUpdate()
@@ -193,6 +202,14 @@ Item {
     onDockFullscreenActiveChanged: {
         if (!root.dockFullscreenActive)
             scheduleDockRectangleUpdate();
+    }
+
+    // Handle output enter/leave: only the current-screen Dock may publish.
+    Connections {
+        target: root.toplevel
+        function onScreensChanged() {
+            root.scheduleDockRectangleUpdate();
+        }
     }
     // Mag/push are bound to targets; Behavior alone retargets. Do NOT also
     // assign in on*TargetChanged — Qt logs "another interceptor unsupported"

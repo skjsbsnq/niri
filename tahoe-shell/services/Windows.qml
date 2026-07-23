@@ -6,6 +6,7 @@ import Quickshell.Io
 import Quickshell.Wayland
 import Quickshell.WindowManager
 import "windows/WindowModel.js" as WindowModel
+import "windows/DockRectanglePublisher.js" as DockRectanglePublisher
 
 // Unified niri window model.
 //
@@ -78,6 +79,13 @@ Item {
     property var recentWindowList: []
     property var focusedWindow: null
     property bool layoutPatchPending: false
+    // R04: frame-coalesced last-hint candidates keyed by wlr Toplevel identity.
+    property var dockRectanglePending: ({})
+    property bool dockRectangleFlushScheduled: false
+    // Observable counters for tests / diagnostics (fail-closed ownership).
+    property int dockRectanglePublishCount: 0
+    property int dockRectangleRejectCount: 0
+    property string dockRectangleLastRejectReason: ""
 
     readonly property bool ipcAvailable: available
     readonly property string ipcError: lastError
@@ -318,14 +326,90 @@ Item {
         ]);
     }
 
-    function setRectangle(idOrWindow, sourceWindow, x, y, width, height) {
-        var window = windowFromIdOrObject(idOrWindow);
-        if (!window || !window.toplevel || !window.toplevel.setRectangle)
-            return;
+    /**
+     * R04 production path: submit a Dock rectangle candidate for one wlr handle.
+     * Ownership is handle.screens (exactly one, matching dockScreen). Geometry is
+     * frame-coalesced unless options.force is true (minimize/restore click).
+     *
+     * @param toplevel actual wlr Toplevel handle (not IPC id)
+     * @param sourceWindow PanelWindow / layer surface owner for set_rectangle
+     * @param dockScreen this Dock's QuickshellScreenInfo
+     */
+    function submitDockRectangle(toplevel, sourceWindow, dockScreen, x, y, width, height, options) {
+        var force = !!(options && options.force);
+        var key = DockRectanglePublisher.toplevelObjectId(toplevel);
+        var existing = key.length > 0 ? root.dockRectanglePending[key] : null;
+        var decision = DockRectanglePublisher.evaluateCandidate(existing, {
+            "toplevel": toplevel,
+            "sourceWindow": sourceWindow,
+            "dockScreen": dockScreen,
+            "rect": { "x": x, "y": y, "width": width, "height": height },
+            "force": force
+        });
 
+        if (!decision.accept) {
+            root.dockRectangleRejectCount += 1;
+            root.dockRectangleLastRejectReason = String(decision.reason || "");
+            return false;
+        }
+
+        var pending = Object.assign({}, root.dockRectanglePending);
+        pending[decision.entry.key] = decision.entry;
+        root.dockRectanglePending = pending;
+
+        if (force)
+            root.flushDockRectanglePending();
+        else
+            root.scheduleDockRectangleFlush();
+        return true;
+    }
+
+    function scheduleDockRectangleFlush() {
+        if (root.dockRectangleFlushScheduled)
+            return;
+        root.dockRectangleFlushScheduled = true;
+        Qt.callLater(function() {
+            root.dockRectangleFlushScheduled = false;
+            root.flushDockRectanglePending();
+        });
+    }
+
+    function flushDockRectanglePending() {
+        var pending = root.dockRectanglePending;
+        root.dockRectanglePending = ({});
+        for (var key in pending) {
+            if (!Object.prototype.hasOwnProperty.call(pending, key))
+                continue;
+            var entry = pending[key];
+            if (!DockRectanglePublisher.canPublish(entry))
+                continue;
+            // Re-check ownership at flush: output enter/leave may have changed.
+            var ownership = DockRectanglePublisher.currentScreenOwnership(
+                entry.toplevel,
+                entry.dockScreen
+            );
+            if (!ownership.ok) {
+                root.dockRectangleRejectCount += 1;
+                root.dockRectangleLastRejectReason = String(ownership.reason || "");
+                continue;
+            }
+            var r = entry.rect;
+            entry.toplevel.setRectangle(
+                entry.sourceWindow,
+                Qt.rect(r.x, r.y, r.width, r.height)
+            );
+            root.dockRectanglePublishCount += 1;
+        }
+    }
+
+    /**
+     * Compatibility entry used by tests and any residual callers.
+     * Resolves the wlr handle from the window model and uses sourceWindow.screen
+     * as the Dock screen. All production geometry still goes through the publisher.
+     */
+    function setRectangle(idOrWindow, sourceWindow, x, y, width, height) {
         // Support the documented shape setRectangle(id, x, y, w, h) as a
-        // no-source fallback, and the Quickshell-required shape
-        // setRectangle(id, panelWindow, x, y, w, h) used by Dock/WindowButton.
+        // no-source fallback — still cannot publish without a source layer.
         if (arguments.length === 5) {
             height = width;
             width = y;
@@ -337,9 +421,26 @@ Item {
         if (!sourceWindow)
             return;
 
-        window.toplevel.setRectangle(
+        var toplevel = null;
+        if (idOrWindow && idOrWindow.setRectangle)
+            toplevel = idOrWindow;
+        else {
+            var window = windowFromIdOrObject(idOrWindow);
+            toplevel = window ? window.toplevel : null;
+        }
+        if (!toplevel || !toplevel.setRectangle)
+            return;
+
+        var dockScreen = sourceWindow.screen !== undefined ? sourceWindow.screen : null;
+        root.submitDockRectangle(
+            toplevel,
             sourceWindow,
-            Qt.rect(Math.round(x), Math.round(y), Math.round(width), Math.round(height))
+            dockScreen,
+            x,
+            y,
+            width,
+            height,
+            { "force": true }
         );
     }
 

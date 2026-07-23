@@ -342,6 +342,10 @@ class DockRestoreRectangleTests(unittest.TestCase):
         self.assertNotIn("root.mapToItem(null, 0, 0)", rectangle)
 
         assert_in_order(self, restore, "updateDockRectangle(true)", "windowsService.restore")
+        self.assertIn("submitDockRectangle", rectangle)
+        self.assertIn("onMagnificationChanged: scheduleDockRectangleUpdate()", text)
+        self.assertIn("onPushXChanged: scheduleDockRectangleUpdate()", text)
+        self.assertIn("onBounceOffsetChanged: scheduleDockRectangleUpdate()", text)
         self.assertEqual(clicked.count("root.restoreOrActivate()"), 1)
         self.assertLess(clicked.index("root.restoreOrActivate()"), clicked.rfind("root.bounce()"))
 
@@ -381,7 +385,9 @@ class DockRestoreRectangleTests(unittest.TestCase):
         )
         self.assertNotIn("root.mapToItem(null, 0, 0)", rectangle)
 
-        assert_in_order(self, restore, "root.updateDockRectangle()", "root.windowsService.restore")
+        assert_in_order(self, restore, "root.updateDockRectangle(true)", "root.windowsService.restore")
+        # R04: production path goes through the Shell publisher owner.
+        self.assertIn("submitDockRectangle", rectangle)
         self.assertEqual(clicked.count("root.restoreWindow()"), 1)
         self.assertLess(clicked.index("root.restoreWindow()"), clicked.rfind("root.bounce()"))
 

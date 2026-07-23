@@ -66,3 +66,13 @@ rg -n 'lifecycle_overlays_are_rendered|render_observation' niri/src
 
 硬件/场景/未测项见 `acceptance/R00-baseline-2026-07-23.md`。
 本任务目标是建立可复测仪器，不是改善数值。
+
+## Follow-up：M1–M3 修复（同任务闭环补强）
+
+| Finding | 修复 |
+| --- | --- |
+| M1 旧/最新 serial | 新增 `real_mapped_serial_old_configure_vs_latest_commit`：maximize(A)→unmaximize(B)→commit A→仍 maximized 且 B 在队列→commit B→false；`test_maximize_commit_state` 返回完整 `(Serial, bool)` 队列 |
+| M2 并行 diag 竞态 | `with_test_lock` / `with_enabled_for_test` 串行化 enable/disable；fixture 与 unit 测试均走此路径 |
+| M3 默认关闭成本 | `note_genie_create(FnOnce)` 仅在 enabled 时求值字节；单测断言闭包不在 disabled 路径执行 |
+
+验证：`cargo test -p niri --lib observe`（9 passed）、`lifecycle_diag`（4 passed）、`layout::tests`（126 passed）。

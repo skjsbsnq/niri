@@ -125,11 +125,20 @@ PanelWindow {
     readonly property bool prestartLivePainting: !!prestartedWallpaperRecord
         && !prestartedWallpaperReleased
         && !prestartedWallpaperStopPending
-    // Cover is ONLY the sticky latch set by showRestartCover() during intentional
-    // restarts. Do NOT auto-bind a permanent boot cover: tahoe-wallpaper stacks
-    // ABOVE linux-wallpaperengine in the Background layer, so a stuck opaque
-    // plate permanently blacks out the live engine (the 5f75b23 regression).
-    readonly property bool coverPlateVisible: restartCoverVisible
+    // Capture plate for the live cold-start / settings-load gap. tahoe-wallpaper
+    // stacks ABOVE linux-wallpaperengine, so this MUST clear whenever anything
+    // may already be painting under us (prestart or ready latch). The previous
+    // permanent boot cover without prestartLivePainting blacked out the desktop;
+    // dropping the cover on process start left niri's gray clear for the whole
+    // engine load. Hold the last engine frame until dynamicActive instead.
+    readonly property bool liveGapCoverDesired: !nestedSession
+        && !dynamicActive
+        && !prestartedWallpaperAdopted
+        && !prestartLivePainting
+        && !liveLaunchFailed
+        && liveWallpaperAllowed
+        && (!settingsReady || liveModeConfigured)
+    readonly property bool coverPlateVisible: restartCoverVisible || liveGapCoverDesired
     readonly property bool showStaticWallpaper: settingsReady
         && !dynamicActive
         && !coverPlateVisible
@@ -263,6 +272,30 @@ PanelWindow {
     function coverCapturePath() {
         var name = coverCaptureOutputName();
         return name.length > 0 ? lockWallpaperCapturePath(name) : "";
+    }
+
+    // Decode the lock capture at panel size (engine often writes 2x/4K frames).
+    // Full-res sync decode of a 17MB PNG blocked shell boot and left the #1c1d20
+    // fill up for seconds — the brownish-gray boot flash.
+    function coverCaptureDecodeSize() {
+        var w = Math.round(Number(root.width) || 0);
+        var h = Math.round(Number(root.height) || 0);
+        if (w <= 0 || h <= 0) {
+            var screen = root.screen;
+            if (!screen && Quickshell.screens && Quickshell.screens.length > 0)
+                screen = Quickshell.screens[0];
+            if (screen) {
+                w = Math.round(Number(screen.width) || 0);
+                h = Math.round(Number(screen.height) || 0);
+            }
+        }
+        if (w <= 0)
+            w = 1920;
+        if (h <= 0)
+            h = 1080;
+        w = Math.min(w, 2560);
+        h = Math.min(h, 1600);
+        return Qt.size(w, h);
     }
 
     function isDirectWallpaperEngineCommand(command) {
@@ -464,22 +497,25 @@ PanelWindow {
     function showRestartCover() {
         // Never plate over an already-painting live surface. tahoe-wallpaper
         // stacks above linux-wallpaperengine; an opaque cover blacks it out.
-        if (dynamicActive || prestartedWallpaperAdopted || prestartLivePainting
-                || dynamicProcess.running || externalProcess.running)
+        // Cold-start still uses liveGapCoverDesired (bound) until dynamicActive;
+        // process.running alone is not enough paint proof (engine may still be
+        // loading assets with no frame yet).
+        if (dynamicActive || prestartedWallpaperAdopted || prestartLivePainting)
             return;
         restartCoverVisible = true;
     }
 
     function hideRestartCoverIfIdle() {
-        // Anything that may already be painting under us → clear immediately.
-        if (dynamicActive || prestartedWallpaperAdopted || prestartLivePainting
-                || dynamicProcess.running || externalProcess.running) {
+        // Anything that may already be painting under us → clear sticky latch.
+        // liveGapCoverDesired still covers cold-start until dynamicActive.
+        if (dynamicActive || prestartedWallpaperAdopted || prestartLivePainting) {
             restartCoverVisible = false;
             return;
         }
         // Keep only during intentional stop/restart with nothing painting yet.
         if (prestartedWallpaperStopPending
-                || dynamicRestartPending || externalRestartPending)
+                || dynamicRestartPending || externalRestartPending
+                || dynamicProcess.running || externalProcess.running)
             return;
         restartCoverVisible = false;
     }
@@ -1037,10 +1073,11 @@ PanelWindow {
             // the boot cover does not open on a blank dark plate. Path falls
             // back to the first announced output when PanelWindow.screen is late.
             source: root.coverCapturePath()
+            // Match LockScreen: decode at panel size so a 4K/17MB engine
+            // screenshot does not stall the shell on the brownish fill.
+            sourceSize: root.coverCaptureDecodeSize()
             fillMode: Image.PreserveAspectCrop
-            // Sync decode on the shell thread is acceptable here: the capture is
-            // a single full-size PNG already on disk from the previous session.
-            asynchronous: false
+            asynchronous: true
             cache: true
             smooth: true
             mipmap: false
@@ -1088,9 +1125,9 @@ PanelWindow {
         command: ["sh", "-lc", root.dynamicCommand]
         onStarted: {
             root.dynamicLaunchFailed = false;
-            // Drop any restart plate immediately so the engine surface under
-            // tahoe-wallpaper is not blacked out for the ready-timer duration.
-            root.restartCoverVisible = false;
+            // Keep the capture plate through the ready latch. Dropping the cover
+            // here exposed niri's gray clear for the whole engine asset-load gap.
+            // liveGapCoverDesired / dynamicActive clear it once paint is expected.
             liveWallpaperReadyTimer.restart();
         }
         onRunningChanged: {
@@ -1120,7 +1157,7 @@ PanelWindow {
         command: ["sh", "-lc", root.externalCommand]
         onStarted: {
             root.externalLaunchFailed = false;
-            root.restartCoverVisible = false;
+            // Same as dynamic: hold capture until liveWallpaperReadyTimer.
             liveWallpaperReadyTimer.restart();
         }
         onRunningChanged: {
@@ -1143,7 +1180,9 @@ PanelWindow {
 
     Timer {
         id: liveWallpaperReadyTimer
-        interval: 1600
+        // Wallpaper Engine often needs several seconds after process start before
+        // the first Background frame. Hold the last capture across that gap.
+        interval: 4500
         repeat: false
         onTriggered: {
             if (dynamicProcess.running || externalProcess.running) {

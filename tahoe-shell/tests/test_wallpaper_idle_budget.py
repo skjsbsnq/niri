@@ -224,9 +224,22 @@ class WallpaperIdleBudgetTests(unittest.TestCase):
         self.assertIn("prestartLivePainting", text)
         self.assertIn("coverPlateVisible", text)
         self.assertIn("liveLaunchFailed", text)
-        # Permanent auto-boot cover was the black-screen regression: it stacked
-        # above linux-wallpaperengine and never cleared without adopt.
+        # Gap cover is OK when it excludes prestart paint and clears on ready.
+        # The black-screen regression was covering a live prestart forever.
+        self.assertIn("liveGapCoverDesired", text)
         self.assertNotIn("liveBootCoverDesired", text)
+        gap = re.search(
+            r"readonly property bool liveGapCoverDesired:(.*?)"
+            r"readonly property bool coverPlateVisible:",
+            text,
+            re.S,
+        )
+        self.assertIsNotNone(gap)
+        gap_body = gap.group(1)
+        self.assertIn("!prestartLivePainting", gap_body)
+        self.assertIn("!dynamicActive", gap_body)
+        self.assertIn("!liveLaunchFailed", gap_body)
+        self.assertIn("!prestartedWallpaperAdopted", gap_body)
         show_static = re.search(
             r"readonly property bool showStaticWallpaper:(.*?)"
             r"readonly property bool liveWallpaperVisible:",
@@ -240,24 +253,32 @@ class WallpaperIdleBudgetTests(unittest.TestCase):
         self.assertIn("!liveWallpaperAllowed", body)
         self.assertIn("!coverPlateVisible", body)
         self.assertIn("!prestartLivePainting", body)
-        # Cover is only the sticky restart latch — never a permanent boot plate.
+        # Cover = sticky restart latch OR cold-start gap capture plate.
         cover_prop = re.search(
             r"readonly property bool coverPlateVisible:(.*)",
             text,
         )
         self.assertIsNotNone(cover_prop)
         self.assertIn("restartCoverVisible", cover_prop.group(1))
-        self.assertNotIn("liveBootCoverDesired", cover_prop.group(1))
+        self.assertIn("liveGapCoverDesired", cover_prop.group(1))
         cover = re.search(r"id: restartCover(.*?)// Live wallpapers", text, re.S)
         self.assertIsNotNone(cover)
         cover_body = cover.group(1)
         self.assertIn("root.coverPlateVisible", cover_body)
         self.assertIn("coverCapturePath", cover_body)
+        self.assertIn("coverCaptureDecodeSize", cover_body)
+        self.assertIn("sourceSize:", cover_body)
         self.assertNotIn("staticWallpaperSource()", cover_body)
         # Layer must stay transparent while live paint is expected so the engine
-        # under tahoe-wallpaper remains visible.
+        # under tahoe-wallpaper remains visible once the cover fades.
         self.assertIn('color: yieldToDynamicWallpaper ? "transparent"', text)
         self.assertNotIn("color: coverPlateVisible", text)
+        # Process start must not drop the capture plate early (gray flash).
+        for started_body in re.findall(r"onStarted: \{(.*?)\n        \}", text, re.S):
+            if "liveWallpaperReadyTimer.restart()" in started_body:
+                self.assertNotIn("restartCoverVisible = false", started_body)
+        self.assertIn("interval: 4500", text)
+        self.assertIn("function coverCaptureDecodeSize(", text)
         # No opacity fade of the static wallpaper plate over live — unmount.
         static_layer = re.search(r"id: staticLayer(.*?)// Intentional command", text, re.S)
         self.assertIsNotNone(static_layer)
@@ -290,6 +311,7 @@ class WallpaperIdleBudgetTests(unittest.TestCase):
         self.assertIn('"startTime"', text)
         self.assertIn('"token"', text)
         self.assertIn("if not outputs:", text)
+        self.assertIn("for _ in range(25):", text)
         self.assertNotIn('inject_lock_capture(prepared, "default")', text)
         self.assertIn("wallpaperPauseWhenFullscreen", text)
         self.assertIn("--no-fullscreen-pause", text)

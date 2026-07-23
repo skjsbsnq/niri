@@ -90,12 +90,15 @@ def load_json(path):
 
 
 def niri_outputs():
-    for _ in range(5):
+    # Boot: niri may not answer for the first second after spawn-at-startup.
+    # Short windows used to exit prestart with no engine, forcing a cold shell
+    # start and a long gray desktop before wallpaperengine painted.
+    for _ in range(25):
         try:
             raw = subprocess.check_output(
                 ["niri", "msg", "--json", "outputs"],
                 stderr=subprocess.DEVNULL,
-                timeout=0.2,
+                timeout=0.4,
                 text=True,
             )
             data = json.loads(raw)
@@ -113,7 +116,7 @@ def niri_outputs():
                     return names
         except Exception:
             pass
-        time.sleep(0.08)
+        time.sleep(0.12)
     return []
 
 

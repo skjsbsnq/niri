@@ -523,17 +523,106 @@ def update_layout_text(text: str, field: str, raw_value: str) -> str:
 # optional block. All glass/blur writes reuse the same atomic_write path
 # (guardrails + niri validate) as layout.
 
-GLASS_MATERIAL_NAMES = ["panel", "pill", "launcher", "dock", "menu", "toast", "backdrop"]
-GLASS_MATERIAL_FIELDS = ["edge-highlight", "refraction", "inner-shadow", "chromatic", "lens-depth"]
-GLASS_MATERIAL_DEFAULTS = {
-    "panel": {"edge-highlight": 0.14, "refraction": 0.004, "inner-shadow": 0.06, "chromatic": 0.0, "lens-depth": 0.0},
-    "pill": {"edge-highlight": 0.32, "refraction": 0.013, "inner-shadow": 0.07, "chromatic": 0.0, "lens-depth": 0.010},
-    "launcher": {"edge-highlight": 0.15, "refraction": 0.004, "inner-shadow": 0.055, "chromatic": 0.0, "lens-depth": 0.003},
-    "dock": {"edge-highlight": 0.18, "refraction": 0.007, "inner-shadow": 0.07, "chromatic": 0.0, "lens-depth": 0.006},
-    "menu": {"edge-highlight": 0.26, "refraction": 0.004, "inner-shadow": 0.10, "chromatic": 0.0, "lens-depth": 0.0},
-    "toast": {"edge-highlight": 0.24, "refraction": 0.005, "inner-shadow": 0.09, "chromatic": 0.0, "lens-depth": 0.0},
-    "backdrop": {"edge-highlight": 0.05, "refraction": 0.002, "inner-shadow": 0.0, "chromatic": 0.0, "lens-depth": 0.0},
-}
+# R13: glass material names/fields/defaults come from the Rust-owned schema
+# artifact (niri-config/generated/glass_schema_defaults.json). This file must
+# not hand-edit compositor defaults — CI / governance tests enforce equality.
+_SHELL_ROOT = Path(__file__).resolve().parents[1]
+_REPO_ROOT = _SHELL_ROOT.parent
+GLASS_SCHEMA_ARTIFACT = (
+    _REPO_ROOT / "niri" / "niri-config" / "generated" / "glass_schema_defaults.json"
+)
+
+
+def load_glass_schema() -> dict[str, Any]:
+    try:
+        payload = json.loads(GLASS_SCHEMA_ARTIFACT.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise KdlEditError(
+            f"failed to load glass schema artifact at {GLASS_SCHEMA_ARTIFACT}: {exc}"
+        ) from exc
+    if not isinstance(payload, dict):
+        raise KdlEditError("glass schema artifact must be a JSON object")
+    return payload
+
+
+_GLASS_SCHEMA: dict[str, Any] | None = None
+
+
+def glass_schema() -> dict[str, Any]:
+    global _GLASS_SCHEMA
+    if _GLASS_SCHEMA is None:
+        _GLASS_SCHEMA = load_glass_schema()
+    return _GLASS_SCHEMA
+
+
+def _schema_material_names() -> list[str]:
+    names = glass_schema().get("material_names")
+    if not isinstance(names, list) or not names:
+        raise KdlEditError("glass schema missing material_names")
+    return [str(name) for name in names]
+
+
+def _schema_settings_fields() -> list[str]:
+    fields = glass_schema().get("settings_fields")
+    if not isinstance(fields, list) or not fields:
+        raise KdlEditError("glass schema missing settings_fields")
+    return [str(field) for field in fields]
+
+
+def _schema_material_defaults() -> dict[str, dict[str, float]]:
+    """Compositor-owned defaults for display/docs — not a second writeable schema."""
+    materials = glass_schema().get("materials")
+    if not isinstance(materials, dict):
+        raise KdlEditError("glass schema missing materials")
+    out: dict[str, dict[str, float]] = {}
+    for name in _schema_material_names():
+        entry = materials.get(name)
+        if not isinstance(entry, dict):
+            raise KdlEditError(f"glass schema missing material {name}")
+        fields: dict[str, float] = {}
+        for field_kdl in _schema_settings_fields():
+            key = field_kdl.replace("-", "_")
+            if key not in entry:
+                raise KdlEditError(f"glass schema material {name} missing {key}")
+            fields[field_kdl] = float(entry[key])
+        out[name] = fields
+    return out
+
+
+def _schema_blur_defaults() -> dict[str, Any]:
+    blur = glass_schema().get("blur")
+    if not isinstance(blur, dict):
+        raise KdlEditError("glass schema missing blur")
+    return {
+        "enabled": not bool(blur.get("off", False)),
+        "passes": int(blur.get("passes", 3)),
+        "offset": float(blur.get("offset", 3)),
+        "noise": float(blur.get("noise", 0.02)),
+        "saturation": float(blur.get("saturation", 1.5)),
+    }
+
+
+# Populated at first use via refresh_glass_schema_constants(); tests may call
+# that helper after monkeypatching GLASS_SCHEMA_ARTIFACT.
+GLASS_MATERIAL_NAMES: list[str] = []
+GLASS_MATERIAL_FIELDS: list[str] = []
+
+
+def refresh_glass_schema_constants() -> None:
+    """Reload module-level name/field lists from the schema artifact."""
+    global GLASS_MATERIAL_NAMES, GLASS_MATERIAL_FIELDS, _GLASS_SCHEMA
+    _GLASS_SCHEMA = None
+    GLASS_MATERIAL_NAMES[:] = _schema_material_names()
+    GLASS_MATERIAL_FIELDS[:] = _schema_settings_fields()
+
+
+# Eager load for normal imports so writable_field_spec sees real names.
+try:
+    refresh_glass_schema_constants()
+except KdlEditError:
+    # Allow unit tests that only exercise non-glass paths to import the module
+    # even if the artifact path is temporarily wrong; glass ops will re-raise.
+    pass
 
 
 def find_top_level_block_or_none(lines: list[str], name: str) -> tuple[int, int] | None:
@@ -618,33 +707,97 @@ def format_float(value: float) -> str:
     return f"{v:.6f}".rstrip("0")
 
 
+def _child_field_number_or_none(
+    lines: list[str], block: tuple[int, int] | None, name: str
+) -> float | None:
+    """Return leaf value if present; None means inherited (not present in KDL)."""
+    if block is None:
+        return None
+    node_re = re.compile(rf"^\s*{re.escape(name)}\b\s+")
+    for index in iter_depth_lines(lines, block[0], block[1], 1):
+        body = uncommented_body(lines[index])
+        if "{" in body:
+            continue
+        match = node_re.match(body)
+        if match:
+            return normalize_number(parse_number(body[match.end():], default=float("nan")))
+    return None
+
+
 def read_glass_text(text: str) -> dict[str, Any]:
+    """Read glass materials from KDL without forging compositor defaults.
+
+    Absent fields are returned as null with `inherited: true` so the settings
+    UI can show "inherited" and fall back to the Rust schema artifact for
+    display ranges — not a second editable default table.
+    """
+    if not GLASS_MATERIAL_NAMES or not GLASS_MATERIAL_FIELDS:
+        refresh_glass_schema_constants()
+
     lines = text.splitlines(True)
     glass = find_top_level_block_or_none(lines, "tahoe-glass")
+    schema_defaults = _schema_material_defaults()
     materials: dict[str, Any] = {}
     for name in GLASS_MATERIAL_NAMES:
         material: dict[str, Any] = {}
         block = find_material_block(lines, glass, name) if glass else None
         for field in GLASS_MATERIAL_FIELDS:
-            default = GLASS_MATERIAL_DEFAULTS[name][field]
-            material[field.replace("-", "_")] = (
-                normalize_number(child_field_number(lines, block, field, default)) if block else default
-            )
+            key = field.replace("-", "_")
+            raw = _child_field_number_or_none(lines, block, field)
+            if raw is None or (isinstance(raw, float) and raw != raw):  # nan
+                material[key] = None
+                material[f"{key}_inherited"] = True
+            else:
+                material[key] = raw
+                material[f"{key}_inherited"] = False
         materials[name] = material
-    return {"materials": materials}
+
+    schema_materials_ui: dict[str, Any] = {}
+    for name, fields in schema_defaults.items():
+        schema_materials_ui[name] = {
+            field_kdl.replace("-", "_"): value for field_kdl, value in fields.items()
+        }
+
+    return {
+        "materials": materials,
+        "schema": {
+            "material_names": list(GLASS_MATERIAL_NAMES),
+            "settings_fields": list(GLASS_MATERIAL_FIELDS),
+            "materials": schema_materials_ui,
+            "blur": _schema_blur_defaults(),
+            "default_blur_kernel_name": glass_schema().get("default_blur_kernel_name", "default"),
+            "source": str(GLASS_SCHEMA_ARTIFACT),
+        },
+    }
 
 
 def read_blur_text(text: str) -> dict[str, Any]:
     lines = text.splitlines(True)
     blur = find_top_level_block_or_none(lines, "blur")
+    schema_blur = _schema_blur_defaults()
     if blur is None:
-        return {"enabled": True, "passes": 3, "offset": 3, "noise": 0.02, "saturation": 1.5}
+        # No blur block: report schema defaults with inherited markers.
+        return {
+            **schema_blur,
+            "inherited": True,
+        }
     return {
         "enabled": block_toggle(lines, blur, absent_default=True, empty_default=True, on_wins=True),
-        "passes": normalize_number(simple_field_number(lines, blur[0], blur[1], "passes", 3)),
-        "offset": normalize_number(simple_field_number(lines, blur[0], blur[1], "offset", 3)),
-        "noise": normalize_number(simple_field_number(lines, blur[0], blur[1], "noise", 0.02)),
-        "saturation": normalize_number(simple_field_number(lines, blur[0], blur[1], "saturation", 1.5)),
+        "passes": normalize_number(
+            simple_field_number(lines, blur[0], blur[1], "passes", schema_blur["passes"])
+        ),
+        "offset": normalize_number(
+            simple_field_number(lines, blur[0], blur[1], "offset", schema_blur["offset"])
+        ),
+        "noise": normalize_number(
+            simple_field_number(lines, blur[0], blur[1], "noise", schema_blur["noise"])
+        ),
+        "saturation": normalize_number(
+            simple_field_number(
+                lines, blur[0], blur[1], "saturation", schema_blur["saturation"]
+            )
+        ),
+        "inherited": False,
     }
 
 

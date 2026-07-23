@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import re
 import unittest
 from pathlib import Path
@@ -14,6 +15,9 @@ NIRI_SETTINGS_QML = SHELL_ROOT / "services" / "NiriSettings.qml"
 NIRI_SETTINGS_TOOL = SHELL_ROOT / "services" / "niri_settings_tool.py"
 NIRI_CONFIG = REPO_ROOT / "config" / "niri" / "tahoe-phase0.kdl"
 NIRI_CONFIG_TAHOE_GLASS = REPO_ROOT / "niri" / "niri-config" / "src" / "tahoe_glass.rs"
+GLASS_SCHEMA_ARTIFACT = (
+    REPO_ROOT / "niri" / "niri-config" / "generated" / "glass_schema_defaults.json"
+)
 GOVERNANCE_DOC = SHELL_ROOT / "docs" / "tahoe-material-governance.md"
 
 MATERIALS = ["panel", "pill", "launcher", "dock", "menu", "toast", "backdrop"]
@@ -129,15 +133,14 @@ def parse_rust_material_defaults() -> dict[str, dict[str, float]]:
     return materials
 
 
-def parse_qml_settings_defaults() -> dict[str, dict[str, float]]:
-    text = NIRI_SETTINGS_QML.read_text(encoding="utf-8")
-    defaults_block = extract_block(text, r"(?m)^\s*property\s+var\s+glassMaterials:\s*\(\s*\{")
+def parse_schema_artifact_settings() -> dict[str, dict[str, float]]:
+    payload = json.loads(GLASS_SCHEMA_ARTIFACT.read_text(encoding="utf-8"))
     materials: dict[str, dict[str, float]] = {}
-    for match in re.finditer(r'"(?P<name>[^"]+)":\s*\{(?P<body>[^}]*)\}', defaults_block):
-        fields: dict[str, float] = {}
-        for key, value in re.findall(r"(edge_highlight|refraction|inner_shadow|chromatic|lens_depth):\s*([-+]?(?:\d+(?:\.\d*)?|\.\d+))", match.group("body")):
-            fields[key.replace("_", "-")] = float(value)
-        materials[match.group("name")] = fields
+    for name in MATERIALS:
+        entry = payload["materials"][name]
+        materials[name] = {
+            field: float(entry[field.replace("-", "_")]) for field in SETTINGS_FIELDS
+        }
     return materials
 
 
@@ -150,7 +153,7 @@ def load_niri_settings_tool():
 
 
 class TahoeMaterialGovernanceTests(unittest.TestCase):
-    def test_shell_kdl_rust_and_settings_material_profiles_do_not_drift(self) -> None:
+    def test_shell_kdl_rust_and_schema_artifact_do_not_drift(self) -> None:
         js_text = TAHOE_GLASS_JS.read_text(encoding="utf-8")
         js_materials = re.findall(r'(?m)^\s*var\s+Material[A-Za-z0-9]+\s*=\s*"([^"]+)";', js_text)
         self.assertEqual(js_materials, MATERIALS)
@@ -159,19 +162,36 @@ class TahoeMaterialGovernanceTests(unittest.TestCase):
         rust = parse_rust_material_defaults()
         self.assertEqual(kdl, rust)
 
-        settings_qml = parse_qml_settings_defaults()
-        self.assertEqual(list(settings_qml), MATERIALS)
+        schema = parse_schema_artifact_settings()
+        self.assertEqual(list(schema), MATERIALS)
         for material in MATERIALS:
             with self.subTest(material=material):
-                self.assertEqual(settings_qml[material], {field: kdl[material][field] for field in SETTINGS_FIELDS})
+                self.assertEqual(
+                    schema[material],
+                    {field: kdl[material][field] for field in SETTINGS_FIELDS},
+                )
 
         settings_tool = load_niri_settings_tool()
+        settings_tool.refresh_glass_schema_constants()
         self.assertEqual(settings_tool.GLASS_MATERIAL_NAMES, MATERIALS)
         self.assertEqual(settings_tool.GLASS_MATERIAL_FIELDS, SETTINGS_FIELDS)
-        self.assertEqual(settings_tool.GLASS_MATERIAL_DEFAULTS, {
-            material: {field: kdl[material][field] for field in SETTINGS_FIELDS}
-            for material in MATERIALS
-        })
+        # R13: no hand-written GLASS_MATERIAL_DEFAULTS table.
+        self.assertFalse(hasattr(settings_tool, "GLASS_MATERIAL_DEFAULTS"))
+        self.assertEqual(
+            settings_tool._schema_material_defaults(),
+            {
+                material: {field: kdl[material][field] for field in SETTINGS_FIELDS}
+                for material in MATERIALS
+            },
+        )
+
+        # QML must not embed seven editable default material objects.
+        qml = NIRI_SETTINGS_QML.read_text(encoding="utf-8")
+        self.assertIn("property var glassMaterials: ({})", qml)
+        self.assertNotRegex(
+            qml,
+            r'property\s+var\s+glassMaterials:\s*\(\s*\{\s*"panel"',
+        )
 
     def test_all_materials_sample_the_live_composed_framebuffer(self) -> None:
         text = NIRI_CONFIG.read_text(encoding="utf-8")
@@ -225,6 +245,22 @@ class TahoeMaterialGovernanceTests(unittest.TestCase):
                 self.assertEqual(values, kdl[material])
 
         self.assertEqual(fallback_counts, {"panel": 2, "menu": 1, "toast": 1})
+
+    def test_read_glass_marks_absent_fields_inherited(self) -> None:
+        settings_tool = load_niri_settings_tool()
+        settings_tool.refresh_glass_schema_constants()
+        # Empty config: every settings field is inherited (null), not forged.
+        payload = settings_tool.read_glass_text("")
+        self.assertIn("schema", payload)
+        for material in MATERIALS:
+            entry = payload["materials"][material]
+            for field in SETTINGS_FIELDS:
+                key = field.replace("-", "_")
+                self.assertIsNone(entry[key], f"{material}.{key}")
+                self.assertTrue(entry[f"{key}_inherited"], f"{material}.{key}_inherited")
+            # Schema still carries compositor defaults for display.
+            schema_entry = payload["schema"]["materials"][material]
+            self.assertAlmostEqual(schema_entry["edge_highlight"], parse_kdl_materials()[material]["edge-highlight"])
 
     def test_material_governance_doc_covers_phase9_scope(self) -> None:
         text = GOVERNANCE_DOC.read_text(encoding="utf-8")

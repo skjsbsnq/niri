@@ -30,26 +30,17 @@ Item {
     property bool snapAssistEnabled: true
     property int snapAssistThreshold: 16
 
-    // S5.1 glass + blur mirrors. glassMaterials is a nested object keyed by
-    // material name; each material carries the five visual material fields
-    // (edge_highlight/refraction/inner_shadow/chromatic/lens_depth). Defaults
-    // mirror the deployed config.kdl so the first frame matches truth before
-    // the first read reconciles. setGlassField rebuilds the top-level object
-    // (QML does not observe nested mutation) and queues a glass.<m>.<f> write.
-    property var glassMaterials: ({
-        "panel":    { edge_highlight: 0.14, refraction: 0.004, inner_shadow: 0.06,  chromatic: 0.0, lens_depth: 0.0 },
-        "pill":     { edge_highlight: 0.32, refraction: 0.013, inner_shadow: 0.07,  chromatic: 0.0, lens_depth: 0.010 },
-        "launcher": { edge_highlight: 0.15, refraction: 0.004, inner_shadow: 0.055, chromatic: 0.0, lens_depth: 0.003 },
-        "dock":     { edge_highlight: 0.18, refraction: 0.007, inner_shadow: 0.07,  chromatic: 0.0, lens_depth: 0.006 },
-        "menu":     { edge_highlight: 0.26, refraction: 0.004, inner_shadow: 0.10,  chromatic: 0.0, lens_depth: 0.0 },
-        "toast":    { edge_highlight: 0.24, refraction: 0.005, inner_shadow: 0.09,  chromatic: 0.0, lens_depth: 0.0 },
-        "backdrop": { edge_highlight: 0.05, refraction: 0.002, inner_shadow: 0.0,   chromatic: 0.0, lens_depth: 0.0 }
-    })
+    // S5.1 glass + blur mirrors. R13: no hand-written compositor defaults here.
+    // glassMaterials is filled by applyGlass from the settings tool; absent KDL
+    // fields arrive as null + *_inherited, and glassSchema holds the Rust-owned
+    // display defaults (not a second editable schema).
+    property var glassMaterials: ({})
+    property var glassSchema: ({})
     property bool blurEnabled: true
-    property int blurPasses: 5
-    property real blurOffset: 7
-    property real blurNoise: 0.012
-    property real blurSaturation: 1.6
+    property int blurPasses: 3
+    property real blurOffset: 3
+    property real blurNoise: 0.02
+    property real blurSaturation: 1.5
 
     // S5.2 input mirrors. keyboard repeat-rate/repeat-delay/numlock and
     // touchpad tap/natural-scroll/dwt/accel-speed are writable through setX.
@@ -205,18 +196,45 @@ Item {
     }
 
     function setGlassField(material, field, value) {
-        var current = root.glassMaterials[material];
-        if (!current)
-            return;
+        var current = root.glassMaterials[material] || {};
         var number = Number(value);
-        if (!isFinite(number) || current[field] === number)
+        if (!isFinite(number))
+            return;
+        if (current[field] === number && current[field + "_inherited"] === false)
             return;
         var next = {};
         for (var key in root.glassMaterials)
             next[key] = key === material ? Object(root.glassMaterials[key]) : root.glassMaterials[key];
+        if (!next[material])
+            next[material] = {};
         next[material][field] = number;
+        next[material][field + "_inherited"] = false;
         root.glassMaterials = next;
         root.writeField("glass." + material + "." + field, String(number));
+    }
+
+    // Resolve a glass field for UI display: explicit KDL value, else schema default.
+    function glassFieldValue(material, field) {
+        var entry = root.glassMaterials[material];
+        if (entry && entry[field] !== undefined && entry[field] !== null && isFinite(entry[field]))
+            return entry[field];
+        var schemaMat = root.glassSchema && root.glassSchema.materials
+            ? root.glassSchema.materials[material]
+            : null;
+        if (schemaMat && schemaMat[field] !== undefined && isFinite(schemaMat[field]))
+            return schemaMat[field];
+        return 0;
+    }
+
+    function glassFieldInherited(material, field) {
+        var entry = root.glassMaterials[material];
+        if (!entry)
+            return true;
+        if (entry[field + "_inherited"] === true)
+            return true;
+        if (entry[field] === null || entry[field] === undefined)
+            return true;
+        return false;
     }
 
     function clampReal(value, minimum, maximum, fallback) {
@@ -436,16 +454,23 @@ Item {
         if (!glass || !glass.materials)
             return;
         root.glassMaterials = glass.materials;
+        if (glass.schema)
+            root.glassSchema = glass.schema;
     }
 
     function applyBlur(blur) {
         if (!blur)
             return;
+        var schemaBlur = root.glassSchema && root.glassSchema.blur ? root.glassSchema.blur : null;
+        var dPasses = schemaBlur && isFinite(schemaBlur.passes) ? schemaBlur.passes : 3;
+        var dOffset = schemaBlur && isFinite(schemaBlur.offset) ? schemaBlur.offset : 3;
+        var dNoise = schemaBlur && isFinite(schemaBlur.noise) ? schemaBlur.noise : 0.02;
+        var dSat = schemaBlur && isFinite(schemaBlur.saturation) ? schemaBlur.saturation : 1.5;
         root.blurEnabled = !!blur.enabled;
-        root.blurPasses = clampNumber(blur.passes, 0, 255, 5);
-        root.blurOffset = clampReal(blur.offset, 0, 100, 3);
-        root.blurNoise = clampReal(blur.noise, 0, 1000, 0.02);
-        root.blurSaturation = clampReal(blur.saturation, 0, 1000, 1.5);
+        root.blurPasses = clampNumber(blur.passes, 0, 255, dPasses);
+        root.blurOffset = clampReal(blur.offset, 0, 100, dOffset);
+        root.blurNoise = clampReal(blur.noise, 0, 1000, dNoise);
+        root.blurSaturation = clampReal(blur.saturation, 0, 1000, dSat);
     }
 
     function applyInput(input) {

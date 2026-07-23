@@ -28,11 +28,15 @@ Flickable {
     readonly property bool ready: !!page.svc && page.svc.loaded
 
     function glassValue(field) {
-        if (!page.svc || !page.svc.glassMaterials)
+        if (!page.svc || !page.svc.glassFieldValue)
             return 0;
-        var entry = page.svc.glassMaterials[page.material];
-        var value = entry ? entry[field] : 0;
-        return isFinite(value) ? value : 0;
+        return page.svc.glassFieldValue(page.material, field);
+    }
+
+    function glassInherited(field) {
+        if (!page.svc || !page.svc.glassFieldInherited)
+            return true;
+        return page.svc.glassFieldInherited(page.material, field);
     }
 
     ColumnLayout {
@@ -152,7 +156,9 @@ Flickable {
                 theme: page.theme
                 iconCode: "\e3e4"
                 label: "边缘高光（edge-highlight）"
-                valueText: page.glassValue("edge_highlight")
+                valueText: page.glassInherited("edge_highlight")
+                    ? ("继承 " + page.glassValue("edge_highlight"))
+                    : page.glassValue("edge_highlight")
                 value: Math.max(0, Math.min(1, page.glassValue("edge_highlight") / 2))
                 enabled: page.ready
                 onUserCommit: function(v) {
@@ -165,7 +171,9 @@ Flickable {
                 theme: page.theme
                 iconCode: "\e84d"
                 label: "折射（refraction）"
-                valueText: page.glassValue("refraction")
+                valueText: page.glassInherited("refraction")
+                    ? ("继承 " + page.glassValue("refraction"))
+                    : page.glassValue("refraction")
                 value: Math.max(0, Math.min(1, page.glassValue("refraction") / 0.12))
                 enabled: page.ready
                 onUserCommit: function(v) {
@@ -178,7 +186,9 @@ Flickable {
                 theme: page.theme
                 iconCode: "\e892"
                 label: "内阴影（inner-shadow）"
-                valueText: page.glassValue("inner_shadow")
+                valueText: page.glassInherited("inner_shadow")
+                    ? ("继承 " + page.glassValue("inner_shadow"))
+                    : page.glassValue("inner_shadow")
                 value: Math.max(0, Math.min(1, page.glassValue("inner_shadow") / 0.5))
                 enabled: page.ready
                 onUserCommit: function(v) {
@@ -191,7 +201,9 @@ Flickable {
                 theme: page.theme
                 iconCode: "\e65f"
                 label: "色散（chromatic）"
-                valueText: page.glassValue("chromatic")
+                valueText: page.glassInherited("chromatic")
+                    ? ("继承 " + page.glassValue("chromatic"))
+                    : page.glassValue("chromatic")
                 value: Math.max(0, Math.min(1, page.glassValue("chromatic") / 0.1))
                 enabled: page.ready
                 onUserCommit: function(v) {
@@ -204,7 +216,9 @@ Flickable {
                 theme: page.theme
                 iconCode: "\e8f5"
                 label: "透镜深度（lens-depth）"
-                valueText: page.glassValue("lens_depth")
+                valueText: page.glassInherited("lens_depth")
+                    ? ("继承 " + page.glassValue("lens_depth"))
+                    : page.glassValue("lens_depth")
                 value: Math.max(0, Math.min(1, page.glassValue("lens_depth") / 0.3))
                 enabled: page.ready
                 onUserCommit: function(v) {

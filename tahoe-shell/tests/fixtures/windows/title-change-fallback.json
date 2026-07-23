@@ -1,5 +1,5 @@
 {
-  "description": "When one title has changed, exact matches are consumed first and appId fallback uses the remaining toplevel.",
+  "description": "Divergent IPC title vs toplevel title still pairs by identifier (no appId/title fuzzy).",
   "workspaces": [
     {
       "id": 1,
@@ -11,6 +11,7 @@
   "toplevels": [
     {
       "key": "doc-b",
+      "identifier": "302",
       "appId": "org.gnome.TextEditor",
       "title": "Doc B",
       "activated": false,
@@ -18,6 +19,7 @@
     },
     {
       "key": "doc-a",
+      "identifier": "301",
       "appId": "org.gnome.TextEditor",
       "title": "Doc A - saved",
       "activated": false,

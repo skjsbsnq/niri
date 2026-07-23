@@ -1,5 +1,5 @@
 {
-  "description": "Same app and identical titles should consume distinct toplevels in order.",
+  "description": "Same app and identical titles pair by identifier, not title order.",
   "workspaces": [
     {
       "id": 1,
@@ -11,6 +11,7 @@
   "toplevels": [
     {
       "key": "browser-a",
+      "identifier": "201",
       "appId": "org.mozilla.firefox",
       "title": "Docs",
       "activated": false,
@@ -18,6 +19,7 @@
     },
     {
       "key": "browser-b",
+      "identifier": "202",
       "appId": "org.mozilla.firefox",
       "title": "Docs",
       "activated": false,

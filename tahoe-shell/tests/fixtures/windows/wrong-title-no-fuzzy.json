@@ -1,0 +1,62 @@
+{
+  "description": "Without matching identifier, same appId/title must NOT fuzzy-bind (fail closed).",
+  "workspaces": [
+    {
+      "id": 1,
+      "idx": 1,
+      "output": "eDP-1",
+      "coordinates": [0]
+    }
+  ],
+  "toplevels": [
+    {
+      "key": "other-handle",
+      "identifier": "999",
+      "appId": "org.mozilla.firefox",
+      "title": "Docs",
+      "activated": false,
+      "minimized": false
+    }
+  ],
+  "ipcWindows": [
+    {
+      "id": 201,
+      "app_id": "org.mozilla.firefox",
+      "title": "Docs",
+      "workspace_id": 1,
+      "is_focused": false,
+      "is_minimized": false,
+      "is_urgent": false,
+      "layout": {
+        "tile_pos_in_workspace_view": [0, 0],
+        "tile_size": [900, 700]
+      }
+    }
+  ],
+  "expect": {
+    "models": [
+      {
+        "id": 201,
+        "modelKey": "id:201",
+        "title": "Docs",
+        "appId": "org.mozilla.firefox",
+        "toplevelKey": null,
+        "workspaceId": 1,
+        "output": "eDP-1"
+      },
+      {
+        "id": null,
+        "modelKey": "toplevel:org.mozilla.firefox:0",
+        "title": "Docs",
+        "appId": "org.mozilla.firefox",
+        "toplevelKey": "other-handle",
+        "workspaceId": null,
+        "output": ""
+      }
+    ],
+    "focusedKey": null,
+    "minimizedKeys": [],
+    "recentKeys": [201, "toplevel:org.mozilla.firefox:0"],
+    "workspaceOrder": [1]
+  }
+}

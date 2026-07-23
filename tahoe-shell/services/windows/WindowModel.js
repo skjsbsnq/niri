@@ -22,18 +22,22 @@ function normalizedWindowSnapshot(rawWindows, workspacesById) {
     return { "windows": windows, "byId": byId, "order": order };
 }
 
+// R11: O(n) merge via ext_foreign_toplevel identifier ≡ niri MappedId / IPC id.
+// Never match niri-managed IPC windows by appId/title. Unpaired handles stay
+// toplevel-only; missing identifier is fail-closed (ipc-only model), not fuzzy.
 function mergeWindowModels(toplevels, ipcWindows, workspacesById) {
     var result = [];
     var usedToplevels = {};
     var list = toplevels || [];
     var ipcList = ipcWindows || [];
+    var byIdentifier = indexToplevelsByIdentifier(list);
 
     for (var i = 0; i < ipcList.length; i++) {
         var ipcWindow = ipcList[i];
         if (!ipcWindow)
             continue;
 
-        var match = findMatchingToplevel(ipcWindow, list, usedToplevels);
+        var match = findToplevelByIdentifier(ipcWindow, byIdentifier, usedToplevels);
         if (match.index !== -1)
             usedToplevels[String(match.index)] = true;
 
@@ -50,46 +54,96 @@ function mergeWindowModels(toplevels, ipcWindows, workspacesById) {
     return result;
 }
 
-function findMatchingToplevel(ipcWindow, toplevels, usedToplevels) {
+function indexToplevelsByIdentifier(toplevels) {
+    var map = {};
+    var list = toplevels || [];
+    for (var i = 0; i < list.length; i++) {
+        var toplevel = list[i];
+        var key = toplevelIdentifierKey(toplevel);
+        if (!key)
+            continue;
+        // First wins; duplicate identifiers indicate pairing desync — keep first,
+        // leave later handles unmatched (fail closed, no fuzzy).
+        if (map[key] === undefined)
+            map[key] = { "index": i, "toplevel": toplevel };
+    }
+    return map;
+}
+
+function findToplevelByIdentifier(ipcWindow, byIdentifier, usedToplevels) {
     var result = { "index": -1, "toplevel": null };
-    if (!ipcWindow || !toplevels)
+    if (!ipcWindow || !byIdentifier)
+        return result;
+
+    // Prefer preserved decimal idKey; never re-derive from a precision-lossy Number.
+    var key = ipcWindow.idKey ? identityKey(ipcWindow.idKey) : identityKey(ipcWindow.id);
+    if (!key)
+        return result;
+
+    var entry = byIdentifier[key];
+    if (!entry)
         return result;
 
     var used = usedToplevels || {};
-    var appId = normalizeIdentity(ipcWindow.appId);
-    var title = normalizeTitle(ipcWindow.title);
+    if (used[String(entry.index)])
+        return result;
 
-    for (var i = 0; i < toplevels.length; i++) {
-        if (used[String(i)])
-            continue;
-
-        var toplevel = toplevels[i];
-        if (!toplevel)
-            continue;
-
-        if (appId.length > 0
-                && appId === normalizeIdentity(toplevel.appId)
-                && title.length > 0
-                && title === normalizeTitle(toplevel.title)) {
-            result.index = i;
-            result.toplevel = toplevel;
-            return result;
-        }
-    }
-
-    for (var j = 0; j < toplevels.length; j++) {
-        if (used[String(j)])
-            continue;
-
-        var candidate = toplevels[j];
-        if (candidate && appId.length > 0 && appId === normalizeIdentity(candidate.appId)) {
-            result.index = j;
-            result.toplevel = candidate;
-            return result;
-        }
-    }
-
+    result.index = entry.index;
+    result.toplevel = entry.toplevel;
     return result;
+}
+
+function toplevelIdentifierKey(toplevel) {
+    if (!toplevel)
+        return null;
+    // Prefer explicit identifier property (Quickshell Toplevel / test fixture).
+    if (toplevel.identifier !== undefined && toplevel.identifier !== null)
+        return identityKey(toplevel.identifier);
+    return null;
+}
+
+// Stable decimal identity for IPC id / ext identifier. Never use Number for
+// values outside JS safe integer range — those fail closed (null key).
+function identityKey(value) {
+    if (value === undefined || value === null)
+        return null;
+
+    if (typeof value === "string") {
+        var trimmed = value.trim();
+        if (trimmed.length === 0)
+            return null;
+        if (!/^[0-9]+$/.test(trimmed))
+            return null;
+        // Reject leading-zero forms that are not "0" to keep canonical decimal.
+        if (trimmed.length > 1 && trimmed.charAt(0) === "0")
+            return null;
+        // Fail closed: decimal strings longer than safe integer digits cannot be
+        // represented exactly if later coerced to Number for IPC CLI actions.
+        if (!decimalStringIsSafeInteger(trimmed))
+            return null;
+        return trimmed;
+    }
+
+    if (typeof value === "bigint") {
+        if (value < 0n)
+            return null;
+        return value.toString();
+    }
+
+    if (typeof value === "number") {
+        if (!isFinite(value) || Math.floor(value) !== value || value < 0)
+            return null;
+        if (value > Number.MAX_SAFE_INTEGER)
+            return null;
+        return String(value);
+    }
+
+    // QML may box ids; prefer string conversion only when purely decimal.
+    var asText = String(value).trim();
+    if (asText.length > 0 && /^[0-9]+$/.test(asText))
+        return identityKey(asText);
+
+    return null;
 }
 
 function buildWindowModel(ipcWindow, toplevel, fallbackIndex, workspacesById) {
@@ -125,13 +179,36 @@ function buildWindowModel(ipcWindow, toplevel, fallbackIndex, workspacesById) {
     };
 }
 
+function decimalStringIsSafeInteger(digits) {
+    if (!digits || typeof digits !== "string")
+        return false;
+    // Number.MAX_SAFE_INTEGER = 9007199254740991 (16 digits).
+    if (digits.length < 16)
+        return true;
+    if (digits.length > 16)
+        return false;
+    return digits <= "9007199254740991";
+}
+
 function normalizeIpcWindow(raw, workspacesById) {
     if (!raw)
         return null;
 
-    var id = asOptionalNumber(raw.id);
-    if (id === null)
+    // Identity is always the decimal string idKey. Numeric id is only a
+    // convenience mirror when within MAX_SAFE_INTEGER; never match on Number alone.
+    var idKey = identityKey(raw.id);
+    if (!idKey)
         return null;
+    var id = null;
+    if (decimalStringIsSafeInteger(idKey)) {
+        var asNum = Number(idKey);
+        if (isFinite(asNum) && String(asNum) === idKey)
+            id = asNum;
+    }
+    // If Number mirror is unavailable, keep string-only identity (id stays null
+    // only when conversion fails — should not happen for safe keys).
+    if (id === null && decimalStringIsSafeInteger(idKey))
+        id = Number(idKey);
 
     var layout = raw.layout || {};
     var workspaceId = asOptionalNumber(raw.workspace_id !== undefined ? raw.workspace_id : raw.workspaceId);
@@ -142,6 +219,7 @@ function normalizeIpcWindow(raw, workspacesById) {
 
     return {
         "id": id,
+        "idKey": idKey,
         "title": textOrEmpty(raw.title),
         "appId": textOrEmpty(raw.app_id !== undefined ? raw.app_id : raw.appId),
         "pid": asOptionalNumber(raw.pid),
@@ -351,8 +429,11 @@ function workspaceFromId(id, workspacesById) {
 }
 
 function windowModelKey(ipcWindow, toplevel, fallbackIndex) {
-    if (ipcWindow && ipcWindow.id !== undefined && ipcWindow.id !== null)
-        return "id:" + String(ipcWindow.id);
+    if (ipcWindow) {
+        var key = ipcWindow.idKey ? identityKey(ipcWindow.idKey) : identityKey(ipcWindow.id);
+        if (key)
+            return "id:" + key;
+    }
 
     var appId = toplevelText(toplevel, "appId");
     return "toplevel:" + appId + ":" + String(fallbackIndex || 0);

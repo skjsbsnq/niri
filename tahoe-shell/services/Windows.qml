@@ -94,6 +94,14 @@ Item {
     onToplevelListChanged: rebuildMergedWindows()
     Component.onCompleted: rebuildMergedWindows()
 
+    // R11: identifier may land after the wlr handle is already in the model.
+    Connections {
+        target: ToplevelManager
+        function onToplevelIdentityChanged() {
+            root.rebuildMergedWindows();
+        }
+    }
+
     // Coalesce layout publishes to ~one shell paint. ipc state is still updated
     // immediately; only the QML model identity refresh is deferred.
     Timer {
@@ -225,6 +233,17 @@ Item {
         });
     }
 
+    // R11: prefer decimal idKey for identity/CLI; never invent from fuzzy fields.
+    function windowIdString(window) {
+        if (!window)
+            return "";
+        if (window.idKey !== undefined && window.idKey !== null && String(window.idKey).length > 0)
+            return String(window.idKey);
+        if (window.id !== undefined && window.id !== null)
+            return String(window.id);
+        return "";
+    }
+
     function windowFromIdOrObject(idOrWindow) {
         if (!idOrWindow)
             return null;
@@ -235,7 +254,7 @@ Item {
         var id = String(idOrWindow);
         for (var i = 0; i < root.windowList.length; i++) {
             var window = root.windowList[i];
-            if (window && String(window.id) === id)
+            if (window && root.windowIdString(window) === id)
                 return window;
         }
 
@@ -244,7 +263,7 @@ Item {
 
     function hasWindowId(idOrWindow) {
         var window = windowFromIdOrObject(idOrWindow);
-        return !!window && window.id !== undefined && window.id !== null;
+        return !!window && root.windowIdString(window).length > 0;
     }
 
     function activate(idOrWindow) {
@@ -262,8 +281,9 @@ Item {
             return;
         }
 
-        if (window.id !== undefined && window.id !== null)
-            action(["focus-window", "--id", String(window.id)]);
+        var focusId = root.windowIdString(window);
+        if (focusId.length > 0)
+            action(["focus-window", "--id", focusId]);
     }
 
     function minimize(idOrWindow) {
@@ -276,8 +296,9 @@ Item {
             return;
         }
 
-        if (window.id !== undefined && window.id !== null)
-            action(["minimize-window", "--id", String(window.id)]);
+        var minimizeId = root.windowIdString(window);
+        if (minimizeId.length > 0)
+            action(["minimize-window", "--id", minimizeId]);
     }
 
     function restore(idOrWindow) {
@@ -292,8 +313,9 @@ Item {
             return;
         }
 
-        if (window.id !== undefined && window.id !== null)
-            action(["restore-window", "--id", String(window.id)]);
+        var restoreId = root.windowIdString(window);
+        if (restoreId.length > 0)
+            action(["restore-window", "--id", restoreId]);
     }
 
     function closeWindow(idOrWindow) {
@@ -301,7 +323,7 @@ Item {
         if (!hasWindowId(window))
             return;
 
-        action(["close-window", "--id", String(window.id)]);
+        action(["close-window", "--id", root.windowIdString(window)]);
     }
 
     function moveWindowToWorkspace(idOrWindow, workspaceOrReference, focus) {
@@ -319,7 +341,7 @@ Item {
         action([
             "move-window-to-workspace",
             "--window-id",
-            String(window.id),
+            root.windowIdString(window),
             "--focus",
             shouldFocus ? "true" : "false",
             reference
@@ -543,7 +565,7 @@ Item {
             var window = root.ipcWindowsById[key];
             if (!window)
                 continue;
-            var focused = target.length > 0 && String(window.id) === target;
+            var focused = target.length > 0 && root.windowIdString(window) === target;
             if (window.isFocused !== focused || window.focused !== focused) {
                 window.isFocused = focused;
                 window.focused = focused;
@@ -772,9 +794,7 @@ Item {
         return WindowModel.windowModelKey(ipcWindow, toplevel, fallbackIndex);
     }
 
-    function findMatchingToplevel(ipcWindow, toplevels, usedToplevels) {
-        return WindowModel.findMatchingToplevel(ipcWindow, toplevels, usedToplevels);
-    }
+    // R11: appId/title fuzzy matcher removed; identity is Toplevel.identifier.
 
     function normalizeIpcWindow(raw) {
         return WindowModel.normalizeIpcWindow(raw, root.workspacesById);

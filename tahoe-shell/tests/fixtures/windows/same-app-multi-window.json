@@ -1,5 +1,5 @@
 {
-  "description": "Same app with two distinct window titles plus one toplevel-only fallback.",
+  "description": "Same app with two distinct window titles plus one toplevel-only fallback. Match by identifier only.",
   "workspaces": [
     {
       "id": 1,
@@ -12,6 +12,7 @@
   "toplevels": [
     {
       "key": "editor-main",
+      "identifier": "101",
       "appId": "org.code.Editor",
       "title": "main.js",
       "activated": true,
@@ -19,6 +20,7 @@
     },
     {
       "key": "editor-settings",
+      "identifier": "102",
       "appId": "org.code.Editor",
       "title": "Settings",
       "activated": false,

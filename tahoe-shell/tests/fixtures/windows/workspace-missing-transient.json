@@ -1,5 +1,5 @@
 {
-  "description": "A transient event-stream mismatch can reference a workspace not present in the latest workspace snapshot.",
+  "description": "A transient event-stream mismatch can reference a workspace not present in the latest workspace snapshot. Identity is still identifier.",
   "workspaces": [
     {
       "id": 1,
@@ -11,6 +11,7 @@
   "toplevels": [
     {
       "key": "terminal",
+      "identifier": "501",
       "appId": "org.wezfurlong.wezterm",
       "title": "Terminal",
       "activated": false,

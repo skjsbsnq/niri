@@ -109,7 +109,10 @@ Flickable {
             Controls.TahoeListRow {
                 theme: page.theme
                 label: "模式"
-                detail: page.profiles && page.profiles.available ? "当前为 " + page.profiles.labelFor(page.profiles.profile) : "不可用"
+                detail: page.profiles && page.profiles.available
+                    ? "当前为 " + page.profiles.labelFor(page.profiles.profile)
+                        + (page.profiles.platformProfile ? " · " + page.profiles.platformProfile : "")
+                    : "不可用"
                 iconCode: "\ue8b2"
 
                 RowLayout {
@@ -133,6 +136,16 @@ Flickable {
                         }
                     }
                 }
+            }
+
+            Controls.TahoeListRow {
+                theme: page.theme
+                label: "切换状态"
+                detail: page.profiles && page.profiles.errorText && page.profiles.errorText.length > 0
+                    ? page.profiles.errorText
+                    : (page.profiles && page.profiles.updating ? "切换中…" : "正常")
+                iconCode: "\ue88e"
+                visible: !!(page.profiles && ((page.profiles.errorText && page.profiles.errorText.length > 0) || page.profiles.updating))
             }
         }
 

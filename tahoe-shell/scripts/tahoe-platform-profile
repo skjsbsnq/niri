@@ -1,0 +1,187 @@
+#!/usr/bin/env bash
+# Read/write ACPI platform_profile with Mechrevo/Bitland-aware mapping.
+#
+# UI ids (power-saver|balanced|performance) are mapped onto the firmware
+# values exported by /sys/firmware/acpi/platform_profile_choices.
+#
+# On many Tongfang/Bitland chassis (e.g. MECHREVO), the useful "performance"
+# tier is the intermediate beast mode `balanced-performance`. Full
+# `performance` (FULL_SPEED) is often rejected by the kernel driver or
+# firmware when written through sysfs, while Fn hotkeys still work.
+set -euo pipefail
+
+PROFILE_PATH="${TAHOE_PLATFORM_PROFILE_PATH:-/sys/firmware/acpi/platform_profile}"
+CHOICES_PATH="${TAHOE_PLATFORM_PROFILE_CHOICES_PATH:-/sys/firmware/acpi/platform_profile_choices}"
+
+usage() {
+  cat <<'EOF'
+Usage:
+  tahoe-platform-profile get
+  tahoe-platform-profile choices
+  tahoe-platform-profile map-from-sysfs <value>
+  tahoe-platform-profile resolve-target <ui-id>
+  tahoe-platform-profile set <ui-id|sysfs-value>
+  tahoe-platform-profile verify <ui-id>
+
+Exit codes:
+  0 success
+  1 usage / invalid argument
+  2 sysfs missing or unreadable
+  3 write failed / verify mismatch
+EOF
+}
+
+die() {
+  local code="$1"
+  shift
+  printf '%s\n' "$*" >&2
+  exit "$code"
+}
+
+read_file() {
+  local path="$1"
+  [[ -r "$path" ]] || die 2 "cannot read $path"
+  tr -d '\n' <"$path"
+  printf '\n'
+}
+
+read_choices() {
+  local raw
+  raw="$(read_file "$CHOICES_PATH")"
+  # shellcheck disable=SC2206
+  CHOICES=($raw)
+  [[ ${#CHOICES[@]} -gt 0 ]] || die 2 "empty platform_profile_choices"
+}
+
+has_choice() {
+  local want="$1"
+  local item
+  for item in "${CHOICES[@]+"${CHOICES[@]}"}"; do
+    [[ "$item" == "$want" ]] && return 0
+  done
+  return 1
+}
+
+first_existing() {
+  local candidate
+  for candidate in "$@"; do
+    if has_choice "$candidate"; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
+map_from_sysfs() {
+  case "$1" in
+    low-power|quiet|power-saver)
+      printf 'power-saver\n'
+      ;;
+    balanced|cool|balanced_performance)
+      printf 'balanced\n'
+      ;;
+    # Kernel exports hyphen; older PPD only understood underscore.
+    balanced-performance|performance)
+      printf 'performance\n'
+      ;;
+    *)
+      die 1 "unknown sysfs profile: $1"
+      ;;
+  esac
+}
+
+resolve_target() {
+  read_choices
+  case "$1" in
+    power-saver|power_saver|powersave)
+      first_existing low-power quiet balanced \
+        || die 1 "no power-saver-compatible platform profile"
+      ;;
+    balanced)
+      first_existing balanced cool \
+        || die 1 "no balanced-compatible platform profile"
+      ;;
+    performance|beast)
+      # Prefer beast/intermediate tier when present: FULL_SPEED often fails
+      # on Bitland/Mechrevo via sysfs while balanced-performance works.
+      first_existing balanced-performance performance balanced_performance \
+        || die 1 "no performance-compatible platform profile"
+      ;;
+    low-power|quiet|cool|balanced-performance|balanced_performance|performance)
+      has_choice "$1" || die 1 "profile not in platform_profile_choices: $1"
+      printf '%s\n' "$1"
+      ;;
+    *)
+      die 1 "unknown profile id: $1"
+      ;;
+  esac
+}
+
+write_profile() {
+  local target="$1"
+  local current
+  [[ -w "$PROFILE_PATH" ]] || die 3 "cannot write $PROFILE_PATH (need root/polkit)"
+  current="$(read_file "$PROFILE_PATH" | tr -d '\n')"
+  if [[ "$current" == "$target" ]]; then
+    printf '%s\n' "$current"
+    return 0
+  fi
+  # Use printf to avoid a trailing-newline-only write race on some kernels.
+  local err=""
+  if ! err="$(printf '%s' "$target" >"$PROFILE_PATH" 2>&1)"; then
+    err="$(printf '%s' "$err" | tr -d '\n')"
+    die 3 "write failed for $target${err:+: $err}"
+  fi
+  # Re-read: some firmwares accept the write then snap back.
+  current="$(read_file "$PROFILE_PATH" | tr -d '\n')"
+  printf '%s\n' "$current"
+  [[ "$current" == "$target" ]] || die 3 "firmware rejected $target (now $current)"
+}
+
+cmd="${1:-}"
+case "$cmd" in
+  get)
+    read_file "$PROFILE_PATH"
+    ;;
+  choices)
+    read_file "$CHOICES_PATH"
+    ;;
+  map-from-sysfs)
+    [[ $# -eq 2 ]] || die 1 "$(usage)"
+    map_from_sysfs "$2"
+    ;;
+  resolve-target)
+    [[ $# -eq 2 ]] || die 1 "$(usage)"
+    resolve_target "$2"
+    ;;
+  set)
+    [[ $# -eq 2 ]] || die 1 "$(usage)"
+    target="$(resolve_target "$2")"
+    write_profile "$target"
+    ;;
+  verify)
+    [[ $# -eq 2 ]] || die 1 "$(usage)"
+    current="$(read_file "$PROFILE_PATH" | tr -d '\n')"
+    mapped="$(map_from_sysfs "$current" | tr -d '\n')"
+    want="$2"
+    case "$want" in
+      power-saver|balanced|performance) ;;
+      *)
+        # Allow verifying raw sysfs values too.
+        [[ "$current" == "$want" ]] || die 3 "verify failed: have $current want $want"
+        printf '%s\n' "$current"
+        exit 0
+        ;;
+    esac
+    [[ "$mapped" == "$want" ]] || die 3 "verify failed: have $current ($mapped) want $want"
+    printf '%s\n' "$current"
+    ;;
+  -h|--help|help|"")
+    usage
+    [[ -n "$cmd" ]] || exit 1
+    ;;
+  *)
+    die 1 "$(usage)"
+    ;;
+esac

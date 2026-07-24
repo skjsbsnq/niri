@@ -771,6 +771,31 @@ Item {
         return ["powerprofilesctl", "set", String(id || "")];
     }
 
+    // Polkit policy annotates this install path for passwordless active sessions.
+    readonly property string platformProfileInstalledHelper: "/usr/local/lib/tahoe/tahoe-platform-profile"
+
+    function platformProfileHelperPath() {
+        return Quickshell.shellPath("scripts/tahoe-platform-profile");
+    }
+
+    function platformProfileGetCommand() {
+        return ["cat", "/sys/firmware/acpi/platform_profile"];
+    }
+
+    function platformProfileChoicesCommand() {
+        return ["cat", "/sys/firmware/acpi/platform_profile_choices"];
+    }
+
+    function platformProfileSetCommand(id) {
+        // Prefer installed helper so org.tahoe.platform-profile.set can apply.
+        // PowerProfiles retries with the bundled path if this binary is missing.
+        return ["pkexec", root.platformProfileInstalledHelper, "set", String(id || "")];
+    }
+
+    function platformProfileVerifyCommand(id) {
+        return [platformProfileHelperPath(), "verify", String(id || "")];
+    }
+
     function parseProbe(text) {
         if (!root.pollingActive && root.revision > 0)
             return;

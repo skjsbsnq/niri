@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC
+ "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1.0/policyconfig.dtd">
+<policyconfig>
+  <vendor>Tahoe</vendor>
+  <vendor_url>https://github.com</vendor_url>
+
+  <!--
+    Allow an active local session to set ACPI platform_profile without a
+    password prompt. power-profiles-daemon already allows the same class of
+    action (org.freedesktop.UPower.PowerProfiles.switch-profile) for active
+    users; this covers firmware tiers PPD cannot express (balanced-performance).
+  -->
+  <action id="org.tahoe.platform-profile.set">
+    <description>Set ACPI platform power profile</description>
+    <description xml:lang="zh_CN">设置 ACPI 平台电源模式</description>
+    <message>Authentication is required to change the platform power profile.</message>
+    <message xml:lang="zh_CN">更改平台电源模式需要认证。</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>yes</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/local/lib/tahoe/tahoe-platform-profile</annotate>
+    <annotate key="org.freedesktop.policykit.exec.allow_gui">true</annotate>
+  </action>
+</policyconfig>

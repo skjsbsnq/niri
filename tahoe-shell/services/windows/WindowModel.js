@@ -125,9 +125,15 @@ function identityKey(value) {
     }
 
     if (typeof value === "bigint") {
-        if (value < 0n)
+        // Never use BigInt *literals* (e.g. 0n): Quickshell QJSEngine rejects
+        // them at parse time ("Unexpected token identifier"), which takes down
+        // the whole shell when WindowModel.js is loaded.
+        var bigText = value.toString();
+        if (bigText.length === 0 || bigText.charAt(0) === "-")
             return null;
-        return value.toString();
+        if (!/^[0-9]+$/.test(bigText))
+            return null;
+        return bigText;
     }
 
     if (typeof value === "number") {

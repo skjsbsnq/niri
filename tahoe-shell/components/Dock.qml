@@ -925,8 +925,8 @@ PanelWindow {
             regionY: Math.round(root.height - root.dockVisibleHeight)
             regionWidth: Math.round(dockChrome.width)
             regionHeight: Math.round(root.dockVisibleHeight)
-            // Quantize so spring settle noise does not republish glass every frame.
-            interaction: Math.round(root.dockGlassInteraction * 50) / 50
+            // R14: raw value; C++ TahoeGlassRegion::setInteraction is the sole 1/50 quantize.
+            interaction: root.dockGlassInteraction
             materialAlpha: 1.0 - root.fullscreenTransition
             glassEnabled: root.dockGlassActive && root.dockVisibleHeight > 0.5 && root.fullscreenTransition < 0.99
         }

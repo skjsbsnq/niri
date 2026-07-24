@@ -32,19 +32,8 @@ Rectangle {
     radius: GlassStyle.radiusForMaterial(material)
     color: fillColor
 
-    // Snap interaction/alpha to 0.02 steps so continuous opacity/spring feeds
-    // do not spam TahoeGlass commits (session.log showed ~60Hz clear/set).
-    function quantizeGlass01(value) {
-        var n = Number(value);
-        if (!isFinite(n))
-            return 0;
-        if (n <= 0)
-            return 0;
-        if (n >= 1)
-            return 1;
-        return Math.round(n * 50) / 50;
-    }
-
+    // R14: do not re-quantize here. Quickshell C++ TahoeGlassRegion setters are
+    // the sole 1/50 quantize + changed-only owner (schedulePolish → setRegions).
     TahoeGlassRegion {
         id: glassRegion
 
@@ -58,8 +47,8 @@ Rectangle {
         blur: root.blur
         shadow: root.shadow
         clip: root.regionClip
-        interaction: root.quantizeGlass01(Math.max(root.interaction, pressHandler.active ? 1 : 0))
-        materialAlpha: root.quantizeGlass01(root.materialAlpha)
+        interaction: Math.max(root.interaction, pressHandler.active ? 1 : 0)
+        materialAlpha: root.materialAlpha
         enabled: root.regionEnabled
     }
 

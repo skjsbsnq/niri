@@ -170,6 +170,10 @@ PanelWindow {
     GlassPanel {
         id: panel
 
+        // No whole-card press boost: the compositor glass gain reads as an
+        // opacity flash when clicking anywhere inside the card.
+        pressInteractionEnabled: false
+
         x: 0
         // Glass region geometry follows panel height via eased NumberAnimation
         // only (never Spring) — guardrail 0704ea4 / T11.

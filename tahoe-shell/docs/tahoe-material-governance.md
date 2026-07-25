@@ -81,6 +81,11 @@
 强度，不改变 region 几何，也不会抢占子 `MouseArea` 的点击或拖拽；baseline
 已经为 `1` 的 surface 不再额外叠加强度。
 
+例外（`pressInteractionEnabled: false`）：弹出卡片/菜单类 surface（顶栏九张
+弹层、DockAppMenu、DockWindowMenu、ProcessMenu）关闭整卡按压增益——卡片
+填充 alpha 极低，增益在整卡上读作"点击闪不透明度"，不属于设计内反馈。常驻
+chrome（TopBar bar、Dock、灵动岛等）与瞬态通知面（toast）保持默认开启。
+
 当前 protocol 硬上限：
 
 - 每个 Wayland surface 最多 32 个 TahoeGlass region。

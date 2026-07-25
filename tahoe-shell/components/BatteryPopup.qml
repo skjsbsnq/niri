@@ -54,6 +54,10 @@ PanelWindow {
     GlassPanel {
         id: panel
 
+        // No whole-card press boost: the compositor glass gain reads as an
+        // opacity flash when clicking anywhere inside the card.
+        pressInteractionEnabled: false
+
         // Keep the compositor glass region anchored. In compositor animation
         // mode niri owns the outer motion.
         y: 0

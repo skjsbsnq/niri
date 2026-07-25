@@ -200,7 +200,7 @@ class EdgeRevealSemanticsTests(unittest.TestCase):
                 for forbidden in ("pop-slide", "scale-from", "scale-to", "origin"):
                     self.assertNotIn(forbidden, block)
 
-        self.assertRegex(layer_open, r"(?m)^\s*opacity-from\s+0\.68\s*$")
+        self.assertRegex(layer_open, r"(?m)^\s*opacity-from\s+0\.84\s*$")
 
     def test_top_edge_panels_keep_close_snapshot_opaque(self) -> None:
         text = CONFIG.read_text(encoding="utf-8")

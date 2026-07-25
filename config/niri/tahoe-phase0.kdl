@@ -563,7 +563,7 @@ layer-rule {
         layer-open {
             style "edge-reveal"
             edge "top"
-            opacity-from 0.68
+            opacity-from 0.84
             spring damping-ratio=0.85 stiffness=380 epsilon=0.0005
             opacity-duration-ms 110
             opacity-curve "standard-decel"

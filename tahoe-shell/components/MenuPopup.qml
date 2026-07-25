@@ -116,6 +116,10 @@ PanelWindow {
     GlassPanel {
         id: menuSurface
 
+        // No whole-card press boost: the compositor glass gain reads as an
+        // opacity flash when clicking anywhere inside the card.
+        pressInteractionEnabled: false
+
         x: 0
         // menuSurface is the compositor-owned glass region item. niri owns the
         // outer layer motion without QML opacity/scale changes.

@@ -206,7 +206,7 @@ class NiriSettingsToolTests(unittest.TestCase):
 
                 popup = niri_settings_tool.MOTION_PROFILE_LAYERS[profile]["small_popup"]
                 if profile != "reduced":
-                    self.assertEqual(popup["layer-open"]["opacity-from"], 0.68)
+                    self.assertEqual(popup["layer-open"]["opacity-from"], 0.84)
 
     def test_motion_profile_writer_preserves_shared_top_edge_panel_close_policy(self) -> None:
         original = TAHOE_PHASE0.read_text(encoding="utf-8")

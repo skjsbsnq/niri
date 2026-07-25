@@ -1091,7 +1091,7 @@ MOTION_PROFILE_LAYERS = {
             "layer-close": layer_phase(110, 80, "opacity-to", 0.0, "emphasized-accel"),
         },
         "small_popup": {
-            "layer-open": spring_phase(0.85, 380, 0.0005, 110, "opacity-from", 0.68, "standard-decel"),
+            "layer-open": spring_phase(0.85, 380, 0.0005, 110, "opacity-from", 0.84, "standard-decel"),
             "layer-close": top_edge_panel_close_phase("balanced"),
         },
         "menu": {
@@ -1121,7 +1121,7 @@ MOTION_PROFILE_LAYERS = {
             "layer-close": layer_phase(90, 60, "opacity-to", 0.0, "emphasized-accel"),
         },
         "small_popup": {
-            "layer-open": spring_phase(0.9, 520, 0.0005, 80, "opacity-from", 0.68, "standard-decel"),
+            "layer-open": spring_phase(0.9, 520, 0.0005, 80, "opacity-from", 0.84, "standard-decel"),
             "layer-close": top_edge_panel_close_phase("fast"),
         },
         "menu": {
@@ -1151,7 +1151,7 @@ MOTION_PROFILE_LAYERS = {
             "layer-close": layer_phase(150, 90, "opacity-to", 0.0, "emphasized-accel"),
         },
         "small_popup": {
-            "layer-open": spring_phase(0.82, 300, 0.0005, 130, "opacity-from", 0.68, "standard-decel"),
+            "layer-open": spring_phase(0.82, 300, 0.0005, 130, "opacity-from", 0.84, "standard-decel"),
             "layer-close": top_edge_panel_close_phase("liquid"),
         },
         "menu": {

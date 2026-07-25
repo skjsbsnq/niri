@@ -70,3 +70,14 @@ R15 之后没有提交再次改动这组动画；回归从 R15 一直保留到�
 ## 残余人工项
 
 自动测试可证明配置语义、writer 往返、ownership 与渲染分支，不能替代主观观感。仍建议在真实桌面逐一肉眼观察 Control Center、Notification Center、Battery、WiFi、Fan、Clipboard、Tray-menu 的正常关闭、打开中途关闭、快速重开，以及 reduced 60ms fade；重点覆盖 fractional scale 与多输出。该项不影响本次代码与配置门禁结论。
+
+## 2026-07-25 follow-up：open 淡入回滚 0.68 → 0.84
+
+用户反馈小弹窗打开淡入可察觉（点顶栏按钮弹卡时透明度渐入），不属于原设计观感。
+上文"open 参数保持 `opacity-from 0.68`"自本日起不再成立：回滚为 R15 之前的
+0.84。四方同步：KDL small_popup 块、`niri_settings_tool.py` fast/balanced/liquid
+三份 small_popup 模板、`test_niri_settings_tool.py:209` 与
+`test_edge_reveal_semantics.py:203` 断言（reduced 仍为 0.0 全淡入，未动）。
+layer-close 侧维持本文件确立的共享 top-edge 关闭策略，一行未碰。同批次连带：
+弹出卡片/菜单类 GlassPanel 关闭整卡按压增益（`pressInteractionEnabled: false`，
+例外清单见 tahoe-shell/docs/tahoe-material-governance.md），常驻 chrome 不变。

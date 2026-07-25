@@ -92,6 +92,10 @@ PanelWindow {
     GlassPanel {
         id: panel
 
+        // No whole-card press boost: the compositor glass gain reads as an
+        // opacity flash when clicking anywhere inside the card.
+        pressInteractionEnabled: false
+
         z: 1
         x: 0
         y: 0

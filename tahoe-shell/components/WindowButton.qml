@@ -324,7 +324,7 @@ Item {
 
     Rectangle {
         id: hoverLabel
-        readonly property real labelMaxWidth: Math.max(48, Math.min(280, (root.labelClipItem ? root.labelClipItem.width : root.width) - 12))
+        readonly property real labelMaxWidth: Math.max(48, (root.labelClipItem ? root.labelClipItem.width : root.width) - 12)
 
         z: 10
         x: {

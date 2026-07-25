@@ -1714,7 +1714,10 @@ PanelWindow {
         Rectangle {
             id: dockHoverLabel
 
-            readonly property real labelMaxWidth: Math.max(48, Math.min(280, dockChrome.width - 12))
+            // No fixed cap: with dockWindowTitleMode "icons" the hover text is
+            // the full window title, and CJK titles overflow a 280px capsule.
+            // The x-clamp below keeps even screen-wide labels on screen.
+            readonly property real labelMaxWidth: Math.max(48, dockChrome.width - 12)
 
             z: 100
             x: Math.max(6, Math.min(dockChrome.width - width - 6, root.dockHoverLabelCenterX - width / 2))

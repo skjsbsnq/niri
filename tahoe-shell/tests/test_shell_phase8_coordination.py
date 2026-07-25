@@ -43,15 +43,38 @@ class ShellPhase8CoordinationTests(unittest.TestCase):
             "screenByName",
             "topBarPopupOpenFor",
             "topBarDismissOpenFor",
-            "topBarDismissPopupWidth",
-            "topBarDismissPopupHeight",
-            "topBarDismissFallbackRight",
             "closeTopBarPopups",
         ]
 
         for wrapper in wrappers:
             with self.subTest(wrapper=wrapper):
                 self.assertRegex(text, rf"function\s+{wrapper}\s*\(")
+
+    def test_dismiss_layer_tracks_real_popup_geometry(self) -> None:
+        """Dismiss cutouts must follow live card geometry, not a size table.
+
+        The pre-fix hardcoded width/height table drifted from the
+        content-sized cards and left invisible dead zones where clicks
+        neither reached the card nor dismissed it.
+        """
+        shell_text = SHELL_QML.read_text(encoding="utf-8")
+        self.assertIn("readonly property var activeTopBarPopup:", shell_text)
+        self.assertIn("popupWidth: activeTopBarPopup ? activeTopBarPopup.implicitWidth : 1", shell_text)
+        self.assertIn("popupHeight: activeTopBarPopup ? activeTopBarPopup.implicitHeight : 1", shell_text)
+
+        helper_text = POPUP_HELPER.read_text(encoding="utf-8")
+        self.assertNotIn("topBarDismissPopupWidth", helper_text)
+        self.assertNotIn("topBarDismissPopupHeight", helper_text)
+
+        dismiss_text = self.read("components/PopupDismissLayer.qml")
+        top_bar_text = self.read("components/TopBar.qml")
+        cutout = re.search(r"height:\s*root\.useTopBarCutout\s*\?\s*(\d+)\s*:\s*0", dismiss_text)
+        bar_height = re.search(r"implicitHeight:\s*(\d+)", top_bar_text)
+        self.assertIsNotNone(cutout)
+        self.assertIsNotNone(bar_height)
+        # A taller cutout than the bar leaves a strip where clicks pass
+        # through to windows underneath instead of dismissing the popup.
+        self.assertEqual(cutout.group(1), bar_height.group(1))
 
     def test_topbar_state_is_aliased_to_helper_not_redeclared_locally(self) -> None:
         text = SHELL_QML.read_text(encoding="utf-8")

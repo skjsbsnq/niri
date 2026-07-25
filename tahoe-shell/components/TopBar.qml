@@ -192,7 +192,7 @@ PanelWindow {
     // Floating, rounded glass bar — mirrors the Dock / ControlCenter form
     // so the top bar reads as "a piece of glass floating off the screen
     // edge" instead of a full-width strip glued to the top. The
-    // PanelWindow itself stays transparent and keeps exclusiveZone 34 so
+    // PanelWindow itself stays transparent and keeps exclusiveZone 40 so
     // window layout doesn't shift; only the inner barSurface floats with
     // insets. See glass-consistency-fix-plan.md §2.3.
     //

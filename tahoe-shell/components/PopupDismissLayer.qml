@@ -3,26 +3,17 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Wayland
-import "PopupGeometry.js" as PopupGeometry
 
 PanelWindow {
     id: root
 
     property bool open: false
-    property var anchorRect: null
+    property int popupLeft: 0
+    property int popupTop: 0
     property int popupWidth: 1
     property int popupHeight: 1
-    property int fallbackRight: 12
-    property int fallbackTop: 28
-    property int popupGap: 8
-    property int edgePadding: 8
     property bool usePopupCutout: true
     property bool useTopBarCutout: true
-    property bool useCustomPopupGeometry: false
-    property int customPopupLeft: 0
-    property int customPopupTop: 0
-    readonly property int popupLeft: useCustomPopupGeometry ? customPopupLeft : PopupGeometry.popupLeft(anchorRect, popupWidth, screenWidth, edgePadding, fallbackRight)
-    readonly property int popupTop: useCustomPopupGeometry ? customPopupTop : PopupGeometry.popupTop(anchorRect, fallbackTop, popupGap)
     readonly property int cutoutPadding: 8
     readonly property int screenWidth: Math.max(1, Number(root.screen && root.screen.width) || root.width)
     readonly property int screenHeight: Math.max(1, Number(root.screen && root.screen.height) || root.height)
@@ -61,7 +52,10 @@ PanelWindow {
             x: 0
             y: 0
             width: root.screenWidth
-            height: root.useTopBarCutout ? 44 : 0
+            // TopBar's surface is 40px (its implicitHeight/exclusiveZone); a
+            // taller cutout leaves a band where clicks neither hit the bar nor
+            // dismiss the popup.
+            height: root.useTopBarCutout ? 40 : 0
         }
     }
 

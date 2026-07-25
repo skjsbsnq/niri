@@ -239,18 +239,6 @@ ShellRoot {
         return shellPopupState.topBarDismissOpenFor(screenName(screen));
     }
 
-    function topBarDismissPopupWidth() {
-        return shellPopupState.topBarDismissPopupWidth();
-    }
-
-    function topBarDismissPopupHeight() {
-        return shellPopupState.topBarDismissPopupHeight();
-    }
-
-    function topBarDismissFallbackRight() {
-        return shellPopupState.topBarDismissFallbackRight();
-    }
-
     function prepareDockAppMenu(screen, app, appId, anchorRect) {
         dockAppMenuScreenName = screenName(screen);
         dockAppMenuApp = app || null;
@@ -796,6 +784,21 @@ ShellRoot {
         Scope {
             required property var modelData
 
+            // The dismiss cutout tracks the real geometry of whichever top-bar
+            // card is open. Card heights are content-sized and animate, so any
+            // fixed size table drifts and leaves invisible dead zones where
+            // clicks neither reach the card nor dismiss it.
+            readonly property var activeTopBarPopup: shell.appMenuOpen ? menuPopup
+                : shell.applicationMenuOpen ? appMenuPopup
+                : shell.controlCenterOpen ? controlCenter
+                : shell.notificationCenterOpen ? notificationCenter
+                : shell.batteryPopupOpen ? batteryPopup
+                : shell.wifiPopupOpen ? wifiPopup
+                : shell.fanPopupOpen ? fanPopup
+                : shell.clipboardPopupOpen ? clipboardPopup
+                : shell.trayMenuOpen ? trayMenu
+                : null
+
             Wallpaper {
                 screen: modelData
                 appsService: apps
@@ -808,10 +811,10 @@ ShellRoot {
             PopupDismissLayer {
                 screen: modelData
                 open: shell.topBarDismissOpenFor(modelData)
-                anchorRect: shell.topBarPopupAnchorRect
-                popupWidth: shell.topBarDismissPopupWidth()
-                popupHeight: shell.topBarDismissPopupHeight()
-                fallbackRight: shell.topBarDismissFallbackRight()
+                popupLeft: activeTopBarPopup ? activeTopBarPopup.popupLeftMargin : 0
+                popupTop: activeTopBarPopup ? activeTopBarPopup.popupTopMargin : 0
+                popupWidth: activeTopBarPopup ? activeTopBarPopup.implicitWidth : 1
+                popupHeight: activeTopBarPopup ? activeTopBarPopup.implicitHeight : 1
                 onCloseRequested: shell.closeTopBarPopups("")
             }
 
@@ -935,9 +938,8 @@ ShellRoot {
                     && !shell.processMenuOpenFor(modelData)
                 usePopupCutout: true
                 useTopBarCutout: true
-                useCustomPopupGeometry: true
-                customPopupLeft: 0
-                customPopupTop: 0
+                popupLeft: 0
+                popupTop: 0
                 popupWidth: leftSidebar.panelWidth
                 popupHeight: Math.max(1, Number(modelData && modelData.height) || 1)
                 onCloseRequested: shell.closeLeftSidebar()
@@ -963,15 +965,16 @@ ShellRoot {
                 open: shell.processMenuOpenFor(modelData)
                 usePopupCutout: true
                 useTopBarCutout: false
-                useCustomPopupGeometry: true
-                customPopupLeft: processMenu.popupLeft
-                customPopupTop: processMenu.popupTop
+                popupLeft: processMenu.popupLeft
+                popupTop: processMenu.popupTop
                 popupWidth: processMenu.panelWidth
                 popupHeight: processMenu.panelHeight
                 onCloseRequested: shell.closeProcessMenu()
             }
 
             MenuPopup {
+                id: menuPopup
+
                 screen: modelData
                 anchorRect: shell.topBarPopupAnchorRect
                 open: shell.topBarPopupOpenFor(shell.appMenuOpen, modelData)
@@ -988,6 +991,8 @@ ShellRoot {
             }
 
             AppMenuPopup {
+                id: appMenuPopup
+
                 screen: modelData
                 anchorRect: shell.topBarPopupAnchorRect
                 open: shell.topBarPopupOpenFor(shell.applicationMenuOpen, modelData)
@@ -1069,15 +1074,16 @@ ShellRoot {
                 open: shell.dockAppMenuOpenFor(modelData) || shell.dockWindowMenuOpenFor(modelData)
                 usePopupCutout: true
                 useTopBarCutout: false
-                useCustomPopupGeometry: true
-                customPopupLeft: shell.dockAppMenuOpenFor(modelData) ? dockAppMenu.popupLeft : dockWindowMenu.popupLeft
-                customPopupTop: shell.dockAppMenuOpenFor(modelData) ? dockAppMenu.popupTop : dockWindowMenu.popupTop
+                popupLeft: shell.dockAppMenuOpenFor(modelData) ? dockAppMenu.popupLeft : dockWindowMenu.popupLeft
+                popupTop: shell.dockAppMenuOpenFor(modelData) ? dockAppMenu.popupTop : dockWindowMenu.popupTop
                 popupWidth: shell.dockAppMenuOpenFor(modelData) ? dockAppMenu.panelWidth : dockWindowMenu.panelWidth
                 popupHeight: shell.dockAppMenuOpenFor(modelData) ? dockAppMenu.panelHeight : dockWindowMenu.panelHeight
                 onCloseRequested: shell.closeDockMenus()
             }
 
             ControlCenter {
+                id: controlCenter
+
                 screen: modelData
                 niriService: niri
                 controlsService: controls
@@ -1173,6 +1179,8 @@ ShellRoot {
             }
 
             NotificationCenter {
+                id: notificationCenter
+
                 screen: modelData
                 notificationsService: notifications
                 settingsService: desktopSettings
@@ -1182,6 +1190,8 @@ ShellRoot {
             }
 
             BatteryPopup {
+                id: batteryPopup
+
                 screen: modelData
                 batteryService: battery
                 powerProfileService: powerProfiles
@@ -1192,6 +1202,8 @@ ShellRoot {
             }
 
             WifiPopup {
+                id: wifiPopup
+
                 screen: modelData
                 controlsService: controls
                 settingsService: desktopSettings
@@ -1201,6 +1213,8 @@ ShellRoot {
             }
 
             FanPopup {
+                id: fanPopup
+
                 screen: modelData
                 fanService: fanControl
                 settingsService: desktopSettings
@@ -1210,6 +1224,8 @@ ShellRoot {
             }
 
             ClipboardPopup {
+                id: clipboardPopup
+
                 screen: modelData
                 clipboardService: clipboardHistory
                 settingsService: desktopSettings
@@ -1219,6 +1235,8 @@ ShellRoot {
             }
 
             TrayMenu {
+                id: trayMenu
+
                 screen: modelData
                 trayItem: shell.trayMenuItem
                 settingsService: desktopSettings

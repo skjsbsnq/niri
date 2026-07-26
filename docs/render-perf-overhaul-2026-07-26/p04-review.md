@@ -249,7 +249,12 @@ validate），fail-close 对旧 KDL 亲测（read 安全降级 / write 拒绝并
 （reduced 0/0 跳快照 + 三档恒 400 + KDL fade/curve 锁）；验收命令 `qs -c tahoe` 勘误；
 走查清单补正常 launch pop 快照 fade 项；节名加"验收数据"。
 
-**批次 4 commit：待填（见 roadmap 状态表）。**
+**批次 4 commit：`25b03f7`（已推送）。**
+
+> **部署状态：待办。** 本会话未获授权触碰线上会话（rsync --delete 覆盖
+> `~/.config/quickshell/tahoe/` + 覆盖 `~/.config/niri/tahoe/config.kdl` 被权限
+> 分类器拦截）。P03/P05 同样留有 niri/quickshell 二进制部署待办——建议与本任务的
+> KDL+shell 同批部署后，一并执行下方验收。
 
 （批次 4 审查结论与 commit 号待补。）
 

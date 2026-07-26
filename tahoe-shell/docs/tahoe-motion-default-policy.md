@@ -51,6 +51,21 @@ panelExit token 分档）；`reduced` 丢弃原固定 160ms scale settle，改�
 fade（与其他组 reduced 政策一致）。opacity 通道与 `panelExit` 的逐档一致性由
 `test_niri_settings_tool.py` 收敛测试锁定。
 
+2026-07-26 update (P04 批次 2): Launchpad 加入 compositor owner 集合（受管组
+`launchpad`，popin/popout 0.988、340ms OutQuint 进 / 240ms InOutCubic 出），
+**显式推翻** R10 段"Launchpad 仍明确由 QML 拥有"的旧决策：当年"compositor
+缩放会软"的评估发生在 close 玻璃尚会被烘进快照、且参数为 0.98/180ms 的机制
+状态下；现行机制（RescaleRenderElement 零上采样、close 玻璃 live 渲染、动画
+alpha 作用于 material_alpha）已消除全部成因。QML 删除了休眠的
+`compositorLayerAnimations` 双路径旗标与 `layerProgress` 外层驱动（含
+exitCleanupTimer/延迟 unmap）；close 分支只停动画不重置内容（快照=最后呈现
+帧，属承重设计）。内容动画（gridEnter、launch pop、paging、壁纸 zoom 联动）
+保留在 QML。已接受取舍：blur region 随整面缩放（旧 QML 只缩绘制内容，region
+静态），动画中期每侧 ~0.6% 未模糊边由同步 fade 掩蔽；额外 dim 由嵌套
+opacity 二次方变单次线性；launch pop 240ms 窗口内用户主动关闭会把半程 pop
+冻进快照。reduced 双通道 0ms = 瞬时 unmap 且不生成快照，与旧 QML reduced
+snap 等价。
+
 ## Why Balanced Stays Default
 
 `balanced` remains the default because it is the only profile with all of the following evidence:
@@ -79,7 +94,7 @@ Reasons:
 | Fallback | Keep/Remove | Reason |
 | --- | --- | --- |
 | QML outer fallback for migrated Tahoe surfaces | Remove | niri is the sole outer owner; disabling means instant outer visibility |
-| Launchpad QML outer animation | Keep | Not migrated to compositor layer animation |
+| Launchpad QML outer animation | Removed (P04 批次 2) | Migrated to compositor layer animation; content animations (grid enter, launch pop, paging) stay QML |
 | Dock, TaskSwitcher, WindowOverview QML path | Keep | Not forced into compositor layer animation |
 | TahoeGlass client fallback to BackgroundEffect | Keep | Protocol/fallback lifecycle is separate from motion defaults |
 | Thumbnail `WindowPreviewFallback` | Keep | Required when niri thumbnail IPC or image decode fails |

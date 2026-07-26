@@ -641,6 +641,23 @@ layer-rule {
                     f"settings {phase} opacity must follow panelExit ({profile})",
                 )
 
+    def test_launchpad_reduced_profile_disables_both_channels(self) -> None:
+        # P04 batch 2: reduced launchpad must stay 0ms on BOTH channels of
+        # BOTH phases. That exact shape is what makes niri skip the close
+        # snapshot entirely (layer_close_animation_config_is_disabled), i.e.
+        # instant unmap with no fullscreen snapshot cost — the compositor
+        # equivalent of the old QML reduced snap. 0/60 would silently
+        # reintroduce a fullscreen snapshot per close.
+        group = niri_settings_tool.MOTION_PROFILE_LAYERS["reduced"]["launchpad"]
+        for phase in niri_settings_tool.LAYER_PHASES:
+            self.assertEqual(group[phase]["transform-duration-ms"], 0, phase)
+            self.assertEqual(group[phase]["opacity-duration-ms"], 0, phase)
+        # The three animated profiles keep the QML-era 340/240 pair.
+        for profile in ("fast", "balanced", "liquid"):
+            animated = niri_settings_tool.MOTION_PROFILE_LAYERS[profile]["launchpad"]
+            self.assertEqual(animated["layer-open"]["transform-duration-ms"], 340, profile)
+            self.assertEqual(animated["layer-close"]["transform-duration-ms"], 240, profile)
+
 
 if __name__ == "__main__":
     unittest.main()

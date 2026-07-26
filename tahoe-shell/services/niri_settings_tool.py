@@ -990,6 +990,9 @@ LAYER_PROFILE_GROUPS = {
     # P04: fullscreen settings surface. Compositor owns the whole-surface
     # fade + 0.985 popin settle that used to be QML opacity/scale Behaviors.
     "settings": ("tahoe-settings",),
+    # P04: launchpad. Compositor owns the whole-surface popin/popout that used
+    # to be the QML layerProgress fade/scale dual path.
+    "launchpad": ("tahoe-launchpad",),
 }
 TOP_EDGE_PANEL_GROUPS = ("control_center", "notification_center", "small_popup")
 LAYER_PHASES = ("layer-open", "layer-close")
@@ -1113,6 +1116,10 @@ MOTION_PROFILE_LAYERS = {
             "layer-open": {**layer_phase(160, 200, "opacity-from", 0.0), "style": "popin"},
             "layer-close": {**layer_phase(160, 200, "opacity-to", 0.0), "style": "popout"},
         },
+        "launchpad": {
+            "layer-open": {**layer_phase(340, 340, "opacity-from", 0.0), "style": "popin"},
+            "layer-close": {**layer_phase(240, 240, "opacity-to", 0.0), "style": "popout"},
+        },
     },
     "fast": {
         "control_center": {
@@ -1147,6 +1154,10 @@ MOTION_PROFILE_LAYERS = {
             "layer-open": {**layer_phase(160, 160, "opacity-from", 0.0), "style": "popin"},
             "layer-close": {**layer_phase(160, 160, "opacity-to", 0.0), "style": "popout"},
         },
+        "launchpad": {
+            "layer-open": {**layer_phase(340, 340, "opacity-from", 0.0), "style": "popin"},
+            "layer-close": {**layer_phase(240, 240, "opacity-to", 0.0), "style": "popout"},
+        },
     },
     "liquid": {
         "control_center": {
@@ -1180,6 +1191,10 @@ MOTION_PROFILE_LAYERS = {
         "settings": {
             "layer-open": {**layer_phase(160, 230, "opacity-from", 0.0), "style": "popin"},
             "layer-close": {**layer_phase(160, 230, "opacity-to", 0.0), "style": "popout"},
+        },
+        "launchpad": {
+            "layer-open": {**layer_phase(340, 340, "opacity-from", 0.0), "style": "popin"},
+            "layer-close": {**layer_phase(240, 240, "opacity-to", 0.0), "style": "popout"},
         },
     },
     "reduced": {
@@ -1216,6 +1231,14 @@ MOTION_PROFILE_LAYERS = {
         "settings": {
             "layer-open": {**layer_phase(0, 60, "opacity-from", 0.0), "style": "fade"},
             "layer-close": {**layer_phase(0, 60, "opacity-to", 0.0), "style": "fade"},
+        },
+        # Reduced launchpad is instant both ways (the QML path snapped
+        # layerProgress with zero duration): both channels 0ms disables the
+        # animation entirely, so open maps statically and close skips the
+        # snapshot.
+        "launchpad": {
+            "layer-open": {**layer_phase(0, 0, "opacity-from", 0.0), "style": "fade"},
+            "layer-close": {**layer_phase(0, 0, "opacity-to", 0.0), "style": "fade"},
         },
     },
 }

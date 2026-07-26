@@ -20,12 +20,14 @@ class LayerAnimationOwnershipTests(unittest.TestCase):
         spotlight = self.read(COMPONENTS / "Spotlight.qml")
         toast = self.read(COMPONENTS / "NotificationToast.qml")
         settings = self.read(COMPONENTS / "SettingsPanel.qml")
+        launchpad = self.read(COMPONENTS / "Launchpad.qml")
 
         for name, text in (
             ("sidebar", sidebar),
             ("spotlight", spotlight),
             ("toast", toast),
             ("settings", settings),
+            ("launchpad", launchpad),
         ):
             with self.subTest(component=name):
                 self.assertNotIn("compositorLayerAnimations", text)
@@ -56,9 +58,25 @@ class LayerAnimationOwnershipTests(unittest.TestCase):
         self.assertNotIn("regionEnabled: root.open", settings)
         self.assertNotIn("Behavior on scale", settings)
 
-    def test_launchpad_remains_explicit_qml_outer_owner(self) -> None:
+    def test_launchpad_is_compositor_owned(self) -> None:
+        # P04 batch 2: the dormant QML dual path (compositorLayerAnimations
+        # flag + layerProgress fade/scale + delayed unmap) is retired; niri's
+        # layer-animation launchpad rule owns the outer open/close. Content
+        # animations (grid enter, launch pop, paging) stay in QML.
         launchpad = self.read(COMPONENTS / "Launchpad.qml")
-        self.assertIn("readonly property bool compositorLayerAnimations: false", launchpad)
+        self.assertIn("visible: open", launchpad)
+        self.assertNotIn("property real layerProgress", launchpad)
+        self.assertNotIn("playLayerEnter", launchpad)
+        self.assertNotIn("playLayerExit", launchpad)
+        self.assertNotIn("exitCleanupTimer", launchpad)
+        self.assertNotIn("glassEnabled: root.open", launchpad)
+        self.assertIn("playGridEnter", launchpad)
+        self.assertIn("launchPopAnim", launchpad)
+
+        motion = self.read(COMPONENTS / "Motion.js")
+        self.assertNotIn("launchpadLayerEnterMs", motion)
+        self.assertNotIn("launchpadLayerExitMs", motion)
+        self.assertNotIn("launchpadLayerScaleFrom", motion)
 
     def test_layer_toggle_uses_only_niri_settings_writer(self) -> None:
         desktop = self.read(SERVICES / "DesktopSettings.qml")

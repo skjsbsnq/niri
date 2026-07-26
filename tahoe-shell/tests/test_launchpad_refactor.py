@@ -63,7 +63,8 @@ class LaunchpadRefactorTests(unittest.TestCase):
         self.assertNotIn('category: "all"', text)
         # Full-screen backdrop material.
         self.assertIn("MaterialBackdrop", text)
-        self.assertIn("compositorLayerAnimations: false", text)
+        # P04: outer open/close is compositor-owned (no QML dual-path flag).
+        self.assertNotIn("compositorLayerAnimations", text)
         # Paging + dots + keyboard.
         self.assertIn("pageFlick", text)
         self.assertIn("snapToNearestPage", text)
@@ -88,8 +89,11 @@ class LaunchpadRefactorTests(unittest.TestCase):
         self.assertIn("var launchpadPageSnapMs = 300;", text)
         self.assertIn("var launchpadPageCommitRatio = 0.10;", text)
         self.assertIn("var launchpadPageFlickVelocity = 220;", text)
-        self.assertIn("var launchpadLayerEnterMs = 340;", text)
-        self.assertIn("var launchpadLayerExitMs = 240;", text)
+        # P04: the whole-layer enter/exit tokens moved to the niri
+        # layer-animation launchpad rule; Motion.js keeps content-side only.
+        self.assertNotIn("launchpadLayerEnterMs", text)
+        self.assertNotIn("launchpadLayerExitMs", text)
+        self.assertNotIn("launchpadLayerScaleFrom", text)
         self.assertIn("var launchpadLaunchPopMs = 200;", text)
         self.assertIn("function launchpadPageSnapDurationForDistance", text)
         self.assertIn("launchpadPageSnapDurationForDistance", LAUNCHPAD.read_text(encoding="utf-8"))
@@ -97,15 +101,16 @@ class LaunchpadRefactorTests(unittest.TestCase):
         self.assertIn("pagePeakVelocity", lp)
         self.assertIn("onDraggingChanged", lp)
         self.assertIn("cancelFlick", lp)
-        self.assertIn("layerProgress", lp)
-        self.assertIn("playLayerEnter", lp)
-        self.assertIn("playLayerExit", lp)
+        self.assertNotIn("layerProgress", lp)
+        self.assertNotIn("playLayerEnter", lp)
+        self.assertNotIn("playLayerExit", lp)
         self.assertIn("launchPop", lp)
         self.assertIn("var launchpadGridCols = 7;", text)
         self.assertIn("var launchpadGridRows = 5;", text)
         self.assertIn("function launchpadStaggerDelay", text)
         self.assertIn("function launchpadPageSnapDuration", text)
-        self.assertIn("function launchpadLayerEnterDuration", text)
+        self.assertNotIn("function launchpadLayerEnterDuration", text)
+        self.assertNotIn("function launchpadLayerExitDuration", text)
         self.assertIn("function launchpadLaunchPopDuration", text)
 
     def test_wallpaper_zoom_driven_by_launchpad(self) -> None:
@@ -174,9 +179,11 @@ class LaunchpadRefactorTests(unittest.TestCase):
         # Launch pop before close.
         self.assertIn("launchCloseTimer", text)
         self.assertIn("launchpadLaunchPopScaleBoost", text)
-        # Layer open/close uses explicit progress (not only Behavior on open).
-        self.assertIn("layerProgressAnim", text)
-        self.assertIn("playLayerExit", text)
+        # P04: no QML outer exit drivers — the compositor close animation
+        # plays the unmap snapshot, so close must not reset committed content.
+        self.assertNotIn("layerProgressAnim", text)
+        self.assertNotIn("playLayerExit", text)
+        self.assertIn("No state resets here", text)
 
 
 if __name__ == "__main__":

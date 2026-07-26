@@ -165,23 +165,21 @@ function spotlightPreviewFade(settingsService) {
     return reducedMotion(settingsService) ? 0 : spotlightPreviewFadeMs;
 }
 
-// Launchpad (T18 + hand-feel fix). Full-screen QML path only (rules §2.11).
+// Launchpad (T18 + hand-feel fix). Rules §2.11.
 // Wallpaper zoom is content-side on Wallpaper.qml.
 // Hand-feel: icons reveal together (short unified fade/scale), not one-by-one
 // distance stagger — the old per-icon opacity:0 + long stagger looked like
 // "only one icon then the rest". Paging uses intent thresholds (short drag OR
 // light flick commits a page) — not "drag past 50% / until icons vanish".
+// P04: the whole-layer open/close (opacity + 0.988 settle) moved to the niri
+// layer-animation rule `tahoe-managed: layer-animation launchpad`; only
+// content-side tokens (wallpaper zoom, grid enter, launch pop, paging) remain.
 var launchpadWallpaperScale = 1.06;
 var launchpadWallpaperDim = 0.25;
 var launchpadWallpaperMs = 400;
 // Soft unified enter (whole grid), not per-icon cascade.
 var launchpadIconEnterMs = 320;
 var launchpadIconEnterScaleFrom = 0.94;
-// Whole-layer open/close (opacity + soft settle). Explicit progress so close
-// still animates after open flips false.
-var launchpadLayerEnterMs = 340;
-var launchpadLayerExitMs = 240;
-var launchpadLayerScaleFrom = 0.988;
 // Icon launch pop before layer exit.
 var launchpadLaunchPopMs = 200;
 var launchpadLaunchPopScaleBoost = 0.14;
@@ -210,14 +208,6 @@ function launchpadWallpaperDuration(settingsService) {
 
 function launchpadIconEnterDuration(settingsService) {
     return reducedMotion(settingsService) ? 0 : launchpadIconEnterMs;
-}
-
-function launchpadLayerEnterDuration(settingsService) {
-    return reducedMotion(settingsService) ? 0 : launchpadLayerEnterMs;
-}
-
-function launchpadLayerExitDuration(settingsService) {
-    return reducedMotion(settingsService) ? 0 : launchpadLayerExitMs;
 }
 
 function launchpadLaunchPopDuration(settingsService) {

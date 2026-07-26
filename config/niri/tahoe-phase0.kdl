@@ -486,8 +486,8 @@ layer-rule {
     }
 }
 
-// Layer animation Spotlight profile. Launchpad stays on the QML path because
-// compositor scaling makes the app grid and glass blur look soft.
+// Layer animation Spotlight profile. Launchpad migrated to its own managed
+// rule below (P04 batch 2).
 // tahoe-managed: layer-animation spotlight
 layer-rule {
     match namespace="^tahoe-spotlight$"
@@ -548,6 +548,49 @@ layer-rule {
             transform-curve "ease-out-cubic"
             opacity-duration-ms 200
             opacity-curve "ease-out-cubic"
+        }
+    }
+}
+
+// Layer animation Launchpad profile (P04). Retires the dormant QML dual path
+// (compositorLayerAnimations flag + layerProgress fade/scale): the compositor
+// now owns the whole-surface popin/popout with the parameters the QML
+// animation used — scale 0.988, 340ms OutQuint enter, 240ms InOutCubic exit —
+// and applies the animation alpha to the glass material like the old
+// materialAlpha ramp. Durations were never profile-scaled in QML (only
+// reduced snapped to instant), so fast/balanced/liquid share one set and
+// reduced disables both channels (instant, as before).
+// Accepted deltas vs the QML path: the blur region now scales with the
+// surface (QML only scaled painted content over a static region), leaving a
+// ~0.6%/side unblurred rim mid-animation that the synchronized fade masks;
+// the extra dim rectangle fades linearly (was quadratic via nested
+// opacities); and a user-initiated close during the launch pop freezes the
+// mid-pop frame into the close snapshot (the no-reset close branch is
+// load-bearing for snapshot cleanliness).
+// tahoe-managed: layer-animation launchpad
+layer-rule {
+    match namespace="^tahoe-launchpad$"
+
+    animations {
+        layer-open {
+            style "popin"
+            origin "center"
+            scale-from 0.988
+            opacity-from 0
+            transform-duration-ms 340
+            transform-curve "cubic-bezier" 0.22 1.0 0.36 1.0
+            opacity-duration-ms 340
+            opacity-curve "cubic-bezier" 0.22 1.0 0.36 1.0
+        }
+        layer-close {
+            style "popout"
+            origin "center"
+            scale-to 0.988
+            opacity-to 0
+            transform-duration-ms 240
+            transform-curve "cubic-bezier" 0.65 0.0 0.35 1.0
+            opacity-duration-ms 240
+            opacity-curve "cubic-bezier" 0.65 0.0 0.35 1.0
         }
     }
 }

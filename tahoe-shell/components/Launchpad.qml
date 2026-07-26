@@ -10,7 +10,8 @@ import "settings/SettingsTheme.js" as Theme
 // T18 + hand-feel fix: full-screen Launchpad — adaptive 7×5 pages, wallpaper
 // zoom (via Wallpaper.qml), unified icon enter, horizontal intent paging
 // (short swipe commits; no 50% drag requirement), page dots, arrow keys.
-// Category chips removed. Stays on the QML outer animation path (§2.11).
+// Category chips removed. P04: outer open/close is compositor-owned
+// (layer-animation launchpad); content animations stay QML (§2.11 hand-feel).
 PanelWindow {
     id: root
 
@@ -25,9 +26,6 @@ PanelWindow {
     // Unified grid enter 0→1 (all icons together). Avoid per-icon opacity:0
     // cascade that looked like "one icon, then the rest".
     property real gridEnter: 0
-    // Whole-layer presentation 0→1 (opacity + soft settle). Driven explicitly
-    // so open/close always animate even when open flips instantly.
-    property real layerProgress: 0
     // Launch pop on the tapped icon before closing.
     property int launchingIndex: -1
     property real launchPop: 0
@@ -40,7 +38,6 @@ PanelWindow {
     property real pageReleaseVelocity: 0
     property real pagePeakVelocity: 0
     property bool pageGestureActive: false
-    property bool closingForLaunch: false
 
     readonly property var filteredApps: root.appsService
         ? root.appsService.filteredLaunchpadApps(root.query, "all")
@@ -70,9 +67,6 @@ PanelWindow {
     readonly property color textPrimary: darkMode ? "#f5f7fb" : "#ffffff"
     readonly property color textSecondary: darkMode ? "#c3ccd6" : "#e8ffffff"
     readonly property color textMuted: darkMode ? "#94a0ad" : "#b8ffffff"
-
-    // Launchpad stays on the QML outer animation path.
-    readonly property bool compositorLayerAnimations: false
 
     signal closeRequested()
 
@@ -124,7 +118,6 @@ PanelWindow {
     }
 
     function requestClose() {
-        closingForLaunch = false;
         closeRequested();
     }
 
@@ -138,14 +131,14 @@ PanelWindow {
             closeRequested();
             return;
         }
-        // Pop the icon, then fade the layer out while the app starts.
+        // Pop the icon, then close; the niri snapshot freezes the pop at its
+        // settled peak for the compositor fade-out.
         launchingIndex = index;
         launchPop = 0;
         launchPopAnim.stop();
         launchPopAnim.from = 0;
         launchPopAnim.to = 1;
         launchPopAnim.duration = Motion.launchpadLaunchPopDuration(settingsService);
-        closingForLaunch = true;
         appsService.launchApp(app);
         launchPopAnim.restart();
         launchCloseTimer.restart();
@@ -219,47 +212,11 @@ PanelWindow {
         gridEnterAnim.restart();
     }
 
-    function playLayerEnter() {
-        layerProgressAnim.stop();
-        if (Motion.reducedMotion(settingsService)) {
-            layerProgress = 1;
-            return;
-        }
-        // Continue from current progress so mid-exit reopen does not flash.
-        layerProgressAnim.from = layerProgress;
-        layerProgressAnim.to = 1;
-        layerProgressAnim.duration = Motion.launchpadLayerEnterDuration(settingsService);
-        layerProgressAnim.easing.type = Easing.OutQuint;
-        layerProgressAnim.restart();
-    }
-
-    function playLayerExit() {
-        layerProgressAnim.stop();
-        if (Motion.reducedMotion(settingsService)) {
-            layerProgress = 0;
-            return;
-        }
-        // Keep grid visible during fade-out (don't zero gridEnter instantly).
-        layerProgressAnim.from = layerProgress;
-        layerProgressAnim.to = 0;
-        layerProgressAnim.duration = Motion.launchpadLayerExitDuration(settingsService);
-        // Soft ease-out exit (not harsh accel) so close feels continuous.
-        layerProgressAnim.easing.type = Easing.InOutCubic;
-        layerProgressAnim.restart();
-    }
-
     NumberAnimation {
         id: gridEnterAnim
         target: root
         property: "gridEnter"
         // OutQuint = longer soft settle than OutCubic for enter feel.
-        easing.type: Easing.OutQuint
-    }
-
-    NumberAnimation {
-        id: layerProgressAnim
-        target: root
-        property: "layerProgress"
         easing.type: Easing.OutQuint
     }
 
@@ -280,8 +237,11 @@ PanelWindow {
         }
     }
 
-    visible: compositorLayerAnimations ? open : (open || layerProgress > 0.01)
-    // P02: freeze scene-graph frames while this surface is unmapped/faded out.
+    // P04: the compositor owns the open/close animation (layer-rule popin/
+    // popout on tahoe-launchpad, same 0.988 scale + curves the QML path
+    // used). Map and unmap are immediate; content below commits statically.
+    visible: open
+    // P02: freeze scene-graph frames while this surface is unmapped.
     // Extends the existing visible gate onto updatesEnabled (not a parallel path).
     updatesEnabled: visible
     exclusionMode: ExclusionMode.Ignore
@@ -307,12 +267,9 @@ PanelWindow {
             currentPage = 0;
             launchingIndex = -1;
             launchPop = 0;
-            closingForLaunch = false;
             launchCloseTimer.stop();
             launchPopAnim.stop();
             gridEnter = 0;
-            // Start layer fade immediately so open never looks like a hard cut.
-            playLayerEnter();
             Qt.callLater(function() {
                 if (!root.open)
                     return;
@@ -324,40 +281,14 @@ PanelWindow {
                 playGridEnter();
             });
         } else {
+            // Stop content animations only. No state resets here: the niri
+            // close snapshot is the last presented frame, so the grid (and a
+            // frozen launch pop) must stay committed as-is; the open branch
+            // above re-arms everything for the next session.
             gridEnterAnim.stop();
             launchCloseTimer.stop();
-            // If we closed after an icon pop, freeze the pop at its peak
-            // during the layer fade (do not snap scale back to 1).
-            if (!closingForLaunch) {
-                launchPopAnim.stop();
-                launchingIndex = -1;
-                launchPop = 0;
-            } else {
-                launchPopAnim.stop();
-                // Hold final pop scale while the layer fades out.
-                launchPop = 1;
-            }
-            // Exit: fade whole layer; keep icons until opacity is gone.
-            playLayerExit();
-            // After exit completes, clear gridEnter / launch state for next open.
-            exitCleanupTimer.restart();
-        }
-    }
-
-    Timer {
-        id: exitCleanupTimer
-        interval: Motion.launchpadLayerExitDuration(root.settingsService) + 40
-        repeat: false
-        onTriggered: {
-            if (root.open)
-                return;
-            gridEnter = 0;
-            launchingIndex = -1;
-            launchPop = 0;
-            closingForLaunch = false;
+            launchPopAnim.stop();
             pageSnapAnim.stop();
-            pageSnapPending = false;
-            pageGestureActive = false;
         }
     }
 
@@ -394,13 +325,8 @@ PanelWindow {
     Item {
         id: launcher
         anchors.fill: parent
-        opacity: root.compositorLayerAnimations ? 1 : root.layerProgress
-        // Soft settle on the whole layer (opacity only — no scale, §2.11 icons).
-        scale: root.compositorLayerAnimations
-            ? 1
-            : (Motion.launchpadLayerScaleFrom
-                + (1.0 - Motion.launchpadLayerScaleFrom) * root.layerProgress)
-        transformOrigin: Item.Center
+        // Static: the compositor layer animation owns the whole-surface
+        // opacity/scale (P04); the old whole-layer progress drivers are retired.
 
         // Full-screen backdrop material (blur region = entire surface).
         GlassPanel {
@@ -416,15 +342,15 @@ PanelWindow {
             regionWidth: Math.round(root.screenWidth)
             regionHeight: Math.round(root.screenHeight)
             interaction: 0
-            materialAlpha: root.compositorLayerAnimations ? 1 : launcher.opacity
-            glassEnabled: root.open || root.layerProgress > 0.01
+            // Stay enabled while unmapped so niri's closing snapshot keeps the
+            // glass material; the compositor applies the animation alpha to it.
         }
 
-        // Extra dim so icons read over wallpaper even without blur.
+        // Extra dim so icons read over wallpaper even without blur. Static:
+        // the compositor animation alpha fades it with the whole surface.
         Rectangle {
             anchors.fill: parent
             color: root.darkMode ? "#66000000" : "#4d000000"
-            opacity: launcher.opacity
         }
 
         // Search pill

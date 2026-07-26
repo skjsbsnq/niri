@@ -99,3 +99,53 @@ PopupDismissLayer，自带 scrim MouseArea；focusable/servicePollingActive 均�
   spotlight/menu 迁移行为同构，既有先例）；契约测试子串匹配弱点已知（组合断言成立）。
 
 （commit 号待补。）
+
+## 批次 2 — Launchpad → 受管组 `launchpad`（双路径收口）
+
+改动：
+
+- `tahoe-phase0.kdl`：新增 `tahoe-managed: layer-animation launchpad` 规则（popin/popout
+  `scale 0.988`、open 340ms `cubic-bezier 0.22 1.0 0.36 1.0`≈OutQuint、close 240ms
+  `cubic-bezier 0.65 0.0 0.35 1.0`≈InOutCubic，与旧 QML layerProgress 单驱动完全同参）；
+  顺带删除 spotlight 规则上"Launchpad stays on the QML path"的过期矛盾注释。
+- `niri_settings_tool.py`：`launchpad` 组入 `LAYER_PROFILE_GROUPS` + 四档模板
+  （fast/balanced/liquid 相同 340/240——QML 从不按档缩放；reduced 双通道 0ms + fade =
+  **瞬时 unmap 且不生成快照**，等价旧 QML reduced snap）。
+- `Launchpad.qml`：删 `compositorLayerAnimations` 旗标、`layerProgress` 属性、
+  playLayerEnter/playLayerExit、layerProgressAnim、exitCleanupTimer、延迟 unmap；
+  launcher/dim/backdrop 静态化；close 分支只停动画**不重置内容**（niri 快照=最后呈现帧，
+  承重设计）；死属性 `closingForLaunch` 一并移除；文件头注释同步。
+- `Motion.js`：删 launchpadLayerEnterMs/ExitMs/ScaleFrom 与两个 duration 函数
+  （wallpaper/icon/pop/paging 内容 token 保留）。
+- 测试：test_launchpad_refactor.py 断言翻转（含 §2.11 原契约保留）；ownership 测试
+  launchpad 改写为已迁移断言 + Motion.js token 缺席断言；新增
+  `test_launchpad_reduced_profile_disables_both_channels`（锁 reduced 0/0 跳快照语义 +
+  三档 340/240）。
+- `tahoe-motion-default-policy.md`：Ownership 表 Launchpad 行改 Removed；新增批次 2 段落，
+  显式推翻 R10 段旧决策并记录成因分析。
+
+### 批次 2 对抗性审查
+
+**审查 A（生命周期/快照/曲线）：无阻断。** 实证：① launch-then-close——launchPopAnim 200ms
+OutBack 在 timer 240ms 时已稳定于 1.0，快照=峰值冻结帧（图标 1.14×、其余 0.45），与旧
+"hold final pop + fade"逐值一致；② 快照 blur 是 **live 采样**（"frozen"仅指 region 几何），
+240ms 快照淡出期间 blur 实时跟随 400ms 壁纸 zoom-out，无新撕裂；③ 中途重开由 niri
+`reopen_start` 以 ClosingLayer 当前 alpha/scale 续走 OpenAnimation——正是旧 QML "continue
+from current progress" 的合成器版；④ 曲线保真：bezier vs OutQuint 最大偏差 1.13%、vs
+InOutCubic 0.95%，不可感知；⑤ 工具往返（含 reduced KDL 独立 validate）字节还原、三档
+detect 正确；⑥ reduced 0/0 → `layer_close_animation_config_is_disabled` → 不生成快照。
+
+**审查 B（一致性/渲染路径/文档治理）：无阻断。** 实证性推翻旧"软"决策：①
+RescaleRenderElement 只缩 dst 几何、src 不变，open 直接 wrap surface 元素无离屏中转，
+close 以输出 fractional scale 1:1 烘焙后向 0.988 缩小——**两方向零上采样**，popin 终帧
+`should_wrap()=false` 完全不包装（像素级 1:1）；② 玻璃 alpha 乘法位置与旧 materialAlpha
+绑定相同（`material_alpha × layer_alpha`）；③ 当年"软"评估发生在 close 玻璃还会被烘进
+快照的机制状态（cde9f181/f5b9b67e 次日才落地）且参数为 0.98/180ms 短促曲线——成因均已
+消除。发现的注释/文档残留（Launchpad.qml:13、KDL spotlight 注释、policy 文档表格/段落）
+已全部修复；KDL "unchanged/exact" 过强措辞已改 Accepted deltas 三条（blur region 随缩放
+~0.6%/侧由 fade 掩蔽、dim 二次方→线性、Esc-during-pop 冻结半程 pop 属固有）。
+
+走查项（沿批次 1 清单累计）：快速连点开关的合成器接力观感、launch pop 快照 fade、
+动画期 blur 边缘。
+
+（commit 号待补。）

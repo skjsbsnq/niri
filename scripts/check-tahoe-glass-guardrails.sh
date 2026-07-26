@@ -52,16 +52,19 @@ check_tahoe_glass_protocol_invariants() {
   for xml in "$NIRI_TAHOE_GLASS_XML" "$QUICKSHELL_TAHOE_GLASS_XML"; do
     rel="$(realpath --relative-to="$REPO_DIR" "$xml")"
 
-    if grep -qE '<interface[[:space:]]+name="tahoe_glass_manager_v1"[[:space:]]+version="1"' "$xml"; then
-      log "$rel keeps manager XML version 1"
+    # P05: v4 adds the presentation-transform requests. Manager and surface
+    # interface versions stay in lockstep because surface objects inherit the
+    # manager's bound version (see niri/src/protocols/tahoe_glass.rs).
+    if grep -qE '<interface[[:space:]]+name="tahoe_glass_manager_v1"[[:space:]]+version="4"' "$xml"; then
+      log "$rel keeps manager XML version 4"
     else
-      fail "$rel must keep tahoe_glass_manager_v1 XML version 1"
+      fail "$rel must keep tahoe_glass_manager_v1 XML version 4"
     fi
 
-    if grep -qE '<interface[[:space:]]+name="tahoe_glass_surface_v1"[[:space:]]+version="3"' "$xml"; then
-      log "$rel keeps surface XML version 3"
+    if grep -qE '<interface[[:space:]]+name="tahoe_glass_surface_v1"[[:space:]]+version="4"' "$xml"; then
+      log "$rel keeps surface XML version 4"
     else
-      fail "$rel must keep tahoe_glass_surface_v1 XML version 3"
+      fail "$rel must keep tahoe_glass_surface_v1 XML version 4"
     fi
   done
 
@@ -70,10 +73,10 @@ check_tahoe_glass_protocol_invariants() {
     return
   fi
 
-  if grep -qE '^[[:space:]]*const[[:space:]]+VERSION:[[:space:]]*u32[[:space:]]*=[[:space:]]*1;' "$NIRI_TAHOE_GLASS_PROTOCOL"; then
-    log "niri TahoeGlass manager global VERSION remains 1"
+  if grep -qE '^[[:space:]]*const[[:space:]]+VERSION:[[:space:]]*u32[[:space:]]*=[[:space:]]*4;' "$NIRI_TAHOE_GLASS_PROTOCOL"; then
+    log "niri TahoeGlass manager global VERSION remains 4"
   else
-    fail "niri TahoeGlass manager global VERSION must remain 1"
+    fail "niri TahoeGlass manager global VERSION must remain 4 (lockstep with the interface XML versions)"
   fi
 }
 

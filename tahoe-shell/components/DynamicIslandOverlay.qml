@@ -246,6 +246,77 @@ PanelWindow {
         return IslandMotion.geometryDurationMs(root.settingsService, root.geometryMorphKind);
     }
 
+    // P05: compositor-side morph. When niri advertises tahoe_glass v4, state
+    // morphs snap the drivers (content + region commit once, at the target)
+    // and the compositor spring/ease-transforms the visual from the old
+    // capsule footprint (set_region_morph, anchored on the glass region).
+    // Swipe drag/settle stays on the legacy driver pipeline: it is
+    // pointer-interactive and needs per-frame client geometry either way.
+    readonly property bool compositorMorph: root.TahoeGlass.transformAvailable
+
+    // Compositor transforms are presentation-only — input never follows. For
+    // the morph window the mask covers the union of the previous footprint
+    // and the target so a collapsing island keeps its still-visible chrome
+    // clickable (the bug the legacy per-frame mask exists to avoid); expiry
+    // snaps the mask to the settled target.
+    property real morphMaskHoldWidth: 0
+    property real morphMaskHoldHeight: 0
+    readonly property real maskWidth: morphMaskHoldTimer.running
+        ? Math.max(root.morphMaskHoldWidth, root.islandAnimatedWidth)
+        : root.islandAnimatedWidth
+    readonly property real maskHeight: morphMaskHoldTimer.running
+        ? Math.max(root.morphMaskHoldHeight, root.islandAnimatedHeight)
+        : root.islandAnimatedHeight
+
+    Timer {
+        id: morphMaskHoldTimer
+        interval: IslandMotion.v2CompositorMorphMaskHoldMs
+        repeat: false
+    }
+
+    function holdMorphMask() {
+        // First call of a burst captures the pre-snap (old) footprint; later
+        // same-tick calls max against the already-snapped target, so the hold
+        // is the old∪new union either way. Retargets extend the union.
+        root.morphMaskHoldWidth = morphMaskHoldTimer.running
+            ? Math.max(root.morphMaskHoldWidth, root.islandAnimatedWidth)
+            : root.islandAnimatedWidth;
+        root.morphMaskHoldHeight = morphMaskHoldTimer.running
+            ? Math.max(root.morphMaskHoldHeight, root.islandAnimatedHeight)
+            : root.islandAnimatedHeight;
+        morphMaskHoldTimer.restart();
+    }
+
+    // A swipe drag takes over geometry per-frame on the legacy pipeline;
+    // cancel any in-flight compositor transform so residual affine cannot
+    // distort the pointer-tracked content.
+    onSwipeInteractiveChanged: {
+        if (root.swipeInteractive && root.compositorMorph)
+            root.TahoeGlass.sendTransform(0, 0, 1, 1);
+    }
+
+    function queueCompositorMorph() {
+        var id = islandSurface.region.regionId;
+        root.holdMorphMask();
+        if (root.osdImmediateGeometry
+                || !IslandMotion.geometrySpringEnabled(root.settingsService, root.useSpring)) {
+            // Eased fallback keeps the exact legacy curve: OutCubic over the
+            // same per-kind duration (OSD 80ms, reduced motion 80ms).
+            return root.TahoeGlass.queueRegionMorphEased(
+                id,
+                root.geometryEaseDurationMs(),
+                IslandMotion.v2CompositorGeometryBezier.x1,
+                IslandMotion.v2CompositorGeometryBezier.y1,
+                IslandMotion.v2CompositorGeometryBezier.x2,
+                IslandMotion.v2CompositorGeometryBezier.y2);
+        }
+        return root.TahoeGlass.queueRegionMorphSpring(
+            id,
+            IslandMotion.v2CompositorGeometrySpring.dampingRatio,
+            IslandMotion.v2CompositorGeometrySpring.stiffness,
+            IslandMotion.v2CompositorGeometrySpring.epsilon);
+    }
+
     function retargetWidthDriver() {
         if (!root.geometryDriversReady) {
             root.islandDriverWidth = root.capsuleTargetWidth;
@@ -266,6 +337,13 @@ PanelWindow {
             driverWidthEase.easing.type = IslandMotion.swipeSettleEasing;
             driverWidthEase.to = root.capsuleTargetWidth;
             driverWidthEase.restart();
+            return;
+        }
+        if (root.compositorMorph && root.queueCompositorMorph()) {
+            // Content lays out at the target once; reveal gates open
+            // immediately (base = target) while the compositor morphs.
+            root.islandDriverWidth = root.capsuleTargetWidth;
+            root.morphBaseWidth = root.capsuleTargetWidth;
             return;
         }
         if (!root.osdImmediateGeometry
@@ -289,6 +367,12 @@ PanelWindow {
         root.morphBaseHeight = root.islandDriverHeight;
         driverHeightSpring.stop();
         driverHeightEase.stop();
+        if (root.compositorMorph && !root.swipeInteractive && !root.swipeSettling
+                && root.queueCompositorMorph()) {
+            root.islandDriverHeight = root.capsuleTargetHeight;
+            root.morphBaseHeight = root.capsuleTargetHeight;
+            return;
+        }
         if (!root.osdImmediateGeometry
                 && IslandMotion.geometrySpringEnabled(root.settingsService, root.useSpring)) {
             driverHeightSpring.to = root.capsuleTargetHeight;
@@ -308,6 +392,12 @@ PanelWindow {
             return;
         }
         driverRadiusEase.stop();
+        if (root.compositorMorph && !root.swipeInteractive && !root.swipeSettling) {
+            // Compositor morph: radius must land with the single region
+            // commit; the visual corner transition rides the surface morph.
+            root.islandDriverRadius = root.capsuleTargetRadius;
+            return;
+        }
         driverRadiusEase.duration = root.geometryEaseDurationMs();
         driverRadiusEase.to = root.capsuleTargetRadius;
         driverRadiusEase.restart();
@@ -824,15 +914,17 @@ PanelWindow {
 
     // Input mask follows the *painted* animated capsule (not the settled
     // target). Target-sized mask during morph made expand hit a huge empty
-    // region and collapse leave visible chrome unclickable.
+    // region and collapse leave visible chrome unclickable. Under a
+    // compositor morph (P05) the drivers snap, so maskWidth/maskHeight add a
+    // timed old∪new union hold to keep the same guarantee.
     mask: Region {
         Region {
             x: root.capsuleShown
-               ? Math.round((root.screenWidth - root.islandAnimatedWidth) / 2)
+               ? Math.round((root.screenWidth - root.maskWidth) / 2)
                : 0
             y: root.capsuleTargetTop
-            width: root.capsuleShown ? Math.round(root.islandAnimatedWidth) : 0
-            height: root.capsuleShown ? Math.round(root.islandAnimatedHeight) : 0
+            width: root.capsuleShown ? Math.round(root.maskWidth) : 0
+            height: root.capsuleShown ? Math.round(root.maskHeight) : 0
             radius: Math.round(root.islandAnimatedRadius)
         }
     }

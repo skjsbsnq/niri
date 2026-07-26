@@ -285,6 +285,28 @@ var springBouncy = {
     damping: 0.22
 };
 
+// --- P05 compositor-side transforms (tahoe_glass_surface_v1 v4) --------------
+// Whole-surface presentation transforms handed to niri: content and glass
+// region stay static in the buffer; niri springs/eases the visual. Values are
+// the niri-space equivalents documented on the Qt tokens above. Epsilons are
+// progress-space (0→1 morph progress), not pixels.
+var compositorSpringSmooth = {
+    // = springSmooth: response .40 / bounce 0. Dock autohide slide.
+    dampingRatio: 1.0,
+    stiffness: 250,
+    epsilon: 0.001
+};
+// emphasizedDecel (= Easing.OutCubic, see top of file) as cubic-bezier
+// control points for compositor eased paths.
+var compositorEmphasizedDecelBezier = {
+    x1: 0.215,
+    y1: 0.61,
+    x2: 0.355,
+    y2: 1.0
+};
+// Legacy dockSlideEase duration, shared with the compositor eased path.
+var dockAutohideSlideEaseMs = 190;
+
 var profileDurations = {
     "fast": {
         "fadeFast": 90,

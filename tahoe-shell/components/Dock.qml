@@ -51,13 +51,22 @@ PanelWindow {
     property bool dockGlassActive: !dockHidden
     // Writable; animated toward dockSlideTarget via springSmooth / ease dual branch (T08).
     property real dockSlideOffset: 0
+    // P05: compositor-side autohide (tahoe_glass v4). The buffer keeps content
+    // and glass region at rest; the surface presentation transform carries the
+    // slide. dockSlideOffset then snaps to the target so the input mask, the
+    // P02 freeze gate, and state logic land immediately (compositor transforms
+    // are presentation-only — input is never transformed).
+    readonly property bool compositorSlide: root.TahoeGlass.transformAvailable
+    // Content-space slide offset: what the in-buffer Translate and label
+    // geometry see. Zero in compositor mode (the transform moves the visual).
+    readonly property real dockContentSlideOffset: compositorSlide ? 0 : dockSlideOffset
     // T08-fix: slide at least the full surface height so the panel never leaves a
     // residual strip at the bottom (surface grew to 96 while token stayed 88).
     readonly property real dockSlideDistance: Math.max(Motion.dockAutohideSlidePx, dockSurfaceHeight)
     readonly property real dockSlideTarget: dockVisualHidden ? dockSlideDistance : 0
     readonly property real dockVisibleAmount: 1 - Math.min(1, Math.max(0, dockSlideOffset / Math.max(1, dockSlideDistance)))
     readonly property real dockGlassInteraction: dockHovered ? dockVisibleAmount : 0.0
-    readonly property real dockVisibleHeight: Math.max(0, Math.min(dockSurface.height, dockSurface.height - dockSlideOffset))
+    readonly property real dockVisibleHeight: Math.max(0, Math.min(dockSurface.height, dockSurface.height - dockContentSlideOffset))
     // Icon base 48 (T08-fix). Peak mag paints ABOVE the glass shelf (macOS).
     // Layer is taller than the glass; glassClip stays TRUE so compositor blur
     // is rounded. QML children are not clipped by glassClip (T08-fix11).
@@ -260,9 +269,40 @@ PanelWindow {
     // T08: autohide slide uses springSmooth (critically damped — no overshoot).
     // Glass region geometry stays clamped via dockVisibleHeight; only the
     // content transform (Translate y) is spring-driven. Dual branch for useSpring.
+    // P05: with tahoe_glass v4 the slide moves to the compositor: one transform
+    // target request instead of a client-side animation, zero repaints and zero
+    // region traffic during the slide.
     function animateDockSlideTo(value) {
         dockSlideSpring.stop();
         dockSlideEase.stop();
+        if (root.compositorSlide) {
+            // Assert instantly when already at the target (protocol appearing,
+            // startup state replay); animate on a real state transition.
+            var atTarget = Math.abs(root.dockSlideOffset - value) < 0.5;
+            var sent = false;
+            if (atTarget) {
+                sent = root.TahoeGlass.sendTransform(0, value, 1, 1);
+            } else if (root.useSpring && !Motion.reducedMotion(root.settingsService)) {
+                sent = root.TahoeGlass.sendTransformTargetSpring(
+                    0, value, 1, 1,
+                    Motion.compositorSpringSmooth.dampingRatio,
+                    Motion.compositorSpringSmooth.stiffness,
+                    Motion.compositorSpringSmooth.epsilon);
+            } else {
+                sent = root.TahoeGlass.sendTransformTargetEased(
+                    0, value, 1, 1,
+                    Motion.dockAutohideSlideEaseMs,
+                    Motion.compositorEmphasizedDecelBezier.x1,
+                    Motion.compositorEmphasizedDecelBezier.y1,
+                    Motion.compositorEmphasizedDecelBezier.x2,
+                    Motion.compositorEmphasizedDecelBezier.y2);
+            }
+            if (sent) {
+                root.dockSlideOffset = value;
+                return;
+            }
+            // Protocol raced away between the gate and the send: legacy path.
+        }
         if (root.useSpring && !Motion.reducedMotion(root.settingsService)) {
             dockSlideSpring.to = value;
             dockSlideSpring.restart();
@@ -271,6 +311,13 @@ PanelWindow {
             dockSlideEase.restart();
         }
     }
+
+    // Re-assert the slide when the protocol path toggles: entering compositor
+    // mode replays the current target through the transform (instant when
+    // already settled); leaving it hands the legacy pipeline back the state
+    // (content pops to the correct position — a compositor restart is already
+    // visually disruptive).
+    onCompositorSlideChanged: root.animateDockSlideTo(root.dockSlideTarget)
 
     SpringAnimation {
         id: dockSlideSpring
@@ -286,7 +333,7 @@ PanelWindow {
         id: dockSlideEase
         target: root
         property: "dockSlideOffset"
-        duration: 190
+        duration: Motion.dockAutohideSlideEaseMs
         easing.type: Motion.emphasizedDecel
     }
 
@@ -942,7 +989,7 @@ PanelWindow {
         }
 
         transform: Translate {
-            y: root.dockSlideOffset
+            y: root.dockContentSlideOffset
         }
 
         GlassPanel {
@@ -1603,7 +1650,7 @@ PanelWindow {
                                 labelClipContentX: windowViewport.contentX
                                 dockWindow: root
                                 dockSurfaceItem: dockSurface
-                                dockSlideOffset: root.dockSlideOffset
+                                dockSlideOffset: root.dockContentSlideOffset
                                 dockFullscreenOffset: root.fullscreenTransition * root.dockSurfaceHeight
                                 dockFullscreenActive: root.fullscreenActive
                                 dockSceneOffsetX: root.windowSectionSceneOffsetX
@@ -1682,7 +1729,7 @@ PanelWindow {
                     useSpring: root.useSpring
                     dockWindow: root
                     dockSurfaceItem: dockSurface
-                    dockSlideOffset: root.dockSlideOffset
+                    dockSlideOffset: root.dockContentSlideOffset
                     thumbnailWidth: root.dockMinimizedThumbnailWidth
                     onDockPointerMoved: function(x, buttons) {
                         // Minimized shelf is outside the mag wave; keep dock revealed only.

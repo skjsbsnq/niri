@@ -135,6 +135,34 @@ function geometrySpringEnabled(settingsService, useSpring) {
     return !!useSpring && !Motion.reducedMotion(settingsService);
 }
 
+// --- P05 compositor-side morph (tahoe_glass_surface_v1 v4) -------------------
+// When the compositor advertises the presentation-transform requests, the
+// island commits target-sized content + region once and sends set_region_morph;
+// niri animates the visual. The spring below is the niri-space equivalent of
+// v2GeometrySpring: Qt SpringAnimation(spring 2.5, damping 0.28) maps to
+// niri damping-ratio 0.85 / stiffness 160 (same Apple response .50 / bounce
+// .15 conversion Motion.springPanel documents). Epsilon is progress-space:
+// the Qt epsilon 0.25px over typical 40-320px morph travels ≈ 0.001-0.006.
+var v2CompositorGeometrySpring = {
+    dampingRatio: 0.85,
+    stiffness: 160,
+    epsilon: 0.003
+};
+// OutCubic expressed as cubic-bezier control points for the compositor eased
+// path (identical curve to v2GeometryEasing = Easing.OutCubic).
+var v2CompositorGeometryBezier = {
+    x1: 0.215,
+    y1: 0.61,
+    x2: 0.355,
+    y2: 1.0
+};
+
+// Input-mask union hold during a compositor morph: the compositor owns the
+// visual timeline (no settle feedback), so the mask covers old∪new footprints
+// for a conservative window before snapping to the target. Covers the spring
+// (dr .85 / st 160 settles ≈ 400ms) and all eased durations.
+var v2CompositorMorphMaskHoldMs = 420;
+
 // V2 radius caps (roadmap §9.3).
 var v2RadiusCompactClock = 16;
 var v2RadiusCompactMedia = 18;

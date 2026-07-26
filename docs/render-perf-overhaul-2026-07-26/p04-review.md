@@ -251,12 +251,14 @@ validate），fail-close 对旧 KDL 亲测（read 安全降级 / write 拒绝并
 
 **批次 4 commit：`25b03f7`（已推送）。**
 
-> **部署状态：待办。** 本会话未获授权触碰线上会话（rsync --delete 覆盖
-> `~/.config/quickshell/tahoe/` + 覆盖 `~/.config/niri/tahoe/config.kdl` 被权限
-> 分类器拦截）。P03/P05 同样留有 niri/quickshell 二进制部署待办——建议与本任务的
-> KDL+shell 同批部署后，一并执行下方验收。
-
-（批次 4 审查结论与 commit 号待补。）
+> **部署状态：已落地（2026-07-26 20:52）。** 20:47 重建 `~/.local/bin/niri`
+> （9ce7a720，含 P03/P05/P06）；20:51 部署 KDL + quickshell 二进制（e8c1acb，含
+> P02/P05 client 侧）+ shell QML；20:52:47/48 niri 与 quickshell 随会话重启加载新
+> 二进制（/proc exe 无 deleted 残留）。部署一致性核验：`config.kdl` 与仓库
+> `tahoe-phase0.kdl` 逐字节一致；`~/.config/quickshell/tahoe/` 与 `tahoe-shell/`
+> 除 pycache/pytest 缓存外逐字节一致（残留一个多余旧脚本
+> `scripts/check-xwayland-satellite-compat.sh`，为历史非 --delete 同步遗留，无害）。
+> 验收①实测数据见下文「验收数据」；②观感走查仍待人工。
 
 ## 部署后验收（欠账清单 / 验收数据）
 
@@ -277,6 +279,26 @@ overview 走 IPC toggle；settings/launchpad 无 IPC toggle（IpcHandler 仅
 openSettings/toggleWindowOverview），用键位/手动开关配合同款 pidstat 窗口采样。
 close 尾巴专项=关面板后 300ms 窗口 pidstat 样本（旧方案该窗口有 fade 帧，新方案应 ~0）。
 与 fdd1ffa 基线的 A/B 对照留给 P08（避免向线上会话回滚部署）。
+
+#### 验收数据（2026-07-26 部署后实测，overview 路径）
+
+环境：niri 9ce7a720 + quickshell e8c1acb + 当批 KDL/QML，会话重启后 ~4 分钟采集。
+本机未装 pidstat，用等价采样器（`/proc/<pid>/stat` utime+stime 差分 / 壁钟间隔，
+单核 %，脚本逻辑与 pidstat -u 同口径）：
+
+| 场景 | 采样 | mean | peak |
+|---|---|---|---|
+| 空闲基线 | 0.2s × 25 | 0.40% | 4.99%（绝大多数样本 0.00） |
+| overview IPC toggle ×8（开+关各 4 轮，14s 窗口） | 0.2s × 70 | 4.21% | 44.96% |
+| close 后 300ms 窗口（3 轮） | 0.1s × 3/轮 | 6.65–9.98% | 9.98–19.97% |
+| 对照：无 UI 的 IPC 调用（lockStatus）后 300ms（2 轮） | 0.1s × 3/轮 | 0.00% | 0.00% |
+
+- toggle 期峰值样本对应 **open 入场**的 QML veil+flight 内容动画（批次 3 设计保留项，
+  open 双通道刻意 no-op），非 close 路径。
+- close 300ms 窗口的非零样本为**组件卸载一次性突发**（对照组证明 IPC 分发本身为 0），
+  不是持续 fade 渲染帧形态；绝对量 ≤0.1s×20% 单核。旧方案同窗口的定量对照（预期含
+  逐帧 fade）按上文决策留 P08 A/B。
+- settings/launchpad 无 IPC toggle，人工路径未采；观感走查②同样待人工执行。
 
 **② 观感走查项**（各批次审查累计，人工确认"不劣于现状"）：
 

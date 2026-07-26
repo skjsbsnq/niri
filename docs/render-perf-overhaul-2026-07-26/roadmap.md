@@ -72,9 +72,18 @@
 |---|---|---|
 | P01 缩略图解码修复 | 完成 | 4b6b420 |
 | P02 updatesEnabled 门控 | 完成 | db8799b（quickshell 1c03b80） |
-| P03 live blur 缓存 | 完成 | niri 7b2ebd0e |
-| P04 弹层动画收尾 | 完成（代码批次 1-4 均经双独立对抗性审查；**部署待办**（与 P03/P05 二进制同批），CPU 实测/观感走查见 p04-review.md「部署后验收」节） | 943c969 / 49ddac0 / 4f079c4 / 25b03f7 |
-| P05 变换动画下沉协议 | 完成 | niri 9ce7a720 / quickshell e8c1acb |
-| P06 动画期降采样（兜底） | 完成（机制默认启用；实测 A/B 留待 P08，详见 p06-review.md） | niri 78540ae2（指针待 P05 落地后前移） |
+| P03 live blur 缓存 | 完成 | niri 7b2ebd0e（外层 11fed12） |
+| P04 弹层动画收尾 | 完成（代码批次 1-4 均经双独立对抗性审查；**已部署** 2026-07-26 20:52 会话重启，验收① CPU 实测已回填 p04-review.md「验收数据」，②观感走查待人工） | 943c969 / 49ddac0 / 4f079c4 / 25b03f7 |
+| P05 变换动画下沉协议 | 完成（灵动岛 mask 测试债 + hold 时长勘误由收尾会话清偿：外层 846fbce，两独立审查 + 定向复核 PASS，详见 p05-review.md「收尾追记」） | niri 9ce7a720 / quickshell e8c1acb / 外层 dd92711 |
+| P06 动画期降采样（兜底） | 完成（机制默认启用；实测 A/B 留待 P08，详见 p06-review.md） | niri 78540ae2（指针已随 dd92711 前移：9ce7a720 ⊇ 78540ae2） |
 | P07 单线程 RenderLoop | 未开始 | |
 | P08 全量回归审查 | 未开始 | |
+
+> **部署状态（2026-07-26 20:52 会话重启）**：P01–P06 全量在线——niri `9ce7a720`
+> （祖先链含 P03 7b2ebd0e、P06 78540ae2）+ quickshell `e8c1acb`（含 P02 1c03b80）
+> + 当批 KDL/QML（与仓库逐字节核验一致）。**唯一例外**：收尾 commit 846fbce 的
+> Motion.js 560ms token 晚于该批，线上仍 420ms——一行部署：
+> `cp tahoe-shell/components/DynamicIslandMotion.js ~/.config/quickshell/tahoe/components/`
+> （热重载，无 KDL 耦合）。移交 P08 的度量欠账：
+> `NIRI_LIFECYCLE_DIAG=1` 定量复测（P03 blur 缓存、P05 commit 计数）、P06 降采样
+> A/B、P04 与 fdd1ffa 基线的 A/B、P04 观感走查②（人工）。

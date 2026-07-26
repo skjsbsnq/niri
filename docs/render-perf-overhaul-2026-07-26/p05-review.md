@@ -43,7 +43,7 @@
 2. **【中】open 与变换并存时合成顺序**:原 transform inner/open outer 会让协议位移被 open scale 缩放(隐藏 Dock 在 open 动画期露边)。修复:调换为 open inner/transform outer,协议变换在最终呈现中精确成立;附单测。
 3. **【中】claim 复位变换但 region 为空时不排 redraw**(自查先行发现,与 destroy 路径修复对称):陈旧变换会留屏至下次任意损伤。修复:claim/clear 双路径都把"变换被复位"纳入 redraw 判定;首次 claim(从未发布过指令)不再发布空复位。
 4. **【中】DockMinimizedShelf 漏改一行**:仍传 snap 的 `dockSlideOffset`,最小化恢复矩形在隐藏态上浮 96px(genie 飞向半空)。修复:改传 `dockContentSlideOffset`。
-5. **【中】岛 morph 期输入 mask 跳终态**(复辟历史 bug"collapse leave visible chrome unclickable"):修复:morph 窗口内 mask 取 old∪new 并集保持 420ms(`v2CompositorMorphMaskHoldMs`,覆盖 spring/eased 全部时长)后落到目标;零逐帧流量。
+5. **【中】岛 morph 期输入 mask 跳终态**(复辟历史 bug"collapse leave visible chrome unclickable"):修复:morph 窗口内 mask 取 old∪new 并集保持 `v2CompositorMorphMaskHoldMs` 后落到目标;零逐帧流量。〔勘误(P05 收尾会话):原定 420ms 并未"覆盖 spring 全部时长"——dr .85/st 160/eps .003 的包络收敛 = −ln(ε)/(ζ·√k) ≈ 540ms(与 niri spring.rs `duration()` 同式),420ms 到期残余 ~1.1%、最大 collapse 尾段 ~120ms 有 2–4px mask 缺口;已提至 **560ms**(niri spring.rs 对 underdamped 直接返回包络式,540.3ms 即精确收敛时长;560 到期包络残余 0.24%、含 1/√(1−ζ²) 振幅因子 ~0.46% ≈ 0.95px,亚像素),见下文「收尾追记」。〕
 6. **【中】swipe 起手不取消在途变换**(拖动内容叠残余仿射畸变):修复:`onSwipeInteractiveChanged` 在 compositor 模式下发 `sendTransform(0,0,1,1)` 即时取消。
 7. **【低】morph 随 region 延迟校验被丢**:region 因 surface_geo 未就绪延迟提交时,morph 现随之保留 pending,与 region 在同一 commit 落地。
 8. **【低】曲线参数可构造 ~115s 常亮重绘**:下限收紧(dr≥0.2、stiffness≥10、eased≤10s),settle 包络钳到秒级。
@@ -64,3 +64,25 @@
 ## 部署
 
 按 P02/P03 先例:commit+push 后待用户窗口期部署(`FORCE_QUICKSHELL_BUILD=true bash scripts/arch-update.sh` + niri 重启),验收数据(岛 morph / Dock autohide 期 client commit 计数与 blur pass 观测,`NIRI_LIFECYCLE_DIAG=1`)部署后补录于本文档附录。
+
+## 收尾追记(2026-07-26 晚,P01–P06 完成度核查会话)
+
+- **测试债清偿**:P05 会话遗留 3 个仍锁旧 mask 契约(逐帧 islandAnimated*)的红测试
+  (test_dynamic_island_expand_morph / _public_contracts / _v2_surface),已改写为锁
+  新契约:mask 读 maskWidth/maskHeight(hold 期 old∪new 并集、非 hold 期恒等
+  islandAnimated* 即 legacy 语义)、禁 capsuleTarget*/screenWidth、holdMorphMask
+  捕获先于双驱动 snap 的顺序锁、restart() 布防锁、repeat: false 锁、Timer 块作用域
+  锁。经两独立子代理对抗性审查 PASS + token 增量定向复核 PASS(变异注入首轮 7/10
+  捕获;按审查建议加固后独立复核 13/14 转红,唯一残余 repeat 变异随 repeat: false
+  锁补齐)。
+- **hold 时长勘误**:420→560ms(上文 #5 勘误);代价为 mask 超集窗口延长 140ms
+  (方向安全:painted ⊆ mask),历史 bug 类缺口(尾段 2–4px)清零。
+- **部署已落地(2026-07-26 20:52 会话重启)**:运行栈 = niri 9ce7a720 + quickshell
+  e8c1acb + 当批 KDL/QML(逐字节核验)。**例外**:本追记的 560ms token(外层
+  846fbce,仅 Motion.js 一文件、无 KDL 耦合)晚于该批部署,线上仍为 420ms——
+  权限分类器拦截线上目录写入,待用户执行
+  `cp tahoe-shell/components/DynamicIslandMotion.js ~/.config/quickshell/tahoe/components/`
+  (quickshell 热重载即生效)或随下批全量 rsync。`NIRI_LIFECYCLE_DIAG` 未随本次
+  启动设置,岛 morph / Dock autohide 期 client commit 计数与 blur pass 的定量验收
+  顺延 P08(与 P03/P06 的 diag 复测同窗口);大跨度岛 morph 圆角各向异性变形维持
+  观察项。

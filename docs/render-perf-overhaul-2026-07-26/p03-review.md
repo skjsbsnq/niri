@@ -78,3 +78,12 @@
 
 **PASS** — 三份独立审查均未发现正确性/视觉反例（P0 零）；全部可修 P1/P2 已修复并复测，其余为收益边界与补强项，已如实记录。允许 commit + push。
 
+
+## 部署后附录（2026-07-26）
+
+- **部署已落地**：20:47 重建 `~/.local/bin/niri`（9ce7a720，祖先链含本任务
+  7b2ebd0e），20:52 会话重启后运行进程即新二进制（/proc exe 核验）。
+- **lifecycle-diag 复测顺延 P08**：本次会话启动未带 `NIRI_LIFECYCLE_DIAG=1`
+  （/proc/1290/environ 仅 NIRI_CONFIG），diag 日志行不可得；顶栏 hover/岛
+  material_alpha 过渡期 blur 归零的定量复测，与 P06 A/B 合并进 P08 的带 diag
+  变量会话窗口执行。

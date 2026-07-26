@@ -99,6 +99,39 @@
 最终状态：`cargo test --lib` 490 全绿；触及文件 rustfmt 干净（仓库既有漂移未
 扩大）；niri 子仓提交 `0be01c18` 已推送。
 
+## 部署后回归与二次修复（2026-07-26 深夜，`5c47e260`）
+
+`0be01c18` 部署当晚用户报告两个新回归（截图证实，背景为黑色终端）：
+
+**回归 A：开/收动画期间玻璃出现"黑块"，面板卡片尚未接触黑终端区域就已变黑。**
+根因是上一轮的"采样锚定"机制本身：把采样带锚在静止位意味着移动中的面板显示
+的是它**将要停靠/曾经停靠**位置的背景模糊——静止位下方有黑终端时，面板刚从
+顶栏滑出就带着终端的黑色模糊（收回时黑色又跟着面板上移）。锚定采样在光学上
+就是错的：玻璃必须折射**当前实际身后**的内容。
+
+**回归 B：剪贴板增高后扩张带完全透明，直到再复制一条/截图引发重绘才恢复。**
+根因是 region 校验的取数时序差一帧：校验挂在 smithay post-commit 钩子上，而
+smithay `Transaction::apply` 的顺序是 apply_state → post-commit hooks →
+`CompositorHandler::commit`，surface 的 view（`RendererSurfaceState`）要到最
+后一步里的 `on_commit_buffer_handler` 才更新——钩子里 `surface_geo()` 读到的
+永远是**上一条 commit** 的几何。增高动画最后一帧（buffer 已到位、region 实际
+已适配）因此仍被判"可自愈拒绝"，之后再无 commit 来复验，扩张带就永久卡在无
+玻璃状态；任何下一次 commit（再复制、截图触发重绘）都会瞬间愈合——与用户观
+察完全吻合。上一轮的 region 自愈机制把旧的"永久掉 KDL 回退"变成了这个更显眼
+的"扩张带透明"，才暴露出这个一直存在的差一帧。
+
+**二次修复（`5c47e260`，9 文件 +85/−297）**：
+
+| 机制 | 实现 |
+|---|---|
+| 回退锚定采样 | 整体移除 `sample_offset`（RenderParams/FramebufferEffectElement 字段、`capture_blit_band()`、`edge_reveal_glass_sample_offset()`、`glass_xray_pos` 静止位分支及配套测试），capture blit 恢复 `dst ∩ output`，xray 恢复随动。原症状①（停稳陈旧带）②（收回缓存拉伸变黑）的防护完全由保留的 `capture_geometry` 键承担：带一动 → key 变 → 同帧强制重捕，缓存纹理结构上不可能再被拉伸到错误位置（审查已在 smithay damage tracker 逐环证实，含 crop/rescale 包裹场景的 instance-damage 兜底）。 |
+| 校验挪到 buffer 更新后 | 删除 post-commit 钩子注册机制（`hook_registered`/`with_inner_and_commit_hook`），钩子函数改为 `tahoe_glass::on_surface_commit`，由 `CompositorHandler::commit` 在 `on_commit_buffer_handler`/`early_import` 之后、`layer_shell_handle_commit` 之前直调——校验读到的就是本次 commit 附加的几何，误拒窗口从根上消失。时序不变量保持：mapping commit 携带的 transform directive 仍先于 `MappedLayer::new` 发布；触发集合与旧钩子 1:1（对照 `Transaction::apply` 核实，sync 子表面递延行为持平并已注释）。自愈携带逻辑保留，作为真实 region-先行-一帧 commit 的安全网。 |
+
+**二次审查**：双独立对抗审查（渲染路径专审 + 协议/commit 时序专审），零
+BLOCKER/MAJOR；全部发现为注释债（`MappedLayer::new` epoch 理由引用已删机制、
+"post-commit hook"/"minus sample offset"措辞残留、sync 子表面限定缺失），已
+全部清偿。`cargo test --lib` 488 全绿（随机制删除其 2 个专属测试）。
+
 ## 遗留观察项
 
 - 一次未复现的偶发：剪贴板弹层开着时 wl-copy 新条目，弹层自行关闭（仅出现一
@@ -112,7 +145,8 @@
 
 ## 部署
 
-本修复只动 niri 合成器二进制（shell/KDL 无改动）：
+本修复只动 niri 合成器二进制（shell/KDL 无改动）；二次修复后二进制版本串应为
+`5c47e260`（`niri msg version` 核对）：
 
 ```bash
 cp /home/wwt/niri/niri/target/release/niri ~/.local/bin/niri
@@ -125,3 +159,8 @@ cp /home/wwt/niri/niri/target/release/niri ~/.local/bin/niri
 2. 打开后点「清空历史」/触发任意状态更新，整卡观感不应再突变。
 3. 点图标收回，面板顶部不应再突然变黑；开/收全程玻璃内容稳定。
 4. 弹层打开时向剪贴板连续塞入新条目使面板增高，玻璃不应闪断（region 自愈）。
+5. **（二次修复新增）**在屏幕下方摆一个黑色终端，打开/收回剪贴板与控制中心：
+   动画全程玻璃只应显示其当前实际覆盖区域的模糊——黑色只在面板真正盖到终端
+   时出现、离开即消失，不得提前/滞后出现黑块。
+6. **（二次修复新增）**复制一条新内容使剪贴板增高：扩张出来的部分应立即有玻
+   璃（增高动画结束帧即愈合），不再需要再复制一条/截图才恢复。

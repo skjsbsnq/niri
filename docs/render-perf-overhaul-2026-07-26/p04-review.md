@@ -1,6 +1,7 @@
 # P04 — 弹层进出场动画收尾（QML 侧删动画，交合成器）
 
-> 状态：进行中（分批推进；每批独立对抗性审查后 commit+push）。
+> 状态：代码收尾完成（批次 1-4，均经双独立对抗性审查后推送）；部署 + CPU 实测/观感走查
+> 见「部署后验收」节。
 
 ## 全面板盘点（2026-07-26）
 
@@ -16,7 +17,8 @@ unmap 技巧），surface 静态提交，动画由 niri layer-rule `layer-open`/
 | NotificationToast（toast 组） | 窗口级 `visible: shouldShowToast` 即时 unmap；per-entry 飞出/进入是多 toast 栈的内容动画（合成器无法按 entry 处理），最后一条退出后快照透明、close 动画不可见，无双重动画 | 无 |
 | TaskSwitcher | T20 有意「瞬时显隐」（macOS cmd+tab 风格），无动画即设计 | 无（不加 profile） |
 | NotificationCenter 行进场 | `claimHistoryEntryAnimation` 按 entry id 一次性认领，仅新到达通知播放，非面板开启尾巴 | 无 |
-| PopupDismissLayer / TopBar / Dock / Wallpaper / DynamicIslandOverlay | 常驻或不可见 surface，无 map/unmap 动画诉求（灵动岛/Dock 形变属 P05） | 无 |
+| PopupDismissLayer / TopBar / Dock / 主 Wallpaper surface / DynamicIslandOverlay | 常驻或不可见 surface，无 map/unmap 动画诉求（灵动岛/Dock 形变属 P05；静态壁纸 zoom/dim 是常驻 surface 的内容动画） | 无 |
+| **Wallpaper 内嵌 live 调光层（tahoe-wallpaper-launchpad-overlay）** | 批次 3 审查发现的盘点缺口：`\|\| opacity > 0.01` 延迟 unmap + 双向 Behavior，wallpaperMode=external 下每次开关 launchpad 都活跃 | **批次 4 迁移** |
 | **SettingsPanel（tahoe-settings）** | `visible: open \|\| panel.opacity > 0.01` 延迟 unmap；scrim fade（fadeFast) + panel fade（panelExit）+ scale 0.985→1（160ms 固定）双向 Behavior | **批次 1 迁移** |
 | **Launchpad（tahoe-launchpad）** | `compositorLayerAnimations` 旗标硬编码 false 的休眠双路径（平行接口）；QML `layerProgress` 驱动整层 opacity+scale(0.988)+materialAlpha，OutQuint 340ms 进 / InOutCubic 240ms 出，延迟 unmap | **批次 2 迁移（收口双路径）** |
 | **WindowOverview（tahoe-window-overview）** | 飞行编排（entering/leaving flight）= 内容动画保留；违规点是 leave 落地后 `visible: … \|\| backdrop.opacity > 0.01` 的 backdrop/panel fade 尾巴延迟 unmap | **批次 3 迁移（close fade 交合成器，open 保留 QML veil 内容淡入）** |
@@ -201,8 +203,83 @@ enabled=True、四档往返字节还原；③ no-op open 论证收紧（合成�
 已接受差异（审查 A 补充量化）：close 快照卡片冻结 opacity 1（旧为并行 fade ≈OutCubic²）、
 reduced 路径快照为完整网格淡出（观感更好）、≤120ms 重开接力不连续（同批次 2 类）。
 
-**批次 3 commit：待填。**
+**批次 3 commit：`4f079c4`（已推送）。**
 
 ## 批次 4 — Wallpaper live 壁纸 launchpad 调光层 → 受管组 `wallpaper_overlay`
 
-（实施与审查记录待补。）
+批次 3 审查 B 发现的盘点缺口（本文件盘点表原把 Wallpaper 整体归为常驻豁免；实际其内嵌第二
+个 PanelWindow `tahoe-wallpaper-launchpad-overlay`，用户真实配置 wallpaperMode=external
+下每次开关 launchpad 都活跃）。
+
+改动：
+
+- `Wallpaper.qml`：overlay `visible: liveWallpaperVisible && launchpadOpen`（删
+  `|| dim.opacity > 0.01` 延迟 unmap）；dim 矩形静态 `launchpadWallpaperDim`、删双向
+  Behavior。
+- `tahoe-phase0.kdl`：`wallpaper_overlay` 受管规则（fade 400ms ease-out-cubic 双相位 =
+  被删 Behavior 的 launchpadWallpaperDuration/emphasizedDecel，与壁纸 zoom 400ms 同步）。
+- `niri_settings_tool.py`：组表（第 11 组）+ 四档模板（fast/balanced/liquid 恒 400——QML
+  从不按档缩放；reduced 双通道 0ms = 瞬时且跳过快照）。
+- 测试：ownership 新增 overlay 归属断言（静态 dim、无 Behavior、无延迟 unmap）。
+- policy 文档：表格行 + 批次 4 段落；本文件盘点表 Wallpaper 行勘正。
+
+已接受取舍：launchpad 开着时切换壁纸模式（仅 CLI/IPC 路径、400ms 自愈）双向瞬态——
+live→static 关闭快照与 staticLayer 已沉淀 dim 叠加（合成峰值 ~0.44 回落 0.25）；
+static→live 先下陷 0 再淡回（旧为双向瞬时干净 0.25）。
+
+### 批次 4 对抗性审查
+
+**审查 A（合成器 alpha 语义/时序/工具）：无阻断，1 低危文档精度项已修（上述双向瞬态）。**
+实证：① 数学等价**逐位**成立——smithay 预乘 `color×alpha` + ONE/ONE_MINUS_SRC_ALPHA 与
+Qt 场景图同式，黑 25% × factor f → dst×(1−0.25f)；`ease-out-cubic` keyframe 实现 ≡
+Qt OutCubic；② Bottom 层与 Overlay 层走同一 open/close 动画代码，closing 按
+(output, layer) 过滤画回同一 Bottom 槽位，堆叠正确；③ fade style 无几何通道 →
+`geometry_animating=false`（P06 blur 降档不误触发）；④ 11 组 marker 双射、四档全周期
+往返字节还原、reduced 0/0 确实跳快照；⑤ R18「overlay 只 dim 不 zoom」契约保留；
+⑥ 快速开关重建 surface 时两黑矩形 OutCubic 凹性保证合成 dim 只轻微欠额（峰值差
+~1.6% 亮度）永不过冲；⑦ 进程崩溃不触发 unmap（liveModeConfigured 兜底），中途翻转
+比设想更罕见；⑧ Wallpaper.qml 是全仓唯一含双 PanelWindow 的组件，无再遗漏。
+
+**审查 B（文档链/P04 终态完整性）：实现无阻断。** 实证：① 全仓 25 处 PanelWindow 逐一
+定性复盘通过，无第三个内嵌 surface、无遗漏延迟 unmap；② 11 组 marker 与
+LAYER_PROFILE_GROUPS 严格双射，三序列 profile 往返逐字节还原（每步经真实 niri
+validate），fail-close 对旧 KDL 亲测（read 安全降级 / write 拒绝并报缺 marker）；
+③ R18 改写保留"staticLayer 拥有 zoom、overlay 只 dim"契约核心；④ 验收节四类必查项
+齐全。处置：roadmap P04 状态行（本 commit 更新）；补 `test_wallpaper_overlay_profile_semantics`
+（reduced 0/0 跳快照 + 三档恒 400 + KDL fade/curve 锁）；验收命令 `qs -c tahoe` 勘误；
+走查清单补正常 launch pop 快照 fade 项；节名加"验收数据"。
+
+**批次 4 commit：待填（见 roadmap 状态表）。**
+
+（批次 4 审查结论与 commit 号待补。）
+
+## 部署后验收（欠账清单 / 验收数据）
+
+部署 = `rsync -a --delete --exclude=__pycache__/ --exclude=*.pyc --exclude=.pytest_cache/
+tahoe-shell/ ~/.config/quickshell/tahoe/` + `cp config/niri/tahoe-phase0.kdl
+~/.config/niri/tahoe/config.kdl`（quickshell 热重载、niri 自动重读；**KDL 与 shell 必须
+同批**——工具对缺新 marker 的旧配置 fail-close）。
+
+**① client 动画期 CPU 实测**（roadmap 验收"client 侧动画期 CPU 下降"）：
+
+```bash
+pid=$(pgrep -x quickshell)
+( sleep 1; for i in $(seq 1 8); do qs -c tahoe ipc call tahoe toggleWindowOverview; sleep 1.5; done ) &
+pidstat -u -h -p "$pid" 0.2 70 | awk '/quickshell/ {s+=$8; n++; if($8>m) m=$8} END {printf "mean=%.2f%% peak=%.2f%% n=%d\n", s/n, m, n}'
+```
+
+overview 走 IPC toggle；settings/launchpad 无 IPC toggle（IpcHandler 仅
+openSettings/toggleWindowOverview），用键位/手动开关配合同款 pidstat 窗口采样。
+close 尾巴专项=关面板后 300ms 窗口 pidstat 样本（旧方案该窗口有 fade 帧，新方案应 ~0）。
+与 fdd1ffa 基线的 A/B 对照留给 P08（避免向线上会话回滚部署）。
+
+**② 观感走查项**（各批次审查累计，人工确认"不劣于现状"）：
+
+- settings：快速连点开关双影/双 scrim 叠加脉冲；close 残影期（~100ms）点击穿透。
+- launchpad：正常 launch 后快照冻结峰值 pop 帧随 240ms 淡出；Esc-during-pop 快照冻结
+  半程 pop；≤240ms 重开接力；blur 边界随缩放（~0.6%/侧，fade 掩蔽）。
+- overview：≤120ms 重开接力不连续；close 快照幽灵卡片（冻结 opacity 1）。
+- wallpaper overlay：launchpad 开着时切换壁纸模式的双向瞬态（快照与静态 dim 叠加短暂
+  加深 ~0.44 / 下陷淡回）。
+- 全局：motion profile 四档切换后各面板动画分档生效；「关闭 compositor layer 动画」
+  开关=全部硬切。

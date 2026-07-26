@@ -997,6 +997,10 @@ LAYER_PROFILE_GROUPS = {
     # entrance); the compositor owns the post-flight close fade that used to
     # be the QML backdrop fade tail.
     "window_overview": ("tahoe-window-overview",),
+    # P04: live-wallpaper launchpad dim overlay. Compositor fades the static
+    # dim in sync with the wallpaper zoom (was a QML Behavior + delayed
+    # unmap).
+    "wallpaper_overlay": ("tahoe-wallpaper-launchpad-overlay",),
 }
 TOP_EDGE_PANEL_GROUPS = ("control_center", "notification_center", "small_popup")
 LAYER_PHASES = ("layer-open", "layer-close")
@@ -1127,6 +1131,10 @@ MOTION_PROFILE_LAYERS = {
         "window_overview": {
             "layer-close": layer_phase(0, 120, "opacity-to", 0.0, "ease-out-cubic"),
         },
+        "wallpaper_overlay": {
+            "layer-open": layer_phase(0, 400, "opacity-from", 0.0),
+            "layer-close": layer_phase(0, 400, "opacity-to", 0.0),
+        },
     },
     "fast": {
         "control_center": {
@@ -1168,6 +1176,10 @@ MOTION_PROFILE_LAYERS = {
         "window_overview": {
             "layer-close": layer_phase(0, 90, "opacity-to", 0.0, "ease-out-cubic"),
         },
+        "wallpaper_overlay": {
+            "layer-open": layer_phase(0, 400, "opacity-from", 0.0),
+            "layer-close": layer_phase(0, 400, "opacity-to", 0.0),
+        },
     },
     "liquid": {
         "control_center": {
@@ -1208,6 +1220,10 @@ MOTION_PROFILE_LAYERS = {
         },
         "window_overview": {
             "layer-close": layer_phase(0, 140, "opacity-to", 0.0, "ease-out-cubic"),
+        },
+        "wallpaper_overlay": {
+            "layer-open": layer_phase(0, 400, "opacity-from", 0.0),
+            "layer-close": layer_phase(0, 400, "opacity-to", 0.0),
         },
     },
     "reduced": {
@@ -1257,6 +1273,13 @@ MOTION_PROFILE_LAYERS = {
         # profile (fadeFast token); the open phase stays the authored no-op.
         "window_overview": {
             "layer-close": layer_phase(0, 70, "opacity-to", 0.0, "ease-out-cubic"),
+        },
+        # Reduced wallpaper overlay is instant both ways (launchpadWallpaper
+        # duration snapped to 0): 0ms on both channels skips the close
+        # snapshot entirely.
+        "wallpaper_overlay": {
+            "layer-open": layer_phase(0, 0, "opacity-from", 0.0),
+            "layer-close": layer_phase(0, 0, "opacity-to", 0.0),
         },
     },
 }

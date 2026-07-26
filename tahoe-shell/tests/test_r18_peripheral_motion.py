@@ -132,7 +132,15 @@ class R18PeripheralMotionTests(unittest.TestCase):
         live_overlay = re.search(r"id: liveWallpaperLaunchpadOverlay.*?Process \{", self.wallpaper, re.S)
         self.assertIsNotNone(live_overlay)
         assert live_overlay
-        self.assertIn("opacity: root.launchpadOpen ? Motion.launchpadWallpaperDim : 0", live_overlay.group(0))
+        # P04 batch 4: the dim commits statically at launchpadWallpaperDim and
+        # the compositor fades the surface (layer-animation wallpaper_overlay);
+        # the overlay still never zooms (that stays staticLayer-only).
+        self.assertIn("opacity: Motion.launchpadWallpaperDim", live_overlay.group(0))
+        self.assertIn(
+            "visible: root.liveWallpaperVisible && root.launchpadOpen",
+            live_overlay.group(0),
+        )
+        self.assertNotIn("Behavior", live_overlay.group(0))
         self.assertNotIn("Motion.launchpadWallpaperScale", live_overlay.group(0))
         self.assertIn("cannot be transformed by staticLayer", self.wallpaper)
         self.assertIn("without restarting or pausing the wallpaper process", self.wallpaper)

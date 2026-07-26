@@ -623,6 +623,38 @@ layer-rule {
     }
 }
 
+// Layer animation Wallpaper live-mode launchpad dim overlay (P04 batch 4).
+// The overlay used to keep itself mapped through a QML Behavior fade
+// (`visible: … || dim.opacity > 0.01`); now the dim rectangle commits
+// statically at launchpadWallpaperDim and the compositor fades the whole
+// surface over the same 400ms OutCubic the Behavior used (in sync with the
+// static-path wallpaper zoom). Accepted delta: switching wallpaper mode while
+// launchpad is open (CLI/IPC-only path, self-healing in 400ms) has bidirectional
+// transients — live→static overlaps the closing snapshot with the already-settled
+// staticLayer dim (composite peak ~0.44 easing back to 0.25); static→live dips
+// to 0 and fades back up (was: instant clean 0.25 both ways).
+// tahoe-managed: layer-animation wallpaper_overlay
+layer-rule {
+    match namespace="^tahoe-wallpaper-launchpad-overlay$"
+
+    animations {
+        layer-open {
+            style "fade"
+            opacity-from 0
+            transform-duration-ms 0
+            opacity-duration-ms 400
+            opacity-curve "ease-out-cubic"
+        }
+        layer-close {
+            style "fade"
+            opacity-to 0
+            transform-duration-ms 0
+            opacity-duration-ms 400
+            opacity-curve "ease-out-cubic"
+        }
+    }
+}
+
 layer-rule {
     match namespace="^tahoe-battery-popup$"
     match namespace="^tahoe-wifi-popup$"

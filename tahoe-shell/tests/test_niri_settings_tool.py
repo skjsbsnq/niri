@@ -658,6 +658,30 @@ layer-rule {
         self.assertIn("opacity-from 1.0", open_block)
         self.assertIn('style "fade"', open_block)
 
+    def test_wallpaper_overlay_profile_semantics(self) -> None:
+        # P04 batch 4: reduced must stay 0ms on BOTH channels of BOTH phases —
+        # that shape skips the close snapshot entirely (instant unmap, no
+        # fullscreen snapshot per launchpad close). The animated profiles keep
+        # the QML-era constant 400ms (launchpadWallpaperMs, synced with the
+        # static-path wallpaper zoom). Style/curve are KDL-authored and not
+        # profile-managed, so lock them here against drift.
+        reduced = niri_settings_tool.MOTION_PROFILE_LAYERS["reduced"]["wallpaper_overlay"]
+        for phase in niri_settings_tool.LAYER_PHASES:
+            self.assertEqual(reduced[phase]["transform-duration-ms"], 0, phase)
+            self.assertEqual(reduced[phase]["opacity-duration-ms"], 0, phase)
+        for profile in ("fast", "balanced", "liquid"):
+            group = niri_settings_tool.MOTION_PROFILE_LAYERS[profile]["wallpaper_overlay"]
+            for phase in niri_settings_tool.LAYER_PHASES:
+                self.assertEqual(group[phase]["opacity-duration-ms"], 400, f"{profile}.{phase}")
+
+        text = TAHOE_PHASE0.read_text(encoding="utf-8")
+        marker = "// tahoe-managed: layer-animation wallpaper_overlay"
+        rule_start = text.index(marker)
+        rule_end = text.index("\n}", rule_start)
+        rule_block = text[rule_start:rule_end]
+        self.assertEqual(rule_block.count('style "fade"'), 2)
+        self.assertEqual(rule_block.count('opacity-curve "ease-out-cubic"'), 2)
+
     def test_launchpad_reduced_profile_disables_both_channels(self) -> None:
         # P04 batch 2: reduced launchpad must stay 0ms on BOTH channels of
         # BOTH phases. That exact shape is what makes niri skip the close

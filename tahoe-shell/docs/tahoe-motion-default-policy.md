@@ -85,6 +85,20 @@ Behavior 起步帧与曲线逐位一致（合成器 fade 会把逐 item alpha �
 veil 在 flightPhase 回到 idle（已 unmap、永不渲染）时复位为 0，保证快照是全
 veil 帧、下次打开从 0 淡入。
 
+2026-07-26 update (P04 批次 4): live 壁纸模式的 launchpad 调光层
+（`tahoe-wallpaper-launchpad-overlay`，Wallpaper.qml 内嵌的第二个
+PanelWindow）加入 compositor owner 集合（受管组 `wallpaper_overlay`）。它此前
+是批次 3 审查发现的盘点缺口：`visible: … || dim.opacity > 0.01` 延迟 unmap +
+双向 Behavior，在 wallpaperMode=external 的真实部署下每次开关 launchpad 都
+逐帧渲染全屏 alpha。现在 dim 矩形以 `launchpadWallpaperDim` 静态提交，合成器
+以同样的 400ms OutCubic（= launchpadWallpaperDuration，与静态壁纸路径的
+zoom/dim 内容动画同步）整面淡入淡出；reduced 双通道 0ms = 瞬时且不生成快照。
+已接受取舍：launchpad 打开期间切换壁纸模式（仅 CLI/IPC 路径，400ms 自愈）有
+双向瞬态——live→static 时关闭快照与 staticLayer 已沉淀的 dim 叠加（合成峰值
+~0.44 回落 0.25）；static→live 时 dim 先下陷到 0 再 400ms 淡回（旧为双向瞬时
+干净 0.25）。静态壁纸路径的 zoom/dim 位于常驻
+wallpaper surface 内部，是内容动画，不属 map/unmap 范畴，保留。
+
 ## Why Balanced Stays Default
 
 `balanced` remains the default because it is the only profile with all of the following evidence:
@@ -115,6 +129,7 @@ Reasons:
 | QML outer fallback for migrated Tahoe surfaces | Remove | niri is the sole outer owner; disabling means instant outer visibility |
 | Launchpad QML outer animation | Removed (P04 批次 2) | Migrated to compositor layer animation; content animations (grid enter, launch pop, paging) stay QML |
 | WindowOverview QML unmap fade tail | Removed (P04 批次 3) | Close fade is compositor-owned; the flight choreography and veil fade-in stay QML content animations |
+| Live-wallpaper launchpad dim overlay QML fade | Removed (P04 批次 4) | The dim commits statically; the compositor fades the surface 400ms in sync with the wallpaper zoom |
 | Dock, TaskSwitcher QML path | Keep | Dock is a persistent surface (P05 scope); TaskSwitcher is deliberately instant (T20) |
 | TahoeGlass client fallback to BackgroundEffect | Keep | Protocol/fallback lifecycle is separate from motion defaults |
 | Thumbnail `WindowPreviewFallback` | Keep | Required when niri thumbnail IPC or image decode fails |

@@ -73,7 +73,7 @@
 | P01 缩略图解码修复 | 完成 | 4b6b420 |
 | P02 updatesEnabled 门控 | 完成 | db8799b（quickshell 1c03b80） |
 | P03 live blur 缓存 | 完成 | niri 7b2ebd0e |
-| P04 弹层动画收尾 | 未开始 | |
+| P04 弹层动画收尾 | 完成（代码批次 1-4 均经双独立对抗性审查；部署 + CPU 实测/观感走查见 p04-review.md「部署后验收」节） | 943c969 / 49ddac0 / 4f079c4 / 批次4见 log |
 | P05 变换动画下沉协议 | 完成 | niri 9ce7a720 / quickshell e8c1acb |
 | P06 动画期降采样（兜底） | 完成（机制默认启用；实测 A/B 留待 P08，详见 p06-review.md） | niri 78540ae2（指针待 P05 落地后前移） |
 | P07 单线程 RenderLoop | 未开始 | |

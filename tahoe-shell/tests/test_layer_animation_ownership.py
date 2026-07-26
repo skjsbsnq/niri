@@ -99,6 +99,20 @@ class LayerAnimationOwnershipTests(unittest.TestCase):
         panel_end = overview.index("MouseArea {", panel_start)
         self.assertNotIn("Behavior", overview[panel_start:panel_end])
 
+    def test_wallpaper_launchpad_overlay_is_compositor_owned(self) -> None:
+        # P04 batch 4: the live-wallpaper launchpad dim overlay maps/unmaps
+        # with launchpadOpen; the 400ms dim fade is the compositor's
+        # (layer-animation wallpaper_overlay). The dim rectangle is a static
+        # commit at launchpadWallpaperDim.
+        wallpaper = self.read(COMPONENTS / "Wallpaper.qml")
+        overlay_start = wallpaper.index("id: liveWallpaperLaunchpadOverlay")
+        overlay_end = wallpaper.index("Process {", overlay_start)
+        overlay = wallpaper[overlay_start:overlay_end]
+        self.assertIn("visible: root.liveWallpaperVisible && root.launchpadOpen", overlay)
+        self.assertNotIn("liveWallpaperDim.opacity > 0.01", overlay)
+        self.assertNotIn("Behavior", overlay)
+        self.assertIn("opacity: Motion.launchpadWallpaperDim", overlay)
+
     def test_layer_toggle_uses_only_niri_settings_writer(self) -> None:
         desktop = self.read(SERVICES / "DesktopSettings.qml")
         niri = self.read(SERVICES / "NiriSettings.qml")

@@ -1166,10 +1166,13 @@ PanelWindow {
     // they cannot be transformed by staticLayer. A short-lived bottom-layer
     // surface supplies the same launchpad dim above either dynamic backend
     // without restarting or pausing the wallpaper process.
+    // P04 batch 4: the dim fade moved to the compositor (layer-animation
+    // wallpaper_overlay, fade 400ms = launchpadWallpaperDuration). The dim
+    // commits statically and map/unmap track launchpadOpen directly.
     PanelWindow {
         id: liveWallpaperLaunchpadOverlay
         screen: root.screen
-        visible: root.liveWallpaperVisible && (root.launchpadOpen || liveWallpaperDim.opacity > 0.01)
+        visible: root.liveWallpaperVisible && root.launchpadOpen
         // P02: same visible→updatesEnabled mirror as other popup surfaces.
         updatesEnabled: visible
         exclusionMode: ExclusionMode.Ignore
@@ -1188,14 +1191,8 @@ PanelWindow {
             id: liveWallpaperDim
             anchors.fill: parent
             color: "#000000"
-            opacity: root.launchpadOpen ? Motion.launchpadWallpaperDim : 0
-
-            Behavior on opacity {
-                NumberAnimation {
-                    duration: Motion.launchpadWallpaperDuration(root.settingsService)
-                    easing.type: Motion.emphasizedDecel
-                }
-            }
+            // Static: the compositor animation alpha ramps the dim 0→this.
+            opacity: Motion.launchpadWallpaperDim
         }
     }
 

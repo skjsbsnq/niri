@@ -78,6 +78,27 @@ class LayerAnimationOwnershipTests(unittest.TestCase):
         self.assertNotIn("launchpadLayerExitMs", motion)
         self.assertNotIn("launchpadLayerScaleFrom", motion)
 
+    def test_window_overview_close_tail_is_compositor_owned(self) -> None:
+        # P04 batch 3: the overview unmaps as soon as the leave flight lands
+        # (visible tracks the flight phases; no backdrop-opacity unmap tail).
+        # niri's layer-close fade plays the final snapshot out. The veil is
+        # content-side: it fades backdrop+panel in under the enter flight and
+        # resets after unmap, never delaying map/unmap.
+        overview = self.read(COMPONENTS / "WindowOverview.qml")
+        self.assertIn("visible: surfaceVisible", overview)
+        self.assertNotIn("backdrop.opacity > 0.01", overview)
+        self.assertIn("property real veil", overview)
+        self.assertIn("playVeilEnter", overview)
+        self.assertNotIn("regionEnabled: root.surfaceVisible", overview)
+        # The backdrop/panel fade is driven by the veil animation, not by
+        # Behaviors racing the unmap.
+        backdrop_start = overview.index("id: backdrop")
+        backdrop_end = overview.index("}", overview.index("opacity:", backdrop_start))
+        self.assertNotIn("Behavior", overview[backdrop_start:backdrop_end])
+        panel_start = overview.index("id: overview")
+        panel_end = overview.index("MouseArea {", panel_start)
+        self.assertNotIn("Behavior", overview[panel_start:panel_end])
+
     def test_layer_toggle_uses_only_niri_settings_writer(self) -> None:
         desktop = self.read(SERVICES / "DesktopSettings.qml")
         niri = self.read(SERVICES / "NiriSettings.qml")

@@ -28,9 +28,14 @@ class ThumbnailAsyncBudgetContractTests(unittest.TestCase):
         overview = self.read("components/WindowOverview.qml")
         open_prefix = overview.split("onWindowChoicesChanged", 1)[0]
         self.assertNotIn("requestVisibleThumbnails(false);", open_prefix)
-        self.assertIn(
-            'onFlightPhaseChanged: if (open && flightPhase === "open") requestVisibleThumbnails(false)',
-            overview,
+        # P04: onFlightPhaseChanged grew a veil-reset branch; the capture
+        # deferral contract is unchanged — the request must sit directly
+        # inside the open-phase guard (adjacency locked, not just presence).
+        flight_handler = overview.split("onFlightPhaseChanged:", 1)[1]
+        self.assertRegex(
+            flight_handler[:400],
+            r'if \(open && flightPhase === "open"\)\s*\n\s*'
+            r"requestVisibleThumbnails\(false\);",
         )
         self.assertIn('thumbnailProvider.cancelRequests("window-overview")', overview)
         self.assertNotIn("niri msg window-thumbnail", overview)

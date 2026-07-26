@@ -66,6 +66,25 @@ opacity 二次方变单次线性；launch pop 240ms 窗口内用户主动关闭�
 冻进快照。reduced 双通道 0ms = 瞬时 unmap 且不生成快照，与旧 QML reduced
 snap 等价。
 
+2026-07-26 update (P04 批次 3): WindowOverview 的 close 收尾交给合成器（受管
+组 `window_overview`）。飞行编排（entering/leaving flight）与 veil 淡入是
+**内容动画，保留在 QML**；被移除的是 leave 落地后靠
+`visible: … || backdrop.opacity > 0.01` 延迟 unmap 的 backdrop/panel 淡出
+尾巴。现在 `visible: surfaceVisible`：leave flight 落地即 unmap，niri
+layer-close 以同样的 fadeFast 时长（balanced 120ms）+ OutCubic 对最终快照
+淡出。layer-open 是刻意的 no-op（双通道 0ms、opacity-from 1.0）——不用合成器
+open fade 的理由：入场期客户端本就逐帧渲染飞行（CPU 零差异）、veil 与被删
+Behavior 起步帧与曲线逐位一致（合成器 fade 会把逐 item alpha 换成整面合成后
+统一 alpha、玻璃 ramp 换通道，两处微差收益为零）、open=QML 内容/close=合成器
+的单相位单归属。该 no-op 形状由 `test_niri_settings_tool.py` 锁定（profile
+表刻意不管理它）。已接受差异：① close 快照中卡片冻结在 opacity 1（旧尾巴里
+卡片自身 fade 与面板淡出并行 ≈ OutCubic²），悬于真实窗口上的幽灵卡片在
+≤120ms 内略更醒目；② reduced/无飞行路径的快照是完整网格淡出（旧版卡片先瞬
+跳到窗口位再淡出）——观感反而更好；③ 合成器淡出 ≤120ms 窗口内再次打开存在
+与 launchpad（批次 2，240ms 窗口）同类的接力不连续，属快照架构既定取舍。
+veil 在 flightPhase 回到 idle（已 unmap、永不渲染）时复位为 0，保证快照是全
+veil 帧、下次打开从 0 淡入。
+
 ## Why Balanced Stays Default
 
 `balanced` remains the default because it is the only profile with all of the following evidence:
@@ -95,7 +114,8 @@ Reasons:
 | --- | --- | --- |
 | QML outer fallback for migrated Tahoe surfaces | Remove | niri is the sole outer owner; disabling means instant outer visibility |
 | Launchpad QML outer animation | Removed (P04 批次 2) | Migrated to compositor layer animation; content animations (grid enter, launch pop, paging) stay QML |
-| Dock, TaskSwitcher, WindowOverview QML path | Keep | Not forced into compositor layer animation |
+| WindowOverview QML unmap fade tail | Removed (P04 批次 3) | Close fade is compositor-owned; the flight choreography and veil fade-in stay QML content animations |
+| Dock, TaskSwitcher QML path | Keep | Dock is a persistent surface (P05 scope); TaskSwitcher is deliberately instant (T20) |
 | TahoeGlass client fallback to BackgroundEffect | Keep | Protocol/fallback lifecycle is separate from motion defaults |
 | Thumbnail `WindowPreviewFallback` | Keep | Required when niri thumbnail IPC or image decode fails |
 | `reduced` motion profile | Keep | Conservative profile for low-motion preference |

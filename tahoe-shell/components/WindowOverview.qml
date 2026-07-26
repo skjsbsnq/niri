@@ -21,6 +21,11 @@ PanelWindow {
     property string flightPhase: "idle"
     property int flightEpoch: 0
     property int pendingFlights: 0
+    // Unified backdrop + panel fade-in (content-side, plays under the flight
+    // choreography while the surface is mapped). The unmap fade tail moved to
+    // the compositor layer-close rule (P04): close unmaps as soon as the
+    // leave flight lands and niri fades the final snapshot out.
+    property real veil: 0
     readonly property var windowChoices: windowsService && windowsService.windowList ? windowsService.windowList : []
     readonly property var workspaceGroups: buildWorkspaceGroups()
     readonly property int screenWidth: Math.max(1, numberOr(root.screen && root.screen.width, root.width))
@@ -68,8 +73,10 @@ PanelWindow {
         return Qt.size(w, h);
     }
 
-    visible: surfaceVisible || backdrop.opacity > 0.01
-    // P02: freeze scene-graph frames while this surface is unmapped/faded out.
+    // P04: map/unmap track the flight phases directly; the compositor owns
+    // the post-flight close fade (layer-rule tahoe-window-overview).
+    visible: surfaceVisible
+    // P02: freeze scene-graph frames while this surface is unmapped.
     // Extends the existing visible gate onto updatesEnabled (not a parallel path).
     updatesEnabled: visible
     aboveWindows: true
@@ -94,6 +101,7 @@ PanelWindow {
             flightEpoch += 1;
             flightPhase = "entering";
             pendingFlights = 0;
+            playVeilEnter();
             selectFocusedOrFirst();
             Qt.callLater(function() {
                 if (!root.open)
@@ -129,7 +137,34 @@ PanelWindow {
             requestVisibleThumbnails(false);
     }
 
-    onFlightPhaseChanged: if (open && flightPhase === "open") requestVisibleThumbnails(false)
+    onFlightPhaseChanged: {
+        if (open && flightPhase === "open")
+            requestVisibleThumbnails(false);
+        if (flightPhase === "idle") {
+            // Post-unmap reset: surfaceVisible is already false here, so this
+            // never renders — the niri close snapshot keeps the full-veil
+            // frame and the next open fades in from zero again.
+            veilAnim.stop();
+            veil = 0;
+        }
+    }
+
+    function playVeilEnter() {
+        veilAnim.stop();
+        // Continue from the current value so a mid-close reopen does not
+        // flash; a fresh open starts from the 0 reset above.
+        veilAnim.from = veil;
+        veilAnim.to = 1;
+        veilAnim.duration = Motion.fadeFast(settingsService);
+        veilAnim.restart();
+    }
+
+    NumberAnimation {
+        id: veilAnim
+        target: root
+        property: "veil"
+        easing.type: Motion.emphasizedDecel
+    }
 
     function numberOr(value, fallback) {
         var number = Number(value);
@@ -588,11 +623,9 @@ PanelWindow {
 
         anchors.fill: parent
         color: "#1a101418"
-        opacity: root.open || root.flightPhase === "entering" || root.flightPhase === "open" || root.flightPhase === "leaving" ? 1 : 0
-
-        Behavior on opacity {
-            NumberAnimation { duration: Motion.fadeFast(root.settingsService); easing.type: Motion.emphasizedDecel }
-        }
+        // Content-side fade-in under the flight; static during leave (the
+        // compositor fades the close snapshot after unmap).
+        opacity: root.veil
     }
 
     MouseArea {
@@ -630,13 +663,10 @@ PanelWindow {
         y: root.panelTop
         width: root.panelWidth
         height: root.panelHeight
-        // No entrance scale (T20). Opacity follows flight phase so leave can finish.
-        opacity: (root.open || root.flightPhase === "entering" || root.flightPhase === "open" || root.flightPhase === "leaving") ? 1 : 0
+        // No entrance scale (T20). Opacity follows the veil so the panel and
+        // backdrop fade in together; unmap is immediate at flight end.
+        opacity: root.veil
         visible: opacity > 0.01
-
-        Behavior on opacity {
-            NumberAnimation { duration: Motion.fadeFast(root.settingsService); easing.type: Motion.emphasizedDecel }
-        }
 
         MouseArea {
             anchors.fill: parent
@@ -660,7 +690,8 @@ PanelWindow {
             regionHeight: Math.round(overviewSurface.height)
             interaction: 0.0
             materialAlpha: overview.opacity
-            regionEnabled: root.surfaceVisible
+            // Stay enabled while unmapped so niri's closing snapshot keeps
+            // the glass material (P04: compositor owns the close fade).
         }
 
         Row {

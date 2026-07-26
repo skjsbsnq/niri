@@ -595,6 +595,34 @@ layer-rule {
     }
 }
 
+// Layer animation Window Overview profile (P04). Open is a deliberate no-op:
+// the surface maps instantly and the QML flight/veil choreography owns the
+// entrance (cards fly from real window rects while the veil fades in — that
+// is content animation, not a map animation). Close replaces the old QML
+// backdrop fade tail (`visible: … || backdrop.opacity > 0.01`): the surface
+// unmaps as soon as the leave flight lands and niri fades the final snapshot
+// out over the same fadeFast duration and OutCubic curve the tail used.
+// tahoe-managed: layer-animation window_overview
+layer-rule {
+    match namespace="^tahoe-window-overview$"
+
+    animations {
+        layer-open {
+            style "fade"
+            opacity-from 1.0
+            transform-duration-ms 0
+            opacity-duration-ms 0
+        }
+        layer-close {
+            style "fade"
+            opacity-to 0
+            transform-duration-ms 0
+            opacity-duration-ms 120
+            opacity-curve "ease-out-cubic"
+        }
+    }
+}
+
 layer-rule {
     match namespace="^tahoe-battery-popup$"
     match namespace="^tahoe-wifi-popup$"

@@ -641,6 +641,23 @@ layer-rule {
                     f"settings {phase} opacity must follow panelExit ({profile})",
                 )
 
+    def test_window_overview_open_phase_is_locked_noop(self) -> None:
+        # P04 batch 3: window_overview's layer-open is a deliberate no-op (the
+        # QML flight/veil own the entrance). It is authored in the KDL and NOT
+        # profile-managed, so nothing in the tool would repair drift — lock it
+        # here instead. A non-zero open duration would silently stack a
+        # compositor fade on top of the QML veil (double entrance animation).
+        text = TAHOE_PHASE0.read_text(encoding="utf-8")
+        marker = "// tahoe-managed: layer-animation window_overview"
+        rule_start = text.index(marker)
+        open_start = text.index("layer-open {", rule_start)
+        open_end = text.index("}", open_start)
+        open_block = text[open_start:open_end]
+        self.assertIn("transform-duration-ms 0", open_block)
+        self.assertIn("opacity-duration-ms 0", open_block)
+        self.assertIn("opacity-from 1.0", open_block)
+        self.assertIn('style "fade"', open_block)
+
     def test_launchpad_reduced_profile_disables_both_channels(self) -> None:
         # P04 batch 2: reduced launchpad must stay 0ms on BOTH channels of
         # BOTH phases. That exact shape is what makes niri skip the close

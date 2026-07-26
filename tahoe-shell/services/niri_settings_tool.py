@@ -993,6 +993,10 @@ LAYER_PROFILE_GROUPS = {
     # P04: launchpad. Compositor owns the whole-surface popin/popout that used
     # to be the QML layerProgress fade/scale dual path.
     "launchpad": ("tahoe-launchpad",),
+    # P04: window overview. Open is a no-op (QML flight/veil own the
+    # entrance); the compositor owns the post-flight close fade that used to
+    # be the QML backdrop fade tail.
+    "window_overview": ("tahoe-window-overview",),
 }
 TOP_EDGE_PANEL_GROUPS = ("control_center", "notification_center", "small_popup")
 LAYER_PHASES = ("layer-open", "layer-close")
@@ -1120,6 +1124,9 @@ MOTION_PROFILE_LAYERS = {
             "layer-open": {**layer_phase(340, 340, "opacity-from", 0.0), "style": "popin"},
             "layer-close": {**layer_phase(240, 240, "opacity-to", 0.0), "style": "popout"},
         },
+        "window_overview": {
+            "layer-close": layer_phase(0, 120, "opacity-to", 0.0, "ease-out-cubic"),
+        },
     },
     "fast": {
         "control_center": {
@@ -1158,6 +1165,9 @@ MOTION_PROFILE_LAYERS = {
             "layer-open": {**layer_phase(340, 340, "opacity-from", 0.0), "style": "popin"},
             "layer-close": {**layer_phase(240, 240, "opacity-to", 0.0), "style": "popout"},
         },
+        "window_overview": {
+            "layer-close": layer_phase(0, 90, "opacity-to", 0.0, "ease-out-cubic"),
+        },
     },
     "liquid": {
         "control_center": {
@@ -1195,6 +1205,9 @@ MOTION_PROFILE_LAYERS = {
         "launchpad": {
             "layer-open": {**layer_phase(340, 340, "opacity-from", 0.0), "style": "popin"},
             "layer-close": {**layer_phase(240, 240, "opacity-to", 0.0), "style": "popout"},
+        },
+        "window_overview": {
+            "layer-close": layer_phase(0, 140, "opacity-to", 0.0, "ease-out-cubic"),
         },
     },
     "reduced": {
@@ -1239,6 +1252,11 @@ MOTION_PROFILE_LAYERS = {
         "launchpad": {
             "layer-open": {**layer_phase(0, 0, "opacity-from", 0.0), "style": "fade"},
             "layer-close": {**layer_phase(0, 0, "opacity-to", 0.0), "style": "fade"},
+        },
+        # Reduced keeps the 70ms close fade the QML tail used on the reduced
+        # profile (fadeFast token); the open phase stays the authored no-op.
+        "window_overview": {
+            "layer-close": layer_phase(0, 70, "opacity-to", 0.0, "ease-out-cubic"),
         },
     },
 }

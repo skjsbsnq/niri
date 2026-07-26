@@ -98,7 +98,7 @@ PopupDismissLayer，自带 scrim MouseArea；focusable/servicePollingActive 均�
 - 建议（快速连点双影 + 双 scrim 叠加脉冲、close 残影期点击穿透）→ 记录为走查项（与
   spotlight/menu 迁移行为同构，既有先例）；契约测试子串匹配弱点已知（组合断言成立）。
 
-（commit 号待补。）
+**批次 1 commit：`943c969`（已推送）。**
 
 ## 批次 2 — Launchpad → 受管组 `launchpad`（双路径收口）
 
@@ -148,4 +148,61 @@ close 以输出 fractional scale 1:1 烘焙后向 0.988 缩小——**两方向�
 走查项（沿批次 1 清单累计）：快速连点开关的合成器接力观感、launch pop 快照 fade、
 动画期 blur 边缘。
 
-（commit 号待补。）
+**批次 2 commit：`49ddac0`（已推送）。**
+
+## 批次 3 — WindowOverview → 受管组 `window_overview`（close 尾巴收尾）
+
+设计要点：飞行编排（entering/leaving flight）与 veil 淡入是**内容动画，保留**；P04 移除的
+是 leave 落地后靠 `visible: … || backdrop.opacity > 0.01` 延迟 unmap 的 QML 淡出尾巴。
+layer-open 是刻意 no-op（双通道 0ms、opacity-from 1.0）：入场必须 map 即时 + 静态提交，
+卡片才能从真实窗口矩形起飞；veil 与 flight 同帧起步，与今日 Behavior 起步时机相同，不存
+在双重动画。
+
+改动：
+
+- `WindowOverview.qml`：`visible: surfaceVisible`；新增 `veil` 属性 + veilAnim +
+  playVeilEnter（fadeFast/OutCubic，与被删 Behavior 同参）；onFlightPhaseChanged 在 idle
+  时复位 veil（此时已 unmap、永不渲染，快照保留全 veil 帧）；backdrop/overview opacity
+  改绑 veil、删两个 Behavior；regionEnabled 门控删除（快照保玻璃，LeftSidebar 模式）。
+- `tahoe-phase0.kdl`：`window_overview` 受管规则（open no-op；close fade 120ms
+  ease-out-cubic = 被删尾巴的 fadeFast/emphasizedDecel 同参）。
+- `niri_settings_tool.py`：组表 + 四档 layer-close（90/120/140/70 跟 fadeFast token；
+  layer-open 常量 no-op 留 KDL 编著、不入 profile 表）。
+- 测试：test_thumbnail_async_budget.py 断言改块形式（延迟捕获契约不变）；ownership 新增
+  overview close 尾巴归属测试。
+- policy 文档：表格行拆分（WindowOverview 尾巴 Removed；Dock=P05 域、TaskSwitcher=T20
+  瞬时设计）+ 批次 3 段落。
+
+（批次 3 审查结论与 commit 号见下。）
+
+### 批次 3 对抗性审查
+
+**审查 A（veil 时序/快照/合成器 no-op）：无阻断，2 应修已修。** 实证：① veil 时序五场景
+穷举（entering 中关、leaving 中重开、空列表强制关、leaveWatchdog 路径、初值）全部无洞——
+含"不存在 open=true 时 phase 变 idle 的路径"的反证；② no-op open 合成器行为：duration 0
+→ is_done 即真 → `open_animation_state()` 返回 None → 零包装零 damage 零重绘循环；
+`opacity-from 1.0` 双保险 alpha≡1；③ 删 regionEnabled 门控**顺带修掉**旧版 tail 期间
+region 先于 unmap 被禁用导致淡出丢玻璃的竞态（实质改进）；④ 工具往返四档字节还原 +
+off/on 还原 + `.items()` 天然跳过缺失 layer-open 无 KeyError 路径。
+应修落实：缩略图断言改邻接正则（变异实验曾证旧改写可被绕过）；KDL no-op open 加锁定
+测试（profile 表刻意不管理它，此前无任何守护，漂移会造成无声双重入场动画）。
+
+**审查 B（任务级完整性/全局收尾）：无阻断，1 实质应修 → 批次 4。** 实证：① 全仓 25 个
+namespace 独立复核，19 个开合面板 `visible: open` 全部干净，豁免定性逐项挑战成立——
+**除 `tahoe-wallpaper-launchpad-overlay` 被盘点漏掉**（Wallpaper.qml 内嵌第二个
+PanelWindow，live 壁纸模式的 launchpad 调光层，`|| opacity > 0.01` 延迟 unmap +双向
+Behavior，用户真实配置 wallpaperMode=external 下每次开关 launchpad 都活跃）→ 立项
+**批次 4 迁移**；② 10 受管组 KDL/marker/registry 全绑定、detect=balanced、
+enabled=True、四档往返字节还原；③ no-op open 论证收紧（合成器 open fade 不被"静态提交"
+论据排除，真正理由是 CPU 零差异+逐位观感一致+单相位单归属——已补进 policy 文档）；
+④ CPU 验收：仓库只有空闲基线，动画期无既有数据——采集方案（IPC toggle 循环 + pidstat
+0.2s 采样 + close 后 300ms 窗口专项）记录于下文"验收数据"节，部署后执行。
+
+已接受差异（审查 A 补充量化）：close 快照卡片冻结 opacity 1（旧为并行 fade ≈OutCubic²）、
+reduced 路径快照为完整网格淡出（观感更好）、≤120ms 重开接力不连续（同批次 2 类）。
+
+**批次 3 commit：待填。**
+
+## 批次 4 — Wallpaper live 壁纸 launchpad 调光层 → 受管组 `wallpaper_overlay`
+
+（实施与审查记录待补。）

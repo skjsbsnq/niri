@@ -159,9 +159,11 @@ var v2CompositorGeometryBezier = {
 
 // Input-mask union hold during a compositor morph: the compositor owns the
 // visual timeline (no settle feedback), so the mask covers old∪new footprints
-// for a conservative window before snapping to the target. Covers the spring
-// (dr .85 / st 160 settles ≈ 400ms) and all eased durations.
-var v2CompositorMorphMaskHoldMs = 420;
+// for a conservative window before snapping to the target. Must outlast the
+// spring: envelope settle = -ln(epsilon)/(dampingRatio*sqrt(stiffness))
+// = 5.81/10.75 ≈ 540ms for dr .85 / st 160 / eps .003 (niri spring.rs uses
+// the same bound), so 560ms covers it with margin — and all eased durations.
+var v2CompositorMorphMaskHoldMs = 560;
 
 // V2 radius caps (roadmap §9.3).
 var v2RadiusCompactClock = 16;

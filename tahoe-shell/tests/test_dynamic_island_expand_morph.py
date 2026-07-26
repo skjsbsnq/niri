@@ -2,7 +2,9 @@
 """Expand morph coordination: mask, content reveal gate, collapse width freeze.
 
 Locks the full Task-2 fixes for media expand/collapse hand-feel:
-1. Input mask follows animated painted geometry (not settled target).
+1. Input mask follows the painted footprint: animated geometry on the legacy
+   pipeline; under P05 compositor morph the old∪new union held for the morph
+   window (never the raw settled target).
 2. Expanded media/timer content waits for geometry reveal progress.
 3. Compact media is held during early expand (no blank mid-morph frame).
 4. Collapse freezes resting_media width until settle (no remeasure retarget).
@@ -47,17 +49,36 @@ class DynamicIslandExpandMorphTests(unittest.TestCase):
         self.assertIn("v2ExpandedContentRevealMinDeltaPx", text)
 
     def test_mask_uses_animated_not_target(self) -> None:
+        # P05 compositor morph snaps the geometry drivers, so the mask reads
+        # maskWidth/maskHeight: islandAnimated* unioned with the pre-snap
+        # footprint for the morph hold window. Raw capsuleTarget* stays
+        # banned — a target-sized mask mid-morph was the historical bug.
         mask = re.search(r"mask:\s*Region\s*\{([\s\S]*?)\n    \}", self.overlay)
         self.assertIsNotNone(mask)
         body = mask.group(1)
-        self.assertIn("islandAnimatedWidth", body)
-        self.assertIn("islandAnimatedHeight", body)
+        self.assertIn("maskWidth", body)
+        self.assertIn("maskHeight", body)
         self.assertIn("islandAnimatedRadius", body)
         self.assertNotIn("capsuleTargetWidth", body)
         self.assertNotIn("capsuleTargetHeight", body)
         self.assertNotIn("capsuleTargetLeft", body)
         # Still top-anchored.
         self.assertIn("capsuleTargetTop", body)
+        # Outside the hold window maskWidth/maskHeight collapse to the
+        # animated painted footprint (legacy pipeline semantics unchanged);
+        # during the hold they union it with the captured pre-snap size.
+        self.assertIn(
+            "readonly property real maskWidth: morphMaskHoldTimer.running\n"
+            "        ? Math.max(root.morphMaskHoldWidth, root.islandAnimatedWidth)\n"
+            "        : root.islandAnimatedWidth",
+            self.overlay,
+        )
+        self.assertIn(
+            "readonly property real maskHeight: morphMaskHoldTimer.running\n"
+            "        ? Math.max(root.morphMaskHoldHeight, root.islandAnimatedHeight)\n"
+            "        : root.islandAnimatedHeight",
+            self.overlay,
+        )
 
     def test_media_content_uses_continuous_expand_progress(self) -> None:
         # Unified media scene for resting_media + expanded_media on owner.

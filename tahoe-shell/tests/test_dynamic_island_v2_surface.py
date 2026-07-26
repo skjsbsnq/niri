@@ -234,15 +234,92 @@ class DynamicIslandV2SurfaceTests(unittest.TestCase):
         self.assertNotIn("MaterialIsland", self.overlay)
 
     def test_mask_follows_animated_painted_geometry(self) -> None:
-        # Input mask tracks the painted morph (islandAnimated*), not the
-        # settled target — target-sized mask desynced hit testing mid-morph.
+        # Input mask tracks the painted footprint, never the raw settled
+        # target — a target-sized mask desynced hit testing mid-morph. On the
+        # legacy pipeline that is islandAnimated* per frame; under P05
+        # compositor morph the drivers snap, so the mask holds the old∪new
+        # union (morphMaskHold* ∨ islandAnimated*) for the morph window
+        # before settling.
         self.assertIn("mask: Region", self.overlay)
         self.assertIn("islandAnimatedWidth", self.overlay)
         self.assertIn("islandAnimatedHeight", self.overlay)
         self.assertIn("islandAnimatedRadius", self.overlay)
-        self.assertIn("width: root.capsuleShown ? Math.round(root.islandAnimatedWidth) : 0", self.overlay)
-        self.assertIn("height: root.capsuleShown ? Math.round(root.islandAnimatedHeight) : 0", self.overlay)
+        self.assertIn("width: root.capsuleShown ? Math.round(root.maskWidth) : 0", self.overlay)
+        self.assertIn("height: root.capsuleShown ? Math.round(root.maskHeight) : 0", self.overlay)
         self.assertIn("y: root.capsuleTargetTop", self.overlay)
+        # Union-hold plumbing: fallback is the animated footprint; the hold
+        # is bounded by the motion token (covers spring/eased settle).
+        self.assertIn(
+            "readonly property real maskWidth: morphMaskHoldTimer.running\n"
+            "        ? Math.max(root.morphMaskHoldWidth, root.islandAnimatedWidth)\n"
+            "        : root.islandAnimatedWidth",
+            self.overlay,
+        )
+        self.assertIn(
+            "readonly property real maskHeight: morphMaskHoldTimer.running\n"
+            "        ? Math.max(root.morphMaskHoldHeight, root.islandAnimatedHeight)\n"
+            "        : root.islandAnimatedHeight",
+            self.overlay,
+        )
+        self.assertIn("var v2CompositorMorphMaskHoldMs = 560", self.motion)
+        # The hold interval belongs to the hold timer specifically.
+        hold_timer = re.search(
+            r"Timer\s*\{\s*\n\s*id: morphMaskHoldTimer([\s\S]*?)\n    \}",
+            self.overlay,
+        )
+        self.assertIsNotNone(hold_timer)
+        self.assertIn(
+            "interval: IslandMotion.v2CompositorMorphMaskHoldMs",
+            hold_timer.group(1),
+        )
+        # One-shot: a repeating hold timer would never release the union,
+        # leaving the oversized mask (and its dead ring) armed forever.
+        self.assertIn("repeat: false", hold_timer.group(1))
+        # holdMorphMask() must capture the pre-snap footprint AND arm the
+        # hold timer — without restart() the union hold silently never runs.
+        hold_fn = re.search(
+            r"function\s+holdMorphMask\(\)\s*\{([\s\S]*?)\n    \}",
+            self.overlay,
+        )
+        self.assertIsNotNone(hold_fn)
+        hold_body = hold_fn.group(1)
+        self.assertIn("root.morphMaskHoldWidth", hold_body)
+        self.assertIn("root.morphMaskHoldHeight", hold_body)
+        self.assertIn("morphMaskHoldTimer.restart();", hold_body)
+        # The capture runs at the top of queueCompositorMorph, before any
+        # morph request is issued (and thus before the drivers snap).
+        queue_fn = re.search(
+            r"function\s+queueCompositorMorph\(\)\s*\{([\s\S]*?)\n    \}",
+            self.overlay,
+        )
+        self.assertIsNotNone(queue_fn)
+        queue_body = queue_fn.group(1)
+        hold_call = queue_body.find("root.holdMorphMask();")
+        first_request = queue_body.find("root.TahoeGlass.queueRegionMorph")
+        self.assertGreater(hold_call, -1)
+        self.assertGreater(first_request, hold_call)
+        # Both geometry drivers must queue the morph (capturing the pre-snap
+        # footprint) before snapping to the target; a snap-first reorder
+        # loses the old footprint from the union (historical hit-gap bug).
+        for fn_name, snap_stmt in (
+            ("retargetWidthDriver", "root.islandDriverWidth = root.capsuleTargetWidth;"),
+            ("retargetHeightDriver", "root.islandDriverHeight = root.capsuleTargetHeight;"),
+        ):
+            with self.subTest(driver=fn_name):
+                driver = re.search(
+                    r"function\s+" + fn_name + r"\(\)\s*\{([\s\S]*?)\n    \}",
+                    self.overlay,
+                )
+                self.assertIsNotNone(driver)
+                driver_body = driver.group(1)
+                # Compositor morph stays gated on protocol availability.
+                self.assertIn("root.compositorMorph", driver_body)
+                anchor = driver_body.find("swipeSettling")
+                self.assertGreater(anchor, -1)
+                queue_call = driver_body.find("root.queueCompositorMorph()")
+                snap_assign = driver_body.find(snap_stmt, anchor)
+                self.assertGreater(queue_call, -1)
+                self.assertGreater(snap_assign, queue_call)
         # Must not bind mask size to settled capsuleTarget* (historical bug).
         mask = re.search(r"mask:\s*Region\s*\{([\s\S]*?)\n    \}", self.overlay)
         self.assertIsNotNone(mask)

@@ -274,28 +274,53 @@ PanelWindow {
         return name.length > 0 ? lockWallpaperCapturePath(name) : "";
     }
 
-    // Decode the lock capture at panel size (engine often writes 2x/4K frames).
-    // Full-res sync decode of a 17MB PNG blocked shell boot and left the #1c1d20
-    // fill up for seconds — the brownish-gray boot flash.
-    function coverCaptureDecodeSize() {
-        var w = Math.round(Number(root.width) || 0);
-        var h = Math.round(Number(root.height) || 0);
+    // Logical→physical scale so 4K wallpapers / engine captures decode to the
+    // on-screen pixel budget instead of full file resolution.
+    readonly property real screenScale: {
+        var dpr = Number(root.devicePixelRatio);
+        if (!isFinite(dpr) || dpr <= 0)
+            dpr = Number(root.screen && root.screen.devicePixelRatio);
+        if (!isFinite(dpr) || dpr <= 0)
+            dpr = 1;
+        return dpr;
+    }
+
+    // Decode wallpaper / lock capture at panel size × scale (engine often writes
+    // 2x/4K frames). Full-res sync decode of a 17MB PNG blocked shell boot and
+    // left the #1c1d20 fill up for seconds — the brownish-gray boot flash.
+    function panelImageDecodeSize() {
+        var scale = root.screenScale;
+        var w = Math.round((Number(root.width) || 0) * scale);
+        var h = Math.round((Number(root.height) || 0) * scale);
         if (w <= 0 || h <= 0) {
             var screen = root.screen;
             if (!screen && Quickshell.screens && Quickshell.screens.length > 0)
                 screen = Quickshell.screens[0];
             if (screen) {
-                w = Math.round(Number(screen.width) || 0);
-                h = Math.round(Number(screen.height) || 0);
+                // screen.width/height are device-independent; multiply by its DPR.
+                var screenScale = Number(screen.devicePixelRatio);
+                if (!isFinite(screenScale) || screenScale <= 0)
+                    screenScale = scale;
+                w = Math.round((Number(screen.width) || 0) * screenScale);
+                h = Math.round((Number(screen.height) || 0) * screenScale);
             }
         }
         if (w <= 0)
             w = 1920;
         if (h <= 0)
             h = 1080;
-        w = Math.min(w, 2560);
-        h = Math.min(h, 1600);
+        // Cap so a mis-reported DPR cannot force multi-4K decodes.
+        w = Math.min(w, 3840);
+        h = Math.min(h, 2400);
         return Qt.size(w, h);
+    }
+
+    function coverCaptureDecodeSize() {
+        return root.panelImageDecodeSize();
+    }
+
+    function staticWallpaperDecodeSize() {
+        return root.panelImageDecodeSize();
     }
 
     function isDirectWallpaperEngineCommand(command) {
@@ -999,9 +1024,14 @@ PanelWindow {
             height: parent.height
             // Avoid binding apps default (iridescence) while live mode is pending.
             source: root.showStaticWallpaper ? root.staticWallpaperSource() : ""
+            // Default wallpaper (iridescence.jpg) is 3840×2160 / ~5.6MB; user
+            // static paths are often 4K too. Decode at panel × scale only.
+            sourceSize: root.staticWallpaperDecodeSize()
             fillMode: Image.PreserveAspectCrop
             smooth: true
             asynchronous: true
+            cache: true
+            mipmap: false
             scale: staticLayer.zoom
             transformOrigin: Item.Center
 

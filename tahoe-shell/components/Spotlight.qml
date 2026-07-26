@@ -706,8 +706,9 @@ PanelWindow {
                                             fillMode: Image.PreserveAspectFit
                                             smooth: true
                                             asynchronous: true
-                                            sourceSize.width: 64
-                                            sourceSize.height: 64
+                                            // 28px row icon: keep ≥4× decode floor, cap 128 (no window screenshots here).
+                                            sourceSize.width: Math.max(64, Math.min(128, Math.ceil(width * Math.max(2, (root.devicePixelRatio || 1) * 2))))
+                                            sourceSize.height: Math.max(64, Math.min(128, Math.ceil(height * Math.max(2, (root.devicePixelRatio || 1) * 2))))
                                         }
 
                                         Text {
@@ -855,8 +856,9 @@ PanelWindow {
                                 fillMode: Image.PreserveAspectFit
                                 smooth: true
                                 asynchronous: true
-                                sourceSize.width: 128
-                                sourceSize.height: 128
+                                // Preview icon already budgets sourceSize; scale with DPR, cap 256.
+                                sourceSize.width: Math.max(128, Math.min(256, Math.ceil(width * Math.max(2, (root.devicePixelRatio || 1) * 2))))
+                                sourceSize.height: Math.max(128, Math.min(256, Math.ceil(height * Math.max(2, (root.devicePixelRatio || 1) * 2))))
                             }
 
                             Text {

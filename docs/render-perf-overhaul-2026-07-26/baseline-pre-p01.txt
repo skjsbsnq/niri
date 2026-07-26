@@ -1,0 +1,27 @@
+=== Render-perf baseline before P01 (2026-07-26T16:41:54+0800) ===
+
+Machine notes:
+- Output eDP-2: 2560x1600 @ ~240Hz, scale 1.25 (logical 2048x1280)
+- wallpaperMode=external (linux-wallpaperengine ~9% CPU separate process)
+
+quickshell pid=1383
+  Name:	quickshell
+  VmRSS:	  665008 kB
+  VmPeak:	 1648104 kB
+  Threads:	10
+  idle_cpu_pct_5s=5.40
+  threads:
+      2 WaylandEventThr
+      2 Thread (pooled)
+      1 quickshell
+      1 QThread
+      1 QDBusConnection
+      1 QQmlThread
+      1 module-rt
+      1 QQuickPixmapRea
+
+Notes for later comparison:
+- Research cited ~2.9% mean quickshell CPU and ~32 render threads with many panels live.
+- This idle sample shows 10 threads total and ~0% CPU with panels not all hot.
+- P01 targets Overview/TaskSwitcher open-first-frame decode storms + static wallpaper decode.
+- Existing window-thumbnail PNGs already downscaled by niri (~320px); cache:false was re-decode tax.

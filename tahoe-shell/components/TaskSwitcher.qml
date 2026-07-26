@@ -32,8 +32,41 @@ PanelWindow {
     readonly property int cardWidth: 138
     readonly property int cardSpacing: 10
     readonly property int cardStride: cardWidth + cardSpacing
+    // Logical→physical scale for Image sourceSize / capture budgets.
+    readonly property real screenScale: {
+        var dpr = Number(root.devicePixelRatio);
+        if (!isFinite(dpr) || dpr <= 0)
+            dpr = Number(root.screen && root.screen.devicePixelRatio);
+        if (!isFinite(dpr) || dpr <= 0)
+            dpr = 1;
+        return dpr;
+    }
+    // previewFrame is 116×66; capture above that so crop stays sharp on HiDPI.
+    readonly property int thumbnailCaptureWidth: Math.max(360, Math.ceil(116 * root.screenScale))
+    readonly property int thumbnailCaptureHeight: Math.max(220, Math.ceil(66 * root.screenScale))
 
     signal closeRequested()
+
+    // Fall back to previewFrame's fixed 116×66 so pre-layout 0×0 does not
+    // decode a 1×1 placeholder and immediately reload.
+    function thumbnailSourceSize(itemWidth, itemHeight) {
+        var iw = Number(itemWidth);
+        var ih = Number(itemHeight);
+        if (!isFinite(iw) || iw < 2)
+            iw = 116;
+        if (!isFinite(ih) || ih < 2)
+            ih = 66;
+        var w = Math.max(1, Math.ceil(iw * root.screenScale));
+        var h = Math.max(1, Math.ceil(ih * root.screenScale));
+        return Qt.size(w, h);
+    }
+
+    function iconSourceSize(itemWidth, itemHeight) {
+        var scale = Math.max(2, root.screenScale * 2);
+        var w = Math.max(64, Math.min(128, Math.ceil(Number(itemWidth) * scale)));
+        var h = Math.max(64, Math.min(128, Math.ceil(Number(itemHeight) * scale)));
+        return Qt.size(w, h);
+    }
 
     // Instant appear (macOS cmd+tab): no entrance scale; opacity is binary with open.
     visible: open
@@ -304,13 +337,25 @@ PanelWindow {
     function requestThumbnailFor(window, force) {
         if (!root.thumbnailProvider || !window)
             return;
-        root.thumbnailProvider.requestThumbnail(window, 360, 220, "task-switcher", !!force);
+        root.thumbnailProvider.requestThumbnail(
+            window,
+            root.thumbnailCaptureWidth,
+            root.thumbnailCaptureHeight,
+            "task-switcher",
+            !!force
+        );
     }
 
     function requestVisibleThumbnails(force) {
         if (!root.thumbnailProvider)
             return;
-        root.thumbnailProvider.requestThumbnails(root.windowChoices, 360, 220, "task-switcher", !!force);
+        root.thumbnailProvider.requestThumbnails(
+            root.windowChoices,
+            root.thumbnailCaptureWidth,
+            root.thumbnailCaptureHeight,
+            "task-switcher",
+            !!force
+        );
     }
 
     // Content-space X of the selection frame (ListView content coordinates).
@@ -575,7 +620,10 @@ PanelWindow {
                             smooth: true
                             mipmap: true
                             asynchronous: true
-                            cache: false
+                            // Bust via ?v=generation on thumbnailSource; keep cache so
+                            // reopening the switcher does not re-decode every PNG.
+                            cache: true
+                            sourceSize: root.thumbnailSourceSize(width, height)
                             opacity: windowItem.minimized ? 0.62 : 1
                             visible: windowItem.thumbnailSource.length > 0 && status !== Image.Error
                             onStatusChanged: {
@@ -613,6 +661,7 @@ PanelWindow {
                                 smooth: true
                                 mipmap: true
                                 asynchronous: true
+                                sourceSize: root.iconSourceSize(width, height)
                             }
                         }
                     }

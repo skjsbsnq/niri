@@ -20,6 +20,17 @@ Item {
     property bool useSpring: false
     property int thumbnailMaxWidth: 320
     property int thumbnailMaxHeight: 220
+    // Logical→physical scale for Image sourceSize / capture budgets.
+    readonly property real screenScale: {
+        var dpr = Number(root.dockWindow && root.dockWindow.devicePixelRatio);
+        if (!isFinite(dpr) || dpr <= 0)
+            dpr = Number(root.dockScreen && root.dockScreen.devicePixelRatio);
+        if (!isFinite(dpr) || dpr <= 0)
+            dpr = 1;
+        return dpr;
+    }
+    readonly property int thumbnailCaptureWidth: Math.max(root.thumbnailMaxWidth, Math.ceil(root.width * root.screenScale))
+    readonly property int thumbnailCaptureHeight: Math.max(root.thumbnailMaxHeight, Math.ceil(root.height * root.screenScale))
     property real bounceOffset: 0
     property real lifecycleOpacity: 1
     property real lifecycleScale: 1
@@ -60,14 +71,39 @@ Item {
         refreshTimer.restart();
     }
 
+    // Fall back to the steady preview geometry (root 112×62, frame margins 2)
+    // so a 0×0 pre-layout bind does not decode a 1×1 placeholder.
+    function thumbnailSourceSize(itemWidth, itemHeight) {
+        var iw = Number(itemWidth);
+        var ih = Number(itemHeight);
+        if (!isFinite(iw) || iw < 2)
+            iw = Math.max(1, root.width - 4);
+        if (!isFinite(ih) || ih < 2)
+            ih = Math.max(1, root.height - 4);
+        if (iw < 2)
+            iw = 108;
+        if (ih < 2)
+            ih = 58;
+        var w = Math.max(1, Math.ceil(iw * root.screenScale));
+        var h = Math.max(1, Math.ceil(ih * root.screenScale));
+        return Qt.size(w, h);
+    }
+
+    function iconSourceSize(itemWidth, itemHeight) {
+        var scale = Math.max(2, root.screenScale * 2);
+        var w = Math.max(64, Math.min(128, Math.ceil(Number(itemWidth) * scale)));
+        var h = Math.max(64, Math.min(128, Math.ceil(Number(itemHeight) * scale)));
+        return Qt.size(w, h);
+    }
+
     function refreshThumbnail() {
         if (!root.hasWindowId || !root.thumbnailProvider)
             return;
 
         root.thumbnailProvider.requestThumbnail(
             root.windowModel,
-            root.thumbnailMaxWidth,
-            root.thumbnailMaxHeight,
+            root.thumbnailCaptureWidth,
+            root.thumbnailCaptureHeight,
             "dock-minimized",
             false
         );
@@ -212,7 +248,10 @@ Item {
             smooth: true
             mipmap: true
             asynchronous: true
-            cache: false
+            // Bust via ?v=generation on thumbnailSource; keep cache across dock
+            // hover revisits so the same PNG is not re-decoded every time.
+            cache: true
+            sourceSize: root.thumbnailSourceSize(width, height)
             visible: !root.showFallback
             onStatusChanged: {
                 if (status === Image.Error && root.thumbnailReady && root.thumbnailProvider)
@@ -252,6 +291,7 @@ Item {
                 smooth: true
                 mipmap: true
                 asynchronous: true
+                sourceSize: root.iconSourceSize(width, height)
             }
         }
     }

@@ -30,8 +30,43 @@ PanelWindow {
     readonly property int panelLeft: Math.round(Math.max(8, (screenWidth - panelWidth) / 2))
     readonly property int panelTop: Math.round(Math.max(44, (screenHeight - panelHeight) / 2))
     readonly property bool surfaceVisible: open || flightPhase === "entering" || flightPhase === "leaving" || flightPhase === "open"
+    // Logical→physical scale for Image sourceSize / capture budgets.
+    readonly property real screenScale: {
+        var dpr = Number(root.devicePixelRatio);
+        if (!isFinite(dpr) || dpr <= 0)
+            dpr = Number(root.screen && root.screen.devicePixelRatio);
+        if (!isFinite(dpr) || dpr <= 0)
+            dpr = 1;
+        return dpr;
+    }
+    // Capture larger than the mini-map so PreserveAspectCrop stays sharp on HiDPI.
+    readonly property int thumbnailCaptureWidth: Math.max(480, Math.ceil(236 * root.screenScale))
+    readonly property int thumbnailCaptureHeight: Math.max(300, Math.ceil(70 * root.screenScale))
 
     signal closeRequested()
+
+    // Decode window screenshots at the on-screen pixel budget (display × scale).
+    // Fall back to the mini-map's steady geometry so a 0×0 pre-layout bind does
+    // not decode a 1×1 placeholder and immediately reload.
+    function thumbnailSourceSize(itemWidth, itemHeight) {
+        var iw = Number(itemWidth);
+        var ih = Number(itemHeight);
+        if (!isFinite(iw) || iw < 2)
+            iw = 212; // card max 236 − 12×2 margins
+        if (!isFinite(ih) || ih < 2)
+            ih = 70;  // miniMap.height
+        var w = Math.max(1, Math.ceil(iw * root.screenScale));
+        var h = Math.max(1, Math.ceil(ih * root.screenScale));
+        return Qt.size(w, h);
+    }
+
+    // Small badge/app icons: keep a 4× decode floor (min 64) for theme PNG sharpness.
+    function iconSourceSize(itemWidth, itemHeight) {
+        var scale = Math.max(2, root.screenScale * 2);
+        var w = Math.max(64, Math.min(128, Math.ceil(Number(itemWidth) * scale)));
+        var h = Math.max(64, Math.min(128, Math.ceil(Number(itemHeight) * scale)));
+        return Qt.size(w, h);
+    }
 
     visible: surfaceVisible || backdrop.opacity > 0.01
     aboveWindows: true
@@ -313,7 +348,13 @@ PanelWindow {
     function requestThumbnailFor(window, force) {
         if (!root.thumbnailProvider || !window)
             return;
-        root.thumbnailProvider.requestThumbnail(window, 480, 300, "window-overview", !!force);
+        root.thumbnailProvider.requestThumbnail(
+            window,
+            root.thumbnailCaptureWidth,
+            root.thumbnailCaptureHeight,
+            "window-overview",
+            !!force
+        );
     }
 
     function requestVisibleThumbnails(force) {
@@ -327,7 +368,13 @@ PanelWindow {
             if (root.windowChoices[i] !== selected)
                 candidates.push(root.windowChoices[i]);
         }
-        root.thumbnailProvider.requestThumbnails(candidates, 480, 300, "window-overview", !!force);
+        root.thumbnailProvider.requestThumbnails(
+            candidates,
+            root.thumbnailCaptureWidth,
+            root.thumbnailCaptureHeight,
+            "window-overview",
+            !!force
+        );
     }
 
     function previewRect(window, bounds, canvasWidth, canvasHeight) {
@@ -1047,7 +1094,10 @@ PanelWindow {
                                             smooth: true
                                             mipmap: true
                                             asynchronous: true
-                                            cache: false
+                                            // Bust via ?v=generation on thumbnailSource; keep cache so
+                                            // reopening Overview does not re-decode every PNG.
+                                            cache: true
+                                            sourceSize: root.thumbnailSourceSize(width, height)
                                             opacity: windowCard.minimized ? 0.62 : 1
                                             visible: windowCard.thumbnailSource.length > 0 && status !== Image.Error
                                             onStatusChanged: {
@@ -1086,6 +1136,7 @@ PanelWindow {
                                                 smooth: true
                                                 mipmap: true
                                                 asynchronous: true
+                                                sourceSize: root.iconSourceSize(width, height)
                                             }
                                         }
                                     }
@@ -1115,6 +1166,7 @@ PanelWindow {
                                         fillMode: Image.PreserveAspectFit
                                         smooth: true
                                         mipmap: true
+                                        sourceSize: root.iconSourceSize(width, height)
                                         opacity: windowCard.minimized ? 0.58 : 1
                                         visible: windowCard.iconSource.length > 0 && status !== Image.Error
                                     }

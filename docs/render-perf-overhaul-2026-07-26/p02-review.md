@@ -64,6 +64,18 @@
 
 **PASS** — 两个 MAJOR 与全部可修 MINOR 均已修复并复测，允许 commit + push。
 
-## 部署后实测（附录）
+## 部署后实测（附录，2026-07-26）
 
-- 待部署后补充：空闲 10s 采样对比（pre-P02：主线程 29 jiffies / 334 次自愿切换，WaylandEventThr 657+355 次）。
+部署：`cmake --install build-tahoe`（新二进制含 1c03b80 修复；版本串仍烙配置期 rev 8b71640，纯外观）+ rsync QML + 重启 quickshell（旧二进制备份于 `~/.local/bin/quickshell.pre-p02`）。启动日志仅两条已知项：既有 `geometryRevealProgress` binding loop（bug-triage 2026-07-25 遗留观察项 ①）与 portal 注册环境噪音；无新 QML 错误。IPC 驱动 WindowOverview 开/关（冻结→解冻→冻结路径）正常。
+
+10s 空闲采样（/proc per-thread jiffies + ctxt switches）：
+
+| 指标 | pre-P02（PID 1383，热机 2h22m） | post-P02（PID 96806，重启后） | 变化 |
+|---|---|---|---|
+| 主线程 CPU jiffies | 29（≈2.9% CPU） | 5（≈0.5% CPU） | -83% |
+| 主线程唤醒 | 334（仅自愿） | 81（自愿+非自愿） | ≥-76% |
+| WaylandEventThr 唤醒 ×2 | 657+355=1012 | 62+48=110 | -89% |
+| QSG 渲染线程活动 | — | 0（空闲无渲染线程唤醒） | 达标 |
+| 线程数 | 10 | 9 | -1 |
+
+注意事项：单次 10s 抽样；post 为刚重启进程（无 2h 累积状态），量级差异远超该偏差可解释范围。验收判据"空闲时各渲染线程无唤醒"成立。

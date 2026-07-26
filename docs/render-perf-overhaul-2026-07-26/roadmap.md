@@ -71,7 +71,7 @@
 | 任务 | 状态 | commit |
 |---|---|---|
 | P01 缩略图解码修复 | 完成 | 4b6b420 |
-| P02 updatesEnabled 门控 | 未开始 | |
+| P02 updatesEnabled 门控 | 完成 | db8799b（quickshell 1c03b80） |
 | P03 live blur 缓存 | 未开始 | |
 | P04 弹层动画收尾 | 未开始 | |
 | P05 变换动画下沉协议 | 未开始 | |

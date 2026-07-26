@@ -14,6 +14,8 @@ Window {
     property var mask: null
     property real implicitWidth: width
     property real implicitHeight: height
+    // P02 freeze gate: real ProxyWindowBase exposes per-window updatesEnabled.
+    property bool updatesEnabled: true
 
     // Nested objects with stable ids; production uses attached properties.
     // QML cannot declare uppercase property names, so Overlay's

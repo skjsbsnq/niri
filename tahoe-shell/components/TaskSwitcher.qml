@@ -70,6 +70,9 @@ PanelWindow {
 
     // Instant appear (macOS cmd+tab): no entrance scale; opacity is binary with open.
     visible: open
+    // P02: freeze scene-graph frames while this surface is unmapped/faded out.
+    // Extends the existing visible gate onto updatesEnabled (not a parallel path).
+    updatesEnabled: visible
     aboveWindows: true
     exclusionMode: ExclusionMode.Ignore
     exclusiveZone: 0

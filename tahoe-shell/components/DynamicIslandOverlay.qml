@@ -6,6 +6,7 @@ import Quickshell.Wayland
 import "DynamicIslandMotion.js" as IslandMotion
 import "TahoeGlass.js" as GlassStyle
 import "DynamicIslandOwnership.js" as IslandOwnership
+import "RenderActivity.js" as RenderActivity
 import "settings/SettingsTheme.js" as Theme
 
 PanelWindow {
@@ -395,6 +396,7 @@ PanelWindow {
     Component.onCompleted: {
         root.syncGeometryDriversImmediately();
         root.geometryDriversReady = true;
+        root.requestPaintPulse();
     }
 
     SpringAnimation {
@@ -715,6 +717,91 @@ PanelWindow {
     }
 
     visible: !root.fullscreenActive
+    // P02: resident freeze gate. Extends visible onto updatesEnabled so a fully
+    // settled resting capsule (clock only) stops scene-graph frames; discrete
+    // content changes (minute tick, metadata) take a short paint pulse.
+    // Motion (geometry drivers, swipe, expand/OSD/notification, playing media
+    // progress, running timer) keeps the surface hot.
+    readonly property bool geometryDriverRunning: driverWidthSpring.running
+        || driverHeightSpring.running
+        || driverWidthEase.running
+        || driverHeightEase.running
+        || driverRadiusEase.running
+    readonly property bool surfaceMotionActive: {
+        if (!visible)
+            return false;
+        if (!root.geometryDriversReady)
+            return true;
+        if (!root.protocolGeometrySettled || root.geometryDriverRunning)
+            return true;
+        if (root.swipeInteractive || root.swipeSettling)
+            return true;
+        if (root.dynamicIslandService && root.dynamicIslandService.userInteracting)
+            return true;
+        var state = String(root.effectiveContentState || "");
+        if (!root.isRestingState(state))
+            return true;
+        // Playing media / running timer push progress every tick — stay hot.
+        if (state === "resting_media" && root.mediaPlaying)
+            return true;
+        if (state === "resting_timer" && root.timerRunning)
+            return true;
+        // Async album-art decode in flight: hold frames until the bitmap can
+        // paint (Ready flips this off → settle pulse lands the final frame).
+        if (islandContent.asyncArtLoading)
+            return true;
+        // Opacity fade on show/hide of the capsule.
+        if (islandSurface.opacity > 0.01 && islandSurface.opacity < 0.99)
+            return true;
+        return false;
+    }
+    // Start true so the first map paints; cleared after a short pulse.
+    property bool paintPulse: true
+    updatesEnabled: RenderActivity.forResidentSurface(visible, surfaceMotionActive, paintPulse)
+
+    Timer {
+        id: islandPaintPulseClear
+        interval: RenderActivity.paintPulseMs
+        repeat: false
+        onTriggered: root.paintPulse = false
+    }
+
+    // Extend-only: a new request never shortens an in-flight pulse (a 48ms
+    // settle request must not truncate a pending 360ms transition pulse).
+    function requestPaintPulse(durationMs) {
+        var ms = Math.max(
+            Number(durationMs) || RenderActivity.paintPulseMs,
+            islandPaintPulseClear.running ? islandPaintPulseClear.interval : 0);
+        islandPaintPulseClear.stop();
+        islandPaintPulseClear.interval = ms;
+        root.paintPulse = true;
+        islandPaintPulseClear.restart();
+    }
+
+    onVisibleChanged: if (visible) root.requestPaintPulse()
+    onCapsuleShownChanged: root.requestPaintPulse()
+    // The final animation tick can land after the last rendered frame; when the
+    // motion predicate flips to rest, pulse once so the settled state paints.
+    // Transition-length: the same event that ends motion can start a Behavior
+    // the predicate cannot see (pause → 110ms status-glyph swap).
+    onSurfaceMotionActiveChanged: if (!surfaceMotionActive) root.requestPaintPulse(RenderActivity.transitionPulseMs)
+    // Content / theme changes kick Behavior transitions (scene crossfade 170ms,
+    // glass fillColor 260ms) invisible to the predicate — cover their full span.
+    onContentClockTimeChanged: root.requestPaintPulse(RenderActivity.transitionPulseMs)
+    onContentClockWeekdayChanged: root.requestPaintPulse(RenderActivity.transitionPulseMs)
+    onContentDisplayTextChanged: root.requestPaintPulse(RenderActivity.transitionPulseMs)
+    onContentSecondaryTextChanged: root.requestPaintPulse(RenderActivity.transitionPulseMs)
+    onMediaTrackTitleChanged: root.requestPaintPulse(RenderActivity.transitionPulseMs)
+    onMediaArtUrlChanged: root.requestPaintPulse(RenderActivity.transitionPulseMs)
+    onEffectiveContentStateChanged: root.requestPaintPulse(RenderActivity.transitionPulseMs)
+    onDarkModeChanged: root.requestPaintPulse(RenderActivity.transitionPulseMs)
+    // Discrete repaint-only inputs that can change while frozen at rest:
+    // external seek while paused (compact 2px progress bar), accent retint,
+    // output resize re-centering the capsule (x depends on screenWidth).
+    onMediaProgressChanged: root.requestPaintPulse()
+    onAccentColorChanged: root.requestPaintPulse()
+    onScreenWidthChanged: root.requestPaintPulse(RenderActivity.transitionPulseMs)
+
     aboveWindows: true
     exclusionMode: ExclusionMode.Ignore
     exclusiveZone: 0

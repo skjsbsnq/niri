@@ -837,6 +837,8 @@ class TaskSwitcherReleaseConfirmQmlTests(unittest.TestCase):
             "focusable",
             "implicitWidth",
             "implicitHeight",
+            # P02 freeze gate: quickshell window property, absent on QtQuick Window.
+            "updatesEnabled",
         )
         for line in src.splitlines(True):
             if re.search(r"\bWlrLayershell\.", line):

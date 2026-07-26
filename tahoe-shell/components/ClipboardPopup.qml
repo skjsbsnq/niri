@@ -30,6 +30,9 @@ PanelWindow {
     signal closeRequested()
 
     visible: open
+    // P02: freeze scene-graph frames while this surface is unmapped/faded out.
+    // Extends the existing visible gate onto updatesEnabled (not a parallel path).
+    updatesEnabled: visible
     aboveWindows: true
     focusable: false
     exclusionMode: ExclusionMode.Ignore

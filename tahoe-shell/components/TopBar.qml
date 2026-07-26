@@ -148,6 +148,9 @@ PanelWindow {
     // unmapped; on workspace switch away from a fullscreen game the island
     // remapped under the still-mapped topbar and disappeared behind glass.
     visible: !root.fullscreenActive
+    // P02: freeze scene-graph frames while this surface is unmapped/faded out.
+    // Extends the existing visible gate onto updatesEnabled (not a parallel path).
+    updatesEnabled: visible
 
     Behavior on fullscreenTransition {
         NumberAnimation {

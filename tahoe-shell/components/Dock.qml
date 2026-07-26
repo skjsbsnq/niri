@@ -5,6 +5,7 @@ import Quickshell
 import Quickshell.Wayland
 import "Motion.js" as Motion
 import "TahoeGlass.js" as GlassStyle
+import "RenderActivity.js" as RenderActivity
 
 PanelWindow {
     id: root
@@ -179,6 +180,46 @@ PanelWindow {
     }
 
     visible: !root.fullscreenActive || dockChrome.opacity > 0.01
+    // P02: freeze while unmapped, or fully autohide-hidden with no motion.
+    // Shown-at-rest still renders (icon layout can change without hover).
+    // Hidden-at-rest stops frames so the off-screen dock does not wake the SG.
+    readonly property bool surfaceMotionActive: dockHovered
+        || pointerDragActive
+        || menuOpen
+        || launchpadOpen
+        || Math.abs(dockSlideOffset - dockSlideTarget) > 0.45
+        || (fullscreenTransition > 0.01 && fullscreenTransition < 0.99)
+        || (dockChrome.opacity > 0.01 && dockChrome.opacity < 0.99)
+    property bool paintPulse: true
+    // Shown-at-rest stays hot via !dockVisualHidden; hidden-at-rest freezes.
+    readonly property bool dockRenderMotion: surfaceMotionActive || !dockVisualHidden
+    updatesEnabled: RenderActivity.forResidentSurface(visible, dockRenderMotion, paintPulse)
+
+    Timer {
+        id: dockPaintPulseClear
+        interval: RenderActivity.paintPulseMs
+        repeat: false
+        onTriggered: root.paintPulse = false
+    }
+
+    // Extend-only: a new request never shortens an in-flight pulse.
+    function requestPaintPulse(durationMs) {
+        var ms = Math.max(
+            Number(durationMs) || RenderActivity.paintPulseMs,
+            dockPaintPulseClear.running ? dockPaintPulseClear.interval : 0);
+        dockPaintPulseClear.stop();
+        dockPaintPulseClear.interval = ms;
+        root.paintPulse = true;
+        dockPaintPulseClear.restart();
+    }
+
+    onVisibleChanged: if (visible) root.requestPaintPulse()
+    // Settle frame: paint the final slide-out position before freezing so the
+    // committed buffer matches the submitted glass region. Transition-length:
+    // the same event can start a Behavior the predicate cannot see.
+    onDockRenderMotionChanged: if (!dockRenderMotion) root.requestPaintPulse(RenderActivity.transitionPulseMs)
+    onDockWindowListChanged: root.requestPaintPulse()
+    onDockMinimizedWindowListChanged: root.requestPaintPulse()
 
     Behavior on fullscreenTransition {
         NumberAnimation {
@@ -202,7 +243,10 @@ PanelWindow {
     }
 
     onDockSlideTargetChanged: root.animateDockSlideTo(dockSlideTarget)
-    Component.onCompleted: root.dockSlideOffset = root.dockSlideTarget
+    Component.onCompleted: {
+        root.dockSlideOffset = root.dockSlideTarget;
+        root.requestPaintPulse();
+    }
 
     // Drop glass only after the panel has fully left the screen (or is about
     // to). Re-enable as soon as any visible height remains during reveal.
@@ -1046,6 +1090,13 @@ PanelWindow {
                                 readonly property real lift: (magnification - 1.0) * root.dockLiftFactor
                                 // Combined bounce: click settle + launch loop share one offset.
                                 property real bounceOffset: 0
+                                // P02: while autohide-hidden the window is frozen, but a launch
+                                // bounce peeks the icon tip above the screen edge (offset > 21px).
+                                // Re-arm a pulse per animation tick so bounce, retract, and the
+                                // 10s-timeout retract all render exactly as before the gate; when
+                                // the offset stops changing the pulse lapses and the freeze
+                                // resumes with the final frame painted.
+                                onBounceOffsetChanged: if (root.dockVisualHidden) root.requestPaintPulse()
                                 height: root.dockPinnedRowHeight
 
                                 property bool reorderPressed: false

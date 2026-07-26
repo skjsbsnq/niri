@@ -5,6 +5,7 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
 import "Motion.js" as Motion
+import "RenderActivity.js" as RenderActivity
 
 PanelWindow {
     id: root
@@ -219,6 +220,46 @@ PanelWindow {
     // Always transparent while live paint is expected. An opaque surface here
     // stacks above linux-wallpaperengine and blacks out the desktop.
     color: yieldToDynamicWallpaper ? "transparent" : "#1c1d20"
+    // P02: freeze when the plate is fully static (or fully yielded to the live
+    // engine with nothing of our own to paint). Launchpad zoom/dim, cover fade,
+    // and static image loads take a paint pulse / stay hot while in motion.
+    readonly property bool surfaceMotionActive: root.launchpadOpen
+        || root.coverPlateVisible
+        || (restartCover.opacity > 0.01 && restartCover.opacity < 0.99)
+        || (staticLayer.visible && Math.abs(staticImage.scale - staticLayer.zoom) > 0.001)
+        || (staticLayer.visible && staticImage.status === Image.Loading)
+        || (restartCover.visible && restartCoverCapture.status === Image.Loading)
+    property bool paintPulse: true
+    // Wallpaper PanelWindow stays mapped; treat as always "visible" for the gate.
+    updatesEnabled: RenderActivity.forResidentSurface(true, surfaceMotionActive, paintPulse)
+
+    Timer {
+        id: wallpaperPaintPulseClear
+        interval: RenderActivity.paintPulseMs
+        repeat: false
+        onTriggered: root.paintPulse = false
+    }
+
+    // Extend-only: a new request never shortens an in-flight pulse.
+    function requestPaintPulse(durationMs) {
+        var ms = Math.max(
+            Number(durationMs) || RenderActivity.paintPulseMs,
+            wallpaperPaintPulseClear.running ? wallpaperPaintPulseClear.interval : 0);
+        wallpaperPaintPulseClear.stop();
+        wallpaperPaintPulseClear.interval = ms;
+        root.paintPulse = true;
+        wallpaperPaintPulseClear.restart();
+    }
+
+    // Settle frame: the last animation tick (launchpad zoom return, cover fade)
+    // can land after the last rendered frame — paint once at rest.
+    // Transition-length so the dim rectangle's sibling Behavior tail (same
+    // duration, off-predicate) fully lands too.
+    onSurfaceMotionActiveChanged: if (!surfaceMotionActive) root.requestPaintPulse(RenderActivity.transitionPulseMs)
+    onShowStaticWallpaperChanged: root.requestPaintPulse()
+    onCoverPlateVisibleChanged: root.requestPaintPulse()
+    onYieldToDynamicWallpaperChanged: root.requestPaintPulse()
+    onLaunchpadOpenChanged: root.requestPaintPulse()
 
     function screenName() {
         if (!root.screen)
@@ -976,6 +1017,7 @@ PanelWindow {
         }
     }
     Component.onCompleted: {
+        root.requestPaintPulse();
         appliedWallpaperFps = effectiveWallpaperFps;
         completed = true;
         // Adopt/start first. Prestart already paints; raising a cover before
@@ -1034,6 +1076,12 @@ PanelWindow {
             mipmap: false
             scale: staticLayer.zoom
             transformOrigin: Item.Center
+
+            // Wallpaper swap at rest: a cache-hit source change can jump
+            // straight to Ready without a Loading phase (which is what the
+            // motion predicate watches) — pulse so the new texture paints.
+            onSourceChanged: root.requestPaintPulse()
+            onStatusChanged: root.requestPaintPulse()
 
             Behavior on scale {
                 NumberAnimation {
@@ -1122,6 +1170,8 @@ PanelWindow {
         id: liveWallpaperLaunchpadOverlay
         screen: root.screen
         visible: root.liveWallpaperVisible && (root.launchpadOpen || liveWallpaperDim.opacity > 0.01)
+        // P02: same visible→updatesEnabled mirror as other popup surfaces.
+        updatesEnabled: visible
         exclusionMode: ExclusionMode.Ignore
         color: "transparent"
         WlrLayershell.layer: WlrLayer.Bottom

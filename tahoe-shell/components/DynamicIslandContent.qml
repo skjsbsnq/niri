@@ -176,6 +176,9 @@ Item {
     // scene stays loaded forever on resting/hidden outputs.
     property bool mediaLoaderActive: false
     property bool notificationLoaderActive: false
+    // P02 freeze gate: surfaces the media scene's in-flight async art decode
+    // to the overlay's motion predicate (frozen rest must not eat the Ready frame).
+    readonly property bool asyncArtLoading: mediaLoader.item ? !!mediaLoader.item.artLoading : false
 
     function syncOsdLayerImmediately() {
         osdExitOpacity.stop();

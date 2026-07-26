@@ -69,6 +69,9 @@ PanelWindow {
     }
 
     visible: surfaceVisible || backdrop.opacity > 0.01
+    // P02: freeze scene-graph frames while this surface is unmapped/faded out.
+    // Extends the existing visible gate onto updatesEnabled (not a parallel path).
+    updatesEnabled: visible
     aboveWindows: true
     exclusionMode: ExclusionMode.Ignore
     exclusiveZone: 0

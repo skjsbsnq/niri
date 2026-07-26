@@ -25,6 +25,9 @@ Item {
     property bool canNext: false
     property bool canSeek: false
     property bool seeking: false
+    // P02 freeze gate: async art decode in flight — the island overlay keeps
+    // rendering until the bitmap is ready to paint.
+    readonly property bool artLoading: artImage.status === Image.Loading
     // 0 = compact pill chrome, 1 = full expanded player. Continuous morph.
     // Default 1 so bare MediaView hosts (lifecycle tests) get full transport;
     // production Content/Overlay always drive this from capsule height.

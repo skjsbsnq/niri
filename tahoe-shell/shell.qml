@@ -57,6 +57,10 @@ ShellRoot {
     // Numeric system views explicitly consume the mono family token.
     property string monoFontFamily: "Noto Sans Mono CJK SC"
     property bool darkMode: appearance.darkMode
+    // Service-side "only when needed" gate (CPU probes). Pair with per-window
+    // PanelWindow.updatesEnabled (P02 / RenderActivity.js) which freezes
+    // scene-graph frames for unmapped or fully static surfaces — same policy,
+    // render path rather than a parallel control plane.
     readonly property bool servicePollingActive: controlCenterOpen
         || appMenuOpen
         || applicationMenuOpen

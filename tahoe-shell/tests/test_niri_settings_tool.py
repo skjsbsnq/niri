@@ -609,6 +609,38 @@ layer-rule {
             self.assertEqual(config.read_text(encoding="utf-8"), original)
             self.assertEqual(list(tmp_path.glob(".config.kdl.*.tmp")), [])
 
+    def test_settings_layer_opacity_follows_panel_exit_token(self) -> None:
+        # P04: the settings group's opacity channel replaces the QML panel
+        # fade that used Motion.panelExit. Lock the per-profile durations to
+        # the Motion.js token so neither side drifts silently.
+        import re
+
+        motion = (ROOT / "components" / "Motion.js").read_text(encoding="utf-8")
+
+        def js_panel_exit(profile: str) -> int:
+            block_match = re.search(
+                rf'"{profile}":\s*\{{(.*?)\n\s*\}}', motion, re.S
+            )
+            assert block_match, f"profileDurations block missing for {profile}"
+            value_match = re.search(r'"panelExit":\s*(\w+)', block_match.group(1))
+            assert value_match, f"panelExit missing for {profile}"
+            token = value_match.group(1)
+            if token.isdigit():
+                return int(token)
+            var_match = re.search(rf"var {token} = (\d+);", motion)
+            assert var_match, f"var {token} missing in Motion.js"
+            return int(var_match.group(1))
+
+        for profile in niri_settings_tool.MOTION_PROFILE_NAMES:
+            expected = js_panel_exit(profile)
+            group = niri_settings_tool.MOTION_PROFILE_LAYERS[profile]["settings"]
+            for phase in niri_settings_tool.LAYER_PHASES:
+                self.assertEqual(
+                    group[phase]["opacity-duration-ms"],
+                    expected,
+                    f"settings {phase} opacity must follow panelExit ({profile})",
+                )
+
 
 if __name__ == "__main__":
     unittest.main()

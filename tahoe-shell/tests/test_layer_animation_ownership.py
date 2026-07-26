@@ -19,8 +19,14 @@ class LayerAnimationOwnershipTests(unittest.TestCase):
         sidebar = self.read(COMPONENTS / "LeftSidebar.qml")
         spotlight = self.read(COMPONENTS / "Spotlight.qml")
         toast = self.read(COMPONENTS / "NotificationToast.qml")
+        settings = self.read(COMPONENTS / "SettingsPanel.qml")
 
-        for name, text in (("sidebar", sidebar), ("spotlight", spotlight), ("toast", toast)):
+        for name, text in (
+            ("sidebar", sidebar),
+            ("spotlight", spotlight),
+            ("toast", toast),
+            ("settings", settings),
+        ):
             with self.subTest(component=name):
                 self.assertNotIn("compositorLayerAnimations", text)
 
@@ -40,6 +46,15 @@ class LayerAnimationOwnershipTests(unittest.TestCase):
         self.assertIn("visible: shouldShowToast", toast)
         self.assertNotIn("toastMaterialAlpha", toast)
         self.assertNotIn("toastGlassActive", toast)
+
+        # P04: settings maps/unmaps immediately; scrim, panel opacity and the
+        # 0.985 scale settle are compositor-owned (layer-rule tahoe-settings).
+        self.assertIn("visible: open", settings)
+        self.assertNotIn("panel.opacity > 0.01", settings)
+        self.assertNotIn("scale: root.open", settings)
+        self.assertNotIn("opacity: root.open", settings)
+        self.assertNotIn("regionEnabled: root.open", settings)
+        self.assertNotIn("Behavior on scale", settings)
 
     def test_launchpad_remains_explicit_qml_outer_owner(self) -> None:
         launchpad = self.read(COMPONENTS / "Launchpad.qml")

@@ -515,6 +515,43 @@ layer-rule {
     }
 }
 
+// Layer animation Settings profile (P04). The fullscreen settings surface
+// keeps its QML scrim + centered panel as static content; the compositor owns
+// the whole-surface fade with the panel's subtle 0.985 popin settle (was QML
+// opacity/scale Behaviors with a delayed unmap). The 160ms transform matches
+// the previous QML scale timing, which was deliberately profile-independent;
+// the opacity channel follows the motion-profile panelExit duration.
+// Accepted deltas vs the QML path: the scrim now fades on the shared opacity
+// channel (was fadeFast 120ms), and popin/popout scales the whole surface
+// including the scrim (edge retreat stays masked by the simultaneous fade).
+// tahoe-managed: layer-animation settings
+layer-rule {
+    match namespace="^tahoe-settings$"
+
+    animations {
+        layer-open {
+            style "popin"
+            origin "center"
+            scale-from 0.985
+            opacity-from 0
+            transform-duration-ms 160
+            transform-curve "ease-out-cubic"
+            opacity-duration-ms 200
+            opacity-curve "ease-out-cubic"
+        }
+        layer-close {
+            style "popout"
+            origin "center"
+            scale-to 0.985
+            opacity-to 0
+            transform-duration-ms 160
+            transform-curve "ease-out-cubic"
+            opacity-duration-ms 200
+            opacity-curve "ease-out-cubic"
+        }
+    }
+}
+
 layer-rule {
     match namespace="^tahoe-battery-popup$"
     match namespace="^tahoe-wifi-popup$"

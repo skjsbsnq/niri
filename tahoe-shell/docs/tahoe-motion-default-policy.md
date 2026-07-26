@@ -41,6 +41,16 @@ byte-identically. Rollback is `git revert` of the T03 commit.
 第二套 QML 动画。Launchpad 仍明确由 QML 拥有，因为它没有对应 compositor
 layer animation rule。`reduced` 同时约束 niri layer channel 和 QML 内部微动画。
 
+2026-07-26 update (P04 批次 1): SettingsPanel 加入 compositor owner 集合
+（受管组 `settings`，popin/popout 0.985 + ease-out-cubic），是首个整面 scrim
+面板。QML 侧删除了延迟 unmap（`visible: open || panel.opacity > 0.01`）与
+scrim/panel 的 opacity/scale Behaviors；`materialAlpha` 恒 1、region 保持
+enabled，供 niri close 快照按 live 路径渲染玻璃。两项已接受的观感取舍：
+scrim 淡出从 `fadeFast`(120ms) 变为整面 opacity 通道（balanced 200ms，随
+panelExit token 分档）；`reduced` 丢弃原固定 160ms scale settle，改纯 60ms
+fade（与其他组 reduced 政策一致）。opacity 通道与 `panelExit` 的逐档一致性由
+`test_niri_settings_tool.py` 收敛测试锁定。
+
 ## Why Balanced Stays Default
 
 `balanced` remains the default because it is the only profile with all of the following evidence:

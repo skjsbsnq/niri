@@ -987,6 +987,9 @@ LAYER_PROFILE_GROUPS = {
         "tahoe-dock-window-menu",
     ),
     "toast": ("tahoe-notification-toast",),
+    # P04: fullscreen settings surface. Compositor owns the whole-surface
+    # fade + 0.985 popin settle that used to be QML opacity/scale Behaviors.
+    "settings": ("tahoe-settings",),
 }
 TOP_EDGE_PANEL_GROUPS = ("control_center", "notification_center", "small_popup")
 LAYER_PHASES = ("layer-open", "layer-close")
@@ -1102,6 +1105,14 @@ MOTION_PROFILE_LAYERS = {
             "layer-open": spring_phase(0.8, 320, 0.0005, 100, "opacity-from", 0.75, "standard-decel"),
             "layer-close": layer_phase(110, 80, "opacity-to", 0.0, "emphasized-accel"),
         },
+        # P04 settings: transform stays 160ms in every non-reduced profile (the
+        # QML scale Behavior it replaces was deliberately profile-independent);
+        # opacity follows the panelExit token. Curve is authored in the KDL
+        # (ease-out-cubic, constant) so it is not profile-managed.
+        "settings": {
+            "layer-open": {**layer_phase(160, 200, "opacity-from", 0.0), "style": "popin"},
+            "layer-close": {**layer_phase(160, 200, "opacity-to", 0.0), "style": "popout"},
+        },
     },
     "fast": {
         "control_center": {
@@ -1131,6 +1142,10 @@ MOTION_PROFILE_LAYERS = {
         "toast": {
             "layer-open": spring_phase(0.85, 450, 0.0005, 80, "opacity-from", 0.75, "standard-decel"),
             "layer-close": layer_phase(90, 60, "opacity-to", 0.0, "emphasized-accel"),
+        },
+        "settings": {
+            "layer-open": {**layer_phase(160, 160, "opacity-from", 0.0), "style": "popin"},
+            "layer-close": {**layer_phase(160, 160, "opacity-to", 0.0), "style": "popout"},
         },
     },
     "liquid": {
@@ -1162,6 +1177,10 @@ MOTION_PROFILE_LAYERS = {
             "layer-open": spring_phase(0.78, 260, 0.0005, 120, "opacity-from", 0.75, "standard-decel"),
             "layer-close": layer_phase(150, 90, "opacity-to", 0.0, "emphasized-accel"),
         },
+        "settings": {
+            "layer-open": {**layer_phase(160, 230, "opacity-from", 0.0), "style": "popin"},
+            "layer-close": {**layer_phase(160, 230, "opacity-to", 0.0), "style": "popout"},
+        },
     },
     "reduced": {
         "control_center": {
@@ -1191,6 +1210,12 @@ MOTION_PROFILE_LAYERS = {
         "toast": {
             "layer-open": layer_phase(0, 80, "opacity-from", 0.0, "standard-decel"),
             "layer-close": layer_phase(0, 60, "opacity-to", 0.0, "emphasized-accel"),
+        },
+        # Reduced suppresses the popin/popout scale entirely (fade style with a
+        # dead transform channel), matching the other groups' reduced policy.
+        "settings": {
+            "layer-open": {**layer_phase(0, 60, "opacity-from", 0.0), "style": "fade"},
+            "layer-close": {**layer_phase(0, 60, "opacity-to", 0.0), "style": "fade"},
         },
     },
 }

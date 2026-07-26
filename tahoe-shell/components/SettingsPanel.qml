@@ -89,8 +89,11 @@ PanelWindow {
 
     signal closeRequested()
 
-    visible: open || panel.opacity > 0.01
-    // P02: freeze scene-graph frames while this surface is unmapped/faded out.
+    // P04: the compositor owns the open/close animation (layer-rule popin/
+    // popout on tahoe-settings). Map and unmap are immediate; content below
+    // commits statically.
+    visible: open
+    // P02: freeze scene-graph frames while this surface is unmapped.
     // Extends the existing visible gate onto updatesEnabled (not a parallel path).
     updatesEnabled: visible
     aboveWindows: true
@@ -224,11 +227,8 @@ PanelWindow {
     Rectangle {
         anchors.fill: parent
         color: root.scrim
-        opacity: root.open ? 1 : 0
-
-        Behavior on opacity {
-            NumberAnimation { duration: Motion.fadeFast(root.settingsService); easing.type: Motion.emphasizedDecel }
-        }
+        // Static: the compositor layer animation fades the whole surface.
+        opacity: 1
     }
 
     MouseArea {
@@ -252,18 +252,11 @@ PanelWindow {
         y: root.panelTop
         width: root.panelWidth
         height: root.panelHeight
-        opacity: root.open ? 1 : 0
-        scale: root.open ? 1 : 0.985
-
-        Behavior on opacity {
-            NumberAnimation { duration: Motion.panelExit(root.settingsService); easing.type: Motion.emphasizedDecel }
-        }
-
-        // Local exception: settings panel scale keeps the existing 160ms settle;
-        // opacity is tokenized, but the scale timing is deliberately unchanged.
-        Behavior on scale {
-            NumberAnimation { duration: 160; easing.type: Motion.emphasizedDecel }
-        }
+        // Static: opacity fade and the 0.985 scale settle moved to the
+        // compositor layer animation (P04); the surface commits one steady
+        // frame and niri animates the mapped/closing texture.
+        opacity: 1
+        scale: 1
 
         MouseArea {
             anchors.fill: parent
@@ -285,8 +278,9 @@ PanelWindow {
             regionWidth: Math.round(panelSurface.width)
             regionHeight: Math.round(panelSurface.height)
             interaction: 0.0
-            materialAlpha: panel.opacity
-            regionEnabled: root.open || panel.opacity > 0.01
+            // Stay enabled while unmapped so niri's closing snapshot keeps the
+            // glass material (P04: compositor owns the close animation).
+            materialAlpha: 1
         }
 
         RowLayout {

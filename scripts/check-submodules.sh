@@ -46,6 +46,30 @@ echo "=== What git submodule update would do ==="
 git submodule update --init --recursive --dry-run 2>&1 || echo "(dry-run not supported, showing init status)"
 echo ""
 
+echo "=== tahoe-glass protocol sync (T-02) ==="
+# Authoritative copy lives at protocols/tahoe-glass-v1.xml. Both submodule
+# copies must match it byte-for-byte. This aggregator always prints the
+# report and a PROTOCOL_SYNC_EXIT line, and always exits 0 itself — it is
+# diagnostic output, not a CI gate. Automation that needs the exit status
+# must call scripts/check-protocol-sync.sh directly.
+PROTOCOL_SYNC_SCRIPT="${PROTOCOL_SYNC_SCRIPT:-"$REPO_DIR/scripts/check-protocol-sync.sh"}"
+PROTOCOL_SYNC_ARGS=()
+if [[ "${PROTOCOL_SYNC_ALLOW_MISSING:-false}" == "true" ]]; then
+  PROTOCOL_SYNC_ARGS+=(--allow-missing)
+fi
+if [[ -f "$PROTOCOL_SYNC_SCRIPT" ]]; then
+  PROTOCOL_SYNC_STATUS=0
+  bash "$PROTOCOL_SYNC_SCRIPT" "${PROTOCOL_SYNC_ARGS[@]}" || PROTOCOL_SYNC_STATUS=$?
+  echo "PROTOCOL_SYNC_EXIT=${PROTOCOL_SYNC_STATUS}"
+  if [[ "$PROTOCOL_SYNC_STATUS" -ne 0 ]]; then
+    echo "(protocol-sync exited $PROTOCOL_SYNC_STATUS — gate on scripts/check-protocol-sync.sh directly if needed)"
+  fi
+else
+  echo "✗ $PROTOCOL_SYNC_SCRIPT missing"
+  echo "PROTOCOL_SYNC_EXIT=1"
+fi
+echo ""
+
 echo "=== Fork lag vs real upstream (T-01) ==="
 # report-fork-lag.sh is the weekly divergence check for the niri and
 # quickshell forks. This aggregator always prints the report and always
@@ -98,3 +122,14 @@ echo "  bash scripts/report-fork-lag.sh --ensure-remotes          # first run / 
 echo "  bash scripts/report-fork-lag.sh --fetch                   # force-refresh upstream tips"
 echo "  bash scripts/report-fork-lag.sh --strict                  # CI gate (exit 1 if behind/rewritten)"
 echo "  FORK_LAG_FETCH=true bash scripts/check-submodules.sh     # same report inside this aggregator"
+echo ""
+echo "Protocol sync (T-02):"
+echo "  bash scripts/check-protocol-sync.sh                      # must print result: IN_SYNC"
+echo "  # after editing protocols/tahoe-glass-v1.xml, copy into both submodules before commit"
+echo ""
+
+# Explicit exit 0 so this diagnostic aggregator cannot accidentally inherit a
+# non-zero status from a future uncaptured command. Leaf gates
+# (check-protocol-sync.sh, report-fork-lag.sh) must be called directly when
+# automation needs their exit contracts.
+exit 0

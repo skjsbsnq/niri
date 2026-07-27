@@ -140,6 +140,32 @@ For a local emergency debug pass only, skip it with:
 RUN_TAHOE_GLASS_GUARDRAILS=false bash scripts/arch-update.sh
 ```
 
+## Protocol Sync (T-02)
+
+```sh
+bash scripts/check-protocol-sync.sh
+```
+
+The Tahoe glass Wayland protocol has one authoritative copy at `protocols/tahoe-glass-v1.xml` and two consumer copies inside the submodules:
+
+- `niri/resources/tahoe-glass-v1.xml` (wayland-scanner input)
+- `quickshell/src/wayland/tahoe_glass/tahoe-glass-v1.xml` (`wl_proto` input)
+
+This script sha256-compares both consumer copies to the authoritative file. Exit contract of **this** script: `0` = in sync, `1` = drift/missing/unreadable consumer copy, `2` = usage error. `scripts/check-submodules.sh` prints the same report plus a `PROTOCOL_SYNC_EXIT=N` line and always exits 0 itself — it is a diagnostic aggregator, not a gate. Automation that needs the exit status must call `check-protocol-sync.sh` directly.
+
+Cross-channel field map (tahoe_glass + event-stream + `niri msg action` + foreign-toplevel `set_rectangle`): `protocols/CONTRACT.md`.
+
+Edit flow when the wire format changes (three git repos):
+
+1. edit `protocols/tahoe-glass-v1.xml` in the superproject
+2. copy identical bytes into both submodule paths
+3. `bash scripts/check-protocol-sync.sh` → `IN_SYNC`
+4. commit + push inside `niri/`, then commit + push inside `quickshell/`
+5. in the superproject, advance both submodule pointers and commit `protocols/` + the pointer bump together
+6. rebuild both forks and update `protocols/CONTRACT.md` in the same superproject change
+
+Skipping the per-submodule commits leaves the forks unshipped even when the superproject looks green.
+
 ## Fork Lag Report (T-01)
 
 ```sh

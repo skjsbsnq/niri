@@ -132,6 +132,26 @@ BLOCKER/MAJOR；全部发现为注释债（`MappedLayer::new` epoch 理由引用
 "post-commit hook"/"minus sample offset"措辞残留、sync 子表面限定缺失），已
 全部清偿。`cargo test --lib` 488 全绿（随机制删除其 2 个专属测试）。
 
+## 三次修复（2026-07-27，`0faa78bd`：动画途中扩张带无玻璃）
+
+`5c47e260` 部署后用户反馈：停稳后不再卡死，但**扩张动画途中**新增带仍无玻璃
+（不透明），扩张完成后立即恢复模糊。根因是二次修复保留的"携带旧 committed
+条目"自愈策略：region 超 surface 时 complete=false 保持 dirty，但玻璃 rect 冻
+在上一帧的小尺寸，surface 已变大 → 新增带无玻璃，直到 buffer 追上那一帧完整
+rect 才落地。shell 侧（ClipboardPopup `Behavior on height` + quickshell polish
+显式 commit）会让 region 比 buffer 早一帧，正好打中这条路径。
+
+**修复（niri `0faa78bd`）**：几何可自愈溢出改为**把 pending region clamp 到当
+前 surface 后提交**（仍 complete=false，buffer 追上后同一 pending 复验完整
+rect）。动画每帧玻璃贴着 buffer 边长大，不再冻在旧尺寸。删除 previous 参数。
+RegionMorph（仅 DynamicIsland）在 pending_dirty 期间继续 hold，不会锚到半成
+品 clamp 尺寸；剪贴板等面板不走 morph，只靠 clamp 跟踪。
+
+对抗审查零阻断（RegionMorph hold、radius fit_to、pending 不改、缩小路径、
+budget×clamp 多 region 仅 MINOR 且壳层单 region 打不中）。测试改写
+`oversized_region_clamps_and_revalidates_once_surface_geometry_catches_up`
+覆盖 small→mid→caught-up；`cargo test --lib` 488 全绿。
+
 ## 遗留观察项
 
 - 一次未复现的偶发：剪贴板弹层开着时 wl-copy 新条目，弹层自行关闭（仅出现一
@@ -145,8 +165,8 @@ BLOCKER/MAJOR；全部发现为注释债（`MappedLayer::new` epoch 理由引用
 
 ## 部署
 
-本修复只动 niri 合成器二进制（shell/KDL 无改动）；二次修复后二进制版本串应为
-`5c47e260`（`niri msg version` 核对）：
+本修复只动 niri 合成器二进制（shell/KDL 无改动）；三次修复后二进制版本串应为
+`0faa78bd`（`niri msg version` 核对）：
 
 ```bash
 cp /home/wwt/niri/niri/target/release/niri ~/.local/bin/niri
@@ -159,8 +179,9 @@ cp /home/wwt/niri/niri/target/release/niri ~/.local/bin/niri
 2. 打开后点「清空历史」/触发任意状态更新，整卡观感不应再突变。
 3. 点图标收回，面板顶部不应再突然变黑；开/收全程玻璃内容稳定。
 4. 弹层打开时向剪贴板连续塞入新条目使面板增高，玻璃不应闪断（region 自愈）。
-5. **（二次修复新增）**在屏幕下方摆一个黑色终端，打开/收回剪贴板与控制中心：
+5. **（二次修复）**在屏幕下方摆一个黑色终端，打开/收回剪贴板与控制中心：
    动画全程玻璃只应显示其当前实际覆盖区域的模糊——黑色只在面板真正盖到终端
    时出现、离开即消失，不得提前/滞后出现黑块。
-6. **（二次修复新增）**复制一条新内容使剪贴板增高：扩张出来的部分应立即有玻
-   璃（增高动画结束帧即愈合），不再需要再复制一条/截图才恢复。
+6. **（二次+三次修复）**复制一条新内容 / 点固定使剪贴板增高：扩张**途中**新增
+   带就应有玻璃（贴着 buffer 边长大），结束后完整模糊；不再出现"途中不透明、
+   结束才恢复"或"需再复制/截图才恢复"。

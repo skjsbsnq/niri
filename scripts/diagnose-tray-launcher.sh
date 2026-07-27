@@ -12,14 +12,28 @@
 #
 # 跑起来后：桌面会闪一下（quickshell 重启），然后立刻去 hover dock 图标、
 # 点 launchpad，把"图标消失"重现出来。倒计时结束自动出结果。
-# 报告存到 /tmp/qs-hover-diag.txt，贴回来。
+# 报告/日志经 mktemp 写入私有路径（F-03：不再用固定 /tmp 名 + `: >` 截断，
+# 避免 symlink 预置攻击截断任意可写文件）。
 
 set -uo pipefail
 
 WAIT="${1:-45}"
-REPORT=/tmp/qs-hover-diag.txt
-QSLOG=/tmp/qs-hover.log
-: > "$REPORT"
+
+# F-03: private temp files, never fixed names under /tmp.
+# mktemp creates with mode 0600 by default on modern coreutils.
+REPORT="$(mktemp -t qs-hover-diag.XXXXXX)" || {
+  printf 'ERROR: mktemp failed for report\n' >&2
+  exit 1
+}
+QSLOG="$(mktemp -t qs-hover-log.XXXXXX)" || {
+  printf 'ERROR: mktemp failed for log\n' >&2
+  rm -f "$REPORT"
+  exit 1
+}
+# On early failure, drop the empty temp files. Successful runs clear this
+# trap so the operator can read the report/log paths we print at the end.
+# shellcheck disable=SC2064
+trap 'rm -f -- "$REPORT" "$QSLOG" 2>/dev/null || true' EXIT
 
 say()  { printf '\n========== %s ==========\n' "$*" | tee -a "$REPORT"; }
 line() { printf '%s\n' "$*" | tee -a "$REPORT"; }
@@ -27,6 +41,8 @@ ts()   { printf '[%s] ' "$(date '+%H:%M:%S')"; }
 
 say "0. 时间 $(date -Is)"
 line "重启后留 ${WAIT}s 给你重现症状。"
+line "报告: $REPORT"
+line "日志: $QSLOG"
 
 # ── 1. 杀掉当前 quickshell ──
 say "1. 杀掉当前 quickshell"
@@ -41,7 +57,7 @@ fi
 
 # ── 2. 用全量 QML 日志级别重启，stderr 进文件 ──
 say "2. 重启 quickshell（QT_LOGGING_RULES=qml=true，stderr -> $QSLOG）"
-: > "$QSLOG"
+# QSLOG is already an exclusive mktemp file — no `: >` on a fixed path.
 TAHOE_CFG="${TAHOE_CONFIG_DIR:-$HOME/.config/quickshell/tahoe}"
 line "config: $TAHOE_CFG"
 
@@ -60,6 +76,8 @@ else
     line "!!! quickshell 没起来，看 $QSLOG。"
     line "── 启动日志前 30 行 ──"
     head -n 30 "$QSLOG" 2>/dev/null | tee -a "$REPORT"
+    # Keep artifacts so the operator can inspect the failed start log.
+    trap - EXIT
     exit 1
 fi
 
@@ -108,3 +126,7 @@ fi
 say "完成"
 line "报告: $REPORT"
 line "原始日志: $QSLOG"
+line "(路径由 mktemp 生成，不会复用固定 /tmp 名；请自行复制/删除。)"
+
+# Keep artifacts for the operator; drop the cleanup trap.
+trap - EXIT

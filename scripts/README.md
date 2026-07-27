@@ -140,6 +140,29 @@ For a local emergency debug pass only, skip it with:
 RUN_TAHOE_GLASS_GUARDRAILS=false bash scripts/arch-update.sh
 ```
 
+## Fork Lag Report (T-01)
+
+```sh
+bash scripts/report-fork-lag.sh --ensure-remotes
+bash scripts/report-fork-lag.sh --fetch          # force-refresh tips
+bash scripts/report-fork-lag.sh --strict         # CI / weekly gate
+```
+
+Weekly divergence check for the two Tahoe forks (`niri/`, `quickshell/`) against their **real** upstreams (`niri-wm/niri`, `quickshell-mirror/quickshell`). Prints HEAD / upstream tip / merge-base (with dates) plus ahead/behind commit counts, then a summary with `shareable-behind:`, `history-rewritten-forks:`, `caught-up: yes|no`, and `result: REPORTED|BEHIND|INCOMPLETE`.
+
+- `--ensure-remotes` adds the canonical `upstream` remote when missing (does not overwrite an existing URL; skips uninitialized checkouts instead of aborting). Submodule remotes live only under `.git/modules/` and are not committed; they survive `git submodule sync` but not a full re-clone — re-run after a fresh clone.
+- Default network policy: use the existing `upstream/<branch>` ref; if it is missing, auto-fetch that one branch once so a fresh clone produces real numbers. `--fetch` force-refreshes; `--offline` never touches the network.
+- `--strict` exits 1 when `shareable-behind > 0`, or when any fork is `history-rewritten` unless `FORK_LAG_ALLOW_REWRITTEN=true`.
+- Exit contract of **this** script: `0` = reported, `1` = incomplete or strict gate failed, `2` = usage. Automation must call `report-fork-lag.sh` directly. `scripts/check-submodules.sh` only prints the report (plus a `FORK_LAG_EXIT=N` line) and always exits 0 itself — it is a diagnostic aggregator, not a gate.
+- The niri fork re-imported history, so it has no merge-base with real upstream. The report marks that as `state: history-rewritten`, warns that tip dates are not lag, and falls back to a `fork-baseline` count against `origin/main` (see live script output for the current ahead count). Content-based rebase is T-37.
+- Vocabulary: the word "upstream" here means the real project remote. `arch-update.sh`'s log line "updating niri submodule to latest upstream" means `origin/` (the Tahoe fork). The two are not interchangeable.
+
+`scripts/check-submodules.sh` invokes the same report (with `--ensure-remotes` by default):
+
+```sh
+FORK_LAG_FETCH=true bash scripts/check-submodules.sh
+```
+
 ## Capture Glass Baseline
 
 ```sh

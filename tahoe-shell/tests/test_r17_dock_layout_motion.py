@@ -22,6 +22,9 @@ class R17DockLayoutMotionTests(unittest.TestCase):
         cls.preview = (COMPONENTS / "DockMinimizedWindow.qml").read_text(encoding="utf-8")
         cls.topbar = (COMPONENTS / "TopBar.qml").read_text(encoding="utf-8")
         cls.kdl = (REPO_ROOT / "config/niri/tahoe-phase0.kdl").read_text(encoding="utf-8")
+        glass_root = REPO_ROOT / "quickshell/src/wayland/tahoe_glass"
+        cls.glass_hpp = (glass_root / "qml.hpp").read_text(encoding="utf-8")
+        cls.glass_cpp = (glass_root / "qml.cpp").read_text(encoding="utf-8")
 
     def test_dock_chrome_and_sections_share_eased_width_motion(self) -> None:
         self.assertIn("readonly property real dockChromeTargetWidth", self.dock)
@@ -197,9 +200,104 @@ class R17DockLayoutMotionTests(unittest.TestCase):
         label = re.search(r"id:\s*dockHoverLabel.*?\n\s*\}\n\s*\}\s*// dockChrome", self.dock, re.S)
         self.assertIsNotNone(label)
         assert label
-        self.assertIn("Behavior on x", label.group(0))
-        self.assertIn("Behavior on y", label.group(0))
-        self.assertIn("Motion.elementMove", label.group(0))
+        source = label.group(0)
+        self.assertNotIn("Behavior on x", source)
+        self.assertIn("Behavior on y", source)
+        self.assertIn("Motion.elementMove", source)
+        center_motion = re.search(
+            r"Behavior on dockHoverLabelCenterX\s*\{.*?Motion\.elementMove",
+            self.dock,
+            re.S,
+        )
+        self.assertIsNotNone(center_motion)
+
+    def test_unified_hover_label_uses_output_bounds_not_dynamic_dock_width(self) -> None:
+        label = re.search(r"id:\s*dockHoverLabel.*?\n\s*\}\n\s*\}\s*// dockChrome", self.dock, re.S)
+        self.assertIsNotNone(label)
+        assert label
+        source = label.group(0)
+
+        # The capsule may paint outside dockChrome because it is unclipped. Its
+        # width and global bounds therefore belong to the output coordinate
+        # space; tying either to the dynamic chrome width elides long titles as
+        # pinned/window counts change.
+        self.assertIn("Math.max(1, root.width - labelScreenMargin * 2)", source)
+        self.assertIn("labelScreenMargin - dockChrome.x", source)
+        self.assertIn("root.width - dockChrome.x - width - labelScreenMargin", source)
+        self.assertNotIn("dockChrome.width - 12", source)
+        self.assertNotIn("Behavior on x", source)
+
+        def capsule_geometry(
+            output_width: float,
+            chrome_x: float,
+            natural_text_width: float,
+            center_x: float,
+        ) -> tuple[float, float]:
+            margin = 6.0
+            max_width = max(1.0, output_width - margin * 2.0)
+            width = min(max(natural_text_width + 18.0, 48.0), max_width)
+            local_min = margin - chrome_x
+            local_max = output_width - chrome_x - width - margin
+            local_x = max(local_min, min(local_max, center_x - width / 2.0))
+            return chrome_x + local_x, width
+
+        # Direct x clamping must stay valid on every animation frame, including
+        # fractional chrome positions, overlong text, and pathological outputs.
+        for output_width, chrome_x, text_width, center_x in (
+            (1366.0, 503.0, 720.0, 12.0),
+            (1366.0, 503.5, 720.0, 350.0),
+            (320.0, 92.25, 900.0, 130.0),
+            (59.0, 7.5, 90.0, 20.0),
+        ):
+            global_x, width = capsule_geometry(
+                output_width, chrome_x, text_width, center_x
+            )
+            self.assertGreaterEqual(global_x, 6.0)
+            self.assertLessEqual(global_x + width, output_width - 6.0)
+
+    def test_dock_replays_compositor_slide_for_each_surface_mapping(self) -> None:
+        self.assertIn(
+            "Q_PROPERTY(quint64 mappingGeneration READ mappingGeneration "
+            "NOTIFY mappingGenerationChanged)",
+            self.glass_hpp,
+        )
+        surface_created = re.search(
+            r"void TahoeGlass::waylandSurfaceCreated\(\)\s*\{(?P<body>.*?)\n\}",
+            self.glass_cpp,
+            re.S,
+        )
+        self.assertIsNotNone(surface_created)
+        assert surface_created
+        lifecycle = surface_created.group("body")
+        self.assertIn("this->advanceMappingGeneration();", lifecycle)
+        self.assertLess(
+            lifecycle.index("this->setAvailable(this->surface != nullptr);"),
+            lifecycle.index("this->advanceMappingGeneration();"),
+            "mapping notification must observe the new protocol surface as available",
+        )
+
+        self.assertIn(
+            "readonly property real tahoeGlassMappingGeneration: "
+            "root.TahoeGlass.mappingGeneration",
+            self.dock,
+        )
+        self.assertIn("onTahoeGlassMappingGenerationChanged:", self.dock)
+        self.assertIn("root.replayCompositorSlideForMapping()", self.dock)
+
+        replay = re.search(
+            r"function replayCompositorSlideForMapping\(\)\s*\{(?P<body>.*?)\n\s*\}",
+            self.dock,
+            re.S,
+        )
+        self.assertIsNotNone(replay)
+        assert replay
+        body = replay.group("body")
+        self.assertIn("root.visible", body)
+        self.assertIn("root.compositorSlide", body)
+        self.assertIn("root.TahoeGlass.sendTransform(0, root.dockSlideTarget, 1, 1)", body)
+        # A remap starts at identity in niri. Replaying as an animation would
+        # briefly expose hidden chrome while its input mask is already empty.
+        self.assertNotIn("sendTransformTarget", body)
 
     def test_fullscreen_qml_transitions_keep_intentional_surface_lifecycles(self) -> None:
         for name, source in (("Dock.qml", self.dock), ("TopBar.qml", self.topbar)):

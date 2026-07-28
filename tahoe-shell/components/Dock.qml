@@ -32,6 +32,12 @@ PanelWindow {
     property real dockHoverLabelCenterX: 0
     property real dockHoverLabelY: -28
     property bool dockHoverLabelVisible: false
+    // Animate the requested center, not the clamped x. The latter must react
+    // immediately when text or chrome width changes so no intermediate frame
+    // can cross an output edge.
+    Behavior on dockHoverLabelCenterX {
+        NumberAnimation { duration: Motion.elementMove(root.settingsService); easing.type: Motion.emphasizedDecel }
+    }
     readonly property bool dockMinimizedShelfEnabled: !!(settingsService && settingsService.dockMinimizedShelfEnabled)
     readonly property var dockWindowList: root.niriService
         ? (root.dockMinimizedShelfEnabled && root.niriService.nonMinimizedWindowList
@@ -57,6 +63,9 @@ PanelWindow {
     // P02 freeze gate, and state logic land immediately (compositor transforms
     // are presentation-only — input is never transformed).
     readonly property bool compositorSlide: root.TahoeGlass.transformAvailable
+    // Unlike transformAvailable, this changes for every new wl_surface even
+    // when protocol availability stays true across a fast unmap/remap.
+    readonly property real tahoeGlassMappingGeneration: root.TahoeGlass.mappingGeneration
     // Content-space slide offset: what the in-buffer Translate and label
     // geometry see. Zero in compositor mode (the transform moves the visual).
     readonly property real dockContentSlideOffset: compositorSlide ? 0 : dockSlideOffset
@@ -312,12 +321,27 @@ PanelWindow {
         }
     }
 
+    // niri intentionally clears presentation transforms on layer unmap. A new
+    // mapping therefore starts at identity even though the QML autohide target
+    // did not change. Reassert the settled target on the new surface before it
+    // can expose hidden chrome over an already-collapsed input mask.
+    function replayCompositorSlideForMapping() {
+        if (!root.visible || !root.compositorSlide)
+            return;
+        dockSlideSpring.stop();
+        dockSlideEase.stop();
+        root.requestPaintPulse();
+        if (root.TahoeGlass.sendTransform(0, root.dockSlideTarget, 1, 1))
+            root.dockSlideOffset = root.dockSlideTarget;
+    }
+
     // Re-assert the slide when the protocol path toggles: entering compositor
     // mode replays the current target through the transform (instant when
     // already settled); leaving it hands the legacy pipeline back the state
     // (content pops to the correct position — a compositor restart is already
     // visually disruptive).
     onCompositorSlideChanged: root.animateDockSlideTo(root.dockSlideTarget)
+    onTahoeGlassMappingGenerationChanged: root.replayCompositorSlideForMapping()
 
     SpringAnimation {
         id: dockSlideSpring
@@ -1812,13 +1836,16 @@ PanelWindow {
         Rectangle {
             id: dockHoverLabel
 
-            // No fixed cap: with dockWindowTitleMode "icons" the hover text is
-            // the full window title, and CJK titles overflow a 280px capsule.
-            // The x-clamp below keeps even screen-wide labels on screen.
-            readonly property real labelMaxWidth: Math.max(48, dockChrome.width - 12)
+            // The capsule is chrome-local so it follows legacy slide motion,
+            // but chrome is unclipped and the actual visual boundary is the
+            // full output. Convert those output bounds back to local x.
+            readonly property real labelScreenMargin: 6
+            readonly property real labelMaxWidth: Math.max(1, root.width - labelScreenMargin * 2)
+            readonly property real labelLocalMinX: labelScreenMargin - dockChrome.x
+            readonly property real labelLocalMaxX: root.width - dockChrome.x - width - labelScreenMargin
 
             z: 100
-            x: Math.max(6, Math.min(dockChrome.width - width - 6, root.dockHoverLabelCenterX - width / 2))
+            x: Math.max(labelLocalMinX, Math.min(labelLocalMaxX, root.dockHoverLabelCenterX - width / 2))
             y: root.dockHoverLabelY
             width: Math.min(Math.max(dockHoverLabelTextItem.implicitWidth + 18, 48), labelMaxWidth)
             height: 26
@@ -1846,10 +1873,6 @@ PanelWindow {
 
             Behavior on opacity {
                 NumberAnimation { duration: Motion.fadeFast(root.settingsService); easing.type: Motion.emphasizedDecel }
-            }
-
-            Behavior on x {
-                NumberAnimation { duration: Motion.elementMove(root.settingsService); easing.type: Motion.emphasizedDecel }
             }
 
             Behavior on y {

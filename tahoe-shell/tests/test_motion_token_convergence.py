@@ -431,6 +431,8 @@ class MotionTokenConvergenceTests(unittest.TestCase):
         self.assertNotIn("return (rightExtra - leftExtra) / 2;", dock)
 
         # Unified hover label: one capsule, 13px, smoothly follows icon geometry.
+        # Animate its requested center while x remains a direct output-edge
+        # clamp; animating x itself can lag text/chrome width changes and clip.
         self.assertIn("id: dockHoverLabel", dock)
         self.assertIn("function showDockHoverLabel", dock)
         self.assertIn("font.pixelSize: 13", dock)
@@ -442,9 +444,10 @@ class MotionTokenConvergenceTests(unittest.TestCase):
         self.assertGreaterEqual(hover_start, 0)
         self.assertGreater(hover_end, hover_start)
         hover_block = dock[hover_start:hover_end]
-        self.assertIn("Behavior on x", hover_block)
+        self.assertNotIn("Behavior on x", hover_block)
         self.assertIn("Behavior on y", hover_block)
         self.assertIn("Motion.elementMove", hover_block)
+        self.assertIn("Behavior on dockHoverLabelCenterX", dock)
 
         # Click bounce still uses dual-branch spring/ease; wave mag/push do NOT
         # (T08-fix8: direct bind — spring restart every move caused jitter).

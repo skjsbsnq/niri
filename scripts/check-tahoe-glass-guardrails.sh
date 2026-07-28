@@ -27,6 +27,19 @@ QUICKSHELL_TAHOE_GLASS_XML="$REPO_DIR/quickshell/src/wayland/tahoe_glass/tahoe-g
 NIRI_TAHOE_GLASS_PROTOCOL="$REPO_DIR/niri/src/protocols/tahoe_glass.rs"
 QUICKSHELL_TAHOE_GLASS_QML="$REPO_DIR/quickshell/src/wayland/tahoe_glass/qml.cpp"
 
+# F-09 / T-04: reference checkouts live under the XDG cache home. Never hardcode
+# /home/<user> — derive from XDG_CACHE_HOME / $HOME, overridable for operators
+# who keep the clones elsewhere. Explicit TAHOE_GLASS_REF_CACHE_ROOT wins and
+# does not require HOME; XDG_CACHE_HOME alone is enough too.
+if [[ -z "${TAHOE_GLASS_REF_CACHE_ROOT:-}" ]]; then
+  if [[ -n "${XDG_CACHE_HOME:-}" ]]; then
+    TAHOE_GLASS_REF_CACHE_ROOT="$XDG_CACHE_HOME/tahoe-liquid-glass-refs"
+  else
+    : "${HOME:?HOME must be set (or set XDG_CACHE_HOME / TAHOE_GLASS_REF_CACHE_ROOT) for TahoeGlass reference cache resolution}"
+    TAHOE_GLASS_REF_CACHE_ROOT="$HOME/.cache/tahoe-liquid-glass-refs"
+  fi
+fi
+
 failures=0
 panel_count=0
 glass_file_count=0
@@ -126,18 +139,22 @@ check_reference_repo() {
   local commit="$4"
   local actual_commit
   local actual_url
+  # Portable marker recorded in the roadmap (relative under the XDG cache
+  # root). Absolute /home/<user>/... strings in historical docs still match
+  # this suffix; new docs should write the portable form.
+  local doc_path_marker="tahoe-liquid-glass-refs/${name}"
 
   if [[ ! -f "$TAHOE_GLASS_ROADMAP_DOC" ]]; then
     fail "missing TahoeGlass roadmap doc: $TAHOE_GLASS_ROADMAP_DOC"
     return
   fi
 
-  if grep -Fq "$path" "$TAHOE_GLASS_ROADMAP_DOC" \
+  if grep -Fq "$doc_path_marker" "$TAHOE_GLASS_ROADMAP_DOC" \
     && grep -Fq "$url" "$TAHOE_GLASS_ROADMAP_DOC" \
     && grep -Fq "$commit" "$TAHOE_GLASS_ROADMAP_DOC"; then
     log "$name reference path, URL, and commit are recorded in the roadmap"
   else
-    fail "$name reference path, URL, and commit must be recorded in $(realpath --relative-to="$REPO_DIR" "$TAHOE_GLASS_ROADMAP_DOC")"
+    fail "$name reference path marker ($doc_path_marker), URL, and commit must be recorded in $(realpath --relative-to="$REPO_DIR" "$TAHOE_GLASS_ROADMAP_DOC")"
   fi
 
   if [[ ! -d "$path/.git" ]]; then
@@ -163,13 +180,13 @@ check_reference_repo() {
 check_tahoe_glass_reference_sources() {
   check_reference_repo \
     "Niri-glass" \
-    "/home/wwt/.cache/tahoe-liquid-glass-refs/Niri-glass" \
+    "$TAHOE_GLASS_REF_CACHE_ROOT/Niri-glass" \
     "https://github.com/zaroutt/Niri-glass" \
     "e018a31"
 
   check_reference_repo \
     "kwin-effects-forceblur" \
-    "/home/wwt/.cache/tahoe-liquid-glass-refs/kwin-effects-forceblur" \
+    "$TAHOE_GLASS_REF_CACHE_ROOT/kwin-effects-forceblur" \
     "https://github.com/taj-ny/kwin-effects-forceblur" \
     "51a1d49"
 }

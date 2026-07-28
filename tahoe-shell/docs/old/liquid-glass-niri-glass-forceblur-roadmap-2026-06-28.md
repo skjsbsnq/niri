@@ -14,38 +14,40 @@
 
 ## 外部源码位置
 
-本轮参考源码均拉取到项目目录外，避免污染 `/home/wwt/niri` 工作区。
+本轮参考源码均拉取到项目目录外，避免污染仓库工作区。默认缓存根为
+`${XDG_CACHE_HOME:-$HOME/.cache}/tahoe-liquid-glass-refs/`（可用环境变量
+`TAHOE_GLASS_REF_CACHE_ROOT` 覆盖；见 `scripts/check-tahoe-glass-guardrails.sh`）。
 
 ### Niri-glass
 
-- 本地路径：`/home/wwt/.cache/tahoe-liquid-glass-refs/Niri-glass`
+- 本地路径：`${XDG_CACHE_HOME:-$HOME/.cache}/tahoe-liquid-glass-refs/Niri-glass`
 - 远程：`https://github.com/zaroutt/Niri-glass`
 - 当前本地提交：`e018a31`
 - 重点文件：
-  - `/home/wwt/.cache/tahoe-liquid-glass-refs/Niri-glass/src/render_helpers/liquid_glass.rs`
-  - `/home/wwt/.cache/tahoe-liquid-glass-refs/Niri-glass/src/render_helpers/shaders/clipped_surface.frag`
-  - `/home/wwt/.cache/tahoe-liquid-glass-refs/Niri-glass/src/render_helpers/background_effect.rs`
-  - `/home/wwt/.cache/tahoe-liquid-glass-refs/Niri-glass/src/render_helpers/framebuffer_effect.rs`
-  - `/home/wwt/.cache/tahoe-liquid-glass-refs/Niri-glass/src/render_helpers/xray.rs`
-  - `/home/wwt/.cache/tahoe-liquid-glass-refs/Niri-glass/niri-config/src/appearance.rs`
-  - `/home/wwt/.cache/tahoe-liquid-glass-refs/Niri-glass/config.kdl`
+  - `${XDG_CACHE_HOME:-$HOME/.cache}/tahoe-liquid-glass-refs/Niri-glass/src/render_helpers/liquid_glass.rs`
+  - `${XDG_CACHE_HOME:-$HOME/.cache}/tahoe-liquid-glass-refs/Niri-glass/src/render_helpers/shaders/clipped_surface.frag`
+  - `${XDG_CACHE_HOME:-$HOME/.cache}/tahoe-liquid-glass-refs/Niri-glass/src/render_helpers/background_effect.rs`
+  - `${XDG_CACHE_HOME:-$HOME/.cache}/tahoe-liquid-glass-refs/Niri-glass/src/render_helpers/framebuffer_effect.rs`
+  - `${XDG_CACHE_HOME:-$HOME/.cache}/tahoe-liquid-glass-refs/Niri-glass/src/render_helpers/xray.rs`
+  - `${XDG_CACHE_HOME:-$HOME/.cache}/tahoe-liquid-glass-refs/Niri-glass/niri-config/src/appearance.rs`
+  - `${XDG_CACHE_HOME:-$HOME/.cache}/tahoe-liquid-glass-refs/Niri-glass/config.kdl`
 
 说明：`Niri-glass` README 明确说 shader 基于 `kwin-effects-glass`。本轮不把 `kwin-effects-glass` 作为第三个重点输入，以避免扩大范围；只记录 `Niri-glass` 对该思路的 niri 移植方式。
 
 ### kwin-effects-forceblur
 
-- 本地路径：`/home/wwt/.cache/tahoe-liquid-glass-refs/kwin-effects-forceblur`
+- 本地路径：`${XDG_CACHE_HOME:-$HOME/.cache}/tahoe-liquid-glass-refs/kwin-effects-forceblur`
 - 远程：`https://github.com/taj-ny/kwin-effects-forceblur`
 - 当前本地提交：`51a1d49`
 - 重点文件：
-  - `/home/wwt/.cache/tahoe-liquid-glass-refs/kwin-effects-forceblur/src/blur.cpp`
-  - `/home/wwt/.cache/tahoe-liquid-glass-refs/kwin-effects-forceblur/src/blur.h`
-  - `/home/wwt/.cache/tahoe-liquid-glass-refs/kwin-effects-forceblur/src/settings.h`
-  - `/home/wwt/.cache/tahoe-liquid-glass-refs/kwin-effects-forceblur/src/settings.cpp`
-  - `/home/wwt/.cache/tahoe-liquid-glass-refs/kwin-effects-forceblur/src/blur.kcfg`
-  - `/home/wwt/.cache/tahoe-liquid-glass-refs/kwin-effects-forceblur/src/shaders/downsample.frag`
-  - `/home/wwt/.cache/tahoe-liquid-glass-refs/kwin-effects-forceblur/src/shaders/upsample.glsl`
-  - `/home/wwt/.cache/tahoe-liquid-glass-refs/kwin-effects-forceblur/src/shaders/roundedcorners.glsl`
+  - `${XDG_CACHE_HOME:-$HOME/.cache}/tahoe-liquid-glass-refs/kwin-effects-forceblur/src/blur.cpp`
+  - `${XDG_CACHE_HOME:-$HOME/.cache}/tahoe-liquid-glass-refs/kwin-effects-forceblur/src/blur.h`
+  - `${XDG_CACHE_HOME:-$HOME/.cache}/tahoe-liquid-glass-refs/kwin-effects-forceblur/src/settings.h`
+  - `${XDG_CACHE_HOME:-$HOME/.cache}/tahoe-liquid-glass-refs/kwin-effects-forceblur/src/settings.cpp`
+  - `${XDG_CACHE_HOME:-$HOME/.cache}/tahoe-liquid-glass-refs/kwin-effects-forceblur/src/blur.kcfg`
+  - `${XDG_CACHE_HOME:-$HOME/.cache}/tahoe-liquid-glass-refs/kwin-effects-forceblur/src/shaders/downsample.frag`
+  - `${XDG_CACHE_HOME:-$HOME/.cache}/tahoe-liquid-glass-refs/kwin-effects-forceblur/src/shaders/upsample.glsl`
+  - `${XDG_CACHE_HOME:-$HOME/.cache}/tahoe-liquid-glass-refs/kwin-effects-forceblur/src/shaders/roundedcorners.glsl`
 
 说明：用户提到的 `kwin-effects-foreblur` 应按现有开源项目名理解为 `kwin-effects-forceblur` / Better Blur。
 

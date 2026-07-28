@@ -134,6 +134,16 @@ Run the same check manually with:
 bash scripts/check-tahoe-glass-guardrails.sh
 ```
 
+Reference-repo checkouts (Niri-glass / kwin-effects-forceblur) are resolved portably (T-04 / F-09) — never hardcoded under `/home/<user>`:
+
+| Variable | Default | Role |
+|---|---|---|
+| `TAHOE_GLASS_REF_CACHE_ROOT` | `${XDG_CACHE_HOME:-$HOME/.cache}/tahoe-liquid-glass-refs` | Parent dir of the two clones |
+| `XDG_CACHE_HOME` | (unset → `$HOME/.cache`) | Standard cache root |
+| `TAHOE_GLASS_ROADMAP_DOC` | `tahoe-shell/docs/liquid-glass-…roadmap….md`, falling back to `docs/old/` if the non-archived path is missing | Doc that must record the portable path marker, URL, and pin commit |
+
+The roadmap match keys on the portable marker `tahoe-liquid-glass-refs/<name>` (plus URL + short commit), not an absolute machine path, so any username / XDG layout works.
+
 For a local emergency debug pass only, skip it with:
 
 ```sh

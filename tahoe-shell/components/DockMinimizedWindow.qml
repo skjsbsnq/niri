@@ -15,6 +15,16 @@ Item {
     property var dockScreen: dockWindow && dockWindow.screen !== undefined ? dockWindow.screen : null
     property var dockSurfaceItem
     property real dockSlideOffset: 0
+    // Undo the fullscreen transition transform on dockRow (mirror WindowButton)
+    // so the hint reports the revealed, not slid-down, position; and suppress
+    // republish while the Dock layer is unmapped for fullscreen.
+    property real dockFullscreenOffset: 0
+    property bool dockFullscreenActive: false
+    // T19/S-M3: ancestor scene offset trigger — mapToItem() establishes no
+    // binding dependency, so Dock forwards the minimized-section scene offset
+    // to refresh the foreign-toplevel hint while the shelf reflows/scrolls.
+    property real dockSceneOffsetX: 0
+    property real dockSceneOffsetY: 0
     // See Dock.qml useSpring — forwarded so the bounce down leg can use the
     // spring branch off software GPUs.
     property bool useSpring: false
@@ -109,23 +119,46 @@ Item {
         );
     }
 
+    // Mirror WindowButton: suppress foreign-toplevel rectangle republish while
+    // the Dock layer is unmapped for fullscreen (publishing into a closing game
+    // handle raced Quickshell on unmap), and republish once fullscreen clears.
+    function dockRectanglePublishBlocked() {
+        return root.dockFullscreenActive;
+    }
+
     function updateDockRectangle(forcePublish) {
         if (!root.dockWindow || !root.windowsService || !root.windowsService.submitDockRectangle)
             return;
         var toplevel = root.windowModel ? root.windowModel.toplevel : null;
         if (!toplevel)
             return;
+        if (!forcePublish && root.dockRectanglePublishBlocked())
+            return;
+        // Interactive restore may run mid-reveal: never publish into a still-
+        // unmapped fullscreen Dock (compositor has no layer surface).
+        if (forcePublish && root.dockFullscreenActive)
+            return;
 
-        // Report the visible preview at its stable, fully revealed Dock
-        // position. Autohide translates the whole Dock, and the click bounce
-        // translates the preview, neither of which belongs in the restore
-        // destination cached by foreign-toplevel.
-        var topLeft = previewFrame.mapToItem(null, 0, 0);
-        var bottomRight = previewFrame.mapToItem(null, previewFrame.width, previewFrame.height);
+        // T19 (S-M8): report REST geometry. Mapping previewFrame directly would
+        // inherit root.scale (lifecycleScale*pressScale) and the bounce
+        // Translate, so a quick minimize→restore cached a source rect shrunk
+        // by the add-transition/press scale. Map from root.parent (the ListView
+        // contentItem — no scale) using the delegate's rest frame (previewFrame
+        // margins) at scale 1, with no bounce; keep the autohide slide undo so
+        // the hint refers to the revealed, not off-screen, position.
+        var p = root.parent;
+        if (!p)
+            return;
+        var restX = root.x + 2;
+        var restY = root.y + 2;
+        var restW = root.width - 4;
+        var restH = root.height - 4;
+        var topLeft = p.mapToItem(null, restX, restY);
+        var bottomRight = p.mapToItem(null, restX + restW, restY + restH);
         var left = Math.floor(Math.min(topLeft.x, bottomRight.x));
-        var top = Math.floor(Math.min(topLeft.y, bottomRight.y) - root.dockSlideOffset + root.bounceOffset);
+        var top = Math.floor(Math.min(topLeft.y, bottomRight.y) - root.dockSlideOffset - root.dockFullscreenOffset);
         var right = Math.ceil(Math.max(topLeft.x, bottomRight.x));
-        var bottom = Math.ceil(Math.max(topLeft.y, bottomRight.y) - root.dockSlideOffset + root.bounceOffset);
+        var bottom = Math.ceil(Math.max(topLeft.y, bottomRight.y) - root.dockSlideOffset - root.dockFullscreenOffset);
         root.windowsService.submitDockRectangle(
             toplevel,
             root.dockWindow,
@@ -139,6 +172,8 @@ Item {
     }
 
     function scheduleDockRectangleUpdate() {
+        if (root.dockRectanglePublishBlocked())
+            return;
         dockRectangleRefresh.restart();
     }
 
@@ -189,7 +224,19 @@ Item {
     onWidthChanged: scheduleDockRectangleUpdate()
     onHeightChanged: scheduleDockRectangleUpdate()
     onDockSlideOffsetChanged: scheduleDockRectangleUpdate()
-    onBounceOffsetChanged: scheduleDockRectangleUpdate()
+    // T19: bounce is a visual-only transform excluded from the REST-geometry
+    // hint (see updateDockRectangle); it no longer triggers a re-publish.
+    onDockSceneOffsetXChanged: scheduleDockRectangleUpdate()
+    onDockSceneOffsetYChanged: scheduleDockRectangleUpdate()
+    // Undo the fullscreen slide mid-transition so the hint tracks the revealed
+    // position; after fullscreen clears, republish immediately even if the
+    // reveal slide still runs (niri cleared rects on unmap and restore needs
+    // them). While fullscreenActive, schedule is blocked above.
+    onDockFullscreenOffsetChanged: scheduleDockRectangleUpdate()
+    onDockFullscreenActiveChanged: {
+        if (!root.dockFullscreenActive)
+            scheduleDockRectangleUpdate();
+    }
     Component.onCompleted: {
         scheduleThumbnailRefresh();
         scheduleDockRectangleUpdate();

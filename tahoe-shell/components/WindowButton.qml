@@ -157,6 +157,24 @@ Item {
         if (root.dockRectanglePublishBlocked())
             return;
         dockRectangleRefresh.restart();
+        // T21: debounce a force-publish after the slot/ancestor Behavior (x/width
+        // and scene-offset transitions) settles. interval = Motion.elementResize
+        // (the longest layout-Behavior duration); continuous changes keep
+        // restarting it, so it fires once the layout Behavior ends and the
+        // settled geometry reaches niri for a T-20 retarget.
+        dockRectangleSettle.restart();
+    }
+
+    // T21: a minimize publishes the predicted shelf slot as the genie target,
+    // then this button is removed (the window reappears as a shelf thumbnail).
+    // Stop the dock-rectangle timers so a settle armed by an earlier layout
+    // change cannot fire after the predicted-slot publish and override it with
+    // this button's rest rect (which would retarget the genie back at the
+    // soon-to-vanish dock icon). The thumbnail's own settle then takes over
+    // (T-20 retargets to the real thumbnail rect).
+    function stopDockRectangleTimers() {
+        dockRectangleRefresh.stop();
+        dockRectangleSettle.stop();
     }
 
     // T19: genie target for a minimize initiated from this button — the
@@ -184,6 +202,7 @@ Item {
                 root.windowsService.restore(root.windowModel);
             } else if (root.windowModel.isFocused) {
                 updateDockRectangle(true, root.minimizeTargetRect());
+                stopDockRectangleTimers();
                 root.windowsService.minimize(root.windowModel);
             } else {
                 updateDockRectangle(true);
@@ -196,6 +215,7 @@ Item {
                 root.toplevel.activate();
         } else if (root.toplevel.activated) {
             updateDockRectangle(true, root.minimizeTargetRect());
+            stopDockRectangleTimers();
             root.toplevel.minimized = true;
         } else if (root.toplevel.activate) {
             updateDockRectangle(true);
@@ -213,6 +233,7 @@ Item {
         // shelf is already open (niri retargets to the real thumbnail once it
         // reports its settled rect, T-20); falls back to the button rest rect.
         updateDockRectangle(true, root.minimizeTargetRect());
+        stopDockRectangleTimers();
         if (root.windowsService && root.windowModel)
             root.windowsService.minimize(root.windowModel);
         else
@@ -277,6 +298,19 @@ Item {
         interval: 0
         repeat: false
         onTriggered: root.updateDockRectangle()
+    }
+
+    // T21: force-publish once more after the slot/ancestor Behavior (x/width and
+    // scene-offset transitions) settles. interval = Motion.elementResize, the
+    // longest layout-Behavior duration (>= elementMove), so it fires once all of
+    // them settle. The interval-0 dockRectangleRefresh reports per-frame; this
+    // guarantees the settled value reaches niri (T-20 retarget) even if the last
+    // per-frame report landed mid-Behavior. Debounced via restart on each schedule.
+    Timer {
+        id: dockRectangleSettle
+        interval: Motion.elementResize(root.settingsService)
+        repeat: false
+        onTriggered: root.updateDockRectangle(true)
     }
 
     Rectangle {

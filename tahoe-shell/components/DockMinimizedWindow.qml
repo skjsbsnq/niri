@@ -175,11 +175,6 @@ Item {
         if (root.dockRectanglePublishBlocked())
             return;
         dockRectangleRefresh.restart();
-        // T21: debounce a force-publish after the shelf/ancestor Behavior (move/
-        // resize transitions) settles (interval = Motion.elementResize, the
-        // longest layout-Behavior duration) so the settled geometry reaches
-        // niri for a T-20 retarget.
-        dockRectangleSettle.restart();
     }
 
     function restoreWindow() {
@@ -266,19 +261,6 @@ Item {
         interval: 0
         repeat: false
         onTriggered: root.updateDockRectangle(false)
-    }
-
-    // T21: force-publish once more after the shelf/ancestor Behavior (move/resize
-    // transitions) settles. interval = Motion.elementResize, the longest
-    // layout-Behavior duration (>= elementMove), so it fires once all of them
-    // settle. The interval-0 dockRectangleRefresh reports per-frame; this
-    // guarantees the settled value reaches niri (T-20 retarget) even if the last
-    // per-frame report landed mid-Behavior. Debounced via restart on each schedule.
-    Timer {
-        id: dockRectangleSettle
-        interval: Motion.elementResize(root.settingsService)
-        repeat: false
-        onTriggered: root.updateDockRectangle(true)
     }
 
     Rectangle {

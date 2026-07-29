@@ -152,6 +152,36 @@ budget×clamp 多 region 仅 MINOR 且壳层单 region 打不中）。测试改�
 `oversized_region_clamps_and_revalidates_once_surface_geometry_catches_up`
 覆盖 small→mid→caught-up；`cargo test --lib` 488 全绿。
 
+## 四次修复（2026-07-29，T-18：撤除 clamp 兜底）
+
+`0faa78bd` 的 clamp 是上游根因的合成器侧兜底：shell 在 polish/`sendTransform*`
+阶段立即 `wl_surface.commit()`，把新 region/transform 贴到**上一帧 buffer** 上，
+合成器因此锁住一帧"region 新、内容旧"。`0faa78bd` 用"把 pending region clamp 到
+当前 surface 后提交"绕开它，代价是 grow 途中玻璃贴 buffer 边而非目标布局，并可能
+在 grow 动画产生超前带。
+
+**T-17（quickshell `063a65b`，主仓 `3bca257`）根治了上游根因**：`commitGlassIfIdle()`
+在 `QEvent::UpdateRequest` 置位 `mRepaintInFlight`、`QQuickWindow::frameSwapped`
+清位；有重绘在途时不显式 commit，让 region/transform 由 render 线程的 buffer commit
+在**同一个原子 `wl_surface.commit`** 里携带，region 不再领先 buffer。`sendTransform*`
+三处立即 commit 并入同一框架（S-M6）。
+
+**T-18（本提交）撤除合成器侧 clamp 兜底**：`git revert 0faa78bd`，恢复 `5c47e260`
+的"携带旧 committed 条目"自愈策略。T-17 之后该 region-ahead-of-buffer 窗口在正常
+操作中不再打开，携带策略降级为**休眠安全网**——万一仍有客户端把 region 落到上一帧
+buffer，携带策略继续显示上一帧（较小尺寸）的玻璃而非掉回 fallback，残留窗口仍会
+在新增长行上留一帧无玻璃带（比 clamp 的超前带轻，但非完全无瑕疵），不会出现 clamp
+的持续性超前带。
+`validate_regions_for_surface_geo` 文档注释补记此休眠语义与 T-17/T-18 因果。测试
+恢复 `oversized_region_revalidates_once_surface_geometry_catches_up`（carry-previous
+版）与 `healable_overflow_behind_budget_point_still_revalidates`；`cargo test --lib`
+524 全绿；`scripts/check-tahoe-glass-guardrails.sh` 通过（VERSION 4 / MAX_REGIONS 32
+/ XML 同步 / Phase 5 popup 几何静态均不变）。
+
+**运行时验证（须部署后活会话）**：`WAYLAND_DEBUG=1` 抓 dock/剪贴板 grow，每帧只见一次
+`wl_surface.commit`、且 `set_region` 与 buffer `attach` 在同一 commit；grow 动画途中
+无超前带、无玻璃断带。复用下文「部署」节走查清单第 5、6 条。
+
 ## 遗留观察项
 
 - 一次未复现的偶发：剪贴板弹层开着时 wl-copy 新条目，弹层自行关闭（仅出现一
@@ -165,8 +195,8 @@ budget×clamp 多 region 仅 MINOR 且壳层单 region 打不中）。测试改�
 
 ## 部署
 
-本修复只动 niri 合成器二进制（shell/KDL 无改动）；三次修复后二进制版本串应为
-`0faa78bd`（`niri msg version` 核对）：
+本修复只动 niri 合成器二进制（shell/KDL 无改动）；四次修复（T-18）后二进制版本串
+应为 T-18 的 niri 提交 `f9bed7e5`（`niri msg version` 核对）：
 
 ```bash
 cp /home/wwt/niri/niri/target/release/niri ~/.local/bin/niri
@@ -182,6 +212,7 @@ cp /home/wwt/niri/niri/target/release/niri ~/.local/bin/niri
 5. **（二次修复）**在屏幕下方摆一个黑色终端，打开/收回剪贴板与控制中心：
    动画全程玻璃只应显示其当前实际覆盖区域的模糊——黑色只在面板真正盖到终端
    时出现、离开即消失，不得提前/滞后出现黑块。
-6. **（二次+三次修复）**复制一条新内容 / 点固定使剪贴板增高：扩张**途中**新增
-   带就应有玻璃（贴着 buffer 边长大），结束后完整模糊；不再出现"途中不透明、
-   结束才恢复"或"需再复制/截图才恢复"。
+6. **（二次+三次+T-18 修复）**复制一条新内容 / 点固定使剪贴板增高：扩张途中及
+   结束玻璃都应稳定模糊——无超前带、无途中不透明、无需再复制/截图才恢复。T-17
+   使 region 与 buffer 在同一 `wl_surface.commit` 原子落地，T-18 撤除了为旧根因
+   兜底的合成器 clamp（不再"贴 buffer 边长大"，而是 region/buffer 同帧到位）。

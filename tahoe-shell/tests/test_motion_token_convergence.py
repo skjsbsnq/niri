@@ -703,6 +703,42 @@ class MotionTokenConvergenceTests(unittest.TestCase):
                 self.assertIn("property bool darkMode", text)
                 self.assertIn("darkMode: root.darkMode", text)
 
+    def test_tray_menu_pins_surface_height_against_async_sni_race(self) -> None:
+        """TrayMenu must pin its layer-surface height, not drive it from content.
+
+        SNI menu children arrive over DBus asynchronously after open
+        (QsMenuOpener.children), so a content-driven implicitHeight grows
+        mid-open and leaves the bottom rows outside the committed layer-surface
+        / TahoeGlass input region until a later configure — the bottom items
+        were unhoverable/un-clickable on the first open (and only worked after
+        reopening). Pinning the surface height (R06 treatment, same as
+        MenuPopup.qml's fixed implicitHeight: 300) keeps the layer shell /
+        glass region / dismiss cutout static throughout. This guard prevents a
+        regression back to `implicitHeight: panel.implicitHeight` /
+        `content.implicitHeight + 16`.
+        """
+        tray = (COMPONENTS_ROOT / "TrayMenu.qml").read_text(encoding="utf-8")
+
+        # Surface height is the fixed panel height, not the content-driven
+        # panel.implicitHeight (the pre-fix line was implicitHeight: panel.implicitHeight).
+        self.assertIn("implicitHeight: panel.height", tray)
+        self.assertNotIn("implicitHeight: panel.implicitHeight", tray)
+        # The panel height is pinned to a fixed cap, not content. The pre-fix
+        # panel used implicitHeight: content.implicitHeight + 16.
+        self.assertIn("implicitHeight: root.maxPanelHeight", tray)
+        self.assertNotIn("implicitHeight: content.implicitHeight + 16", tray)
+        # The cap is a sane, bounded value — not the near-fullscreen
+        # screen-relative remainder (which would render a huge empty card).
+        self.assertIn("readonly property int maxPanelHeight", tray)
+        self.assertRegex(tray, r"Math\.min\(\s*360")
+        # Overflowing SNI content scrolls instead of resizing the surface.
+        self.assertIn("Flickable {", tray)
+        self.assertIn("boundsBehavior: Flickable.StopAtBounds", tray)
+        # The Flickable must only grab pointer events when content overflows;
+        # otherwise a short menu's empty glass area would swallow clicks instead
+        # of dismissing via the surface MouseArea (z: -1).
+        self.assertIn("interactive: contentHeight > height", tray)
+
     def test_glass_panel_press_drives_material_interaction(self) -> None:
         text = (COMPONENTS_ROOT / "GlassPanel.qml").read_text(encoding="utf-8")
 

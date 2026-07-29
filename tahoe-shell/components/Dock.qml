@@ -165,20 +165,6 @@ PanelWindow {
         + windowViewport.y
         + windowRow.y
         - windowViewport.contentY
-    // T19/S-M3: minimized-section scene offset trigger for shelf thumbnails.
-    // Mirrors windowSectionSceneOffsetX/Y — mapToItem() establishes no binding
-    // dependency, so this lets DockMinimizedWindow refresh its foreign-toplevel
-    // hint while the shelf reflows (minimizedSectionHost width Behavior) or
-    // scrolls (viewport contentX). Used as a change trigger only; the rect is
-    // still computed via mapToItem at call time.
-    readonly property real minimizedSectionSceneOffsetX: dockChrome.x
-        + dockRow.x
-        + minimizedSectionHost.x
-        - (minimizedShelf ? minimizedShelf.viewportContentX : 0)
-    readonly property real minimizedSectionSceneOffsetY: dockChrome.y
-        + dockRow.y
-        + minimizedSectionHost.y
-        - (minimizedShelf ? minimizedShelf.viewportContentY : 0)
     // Wave section: "pinned" | "window" | "" — cursor is rest-local to that section.
     property string dockWaveSection: ""
     readonly property color glassFill: darkMode ? "#d01d1f24" : GlassStyle.FillDock
@@ -610,37 +596,6 @@ PanelWindow {
         if (!w || index < 0 || index >= w.pushX.length)
             return 0;
         return w.pushX[index];
-    }
-
-    // T19: predicted scene rect of where a newly-minimized window's thumbnail
-    // will appear in an already-open shelf. Used as the initial genie target so
-    // it flies toward the shelf, not the button's old slot; niri retargets
-    // (T-20) to the real thumbnail once it reports its settled rect. Returns
-    // null when the shelf is closed (first minimize) or geometry is unavailable
-    // — callers fall back to the button rest rect.
-    //
-    // The shelf preserves niri's spatial column/tile order (filteredMinimized
-    // — filtered not re-sorted), so the new thumbnail lands at the minimizee's
-    // position among the already-minimized windows — not appended at the end.
-    // That position is unknowable from the button, so use the shelf-content
-    // center as a neutral initial target (minimizes the worst-case redirect to
-    // the real slot, which T-20 corrects regardless).
-    function predictedMinimizeSlotSceneRect() {
-        if (!root.hasMinimizedWindows || !minimizedShelf)
-            return null;
-        var tw = root.dockMinimizedThumbnailWidth;
-        var spacing = minimizedShelf.shelfSpacing;
-        var slotH = minimizedShelf.thumbnailHeight;
-        var count = root.minimizedWindowButtonCount;
-        // The shelf will hold count+1 thumbnails once this minimize lands.
-        var contentWidth = (count + 1) * tw + count * spacing;
-        var centerX = root.minimizedSectionSceneOffsetX + contentWidth / 2;
-        return {
-            "x": centerX - tw / 2,
-            "y": root.minimizedSectionSceneOffsetY,
-            "width": tw,
-            "height": slotH
-        };
     }
 
     // Glass must never grow with the wave (jitter). These stay at 0.
@@ -1787,7 +1742,6 @@ PanelWindow {
                 }
 
                 DockMinimizedShelf {
-                    id: minimizedShelf
                     anchors.left: parent.left
                     anchors.right: parent.right
                     anchors.verticalCenter: parent.verticalCenter
@@ -1800,10 +1754,6 @@ PanelWindow {
                     dockWindow: root
                     dockSurfaceItem: dockSurface
                     dockSlideOffset: root.dockContentSlideOffset
-                    dockSceneOffsetX: root.minimizedSectionSceneOffsetX
-                    dockSceneOffsetY: root.minimizedSectionSceneOffsetY
-                    dockFullscreenOffset: root.fullscreenTransition * root.dockSurfaceHeight
-                    dockFullscreenActive: root.fullscreenActive
                     thumbnailWidth: root.dockMinimizedThumbnailWidth
                     onDockPointerMoved: function(x, buttons) {
                         // Minimized shelf is outside the mag wave; keep dock revealed only.

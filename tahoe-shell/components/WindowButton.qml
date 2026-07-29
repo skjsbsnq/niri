@@ -93,7 +93,7 @@ Item {
         return root.dockFullscreenActive;
     }
 
-    function updateDockRectangle(forcePublish, overrideRect) {
+    function updateDockRectangle(forcePublish) {
         if (!root.dockWindow)
             return;
         if (!forcePublish && root.dockRectanglePublishBlocked())
@@ -109,36 +109,16 @@ Item {
         if (!root.windowsService || !root.windowsService.submitDockRectangle)
             return;
 
-        // T19 (S-H2/S-M8): report REST geometry. The foreign-toplevel hint is
-        // the icon's settled slot position, not the live hover wave. Mapping
-        // the icon itself would include magnification*pressScale, the pushX
-        // Translate and the click-bounce lift, so a minimize triggered at the
-        // wave peak flew to a distorted/pressed/bounced target. Map from root
-        // (the delegate Item — no scale, only the slot x/width Behavior) using
-        // the icon's rest geometry (settled y, no bounceOffset); the wave is a
-        // visual-only transform that never enters the hint. overrideRect (the
-        // predicted shelf slot from Dock) is already in the same scene space.
-        var left, top, right, bottom;
-        if (overrideRect) {
-            // The predicted shelf slot (from Dock) is derived from layout .x/.y
-            // (QML transform: does not affect .y), so it is already in the
-            // revealed/rest scene space — do NOT re-subtract the slide/fullscreen
-            // offsets that the mapToItem() path undoes below.
-            var ox = Number(overrideRect.x);
-            var oy = Number(overrideRect.y);
-            left = Math.floor(ox);
-            top = Math.floor(oy);
-            right = Math.ceil(ox + Number(overrideRect.width));
-            bottom = Math.ceil(oy + Number(overrideRect.height));
-        } else {
-            var restIconY = Math.round(root.height - icon.height - 6);
-            var topLeft = root.mapToItem(null, icon.x, restIconY);
-            var bottomRight = root.mapToItem(null, icon.x + icon.width, restIconY + icon.height);
-            left = Math.floor(Math.min(topLeft.x, bottomRight.x));
-            top = Math.floor(Math.min(topLeft.y, bottomRight.y) - root.dockSlideOffset - root.dockFullscreenOffset);
-            right = Math.ceil(Math.max(topLeft.x, bottomRight.x));
-            bottom = Math.ceil(Math.max(topLeft.y, bottomRight.y) - root.dockSlideOffset - root.dockFullscreenOffset);
-        }
+        // The foreign-toplevel hint is the icon itself, not this delegate's
+        // hit target. Mapping both corners includes hover magnification/lift.
+        // Remove Dock's transient hide translations so cached hints always
+        // refer to the stable, fully revealed position rather than off-screen.
+        var topLeft = icon.mapToItem(null, 0, 0);
+        var bottomRight = icon.mapToItem(null, icon.width, icon.height);
+        var left = Math.floor(Math.min(topLeft.x, bottomRight.x));
+        var top = Math.floor(Math.min(topLeft.y, bottomRight.y) - root.dockSlideOffset - root.dockFullscreenOffset);
+        var right = Math.ceil(Math.max(topLeft.x, bottomRight.x));
+        var bottom = Math.ceil(Math.max(topLeft.y, bottomRight.y) - root.dockSlideOffset - root.dockFullscreenOffset);
         var targetWidth = Math.max(1, right - left);
         var targetHeight = Math.max(1, bottom - top);
         root.windowsService.submitDockRectangle(
@@ -159,46 +139,29 @@ Item {
         dockRectangleRefresh.restart();
     }
 
-    // T19: genie target for a minimize initiated from this button — the
-    // predicted appended shelf slot when the shelf is already open, else null
-    // (updateDockRectangle falls back to this button's rest rect).
-    function minimizeTargetRect() {
-        return (root.dockWindow && root.dockWindow.hasMinimizedWindows)
-            ? root.dockWindow.predictedMinimizeSlotSceneRect()
-            : null;
-    }
-
     function restoreOrActivate() {
         if (!root.windowModel && !root.toplevel)
             return;
 
         // Force publish after fullscreen so minimize/restore is not a silent
         // no-op while the dock reveal animation still holds a non-zero offset.
-        // T19: a minimize initiated here flies TO the dock, so when the shelf is
-        // already open we report the predicted appended shelf slot instead of
-        // this button's rest rect; restore/activate keep the button rest rect
-        // (the restore genie source is the dock icon).
+        updateDockRectangle(true);
+
         if (root.windowsService && root.windowModel) {
             if (root.windowModel.isMinimized) {
-                updateDockRectangle(true);
                 root.windowsService.restore(root.windowModel);
             } else if (root.windowModel.isFocused) {
-                updateDockRectangle(true, root.minimizeTargetRect());
                 root.windowsService.minimize(root.windowModel);
             } else {
-                updateDockRectangle(true);
                 root.windowsService.activate(root.windowModel);
             }
         } else if (root.toplevel.minimized) {
-            updateDockRectangle(true);
             root.toplevel.minimized = false;
             if (root.toplevel.activate)
                 root.toplevel.activate();
         } else if (root.toplevel.activated) {
-            updateDockRectangle(true, root.minimizeTargetRect());
             root.toplevel.minimized = true;
         } else if (root.toplevel.activate) {
-            updateDockRectangle(true);
             root.toplevel.activate();
         }
 
@@ -209,10 +172,7 @@ Item {
         if (!root.windowModel && !root.toplevel)
             return;
 
-        // T19: point the genie at the predicted appended shelf slot when the
-        // shelf is already open (niri retargets to the real thumbnail once it
-        // reports its settled rect, T-20); falls back to the button rest rect.
-        updateDockRectangle(true, root.minimizeTargetRect());
+        updateDockRectangle(true);
         if (root.windowsService && root.windowModel)
             root.windowsService.minimize(root.windowModel);
         else
@@ -231,9 +191,10 @@ Item {
     onToplevelChanged: scheduleDockRectangleUpdate()
     onDockSceneOffsetXChanged: scheduleDockRectangleUpdate()
     onDockSceneOffsetYChanged: scheduleDockRectangleUpdate()
-    // T19: the hover wave (magnification/pushX) and click bounce are visual-only
-    // transforms excluded from the REST-geometry hint (see updateDockRectangle),
-    // so they no longer trigger a re-publish. Slot/layout/scene-offset changes do.
+    // F06: visual geometry (mag/push/bounce) must refresh the last-hint, not only slot layout.
+    onMagnificationChanged: scheduleDockRectangleUpdate()
+    onPushXChanged: scheduleDockRectangleUpdate()
+    onBounceOffsetChanged: scheduleDockRectangleUpdate()
     // Offset still animates after fullscreen ends; keep coordinates fresh for
     // minimize targets. While fullscreenActive, schedule is blocked above.
     onDockFullscreenOffsetChanged: scheduleDockRectangleUpdate()

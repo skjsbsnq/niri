@@ -324,14 +324,11 @@ class DockRestoreRectangleTests(unittest.TestCase):
             r"(?m)^\s*onClicked:\s*function\s*\([^)]*\)\s*\{",
         )
 
-        # T19: the hint is the icon's REST geometry — mapped from root (no
-        # scale), excluding the hover-wave magnification/pushX and click bounce.
-        self.assertRegex(rectangle, r"topLeft\s*=\s*root\.mapToItem\(null,\s*icon\.x,\s*restIconY\)")
+        self.assertRegex(rectangle, r"topLeft\s*=\s*icon\.mapToItem\(null,\s*0,\s*0\)")
         self.assertRegex(
             rectangle,
-            r"bottomRight\s*=\s*root\.mapToItem\(null,\s*icon\.x\s*\+\s*icon\.width,\s*restIconY\s*\+\s*icon\.height\)",
+            r"bottomRight\s*=\s*icon\.mapToItem\(null,\s*icon\.width,\s*icon\.height\)",
         )
-        self.assertNotIn("icon.mapToItem(null", rectangle)
         self.assertRegex(rectangle, r"targetWidth\s*=\s*Math\.max\(1,\s*right\s*-\s*left\)")
         self.assertRegex(rectangle, r"targetHeight\s*=\s*Math\.max\(1,\s*bottom\s*-\s*top\)")
         self.assertRegex(
@@ -342,13 +339,13 @@ class DockRestoreRectangleTests(unittest.TestCase):
             rectangle,
             r"bottom\s*=\s*Math\.ceil\([^;\n]*-\s*root\.dockSlideOffset[^;\n]*\)",
         )
+        self.assertNotIn("root.mapToItem(null, 0, 0)", rectangle)
 
         assert_in_order(self, restore, "updateDockRectangle(true)", "windowsService.restore")
         self.assertIn("submitDockRectangle", rectangle)
-        # T19: the wave/bounce are visual-only and no longer republish the hint.
-        self.assertNotIn("onMagnificationChanged: scheduleDockRectangleUpdate()", text)
-        self.assertNotIn("onPushXChanged: scheduleDockRectangleUpdate()", text)
-        self.assertNotIn("onBounceOffsetChanged: scheduleDockRectangleUpdate()", text)
+        self.assertIn("onMagnificationChanged: scheduleDockRectangleUpdate()", text)
+        self.assertIn("onPushXChanged: scheduleDockRectangleUpdate()", text)
+        self.assertIn("onBounceOffsetChanged: scheduleDockRectangleUpdate()", text)
         self.assertEqual(clicked.count("root.restoreOrActivate()"), 1)
         self.assertLess(clicked.index("root.restoreOrActivate()"), clicked.rfind("root.bounce()"))
 
@@ -367,15 +364,15 @@ class DockRestoreRectangleTests(unittest.TestCase):
             r"(?m)^\s*onClicked:\s*function\s*\([^)]*\)\s*\{",
         )
 
-        # T19: the hint is the thumbnail's REST geometry — mapped from
-        # root.parent (the ListView contentItem, no scale), excluding the
-        # add-transition/press scale and click bounce.
-        self.assertRegex(rectangle, r"topLeft\s*=\s*p\.mapToItem\(null,\s*restX,\s*restY\)")
         self.assertRegex(
             rectangle,
-            r"bottomRight\s*=\s*p\.mapToItem\(null,\s*restX\s*\+\s*restW,\s*restY\s*\+\s*restH\)",
+            r"topLeft\s*=\s*previewFrame\.mapToItem\(null,\s*0,\s*0\)",
         )
-        self.assertNotIn("previewFrame.mapToItem", rectangle)
+        self.assertRegex(
+            rectangle,
+            r"bottomRight\s*=\s*previewFrame\.mapToItem"
+            r"\(null,\s*previewFrame\.width,\s*previewFrame\.height\)",
+        )
         self.assertRegex(rectangle, r"Math\.max\(1,\s*right\s*-\s*left\)")
         self.assertRegex(rectangle, r"Math\.max\(1,\s*bottom\s*-\s*top\)")
         self.assertRegex(
@@ -386,6 +383,7 @@ class DockRestoreRectangleTests(unittest.TestCase):
             rectangle,
             r"bottom\s*=\s*Math\.ceil\([^;\n]*-\s*root\.dockSlideOffset[^;\n]*\)",
         )
+        self.assertNotIn("root.mapToItem(null, 0, 0)", rectangle)
 
         assert_in_order(self, restore, "root.updateDockRectangle(true)", "root.windowsService.restore")
         # R04: production path goes through the Shell publisher owner.

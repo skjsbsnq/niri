@@ -17,23 +17,6 @@ Item {
     property var dockSurfaceItem
     property real dockSlideOffset: 0
     property int thumbnailWidth: 112
-    // T19: single source for the shelf's per-slot spacing and delegate rest
-    // height; Dock reads these to predict the appended-slot rect, and the
-    // ListView/delegate consume them below (no parallel literals).
-    property int shelfSpacing: 8
-    property int thumbnailHeight: 62
-    // T19/S-M3: ancestor scene offset forwarded from Dock and on to each
-    // delegate so it can re-publish when the shelf reflows/scrolls. Exposed
-    // read-only for Dock's minimized-section scene offset trigger.
-    property real dockSceneOffsetX: 0
-    property real dockSceneOffsetY: 0
-    // T19: fullscreen parity forwarded to each delegate (mirror WindowButton)
-    // so the shelf hint undoes the dockRow fullscreen slide and suppresses
-    // republish while the Dock layer is unmapped for fullscreen.
-    property real dockFullscreenOffset: 0
-    property bool dockFullscreenActive: false
-    readonly property real viewportContentX: viewport.contentX
-    readonly property real viewportContentY: viewport.contentY
     readonly property var minimizedWindows: windowsService && windowsService.minimizedWindowList
         ? windowsService.minimizedWindowList
         : []
@@ -67,7 +50,7 @@ Item {
         height: parent.height + 30
         topMargin: 30
         orientation: ListView.Horizontal
-        spacing: root.shelfSpacing
+        spacing: 8
         clip: true
         boundsBehavior: Flickable.StopAtBounds
         flickableDirection: Flickable.HorizontalFlick
@@ -137,7 +120,6 @@ Item {
             required property var modelData
 
             width: root.thumbnailWidth
-            height: root.thumbnailHeight
             windowModel: modelData
             windowsService: root.windowsService
             thumbnailProvider: root.thumbnailProvider
@@ -147,10 +129,6 @@ Item {
             dockWindow: root.dockWindow
             dockSurfaceItem: root.dockSurfaceItem
             dockSlideOffset: root.dockSlideOffset
-            dockSceneOffsetX: root.dockSceneOffsetX
-            dockSceneOffsetY: root.dockSceneOffsetY
-            dockFullscreenOffset: root.dockFullscreenOffset
-            dockFullscreenActive: root.dockFullscreenActive
             onDockPointerMoved: function(x, buttons) {
                 root.dockPointerMoved(x, buttons === undefined ? Qt.NoButton : buttons);
             }

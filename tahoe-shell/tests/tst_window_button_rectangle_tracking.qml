@@ -155,33 +155,13 @@ TestCase {
         compare(windowsService.events[0].force, true);
     }
 
-    function test_visual_mag_push_excluded_from_rest_hint() {
-        // T19: the hover wave (magnification/pushX) is a visual-only transform
-        // and must NOT enter the foreign-toplevel hint or trigger a republish —
-        // the hint is the icon's REST geometry. Changing the wave leaves the
-        // reported rectangle at its rest value with no new publish, and a forced
-        // re-publish reports the same rest rect (no wave distortion).
-        windowsService.reset();
-        button.updateDockRectangle();
-        compare(windowsService.callCount, 1);
-        var restLeft = windowsService.lastLeft;
-        var restTop = windowsService.lastTop;
-
+    function test_visual_mag_push_schedules_republish() {
         windowsService.reset();
         button.magnification = 1.4;
+        tryVerify(function() { return windowsService.callCount > 0; }, 500);
+        windowsService.reset();
         button.pushX = 12;
-        wait(60);  // allow any (incorrect) queued republish to flush
-        compare(windowsService.callCount, 0);
-
-        // A forced re-publish still reports the REST rect, unchanged by the wave.
-        button.updateDockRectangle(true);
-        compare(windowsService.callCount, 1);
-        compare(windowsService.lastLeft, restLeft);
-        compare(windowsService.lastTop, restTop);
-
-        // Restore the default wave state for any later test in this case.
-        button.magnification = 1.0;
-        button.pushX = 0;
+        tryVerify(function() { return windowsService.callCount > 0; }, 500);
     }
 
     function test_no_direct_setrectangle_bypass() {

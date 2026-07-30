@@ -162,8 +162,20 @@ PanelWindow {
     // natural size (no first-frame scale-up). Only the ->resting_time
     // collapse is excluded; expand, transient<->transient, and the media
     // morph keep compositorMorph.
-    readonly property bool compositorMorphAllowed: root.compositorMorph
-        && String(root.effectiveGeometryState || "") !== "resting_time"
+    //
+    // The gate is evaluated INLINE inside each retarget*Driver, not as a
+    // readonly property binding. Reason: the drivers run from
+    // onCapsuleTargetWidthChanged / ...Height / ...Radius (change-signal
+    // handlers), and capsuleTarget* itself depends on effectiveGeometryState.
+    // A sibling readonly binding on effectiveGeometryState is NOT guaranteed
+    // to have flushed before capsuleTarget*'s change-signal fires (Qt does
+    // not promise binding evaluation order), so reading such a binding in
+    // the handler could return the STALE previous-frame value — letting the
+    // collapse-to-clock path still ride the compositor morph (first-frame
+    // scale-up) AND letting the expand path skip the compositor morph (content
+    // snapping with no smooth scale). Reading effectiveGeometryState directly
+    // in the function body is safe: by the time capsuleTarget* changed enough
+    // to emit, effectiveGeometryState has already settled to its new value.
     // R08 geometry driver pipeline. Springs drive the island driver values
     // only; islandSurface binds clamp(driver, min, max) and the TahoeGlass
     // region submits quantized clamped values — the region can never leave
@@ -350,7 +362,9 @@ PanelWindow {
             driverWidthEase.restart();
             return;
         }
-        if (root.compositorMorphAllowed && root.queueCompositorMorph()) {
+        if (root.compositorMorph
+                && String(root.effectiveGeometryState || "") !== "resting_time"
+                && root.queueCompositorMorph()) {
             // Content lays out at the target once; reveal gates open
             // immediately (base = target) while the compositor morphs.
             root.islandDriverWidth = root.capsuleTargetWidth;
@@ -378,7 +392,9 @@ PanelWindow {
         root.morphBaseHeight = root.islandDriverHeight;
         driverHeightSpring.stop();
         driverHeightEase.stop();
-        if (root.compositorMorphAllowed && !root.swipeInteractive && !root.swipeSettling
+        if (root.compositorMorph
+                && String(root.effectiveGeometryState || "") !== "resting_time"
+                && !root.swipeInteractive && !root.swipeSettling
                 && root.queueCompositorMorph()) {
             root.islandDriverHeight = root.capsuleTargetHeight;
             root.morphBaseHeight = root.capsuleTargetHeight;
@@ -403,7 +419,9 @@ PanelWindow {
             return;
         }
         driverRadiusEase.stop();
-        if (root.compositorMorphAllowed && !root.swipeInteractive && !root.swipeSettling) {
+        if (root.compositorMorph
+                && String(root.effectiveGeometryState || "") !== "resting_time"
+                && !root.swipeInteractive && !root.swipeSettling) {
             // Compositor morph: radius must land with the single region
             // commit; the visual corner transition rides the surface morph.
             root.islandDriverRadius = root.capsuleTargetRadius;

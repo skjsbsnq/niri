@@ -357,27 +357,41 @@ class DynamicIslandV2SurfaceTests(unittest.TestCase):
         # target-committed (small) clock onto the previous (larger) footprint,
         # scaling it up before shrinking back — the "magnified clock then
         # recovers" symptom. Collapsing into resting_time must fall back to the
-        # client eased/spring driver instead. The bypass is one shared gate
-        # (compositorMorphAllowed) read by all three geometry drivers, so the
-        # radius does not snap ahead of the still-easing width/height.
-        self.assertIn("readonly property bool compositorMorphAllowed", self.overlay)
-        gate = re.search(
-            r"readonly property bool compositorMorphAllowed:\s*([^\n]+(?:\n[ \t]+[^\n]+)*)",
-            self.overlay,
-        )
-        self.assertIsNotNone(gate)
-        gate_text = gate.group(1)
-        self.assertIn("root.compositorMorph", gate_text)
-        self.assertIn('"resting_time"', gate_text)
-        # All three geometry drivers route on the shared gate, not the raw
-        # protocol-availability flag — collapse-to-clock must not snap.
+        # client eased/spring driver instead.
+        #
+        # The bypass is evaluated INLINE inside each retarget*Driver — NOT as a
+        # shared readonly property binding. A sibling binding on
+        # effectiveGeometryState is not guaranteed to flush before
+        # capsuleTarget*'s change-signal fires (Qt does not promise binding
+        # evaluation order), so reading it in the change-signal handler could
+        # return the stale previous-frame value: collapse-to-clock would still
+        # ride the compositor morph (first-frame scale-up) and expand would
+        # skip it (content snapping, no smooth scale). Reading
+        # effectiveGeometryState directly in the driver body is fresh because
+        # by the time capsuleTarget* changed enough to emit, EGS has already
+        # settled. All three drivers share the inline condition so width/
+        # height/radius route together (radius does not snap ahead of the
+        # still-easing width/height). There must be no leftover
+        # compositorMorphAllowed binding either — that is the stale-read trap.
+        self.assertNotIn("compositorMorphAllowed", self.overlay)
+        # All three geometry drivers inline the collapse-to-clock bypass:
+        # compositorMorph AND effectiveGeometryState !== "resting_time".
         for fn_name in ("retargetWidthDriver", "retargetHeightDriver", "retargetRadiusDriver"):
             with self.subTest(driver=fn_name):
                 body = _function_body(self.overlay, fn_name)
                 self.assertTrue(body, f"{fn_name} body not found")
-                self.assertIn("root.compositorMorphAllowed", body)
-                self.assertNotIn("root.compositorMorph ", body)
-                self.assertNotIn("root.compositorMorph&&", body)
+                self.assertIn("root.compositorMorph", body)
+                self.assertIn("root.effectiveGeometryState", body)
+                self.assertIn('"resting_time"', body)
+                # Lock the exclusion direction: collapse-to-clock must be
+                # excluded (!==), never only-included (=== would snap it).
+                self.assertIn('!== "resting_time"', body)
+                # The compositor-availability flag must be gated by the
+                # resting_time exclusion in the same condition — never the
+                # raw flag alone (that would snap collapse-to-clock).
+                cm = body.index("root.compositorMorph")
+                rt = body.index('"resting_time"')
+                self.assertLess(cm, rt, f"{fn_name}: resting_time guard must follow compositorMorph")
 
     def _quantize_ceil(self, value: float, quantum: int) -> int:
         return max(0, math.ceil(value / quantum) * quantum)

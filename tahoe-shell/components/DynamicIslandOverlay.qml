@@ -213,24 +213,21 @@ PanelWindow {
         root.islandAnimatedWidth / 2,
         root.islandAnimatedHeight / 2))
 
-    // T24: media content expand progress, 0..1. Under the compositor-morph
-    // path the geometry driver SNAPS to target (the compositor owns the
-    // whole-surface proportional scale), so a height-bound progress would
-    // snap 0->1 on expand and defeat MediaView's staged content morph —
-    // text/buttons/cover would all jump to the expanded layout on frame 1
-    // (the "font flashes, controls pop in, cover snaps" symptom). To keep
-    // the content morph continuous while the compositor still gets its
-    // one-shot target commit, the compositor path drives this progress
-    // from an independent client clock (mediaContentMorphEase) that runs the
-    // same duration+curve as the compositor morph (geometryEaseDurationMs +
-    // v2GeometryEasing). The non-compositor paths (swipe 1:1, fallback
-    // spring/ease) keep the legacy height-bound value via
-    // legacyMediaExpandProgress — there the geometry IS continuous, so the
-    // height shadow is the correct content clock. mediaProgressDrivenByAnimation
-    // is toggled by armMediaContentMorph/releaseMediaContentMorph; while
-    // true the animation owns this value, while false it tracks legacy.
-    property real mediaExpandProgress: 0
-    property bool mediaProgressDrivenByAnimation: false
+    // T25: media content expand progress, 0..1, driven continuously by the
+    // live capsule height (legacyMediaExpandProgress). The media expand/
+    // collapse path now BYPASSES the P05 compositor region morph (see the
+    // gate in retarget*Driver) and rides the client eased/spring driver
+    // instead, so the geometry is continuous — the height shadow IS the
+    // correct content clock. Earlier (T24) the compositor path SNAPPED the
+    // geometry to target and drove this progress from an independent client
+    // clock so MediaView's staged morph stayed continuous; but that made the
+    // compositor's whole-surface proportional scale AND the content's staged
+    // morph BOTH transform the same elements (font scaled twice, buttons
+    // translated twice, cover moved twice) — the "font flashes / controls
+    // pop in / cover snaps / buttons jump on collapse" double-amplify symptom.
+    // Routing media morph through the client driver leaves a SINGLE transform
+    // (the content's own staged morph), which is what reads as smooth.
+    readonly property real mediaExpandProgress: root.legacyMediaExpandProgress
     readonly property real legacyMediaExpandProgress: {
         var compactH = IslandMotion.v2CompactMediaHeight;
         var expandedH = Math.round(
@@ -247,19 +244,6 @@ PanelWindow {
         if (state === "expanded_media")
             return Math.max(0, Math.min(1, (h - compactH) / span));
         return 0;
-    }
-    // Explicit sync (T23 lesson: do NOT rely on sibling-binding flush order).
-    // legacyMediaExpandProgress and mediaProgressDrivenByAnimation are both
-    // bindings off effectiveContentState/islandAnimatedHeight; when either
-    // changes we resync mediaExpandProgress here. While the animation is
-    // driving, it owns the value (do not clobber it from legacy).
-    onLegacyMediaExpandProgressChanged: {
-        if (!root.mediaProgressDrivenByAnimation)
-            root.mediaExpandProgress = root.legacyMediaExpandProgress;
-    }
-    onMediaProgressDrivenByAnimationChanged: {
-        if (!root.mediaProgressDrivenByAnimation)
-            root.mediaExpandProgress = root.legacyMediaExpandProgress;
     }
 
     // Geometry morph progress 0→1 along the dominant height axis (used by
@@ -344,75 +328,9 @@ PanelWindow {
     onSwipeInteractiveChanged: {
         if (root.swipeInteractive && root.compositorMorph)
             root.TahoeGlass.sendTransform(0, 0, 1, 1);
-        // T24: a swipe drag takes geometry per-frame on the legacy pipeline;
-        // let media content progress follow the live height 1:1 (legacy) and
-        // stop any in-flight content morph animation from lagging the pointer.
-        if (root.swipeInteractive)
-            root.releaseMediaContentMorph();
-    }
-
-    // T24: drive the media content expand progress from an independent
-    // client clock so the compositor-morph path (which snaps geometry to
-    // target) still yields a continuous content morph. Called from the
-    // height driver's compositor branch right after the geometry snap.
-    // effectiveContentState is read INLINE here, not via a sibling binding —
-    // by the time capsuleTargetHeight changed enough to emit, the common
-    // dependency has already settled (same rationale as the T23 gate).
-    function claimMediaContentMorph() {
-        // T24: claim ownership of mediaExpandProgress BEFORE a geometry snap
-        // so the synchronous onLegacyMediaExpandProgressChanged fired by the
-        // snap write is guarded out (gate true -> handler skips). Stopping the
-        // clocks here also means a rapid re-retarget cannot leave a stale
-        // animation running into the new claim. Does not read content state or
-        // start an animation — armMediaContentMorph does that after the snap.
-        root.mediaProgressDrivenByAnimation = true;
-        mediaContentMorphEase.stop();
-        mediaContentMorphSpring.stop();
-    }
-    function armMediaContentMorph() {
-        var st = String(root.effectiveContentState || "");
-        // Only the media scene (resting_media <-> expanded_media) consumes
-        // mediaExpandProgress. Other compositor-morph transitions
-        // (transient<->transient, etc.) must not fight it — release to the
-        // height-bound legacy value.
-        if (st !== "resting_media" && st !== "expanded_media") {
-            root.releaseMediaContentMorph();
-            return;
-        }
-        var target = (st === "expanded_media") ? 1 : 0;
-        root.mediaProgressDrivenByAnimation = true;
-        // Stay in lockstep with the compositor surface morph by mirroring the
-        // SAME spring/eased split queueCompositorMorph() uses for the surface:
-        //   - spring path (production useSpring + compositor available, not
-        //     reduced): drive content from a SpringAnimation with the geometry
-        //     driver's spring constants (v2GeometrySpring) — Motion.js notes
-        //     these are the niri-space equivalent of the compositor spring, so
-        //     content staging rides the same bouncy curve the surface rides.
-        //   - eased path (no spring / reduced motion / OSD): NumberAnimation
-        //     OutCubic over geometryEaseDurationMs() (reduced -> 80ms). This is
-        //     the exact curve the eased compositor morph uses (v2GeometryEasing
-        //     == v2CompositorGeometryBezier == OutCubic), so the two are in
-        //     lockstep. Using a single eased NumberAnimation for the spring
-        //     path instead would desync: content would settle at ~280ms while
-        //     the surface spring still overshoots toward ~540ms settle.
-        mediaContentMorphEase.stop();
-        mediaContentMorphSpring.stop();
-        if (!root.osdImmediateGeometry
-                && IslandMotion.geometrySpringEnabled(root.settingsService, root.useSpring)) {
-            mediaContentMorphSpring.to = target;
-            mediaContentMorphSpring.restart();
-        } else {
-            mediaContentMorphEase.duration = root.geometryEaseDurationMs();
-            mediaContentMorphEase.to = target;
-            mediaContentMorphEase.restart();
-        }
-    }
-    function releaseMediaContentMorph() {
-        mediaContentMorphEase.stop();
-        mediaContentMorphSpring.stop();
-        root.mediaProgressDrivenByAnimation = false;
-        // Resync to the height-bound legacy value (swipe 1:1 / fallback).
-        root.mediaExpandProgress = root.legacyMediaExpandProgress;
+        // T25: a swipe drag takes geometry per-frame on the legacy pipeline;
+        // mediaExpandProgress already follows the live height 1:1 via the
+        // readonly legacy binding (no independent content clock to release).
     }
 
     function queueCompositorMorph() {
@@ -459,8 +377,19 @@ PanelWindow {
             driverWidthEase.restart();
             return;
         }
+        // T25: read the common dependency (effectiveGeometryState) inline as a
+        // local, then exclude resting_time (T-23) AND the media states. Media
+        // expand/collapse (resting_media<->expanded_media, plus enter/exit media
+        // resting_time<->resting_media) bypasses the compositor's whole-surface
+        // affine scale and goes through the client driver (spring/ease), so the
+        // content's own staged morph is the only transform on text/buttons/cover
+        // — no double-amplify. Reading the state inline (not via a sibling
+        // binding) avoids the Qt sibling-flush-order stale-read trap (T-23).
+        var stW = String(root.effectiveGeometryState || "");
         if (root.compositorMorph
-                && String(root.effectiveGeometryState || "") !== "resting_time"
+                && stW !== "resting_time"
+                && stW !== "resting_media"
+                && stW !== "expanded_media"
                 && root.queueCompositorMorph()) {
             // Content lays out at the target once; reveal gates open
             // immediately (base = target) while the compositor morphs.
@@ -489,40 +418,30 @@ PanelWindow {
         root.morphBaseHeight = root.islandDriverHeight;
         driverHeightSpring.stop();
         driverHeightEase.stop();
+        // T25: media states bypass the compositor morph (see retargetWidthDriver
+        // for the inline-state rationale). With the bypass, geometry animates
+        // continuously through the client driver, so mediaExpandProgress (back
+        // to a readonly height-binding) follows the live height and the content
+        // staged morph is the only transform — no double-amplify, no snap.
+        var stH = String(root.effectiveGeometryState || "");
         if (root.compositorMorph
-                && String(root.effectiveGeometryState || "") !== "resting_time"
+                && stH !== "resting_time"
+                && stH !== "resting_media"
+                && stH !== "expanded_media"
                 && !root.swipeInteractive && !root.swipeSettling
                 && root.queueCompositorMorph()) {
-            // T24: claim content-morph ownership BEFORE the geometry snap.
-            // Writing islandDriverHeight re-evaluates legacyMediaExpandProgress
-            // synchronously and fires onLegacyMediaExpandProgressChanged during
-            // the assignment; if the gate were still false that handler would
-            // copy the now-target value into mediaExpandProgress and snap the
-            // content to the expanded layout on frame 1 (the exact "font
-            // flashes / controls pop in / cover snaps" symptom). Claiming first
-            // makes the handler skip, so the independent clock owns the value.
-            root.claimMediaContentMorph();
+            // Content lays out at the target once; reveal gates open
+            // immediately (base = target) while the compositor morphs.
             root.islandDriverHeight = root.capsuleTargetHeight;
             root.morphBaseHeight = root.capsuleTargetHeight;
-            // T24: geometry snapped for the compositor; start the independent
-            // content morph clock so text/buttons/cover animate continuously
-            // (not snap to the target layout).
-            root.armMediaContentMorph();
             return;
         }
         if (!root.osdImmediateGeometry
                 && IslandMotion.geometrySpringEnabled(root.settingsService, root.useSpring)) {
-            // T24: fallback path drives geometry continuously, so content
-            // progress follows the live height (legacy). Stop any in-flight
-            // content morph animation so it does not fight the spring.
-            root.releaseMediaContentMorph();
             driverHeightSpring.to = root.capsuleTargetHeight;
             driverHeightSpring.restart();
             return;
         }
-        // T24: same as the spring branch — ease is continuous, content
-        // progress follows the live height (legacy).
-        root.releaseMediaContentMorph();
         driverHeightEase.duration = root.geometryEaseDurationMs();
         driverHeightEase.to = root.capsuleTargetHeight;
         driverHeightEase.restart();
@@ -536,8 +455,13 @@ PanelWindow {
             return;
         }
         driverRadiusEase.stop();
+        // T25: media states bypass the compositor morph (see retargetWidthDriver
+        // for the inline-state rationale); radius eases along the client driver.
+        var stR = String(root.effectiveGeometryState || "");
         if (root.compositorMorph
-                && String(root.effectiveGeometryState || "") !== "resting_time"
+                && stR !== "resting_time"
+                && stR !== "resting_media"
+                && stR !== "expanded_media"
                 && !root.swipeInteractive && !root.swipeSettling) {
             // Compositor morph: radius must land with the single region
             // commit; the visual corner transition rides the surface morph.
@@ -560,10 +484,10 @@ PanelWindow {
         root.islandDriverRadius = root.capsuleTargetRadius;
         root.morphBaseWidth = root.capsuleTargetWidth;
         root.morphBaseHeight = root.capsuleTargetHeight;
-        // T24: a non-state-change retarget (screen resize, owner swap, init);
-        // reset content progress to the height-bound legacy value and drop
-        // any stale animation ownership so the value is consistent.
-        root.releaseMediaContentMorph();
+        // Non-state-change retarget (screen resize, owner swap, init):
+        // mediaExpandProgress is a readonly height-binding again (T25), so the
+        // height snap above already leaves content progress consistent — no
+        // separate content-clock ownership to release.
     }
 
     function armCollapseWidthFreeze() {
@@ -675,44 +599,6 @@ PanelWindow {
         id: driverRadiusEase
         target: root
         property: "islandDriverRadius"
-        easing.type: IslandMotion.v2GeometryEasing
-    }
-
-    // T24: independent clock for the media content expand progress under
-    // the compositor-morph path (where the geometry driver snaps to target).
-    // The compositor morph timeline is what the surface visually rides, so the
-    // content clock must ride the SAME timeline to stay in lockstep:
-    //   - spring path (production useSpring + compositor available, not
-    //     reduced): mediaContentMorphSpring uses the geometry-driver spring
-    //     constants (v2GeometrySpring) — Motion.js notes these are the
-    //     niri-space equivalent of the compositor spring, so content staging
-    //     rides the same bouncy overshoot the surface rides. A single eased
-    //     NumberAnimation here would desync: content would settle at ~280ms
-    //     while the surface spring overshoots toward ~540ms settle.
-    //   - eased path (no spring / reduced motion / OSD): mediaContentMorphEase
-    //     OutCubic over geometryEaseDurationMs() (reduced -> 80ms). This is the
-    //     exact curve the eased compositor morph uses (v2GeometryEasing ==
-    //     v2CompositorGeometryBezier == OutCubic), so the two are in lockstep.
-    // armMediaContentMorph picks the branch mirroring queueCompositorMorph();
-    // releaseMediaContentMorph stops both and resyncs to the height-bound
-    // legacy value.
-    SpringAnimation {
-        id: mediaContentMorphSpring
-        target: root
-        property: "mediaExpandProgress"
-        spring: IslandMotion.v2GeometrySpring.spring
-        damping: IslandMotion.v2GeometrySpring.damping
-        // T24: mediaExpandProgress is a 0..1 unitless value, so use a 0..1-space
-        // epsilon — the px-scale v2GeometrySpringEpsilon (0.25) would mean "at
-        // rest anywhere in [0.75, 1.25]" and leave the final progress
-        // non-deterministic (only correct by overshoot+clamp accident).
-        epsilon: IslandMotion.v2ContentProgressSpringEpsilon
-    }
-
-    NumberAnimation {
-        id: mediaContentMorphEase
-        target: root
-        property: "mediaExpandProgress"
         easing.type: IslandMotion.v2GeometryEasing
     }
 

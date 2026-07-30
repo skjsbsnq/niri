@@ -153,6 +153,17 @@ PanelWindow {
             return "transient";
         return "collapse";
     }
+    // T23: collapsing into the resting clock must not ride the P05
+    // compositor region morph. That morph's first frame maps the
+    // target-committed (small) clock onto the previous (larger) footprint,
+    // scaling it up before shrinking back — the "magnified clock then
+    // recovers" symptom (like a left-drag stretch). Falling back to the
+    // client eased/spring driver lets the capsule shrink with its content at
+    // natural size (no first-frame scale-up). Only the ->resting_time
+    // collapse is excluded; expand, transient<->transient, and the media
+    // morph keep compositorMorph.
+    readonly property bool compositorMorphAllowed: root.compositorMorph
+        && String(root.effectiveGeometryState || "") !== "resting_time"
     // R08 geometry driver pipeline. Springs drive the island driver values
     // only; islandSurface binds clamp(driver, min, max) and the TahoeGlass
     // region submits quantized clamped values — the region can never leave
@@ -339,7 +350,7 @@ PanelWindow {
             driverWidthEase.restart();
             return;
         }
-        if (root.compositorMorph && root.queueCompositorMorph()) {
+        if (root.compositorMorphAllowed && root.queueCompositorMorph()) {
             // Content lays out at the target once; reveal gates open
             // immediately (base = target) while the compositor morphs.
             root.islandDriverWidth = root.capsuleTargetWidth;
@@ -367,7 +378,7 @@ PanelWindow {
         root.morphBaseHeight = root.islandDriverHeight;
         driverHeightSpring.stop();
         driverHeightEase.stop();
-        if (root.compositorMorph && !root.swipeInteractive && !root.swipeSettling
+        if (root.compositorMorphAllowed && !root.swipeInteractive && !root.swipeSettling
                 && root.queueCompositorMorph()) {
             root.islandDriverHeight = root.capsuleTargetHeight;
             root.morphBaseHeight = root.capsuleTargetHeight;
@@ -392,7 +403,7 @@ PanelWindow {
             return;
         }
         driverRadiusEase.stop();
-        if (root.compositorMorph && !root.swipeInteractive && !root.swipeSettling) {
+        if (root.compositorMorphAllowed && !root.swipeInteractive && !root.swipeSettling) {
             // Compositor morph: radius must land with the single region
             // commit; the visual corner transition rides the surface morph.
             root.islandDriverRadius = root.capsuleTargetRadius;

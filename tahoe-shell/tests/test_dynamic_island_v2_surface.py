@@ -352,6 +352,33 @@ class DynamicIslandV2SurfaceTests(unittest.TestCase):
     def _quantize_floor(self, value: float, quantum: int) -> int:
         return max(0, math.floor(value / quantum) * quantum)
 
+    def test_t23_collapse_to_clock_bypasses_compositor_morph(self) -> None:
+        # T23: the P05 compositor region morph's first frame maps the
+        # target-committed (small) clock onto the previous (larger) footprint,
+        # scaling it up before shrinking back — the "magnified clock then
+        # recovers" symptom. Collapsing into resting_time must fall back to the
+        # client eased/spring driver instead. The bypass is one shared gate
+        # (compositorMorphAllowed) read by all three geometry drivers, so the
+        # radius does not snap ahead of the still-easing width/height.
+        self.assertIn("readonly property bool compositorMorphAllowed", self.overlay)
+        gate = re.search(
+            r"readonly property bool compositorMorphAllowed:\s*([^\n]+(?:\n[ \t]+[^\n]+)*)",
+            self.overlay,
+        )
+        self.assertIsNotNone(gate)
+        gate_text = gate.group(1)
+        self.assertIn("root.compositorMorph", gate_text)
+        self.assertIn('"resting_time"', gate_text)
+        # All three geometry drivers route on the shared gate, not the raw
+        # protocol-availability flag — collapse-to-clock must not snap.
+        for fn_name in ("retargetWidthDriver", "retargetHeightDriver", "retargetRadiusDriver"):
+            with self.subTest(driver=fn_name):
+                body = _function_body(self.overlay, fn_name)
+                self.assertTrue(body, f"{fn_name} body not found")
+                self.assertIn("root.compositorMorphAllowed", body)
+                self.assertNotIn("root.compositorMorph ", body)
+                self.assertNotIn("root.compositorMorph&&", body)
+
     def _quantize_ceil(self, value: float, quantum: int) -> int:
         return max(0, math.ceil(value / quantum) * quantum)
 

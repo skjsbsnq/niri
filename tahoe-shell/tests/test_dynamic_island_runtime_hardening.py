@@ -92,8 +92,13 @@ class DynamicIslandRuntimeHardeningTests(unittest.TestCase):
         self.assertEqual(self.overlay.count("PanelWindow {"), 1)
         self.assertIn("TahoeGlass.regions: [islandSurface.region]", self.overlay)
         # R08: exactly the two geometry driver springs; region reads clamped
-        # quantized driver output, never a SpringAnimation directly.
-        self.assertEqual(self.overlay.count("SpringAnimation {"), 2)
+        # quantized driver output, never a SpringAnimation directly. The third
+        # SpringAnimation is mediaContentMorphSpring (T24) — it drives a 0..1
+        # content progress (not a geometry driver), so it cannot overhang the
+        # layer surface; the R08 region-leave guard still holds at 2 geometry
+        # springs.
+        self.assertEqual(self.overlay.count("SpringAnimation {"), 3)
+        self.assertIn("id: mediaContentMorphSpring", self.overlay)
         self.assertIn("islandDriverWidth", self.overlay)
         self.assertIn("islandDriverHeight", self.overlay)
         self.assertIn("exclusiveZone: 0", self.overlay)

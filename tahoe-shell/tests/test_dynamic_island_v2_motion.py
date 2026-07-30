@@ -62,8 +62,13 @@ class DynamicIslandV2MotionTests(unittest.TestCase):
         self.assertIn("geometryEaseDurationMs", self.overlay)
         self.assertIn("geometryMorphKind", self.overlay)
         # R08: springs exist only as geometry driver animations (width/height);
-        # the surface/region read clamped driver output.
-        self.assertEqual(self.overlay.count("SpringAnimation {"), 2)
+        # the surface/region read clamped driver output. The third
+        # SpringAnimation is mediaContentMorphSpring (T24) — it drives a 0..1
+        # content progress (not a geometry driver), so it cannot overhang the
+        # layer surface; the R08 region-leave guard still holds at 2 geometry
+        # springs.
+        self.assertEqual(self.overlay.count("SpringAnimation {"), 3)
+        self.assertIn("id: mediaContentMorphSpring", self.overlay)
         self.assertRegex(
             self.overlay,
             r"SpringAnimation \{\s*\n\s*id: driverWidthSpring\s*\n\s*target: root\s*\n\s*property: \"islandDriverWidth\"",

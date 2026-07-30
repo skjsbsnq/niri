@@ -147,10 +147,15 @@ class DynamicIslandExpandMorphTests(unittest.TestCase):
         self.assertNotIn("id: contentSwap", self.overlay)
         self.assertNotIn("contentLayerOpacity", self.overlay)
         self.assertNotIn("pendingContentState", self.overlay)
-        # Glass region still quantized / settled — R08 path intact.
+        # Glass region still quantized / settled — R08 path intact. The third
+        # SpringAnimation is mediaContentMorphSpring (T24) — it drives a 0..1
+        # content progress (not a geometry driver), so it cannot overhang the
+        # layer surface; the R08 region-leave guard still holds at 2 geometry
+        # springs.
         self.assertIn("protocolGeometrySettled", self.overlay)
         self.assertIn("quantizeProtocolFloor", self.overlay)
-        self.assertEqual(self.overlay.count("SpringAnimation {"), 2)
+        self.assertEqual(self.overlay.count("SpringAnimation {"), 3)
+        self.assertIn("id: mediaContentMorphSpring", self.overlay)
 
     def test_no_parallel_geometry_owner(self) -> None:
         # Drivers remain on Overlay root; no second morph service.

@@ -56,8 +56,19 @@ var v2GeometrySpring = {
     damping: 0.28
 };
 // Stop the spring tail early so the settled snap engages promptly (protocol
-// settle threshold in the overlay is 0.6 > this epsilon).
+// settle threshold in the overlay is 0.6 > this epsilon). Tuned for the
+// GEOMETRY drivers, whose target is in px (range ~36-172) — 0.25px is
+// sub-pixel there. Do NOT reuse this for a 0..1 unitless progress; use
+// v2ContentProgressSpringEpsilon instead.
 var v2GeometrySpringEpsilon = 0.25;
+// T24: epsilon for the media content-progress spring (mediaContentMorphSpring),
+// whose target mediaExpandProgress is a 0..1 unitless value. The geometry
+// epsilon (0.25) would mean "at rest anywhere in [0.75, 1.25]" for a 0..1
+// value — the final resting progress would be non-deterministic and only
+// correct by overshoot+clamp accident, fragile to spring-constant changes.
+// 0.005 mirrors the compositor spring epsilon (v2CompositorGeometrySpring
+// .epsilon = 0.003): a tight band so the progress pins to 1.0 / 0.0 at rest.
+var v2ContentProgressSpringEpsilon = 0.005;
 
 // Protocol quantization during morph (R08 #22). Width/height floor to the
 // quantum so the glass region never overhangs the painted capsule (the old

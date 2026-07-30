@@ -294,8 +294,13 @@ class MotionTokenConvergenceTests(unittest.TestCase):
         self.assertNotIn("contentScaleSpring", overlay)
         self.assertIn("scale: 1.0", overlay)
         # R08: island geometry springs exist only as clamped driver animations
-        # (width/height); the glass region reads quantized clamped output.
-        self.assertEqual(overlay.count("SpringAnimation {"), 2)
+        # (width/height); the glass region reads quantized clamped output. The
+        # third SpringAnimation is mediaContentMorphSpring (T24) — it drives a
+        # 0..1 content progress (not a geometry driver), so it cannot overhang
+        # the layer surface; the R08 region-leave guard still holds at 2
+        # geometry springs.
+        self.assertEqual(overlay.count("SpringAnimation {"), 3)
+        self.assertIn("id: mediaContentMorphSpring", overlay)
         # Swipe IPC path still wired (debug + settle).
         self.assertIn("beginSwipe", overlay)
         self.assertIn("advanceSwipe", overlay)

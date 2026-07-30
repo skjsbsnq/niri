@@ -393,6 +393,101 @@ class DynamicIslandV2SurfaceTests(unittest.TestCase):
                 rt = body.index('"resting_time"')
                 self.assertLess(cm, rt, f"{fn_name}: resting_time guard must follow compositorMorph")
 
+    def test_t24_media_content_progress_decoupled_from_geometry_snap(self) -> None:
+        # T24: under the compositor-morph path the geometry driver SNAPS to
+        # target (the compositor owns the whole-surface proportional scale).
+        # A height-bound mediaExpandProgress would snap 0->1 on expand,
+        # defeating MediaView's staged content morph — text/buttons/cover
+        # all jump to the expanded layout on frame 1 (the "font flashes,
+        # controls pop in, cover snaps" symptom). The fix decouples the
+        # content progress to an independent client clock while keeping the
+        # legacy height-bound value for the non-compositor (swipe/fallback)
+        # paths. mediaExpandProgress stays the single consumer-facing
+        # property (Content/MediaView unchanged) — only its driver source
+        # is migrated; this is NOT a parallel interface.
+        # mediaExpandProgress must be writable (animation-driven), not readonly.
+        self.assertNotIn("readonly property real mediaExpandProgress", self.overlay)
+        self.assertIn("property real mediaExpandProgress", self.overlay)
+        # The legacy height-bound formula is preserved verbatim.
+        self.assertIn("readonly property real legacyMediaExpandProgress", self.overlay)
+        # The independent animation clock exists and targets mediaExpandProgress.
+        # There are TWO clocks mirroring queueCompositorMorph()'s spring/eased
+        # split so the content morph stays in lockstep with the surface morph
+        # under both paths (a single eased clock would desync under the
+        # production spring path — content settling at ~280ms while the surface
+        # spring overshoots toward ~540ms).
+        self.assertIn("id: mediaContentMorphEase", self.overlay)
+        self.assertIn("id: mediaContentMorphSpring", self.overlay)
+        self.assertIn("IslandMotion.v2GeometryEasing", self.overlay)
+        # The spring uses the geometry-driver spring constants (the niri-space
+        # equivalent of the compositor spring, per Motion.js) but a 0..1-space
+        # epsilon — the px-scale v2GeometrySpringEpsilon (0.25) would mean "at
+        # rest anywhere in [0.75, 1.25]" for a 0..1 progress and leave the final
+        # value non-deterministic (only correct by overshoot+clamp accident).
+        self.assertIn("id: mediaContentMorphSpring", self.overlay)
+        self.assertIn("IslandMotion.v2GeometrySpring.spring", self.overlay)
+        self.assertIn("IslandMotion.v2GeometrySpring.damping", self.overlay)
+        self.assertIn("IslandMotion.v2ContentProgressSpringEpsilon", self.overlay)
+        self.assertIn("var v2ContentProgressSpringEpsilon = 0.005", self.motion)
+        # armMediaContentMorph reads effectiveContentState INLINE (not a sibling
+        # binding — same T23 lesson) and only animates the media scene. It
+        # picks spring vs eased using the SAME condition queueCompositorMorph
+        # uses (!osdImmediateGeometry && geometrySpringEnabled).
+        arm = _function_body(self.overlay, "armMediaContentMorph")
+        self.assertTrue(arm, "armMediaContentMorph not found")
+        self.assertIn("root.effectiveContentState", arm)
+        self.assertIn('"resting_media"', arm)
+        self.assertIn('"expanded_media"', arm)
+        self.assertIn("mediaContentMorphEase.stop()", arm)
+        self.assertIn("mediaContentMorphSpring.stop()", arm)
+        self.assertIn("osdImmediateGeometry", arm)
+        self.assertIn("IslandMotion.geometrySpringEnabled(root.settingsService, root.useSpring)", arm)
+        self.assertIn("mediaContentMorphSpring.restart()", arm)
+        self.assertIn("mediaContentMorphEase.duration = root.geometryEaseDurationMs()", arm)
+        self.assertIn("mediaContentMorphEase.restart()", arm)
+        # releaseMediaContentMorph hands the value back to legacy + clears the
+        # animation-ownership gate; it stops BOTH clocks.
+        release = _function_body(self.overlay, "releaseMediaContentMorph")
+        self.assertTrue(release, "releaseMediaContentMorph not found")
+        self.assertIn("mediaContentMorphEase.stop()", release)
+        self.assertIn("mediaContentMorphSpring.stop()", release)
+        self.assertIn("root.legacyMediaExpandProgress", release)
+        # claimMediaContentMorph sets the ownership gate BEFORE the geometry
+        # snap. Writing islandDriverHeight re-evaluates legacyMediaExpandProgress
+        # synchronously and fires onLegacyMediaExpandProgressChanged during the
+        # assignment; if the gate were still false the handler would copy the
+        # target value into mediaExpandProgress and snap content to the expanded
+        # layout on frame 1. Claiming first guards the handler out.
+        claim = _function_body(self.overlay, "claimMediaContentMorph")
+        self.assertTrue(claim, "claimMediaContentMorph not found")
+        self.assertIn("root.mediaProgressDrivenByAnimation = true", claim)
+        self.assertIn("mediaContentMorphEase.stop()", claim)
+        self.assertIn("mediaContentMorphSpring.stop()", claim)
+        # The height driver's compositor branch CLAIMS ownership before the
+        # geometry snap (guards the synchronous legacy handler), SNAPS, then
+        # ARMS the independent content clock (snap feeds the compositor while
+        # the content morph stays continuous). Order: claim < snap < arm.
+        h = _function_body(self.overlay, "retargetHeightDriver")
+        self.assertTrue(h)
+        claim_idx = h.find("root.claimMediaContentMorph()")
+        # The compositor-branch snap is the one right after claim; find it
+        # after the claim (the not-ready early-return also snaps, earlier).
+        snap_idx = h.find("root.islandDriverHeight = root.capsuleTargetHeight", claim_idx)
+        arm_idx = h.find("root.armMediaContentMorph()", claim_idx)
+        self.assertGreater(claim_idx, -1, "claim call missing")
+        self.assertGreater(snap_idx, -1, "compositor-branch snap missing after claim")
+        self.assertGreater(arm_idx, -1, "arm call missing after claim")
+        self.assertGreater(snap_idx, claim_idx, "snap must follow claim (gate set before snap)")
+        self.assertGreater(arm_idx, snap_idx, "arm must follow the snap")
+        # Swipe takeover releases the animation so content follows the live
+        # height 1:1 (no animation lag behind the pointer).
+        self.assertIn("onSwipeInteractiveChanged", self.overlay)
+        self.assertIn("releaseMediaContentMorph()", self.overlay)
+        # No leftover stale sibling-binding trap: mediaExpandProgress must not
+        # be a readonly binding onto legacy (that would make it unwritable by
+        # the animation and re-introduce the snap).
+        self.assertNotIn("readonly property real mediaExpandProgress: root.legacyMediaExpandProgress", self.overlay)
+
     def _quantize_ceil(self, value: float, quantum: int) -> int:
         return max(0, math.ceil(value / quantum) * quantum)
 
@@ -448,7 +543,18 @@ class DynamicIslandV2SurfaceTests(unittest.TestCase):
         # R08: springs drive island driver values only; the surface binds
         # clamp(driver, min, max) and the region submits quantized clamped
         # values, so the region cannot leave the layer surface at overshoot.
-        self.assertEqual(self.overlay.count("SpringAnimation {"), 2)
+        # The third SpringAnimation is mediaContentMorphSpring (T24) — it drives
+        # a 0..1 content progress (clamped by Content/MediaView consumers), not
+        # a geometry driver, so it cannot overhang the layer surface. It uses
+        # the same v2GeometrySpring constants as the geometry-driver springs,
+        # mirroring queueCompositorMorph()'s spring path so the content morph
+        # stays in lockstep with the surface morph.
+        self.assertEqual(self.overlay.count("SpringAnimation {"), 3)
+        self.assertIn("id: mediaContentMorphSpring", self.overlay)
+        self.assertEqual(
+            self.overlay.count("property: \"mediaExpandProgress\""), 2,
+            "mediaExpandProgress driven by both the spring and the ease",
+        )
         self.assertIn("property real islandDriverWidth", self.overlay)
         self.assertIn("property real islandDriverHeight", self.overlay)
         self.assertIn("property real islandDriverRadius", self.overlay)

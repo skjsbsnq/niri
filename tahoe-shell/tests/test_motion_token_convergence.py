@@ -358,6 +358,9 @@ class MotionTokenConvergenceTests(unittest.TestCase):
         self.assertIn("Motion.ccMorphListMaxHeight", cc)
         self.assertIn("emphasizedDecel", cc)
         self.assertNotIn("SpringAnimation", cc)
+        # T-23: this used to be satisfied by the sibling stack's morph Behavior.
+        # That one is gone (the morph clock owns it now); the remaining match is
+        # the 「编辑控制项」utility row, which animates independently of the morph.
         self.assertIn("Behavior on Layout.preferredHeight", cc)
         self.assertNotIn("Behavior on height", cc)
         # content ColumnLayout is top-anchored (not fill) to avoid stretch bounce.
@@ -385,9 +388,14 @@ class MotionTokenConvergenceTests(unittest.TestCase):
         # Closing panel clears morph state (no layout residue).
         self.assertIn("onOpenChanged", cc)
         self.assertIn('root.expandedModule = ""', cc)
-        # Sibling stack collapses only while morph-expanded (-1 = auto otherwise).
-        self.assertIn("Layout.preferredHeight: root.moduleExpanded ? 0 : -1", cc)
-        self.assertIn("Layout.maximumHeight: root.moduleExpanded ? 0 : -1", cc)
+        # T-23/S-M2: the sibling stack no longer switches height on the module
+        # state. It collapses continuously through the shared morph clock, so the
+        # panel edge travels straight instead of diving on the first frame.
+        # Detail assertions live in test_control_center_morph_monotonic.py.
+        self.assertIn("id: siblingHost", cc)
+        self.assertIn("root.morphProgress", cc)
+        self.assertNotIn("Layout.preferredHeight: root.moduleExpanded ? 0 : -1", cc)
+        self.assertNotIn("Layout.maximumHeight: root.moduleExpanded ? 0 : -1", cc)
 
     def test_dock_uses_analytical_cosine_wave_and_unified_label(self) -> None:
         dock = (COMPONENTS_ROOT / "Dock.qml").read_text(encoding="utf-8")

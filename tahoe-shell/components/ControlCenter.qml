@@ -53,6 +53,36 @@ PanelWindow {
     readonly property int morphDuration: Motion.reducedMotion(settingsService) ? 0 : Motion.ccMorphDurationMs
     readonly property int collapsedTopHeight: 92
     readonly property int expandedTopHeight: 40 + Motion.ccMorphListMaxHeight + 12
+    // Gap between the morph host and the sibling stack. Owned by siblingHost
+    // (content.spacing is 0) so the gap collapses with the stack instead of
+    // stepping off in one frame when the stack stops being laid out.
+    readonly property int siblingGap: 12
+
+    // S-M2: single morph clock. Every morph-coupled geometry/opacity value is a
+    // linear function of this progress, so panel height moves monotonically and
+    // the two halves of the crossfade always sum to 1. Replaces the previous
+    // per-property Behaviors (morphHost height, both opacities, sibling offset),
+    // which ran independently and let the sibling stack snap to 0 on frame one
+    // while the host was still growing — the panel bottom edge jumped ~150-250px
+    // and came back.
+    // Writable only because Behavior drives it; the binding below is the sole
+    // intended writer — do not assign morphProgress imperatively.
+    property real morphProgress: root.moduleExpanded ? 1 : 0
+    // Suspends the morph clock's animation so a state change lands instantly.
+    // Written imperatively (never bound to root.open) because a binding on the
+    // Behavior would not be guaranteed to re-evaluate before onOpenChanged
+    // clears the module state — the animation would start anyway.
+    property bool morphAnimatable: true
+
+    Behavior on morphProgress {
+        // Feeds the glass region height — eased NumberAnimation only, no Spring
+        // (guardrail 0704ea4 / T11).
+        enabled: root.morphAnimatable
+        NumberAnimation {
+            duration: root.morphDuration
+            easing.type: Motion.emphasizedDecel
+        }
+    }
 
     signal closeRequested()
 
@@ -140,10 +170,20 @@ PanelWindow {
 
     onOpenChanged: {
         if (!open) {
+            // Suspend the morph clock before clearing module state so the reset
+            // lands in one step. Two reasons it must be imperative and ordered
+            // this way: clearing expandedModule only retargets a running
+            // Behavior, and the P02 freeze gate stops animation ticks the moment
+            // the surface unmaps — a morph left in flight would stay frozen at a
+            // partial value and the next open would resume from there instead of
+            // starting collapsed.
+            root.morphAnimatable = false;
             if (root.controlsService)
                 root.controlsService.setBluetoothDiscoveryActive(root.bluetoothDiscoveryOwner, false);
             root.expandedModule = "";
             root.controlsExpanded = false;
+        } else {
+            root.morphAnimatable = true;
         }
     }
 
@@ -191,11 +231,11 @@ PanelWindow {
         interaction: 0.0
         opacity: 1
 
-        // No Behavior on panel.height: content uses anchors.fill, so a lagged
+        // No Behavior on panel.height: content uses top anchors, so a lagged
         // height animation stretches the ColumnLayout (extra space) then snaps
         // back — visible as sliders jumping down on 「编辑控制项」collapse.
-        // Morph height is animated only via morphHost / sibling layout props;
-        // panel.height tracks content.implicitHeight 1:1 (still no Spring).
+        // Morph height is animated only through root.morphProgress; panel.height
+        // tracks content.implicitHeight 1:1 (still no Spring).
 
         ColumnLayout {
             id: content
@@ -204,22 +244,20 @@ PanelWindow {
             anchors.right: parent.right
             anchors.top: parent.top
             anchors.margins: 14
-            spacing: 12
+            // Inter-section gap is owned by siblingHost (root.siblingGap) so it
+            // collapses continuously with the morph instead of being dropped in
+            // one frame when the sibling stack goes invisible.
+            spacing: 0
 
             // ---- Morph host: collapsed tiles ↔ expanded module list ----
             Item {
                 id: morphHost
                 Layout.fillWidth: true
-                Layout.preferredHeight: root.moduleExpanded ? root.expandedTopHeight : root.collapsedTopHeight
+                // Linear in the shared morph clock — feeds the glass region
+                // height, so no Behavior of its own (would double-animate).
+                Layout.preferredHeight: root.collapsedTopHeight
+                    + (root.expandedTopHeight - root.collapsedTopHeight) * root.morphProgress
                 clip: true
-
-                Behavior on Layout.preferredHeight {
-                    // Feeds glass region height — NumberAnimation only, no spring.
-                    NumberAnimation {
-                        duration: root.morphDuration
-                        easing.type: Motion.emphasizedDecel
-                    }
-                }
 
                 // Collapsed: connectivity + music side by side.
                 RowLayout {
@@ -229,19 +267,13 @@ PanelWindow {
                     anchors.top: parent.top
                     height: root.collapsedTopHeight
                     spacing: 10
-                    opacity: root.moduleExpanded ? 0 : 1
+                    // Crossfade halves read the same clock: they always sum to 1.
+                    opacity: 1 - root.morphProgress
                     // No Behavior on y / Item.y — Phase 5 glass guardrails ban
                     // those patterns in popup shells. Sibling offset uses
-                    // Layout.topMargin on siblingColumn only.
+                    // siblingColumn's anchors.topMargin only.
                     enabled: !root.moduleExpanded
                     visible: opacity > 0.01
-
-                    Behavior on opacity {
-                        NumberAnimation {
-                            duration: root.morphDuration
-                            easing.type: Motion.emphasizedDecel
-                        }
-                    }
 
                     ConnectivityTile {
                         Layout.fillWidth: true
@@ -267,182 +299,197 @@ PanelWindow {
                     anchors.right: parent.right
                     anchors.top: parent.top
                     height: root.expandedTopHeight
-                    opacity: root.moduleExpanded ? 1 : 0
+                    opacity: root.morphProgress
                     enabled: root.moduleExpanded
                     visible: opacity > 0.01
                     moduleName: root.expandedModule
                     controls: root.controlsService
                     onBackRequested: root.closeModule()
-
-                    Behavior on opacity {
-                        NumberAnimation {
-                            duration: root.morphDuration
-                            easing.type: Motion.emphasizedDecel
-                        }
-                    }
                 }
             }
 
-            // ---- Sliders + utilities: sibling fade/down when morph open ----
-            // Morph only: force height 0 when module expanded (no Behavior on
-            // preferredHeight — binding to implicitHeight + Behavior re-ran on
-            // every 「编辑控制项」toggle and lagged the utility-row animation).
-            ColumnLayout {
-                id: siblingColumn
+            // ---- Sliders + utilities: sibling fade/collapse when morph open ----
+            // S-M2: the collapse is a clip host whose height is linear in the
+            // shared morph clock, including the inter-section gap. The inner
+            // stack keeps its natural height binding (no Behavior), so
+            // 「编辑控制项」grow/shrink still animates through its own row
+            // Behavior without the morph lagging behind it.
+            Item {
+                id: siblingHost
                 Layout.fillWidth: true
-                spacing: 12
-                opacity: root.moduleExpanded ? 0 : 1
-                Layout.topMargin: root.moduleExpanded ? Motion.ccMorphSiblingOffsetPx : 0
-                // -1 = use implicitHeight (edit-controls grow/shrink freely).
-                Layout.preferredHeight: root.moduleExpanded ? 0 : -1
-                Layout.maximumHeight: root.moduleExpanded ? 0 : -1
-                clip: root.moduleExpanded
-                enabled: !root.moduleExpanded
-                visible: !root.moduleExpanded || opacity > 0.01
+                Layout.preferredHeight: (siblingHost.travelHeight + root.siblingGap)
+                    * (1 - root.morphProgress)
+                clip: root.morphProgress > 0.001
+                visible: root.morphProgress < 0.999
 
-                Behavior on opacity {
-                    NumberAnimation {
-                        duration: root.morphDuration
-                        easing.type: Motion.emphasizedDecel
-                    }
-                }
-                Behavior on Layout.topMargin {
-                    NumberAnimation {
-                        duration: root.morphDuration
-                        easing.type: Motion.emphasizedDecel
-                    }
+                // Latch the stack's natural height for the duration of a morph.
+                // siblingColumn.implicitHeight re-resolves by a pixel or two
+                // while its children relayout under the shrinking clip, and
+                // feeding that live value into the collapse makes the panel edge
+                // wobble across the endpoint band. The natural height is only
+                // allowed to move when the morph clock is at rest — which is also
+                // when 「编辑控制项」grow/shrink runs.
+                readonly property real naturalHeight: siblingColumn.implicitHeight
+                property real travelHeight: siblingColumn.implicitHeight
+
+                onNaturalHeightChanged: {
+                    if (root.morphProgress <= 0.001 || root.morphProgress >= 0.999)
+                        siblingHost.travelHeight = siblingHost.naturalHeight;
                 }
 
-                GlassSlider {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 64
-                    iconCode: root.controlsService && root.controlsService.brightnessAvailable ? "\ue518" : "\ue1ad"
-                    label: "显示"
-                    value: root.controlsService ? root.controlsService.brightness : 0
-                    enabled: root.controlsService && root.controlsService.brightnessAvailable
-                    onUserPreview: function(v) {
-                        if (root.controlsService)
-                            root.controlsService.previewBrightness(v);
-                    }
-                    onUserCommit: function(v) {
-                        if (root.controlsService)
-                            root.controlsService.commitBrightness(v);
+                Connections {
+                    target: root
+                    function onMorphProgressChanged() {
+                        if (root.morphProgress <= 0.001 || root.morphProgress >= 0.999)
+                            siblingHost.travelHeight = siblingHost.naturalHeight;
                     }
                 }
 
-                GlassSlider {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 64
-                    iconCode: root.controlsService && root.controlsService.muted ? "\ue04f" : "\ue050"
-                    label: "声音"
-                    value: root.controlsService && !root.controlsService.muted ? root.controlsService.volume : 0
-                    enabled: root.controlsService && root.controlsService.audioReady
-                    onUserPreview: function(v) {
-                        if (root.controlsService)
-                            root.controlsService.setVolume(v);
-                    }
-                }
+                ColumnLayout {
+                    id: siblingColumn
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.top: parent.top
+                    // Gap lives here so it collapses with the host rather than
+                    // being dropped by ColumnLayout when this stack goes hidden.
+                    anchors.topMargin: root.siblingGap
+                        + Motion.ccMorphSiblingOffsetPx * root.morphProgress
+                    height: implicitHeight
+                    spacing: 12
+                    opacity: 1 - root.morphProgress
+                    enabled: !root.moduleExpanded
 
-                RowLayout {
-                    Layout.fillWidth: true
-                    spacing: 10
-                    Layout.preferredHeight: root.controlsExpanded ? 50 : 0
-                    opacity: root.controlsExpanded ? 1 : 0
-                    visible: Layout.preferredHeight > 0
-
-                    Behavior on Layout.preferredHeight {
-                        NumberAnimation {
-                            duration: Motion.elementResize(root.settingsService)
-                            easing.type: Motion.emphasizedDecel
+                    GlassSlider {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 64
+                        iconCode: root.controlsService && root.controlsService.brightnessAvailable ? "\ue518" : "\ue1ad"
+                        label: "显示"
+                        value: root.controlsService ? root.controlsService.brightness : 0
+                        enabled: root.controlsService && root.controlsService.brightnessAvailable
+                        onUserPreview: function(v) {
+                            if (root.controlsService)
+                                root.controlsService.previewBrightness(v);
+                        }
+                        onUserCommit: function(v) {
+                            if (root.controlsService)
+                                root.controlsService.commitBrightness(v);
                         }
                     }
 
-                    Behavior on opacity {
-                        NumberAnimation {
-                            duration: Motion.panelExit(root.settingsService)
-                            easing.type: Motion.standardDecel
+                    GlassSlider {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 64
+                        iconCode: root.controlsService && root.controlsService.muted ? "\ue04f" : "\ue050"
+                        label: "声音"
+                        value: root.controlsService && !root.controlsService.muted ? root.controlsService.volume : 0
+                        enabled: root.controlsService && root.controlsService.audioReady
+                        onUserPreview: function(v) {
+                            if (root.controlsService)
+                                root.controlsService.setVolume(v);
                         }
                     }
 
-                    UtilityButton {
+                    RowLayout {
                         Layout.fillWidth: true
-                        iconCode: "\ue51c"
-                        label: "深色"
-                        enabled: !!root.appearanceService
-                        active: root.appearanceService && root.appearanceService.darkMode
-                        onClicked: {
-                            if (root.appearanceService)
-                                root.appearanceService.toggleDarkMode();
+                        spacing: 10
+                        Layout.preferredHeight: root.controlsExpanded ? 50 : 0
+                        opacity: root.controlsExpanded ? 1 : 0
+                        visible: Layout.preferredHeight > 0
+
+                        Behavior on Layout.preferredHeight {
+                            NumberAnimation {
+                                duration: Motion.elementResize(root.settingsService)
+                                easing.type: Motion.emphasizedDecel
+                            }
+                        }
+
+                        Behavior on opacity {
+                            NumberAnimation {
+                                duration: Motion.panelExit(root.settingsService)
+                                easing.type: Motion.standardDecel
+                            }
+                        }
+
+                        UtilityButton {
+                            Layout.fillWidth: true
+                            iconCode: "\ue51c"
+                            label: "深色"
+                            enabled: !!root.appearanceService
+                            active: root.appearanceService && root.appearanceService.darkMode
+                            onClicked: {
+                                if (root.appearanceService)
+                                    root.appearanceService.toggleDarkMode();
+                            }
+                        }
+
+                        UtilityButton {
+                            Layout.fillWidth: true
+                            iconCode: "\ue3a9"
+                            label: "夜览"
+                            enabled: !!root.appearanceService
+                            active: root.appearanceService && root.appearanceService.nightMode
+                            onClicked: {
+                                if (root.appearanceService)
+                                    root.appearanceService.toggleNightMode();
+                            }
+                        }
+
+                        UtilityButton {
+                            Layout.fillWidth: true
+                            iconCode: "\uea5f"
+                            label: "计算器"
+                            enabled: true
+                            onClicked: root.launchFallbackApp("org.gnome.Calculator", "gnome-calculator", "calc")
+                        }
+
+                        UtilityButton {
+                            Layout.fillWidth: true
+                            iconCode: "\ue425"
+                            label: "计时器"
+                            enabled: true
+                            onClicked: root.launchFallbackApp("org.gnome.Clock", "gnome-clocks", "clock")
+                        }
+
+                        UtilityButton {
+                            Layout.fillWidth: true
+                            iconCode: "\ue3b0"
+                            label: "相机"
+                            enabled: true
+                            onClicked: root.launchFallbackApp("cheese", "cheese", "camera")
                         }
                     }
 
-                    UtilityButton {
+                    Rectangle {
                         Layout.fillWidth: true
-                        iconCode: "\ue3a9"
-                        label: "夜览"
-                        enabled: !!root.appearanceService
-                        active: root.appearanceService && root.appearanceService.nightMode
-                        onClicked: {
-                            if (root.appearanceService)
-                                root.appearanceService.toggleNightMode();
+                        Layout.preferredHeight: 28
+                        radius: 14
+                        color: editMouse.pressed ? "#34ffffff" : (editMouse.containsMouse ? "#40ffffff" : "#59ffffff")
+                        border.color: "#30ffffff"
+                        border.width: 1
+                        scale: Motion.pressScaleFor(root.settingsService, editMouse.pressed)
+
+                        Behavior on scale {
+                            NumberAnimation {
+                                duration: Motion.pressDurationFor(root.settingsService)
+                                easing.type: Motion.pressEasing
+                            }
                         }
-                    }
 
-                    UtilityButton {
-                        Layout.fillWidth: true
-                        iconCode: "\uea5f"
-                        label: "计算器"
-                        enabled: true
-                        onClicked: root.launchFallbackApp("org.gnome.Calculator", "gnome-calculator", "calc")
-                    }
-
-                    UtilityButton {
-                        Layout.fillWidth: true
-                        iconCode: "\ue425"
-                        label: "计时器"
-                        enabled: true
-                        onClicked: root.launchFallbackApp("org.gnome.Clock", "gnome-clocks", "clock")
-                    }
-
-                    UtilityButton {
-                        Layout.fillWidth: true
-                        iconCode: "\ue3b0"
-                        label: "相机"
-                        enabled: true
-                        onClicked: root.launchFallbackApp("cheese", "cheese", "camera")
-                    }
-                }
-
-                Rectangle {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 28
-                    radius: 14
-                    color: editMouse.pressed ? "#34ffffff" : (editMouse.containsMouse ? "#40ffffff" : "#59ffffff")
-                    border.color: "#30ffffff"
-                    border.width: 1
-                    scale: Motion.pressScaleFor(root.settingsService, editMouse.pressed)
-
-                    Behavior on scale {
-                        NumberAnimation {
-                            duration: Motion.pressDurationFor(root.settingsService)
-                            easing.type: Motion.pressEasing
+                        Text {
+                            anchors.centerIn: parent
+                            text: root.controlsExpanded ? "收起" : "编辑控制项"
+                            color: root.textPrimary
+                            font.pixelSize: 11
+                            font.weight: Font.DemiBold
                         }
-                    }
 
-                    Text {
-                        anchors.centerIn: parent
-                        text: root.controlsExpanded ? "收起" : "编辑控制项"
-                        color: root.textPrimary
-                        font.pixelSize: 11
-                        font.weight: Font.DemiBold
-                    }
-
-                    MouseArea {
-                        id: editMouse
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: root.controlsExpanded = !root.controlsExpanded
+                        MouseArea {
+                            id: editMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: root.controlsExpanded = !root.controlsExpanded
+                        }
                     }
                 }
             }

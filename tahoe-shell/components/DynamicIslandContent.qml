@@ -265,12 +265,164 @@ Item {
             root.latchedCompactMediaWidth = w;
     }
 
+    // Hold window so a scene's exit fade (sceneExitMs + padding) outlives the
+    // service's transient-field clear. While a scene is active OR within this
+    // hold after it goes inactive, the scene keeps rendering latched content
+    // — transient fields are cleared the instant the lease ends, so without
+    // this latch the fading card would flash to the clock/fallback string
+    // (T-22). Media uses the same pattern (latchedCompactMediaTitle +
+    // mediaUnloadHold); notification/bluetooth/workspace previously lacked it.
+    readonly property int sceneExitHoldMs: root.expandedUnloadHoldMs
+
+    // True while a transient scene is showing or still fading out through its
+    // hold window. Bindings freeze to latched content for this whole window so
+    // the dismiss→clear does not rewrite the outgoing scene.
+    property bool notificationExiting: false
+    property bool bluetoothExiting: false
+    property bool workspaceExiting: false
+
+    // Latched notification content (last non-empty values seen while active).
+    property string latchedNotificationSummary: ""
+    property string latchedNotificationBody: ""
+    property string latchedNotificationAppName: ""
+    property string latchedNotificationIconUrl: ""
+    property string latchedNotificationUrgency: "normal"
+    property bool latchedNotificationHasOverflow: false
+    property bool latchedNotificationExpanded: false
+    property var latchedNotificationActions: []
+    // Live-or-latched notification content. While active, follow live so
+    // in-place text refresh keeps working; once the hold latch engages the
+    // service fields are already empty, so the latch is the only source.
+    readonly property string notificationSummaryBinding: {
+        var live = String(root.displayText || "").trim();
+        if (live.length > 0 && root.notificationActive)
+            return live;
+        return root.latchedNotificationSummary;
+    }
+    readonly property string notificationBodyBinding: {
+        var live = String(root.secondaryText || "").trim();
+        if (live.length > 0 && root.notificationActive)
+            return live;
+        return root.latchedNotificationBody;
+    }
+    readonly property string notificationAppNameBinding: {
+        var live = String(root.notificationAppName || "").trim();
+        if (live.length > 0 && root.notificationActive)
+            return live;
+        return root.latchedNotificationAppName;
+    }
+    readonly property string notificationIconUrlBinding: {
+        var live = String(root.notificationIconUrl || "").trim();
+        if (live.length > 0 && root.notificationActive)
+            return live;
+        return root.latchedNotificationIconUrl;
+    }
+    readonly property string notificationUrgencyBinding:
+        root.notificationActive ? root.notificationUrgency : root.latchedNotificationUrgency
+    readonly property bool notificationHasOverflowBinding:
+        root.notificationActive ? root.notificationHasOverflow : root.latchedNotificationHasOverflow
+    readonly property bool notificationExpandedBinding:
+        root.notificationActive ? root.notificationExpanded : root.latchedNotificationExpanded
+    readonly property var notificationActionsBinding:
+        root.notificationActive ? root.notificationActions : root.latchedNotificationActions
+
+    // Latched bluetooth content (last non-empty values seen while active).
+    property string latchedBluetoothKind: ""
+    property string latchedBluetoothDeviceName: ""
+    property string latchedBluetoothDeviceIcon: ""
+    readonly property string bluetoothKindBinding: {
+        var live = String(root.bluetoothKind || "").trim();
+        if (live.length > 0 && root.bluetoothActive)
+            return live;
+        return root.latchedBluetoothKind;
+    }
+    readonly property string bluetoothDeviceNameBinding: {
+        var live = String(root.bluetoothDeviceName || "").trim();
+        if (live.length > 0 && root.bluetoothActive)
+            return live;
+        return root.latchedBluetoothDeviceName;
+    }
+    readonly property string bluetoothDeviceIconBinding: {
+        var live = String(root.bluetoothDeviceIcon || "").trim();
+        if (live.length > 0 && root.bluetoothActive)
+            return live;
+        return root.latchedBluetoothDeviceIcon;
+    }
+
+    // Latched workspace content (last non-empty values seen while active).
+    property string latchedWorkspaceLabel: ""
+    property int latchedWorkspaceDirection: 0
+    readonly property string workspaceLabelBinding: {
+        var live = String(root.workspaceLabel || "").trim();
+        if (live.length > 0 && root.workspaceActive)
+            return live;
+        return root.latchedWorkspaceLabel;
+    }
+    readonly property int workspaceDirectionBinding:
+        root.workspaceActive ? root.workspaceDirection : root.latchedWorkspaceDirection
+
+    function latchNotificationContent() {
+        var v;
+        v = String(root.displayText || "").trim();
+        if (v.length > 0)
+            root.latchedNotificationSummary = v;
+        v = String(root.secondaryText || "").trim();
+        if (v.length > 0)
+            root.latchedNotificationBody = v;
+        v = String(root.notificationAppName || "").trim();
+        if (v.length > 0)
+            root.latchedNotificationAppName = v;
+        v = String(root.notificationIconUrl || "").trim();
+        if (v.length > 0)
+            root.latchedNotificationIconUrl = v;
+        if (root.notificationUrgency && root.notificationUrgency.length > 0)
+            root.latchedNotificationUrgency = root.notificationUrgency;
+        root.latchedNotificationHasOverflow = root.notificationHasOverflow;
+        root.latchedNotificationExpanded = root.notificationExpanded;
+        root.latchedNotificationActions = root.notificationActions || [];
+    }
+    function latchBluetoothContent() {
+        var v;
+        v = String(root.bluetoothKind || "").trim();
+        if (v.length > 0)
+            root.latchedBluetoothKind = v;
+        v = String(root.bluetoothDeviceName || "").trim();
+        if (v.length > 0)
+            root.latchedBluetoothDeviceName = v;
+        v = String(root.bluetoothDeviceIcon || "").trim();
+        if (v.length > 0)
+            root.latchedBluetoothDeviceIcon = v;
+    }
+    function latchWorkspaceContent() {
+        var v = String(root.workspaceLabel || "").trim();
+        if (v.length > 0)
+            root.latchedWorkspaceLabel = v;
+        root.latchedWorkspaceDirection = root.workspaceDirection;
+    }
+
     onNotificationActiveChanged: {
         if (root.notificationActive) {
             notificationUnloadHold.stop();
+            root.notificationExiting = false;
+            notificationExitHold.stop();
+            // Clear the latch before seeding so a reused instance (dismiss →
+            // next queued notif within the Loader hold window) does not bleed
+            // the previous notification's app/summary into the new one when
+            // the new lease has an empty field (e.g. no appName).
+            root.latchedNotificationSummary = "";
+            root.latchedNotificationBody = "";
+            root.latchedNotificationAppName = "";
+            root.latchedNotificationIconUrl = "";
+            root.latchedNotificationUrgency = "normal";
+            root.latchedNotificationHasOverflow = false;
+            root.latchedNotificationExpanded = false;
+            root.latchedNotificationActions = [];
             root.notificationLoaderActive = true;
+            root.latchNotificationContent();
         } else {
             notificationUnloadHold.restart();
+            root.notificationExiting = true;
+            notificationExitHold.restart();
         }
     }
 
@@ -279,10 +431,103 @@ Item {
         interval: root.expandedUnloadHoldMs
         repeat: false
         onTriggered: {
-            if (!root.notificationActive)
+            if (!root.notificationActive) {
                 root.notificationLoaderActive = false;
+            }
         }
     }
+
+    // Clears the exit latch once the fade is guaranteed done. Paired with
+    // notificationUnloadHold so loader unload and latch clear share one window.
+    Timer {
+        id: notificationExitHold
+        interval: root.sceneExitHoldMs
+        repeat: false
+        onTriggered: {
+            if (!root.notificationActive) {
+                root.notificationExiting = false;
+                root.latchedNotificationSummary = "";
+                root.latchedNotificationBody = "";
+                root.latchedNotificationAppName = "";
+                root.latchedNotificationIconUrl = "";
+                root.latchedNotificationUrgency = "normal";
+                root.latchedNotificationHasOverflow = false;
+                root.latchedNotificationExpanded = false;
+                root.latchedNotificationActions = [];
+            }
+        }
+    }
+
+    onBluetoothActiveChanged: {
+        if (root.bluetoothActive) {
+            root.bluetoothExiting = false;
+            bluetoothExitHold.stop();
+            root.latchBluetoothContent();
+        } else {
+            root.bluetoothExiting = true;
+            bluetoothExitHold.restart();
+        }
+    }
+
+    Timer {
+        id: bluetoothExitHold
+        interval: root.sceneExitHoldMs
+        repeat: false
+        onTriggered: {
+            if (!root.bluetoothActive) {
+                root.bluetoothExiting = false;
+                root.latchedBluetoothKind = "";
+                root.latchedBluetoothDeviceName = "";
+                root.latchedBluetoothDeviceIcon = "";
+            }
+        }
+    }
+
+    onWorkspaceActiveChanged: {
+        if (root.workspaceActive) {
+            root.workspaceExiting = false;
+            workspaceExitHold.stop();
+            root.latchWorkspaceContent();
+        } else {
+            root.workspaceExiting = true;
+            workspaceExitHold.restart();
+        }
+    }
+
+    Timer {
+        id: workspaceExitHold
+        interval: root.sceneExitHoldMs
+        repeat: false
+        onTriggered: {
+            if (!root.workspaceActive) {
+                root.workspaceExiting = false;
+                root.latchedWorkspaceLabel = "";
+                root.latchedWorkspaceDirection = 0;
+            }
+        }
+    }
+
+    // Re-latch live values while a scene stays active (in-place text refresh
+    // without a state change). displayText feeds both notification summary and
+    // workspace label, so route it to whichever scene(s) are active.
+    onDisplayTextChanged: {
+        if (root.notificationActive)
+            root.latchNotificationContent();
+        if (root.workspaceActive)
+            root.latchWorkspaceContent();
+    }
+    onSecondaryTextChanged: if (root.notificationActive) root.latchNotificationContent()
+    onNotificationAppNameChanged: if (root.notificationActive) root.latchNotificationContent()
+    onNotificationIconUrlChanged: if (root.notificationActive) root.latchNotificationContent()
+    onNotificationUrgencyChanged: if (root.notificationActive) root.latchNotificationContent()
+    onNotificationHasOverflowChanged: if (root.notificationActive) root.latchNotificationContent()
+    onNotificationExpandedChanged: if (root.notificationActive) root.latchNotificationContent()
+    onNotificationActionsChanged: if (root.notificationActive) root.latchNotificationContent()
+    onBluetoothKindChanged: if (root.bluetoothActive) root.latchBluetoothContent()
+    onBluetoothDeviceNameChanged: if (root.bluetoothActive) root.latchBluetoothContent()
+    onBluetoothDeviceIconChanged: if (root.bluetoothActive) root.latchBluetoothContent()
+    onWorkspaceLabelChanged: if (root.workspaceActive) root.latchWorkspaceContent()
+    onWorkspaceDirectionChanged: if (root.workspaceActive) root.latchWorkspaceContent()
 
     // V2 resting clock (T12). Top-stable; crossfades in place (exit up,
     // enter from above) — no hold timers, visibility follows opacity.
@@ -322,9 +567,9 @@ Item {
     DynamicIslandBluetoothView {
         id: bluetoothView
         anchors.fill: parent
-        kind: root.bluetoothKind
-        deviceName: root.bluetoothDeviceName
-        deviceIcon: root.bluetoothDeviceIcon
+        kind: root.bluetoothKindBinding
+        deviceName: root.bluetoothDeviceNameBinding
+        deviceIcon: root.bluetoothDeviceIconBinding
         textPrimary: root.textPrimary
         textSecondary: root.textSecondary
         accentColor: root.accentColor
@@ -364,14 +609,14 @@ Item {
 
         DynamicIslandNotificationView {
             anchors.fill: parent
-            appName: root.notificationAppName
-            summary: root.displayText
-            body: root.secondaryText
-            iconUrl: root.notificationIconUrl
-            urgency: root.notificationUrgency
-            hasOverflow: root.notificationHasOverflow
-            expanded: root.notificationExpanded
-            actions: root.notificationActions
+            appName: root.notificationAppNameBinding
+            summary: root.notificationSummaryBinding
+            body: root.notificationBodyBinding
+            iconUrl: root.notificationIconUrlBinding
+            urgency: root.notificationUrgencyBinding
+            hasOverflow: root.notificationHasOverflowBinding
+            expanded: root.notificationExpandedBinding
+            actions: root.notificationActionsBinding
             notificationEpoch: root.notificationEpoch
             textPrimary: root.textPrimary
             textSecondary: root.textSecondary
@@ -448,13 +693,22 @@ Item {
     DynamicIslandWorkspaceView {
         id: workspaceView
         anchors.fill: parent
-        workspaceLabel: root.workspaceLabel.length > 0 ? root.workspaceLabel : root.displayText
+        workspaceLabel: {
+            var live = root.workspaceLabelBinding;
+            if (live.length > 0)
+                return live;
+            // displayText carries the same label for transient_workspace while
+            // active; during the exit-hold latch it is already cleared, so the
+            // latched label above is the authoritative source.
+            var dt = String(root.displayText || "").trim();
+            return root.workspaceActive && dt.length > 0 ? dt : live;
+        }
         workspaceIndex: {
-            var m = String(root.workspaceLabel || root.displayText || "").match(/(\d+)/);
+            var m = String(root.workspaceLabelBinding || "").match(/(\d+)/);
             return m ? Number(m[1]) : 0;
         }
         workspaceCount: root.workspaceCount
-        direction: root.workspaceDirection
+        direction: root.workspaceDirectionBinding
         textPrimary: root.textPrimary
         textSecondary: root.textSecondary
         accentColor: root.accentColor
@@ -591,7 +845,13 @@ Item {
         root.syncOsdLayerImmediately();
         if (root.mediaExpandedContentVisible)
             root.mediaLoaderActive = true;
-        if (root.notificationActive)
+        if (root.notificationActive) {
             root.notificationLoaderActive = true;
+            root.latchNotificationContent();
+        }
+        if (root.bluetoothActive)
+            root.latchBluetoothContent();
+        if (root.workspaceActive)
+            root.latchWorkspaceContent();
     }
 }

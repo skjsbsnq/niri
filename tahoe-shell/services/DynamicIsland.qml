@@ -2454,8 +2454,18 @@ Item {
             }
             if (root.presentation === "transient_timer_complete" && root.timerService)
                 root.timerService.clearFinished();
-            root.clearTransientFields();
+            // Flip presentation to resting BEFORE clearing transient fields, so
+            // that notificationActive/bluetoothActive/workspaceActive go false
+            // (releasing the Content-layer *Binding to its latched value) before
+            // transientDisplayText/secondaryText empty out and `displayText`
+            // falls back to the fallbackTransientText glyph. Otherwise the
+            // exit fade renders the fallback "通知"/"蓝牙" instead of the real
+            // summary/label — the flash T-22 latches out. All other dismiss
+            // paths (notification-eviction, dismiss, explicit-hide) already use
+            // this forcedState-then-clear order; the auto-hide timer was the lone
+            // outlier and caused the bug on the common 4.2s dismissal path.
             root.forcedState = "";
+            root.clearTransientFields();
             root.clearEventOwnerOutput();
             // Keep session owner only while expanded; transient end drops event pin.
             if (!root.expanded)

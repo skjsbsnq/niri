@@ -1007,6 +1007,8 @@ ShellRoot {
             }
 
             Dock {
+                id: dock
+
                 screen: modelData
                 fullscreenActive: niri.shellChromeHiddenOnOutput(modelData)
                 appsService: apps
@@ -1071,6 +1073,18 @@ ShellRoot {
                 settingsService: desktopSettings
                 darkMode: shell.darkMode
                 onCloseRequested: shell.closeDockWindowMenu()
+                // T21: route the context-menu "最小化" to the WindowButton that
+                // owns this window (same delegate scope as the Dock instance
+                // `dock`), so it runs the publish-predicted-slot →
+                // stopDockRectangleTimers invariant instead of a bare
+                // windowsService.minimize that would retarget the Genie back at
+                // the vanishing dock icon. dockWindowMenuWindow is the object the
+                // source button passed via contextMenuRequested (windowModel),
+                // so the WindowButton matches it by ref and calls minimize().
+                onMinimizeRequested: function(window) {
+                    dock.requestMinimizeWindowButton(window);
+                    shell.closeDockWindowMenu();
+                }
             }
 
             PopupDismissLayer {

@@ -40,6 +40,15 @@ PanelWindow {
     readonly property int popupTop: popupTopFor()
     readonly property real popupOriginX: Math.max(0, Math.min(panel.width, anchorCenterX() - root.popupLeft))
     signal closeRequested()
+    // T21: route the context-menu "最小化" through WindowButton.minimize() (see
+    // shell.qml Dock.requestMinimizeWindowButton → WindowButton Connections) so
+    // every minimize path converges on the publish-predicted-slot →
+    // stopDockRectangleTimers invariant. Calling windowsService.minimize here
+    // directly would bypass that invariant: a settle armed by an earlier layout
+    // change would fire after the Genie started and retarget it back at the
+    // soon-to-vanish dock icon — and the menu never publishes the predicted
+    // shelf slot at all (a pre-existing T-19 gap this also closes).
+    signal minimizeRequested(var window)
 
     visible: open
     // P02: freeze scene-graph frames while this surface is unmapped/faded out.
@@ -216,8 +225,8 @@ PanelWindow {
                 settingsService: root.settingsService
                 darkMode: root.darkMode
                 onActivated: {
-                    if (root.windowsService && root.window)
-                        root.windowsService.minimize(root.window);
+                    if (root.window)
+                        root.minimizeRequested(root.window);
                 }
                 onFlashFinished: root.closeRequested()
             }

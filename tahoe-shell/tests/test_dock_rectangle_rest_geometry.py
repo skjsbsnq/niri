@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""T-19 contract tests: genie target REST geometry + shelf scene-offset + predicted slot.
+"""T-19 + T-21 contract tests: genie target REST geometry + shelf scene-offset +
+predicted slot + frame-synced settle republish.
 
 Source-level guards (same style as test_dock_rectangle_publisher.py) for the
 S-H2 / S-M3 / S-M8 remediation: the foreign-toplevel rectangle reported by the
@@ -7,6 +8,11 @@ Dock delegates must be REST geometry (no hover-wave magnification/pushX, no
 lifecycle/press scale, no click bounce), the minimized shelf must forward a
 scene-offset dependency so reflow/scroll republishes, and Dock must expose the
 predicted appended shelf slot for an initial minimize into an open shelf.
+
+T-21 adds the frame-sync contract: a debounced ``dockRectangleSettle`` Timer
+(interval = the layout-Behavior duration ``Motion.elementResize``) force-reports
+REST geometry once the slot/ancestor Behavior ends, so the settled rect reaches
+niri for a T-20 in-flight genie retarget.
 """
 
 from __future__ import annotations
@@ -20,6 +26,8 @@ WINDOW_BUTTON = ROOT / "components" / "WindowButton.qml"
 DOCK_MINIMIZED = ROOT / "components" / "DockMinimizedWindow.qml"
 DOCK_MINIMIZED_SHELF = ROOT / "components" / "DockMinimizedShelf.qml"
 DOCK = ROOT / "components" / "Dock.qml"
+DOCK_WINDOW_MENU = ROOT / "components" / "DockWindowMenu.qml"
+SHELL = ROOT / "shell.qml"
 
 
 def slice_between(text: str, start: str, end: str) -> str:
@@ -236,6 +244,181 @@ class DockShelfOffsetAndPredictionTests(unittest.TestCase):
     def test_constants_aligned_with_existing_width(self) -> None:
         # Guard against silent drift of the thumbnail width used by the shelf.
         self.assertIn("readonly property int dockMinimizedThumbnailWidth: 112", self.dock)
+
+
+class DockRectangleFrameSyncTests(unittest.TestCase):
+    """T-21 contract: a debounced dockRectangleSettle Timer force-reports REST
+    geometry once the slot/ancestor Behavior (duration Motion.elementResize)
+    ends, so the settled rect reaches niri for a T-20 in-flight genie retarget.
+
+    The interval-0 dockRectangleRefresh still handles the immediate per-frame
+    report; the settle Timer only adds the post-Behavior force. Source-contract
+    style — a live Behavior cannot be simulated headlessly.
+    """
+
+    def setUp(self) -> None:
+        self.window_button = WINDOW_BUTTON.read_text(encoding="utf-8")
+        self.dock_minimized = DOCK_MINIMIZED.read_text(encoding="utf-8")
+
+    def _settle_block(self, text: str) -> str:
+        # The dockRectangleSettle Timer body, between its id and its force onTriggered.
+        return code_only(
+            slice_between(
+                text,
+                "id: dockRectangleSettle",
+                "onTriggered: root.updateDockRectangle(true)",
+            )
+        )
+
+    def test_window_button_settle_timer_uses_behavior_duration(self) -> None:
+        # interval is the layout-Behavior duration (not a literal), so
+        # reduced-motion (elementResize == 0) collapses it to fire immediately.
+        block = self._settle_block(self.window_button)
+        self.assertIn("interval: Motion.elementResize(root.settingsService)", block)
+        self.assertIn("repeat: false", block)
+        self.assertNotIn("interval: 0", block)
+
+    def test_dock_minimized_settle_timer_uses_behavior_duration(self) -> None:
+        block = self._settle_block(self.dock_minimized)
+        self.assertIn("interval: Motion.elementResize(root.settingsService)", block)
+        self.assertIn("repeat: false", block)
+        self.assertNotIn("interval: 0", block)
+
+    def test_settle_timer_force_publishes(self) -> None:
+        # onTriggered must force-publish (true) so the settled value bypasses the
+        # publisher's Qt.callLater coalescing and reaches niri synchronously.
+        for text in (self.window_button, self.dock_minimized):
+            self.assertIn("onTriggered: root.updateDockRectangle(true)", text)
+
+    def test_schedule_restarts_both_timers_in_order(self) -> None:
+        # scheduleDockRectangleUpdate debounces: restart the per-frame refresh,
+        # then the settle Timer (continuous changes keep pushing the settle out
+        # until elementResize ms after the last change).
+        for text in (self.window_button, self.dock_minimized):
+            assert_in_order(
+                self,
+                text,
+                "dockRectangleRefresh.restart()",
+                "dockRectangleSettle.restart()",
+            )
+
+    def test_settle_augments_not_replaces_per_frame_refresh(self) -> None:
+        # Both Timers coexist: the interval-0 refresh reports per-frame, the
+        # settle Timer adds the post-Behavior force.
+        for text in (self.window_button, self.dock_minimized):
+            self.assertIn("id: dockRectangleRefresh", text)
+            self.assertIn("id: dockRectangleSettle", text)
+
+    def test_settle_force_suppressed_while_fullscreen(self) -> None:
+        # The settle's force onTriggered must not publish into an unmapped dock
+        # (a settle armed just before fullscreen activated can still fire). The
+        # force path guards on dockFullscreenActive, not only scheduleDockRectangleUpdate.
+        for text in (self.window_button, self.dock_minimized):
+            update = slice_code(
+                text,
+                "function updateDockRectangle",
+                "function scheduleDockRectangleUpdate",
+            )
+            self.assertIn("if (forcePublish && root.dockFullscreenActive)", update)
+
+    def test_minimize_stops_settle_after_predicted_slot(self) -> None:
+        # T21 review finding: a settle armed by an earlier layout change can
+        # fire after minimize() force-published the predicted shelf slot and
+        # override it with this dying button's rest rect (wrong genie target).
+        # Every minimize path must stop the timers right after the predicted-slot
+        # publish so the predicted slot is the last word from this button.
+        helper = slice_between(
+            self.window_button,
+            "function stopDockRectangleTimers()",
+            "function minimizeTargetRect()",
+        )
+        self.assertIn("dockRectangleRefresh.stop()", helper)
+        self.assertIn("dockRectangleSettle.stop()", helper)
+
+        minimize_fn = slice_between(
+            self.window_button, "function minimize(", "onXChanged:"
+        )
+        assert_in_order(
+            self,
+            minimize_fn,
+            "updateDockRectangle(true, root.minimizeTargetRect())",
+            "stopDockRectangleTimers()",
+        )
+        self.assertEqual(minimize_fn.count("stopDockRectangleTimers()"), 1)
+
+        # restoreOrActivate has two minimize branches (isFocused + toplevel
+        # activated); each stops the timers after its predicted-slot publish.
+        restore_fn = slice_between(
+            self.window_button, "function restoreOrActivate(", "function minimize("
+        )
+        self.assertEqual(restore_fn.count("stopDockRectangleTimers()"), 2)
+        self.assertEqual(restore_fn.count("updateDockRectangle(true, root.minimizeTargetRect())"), 2)
+
+
+class ContextMenuMinimizeRoutingTests(unittest.TestCase):
+    """T-21 blocker fix: the context-menu "最小化" must route through
+    WindowButton.minimize() so it runs the publish-predicted-slot →
+    stopDockRectangleTimers invariant, not a bare windowsService.minimize that
+    (a) never publishes the predicted shelf slot and (b) lets a settle armed by
+    an earlier layout change retarget the Genie back at the vanishing icon.
+    """
+
+    def setUp(self) -> None:
+        self.dock_menu = DOCK_WINDOW_MENU.read_text(encoding="utf-8")
+        self.dock = DOCK.read_text(encoding="utf-8")
+        self.window_button = WINDOW_BUTTON.read_text(encoding="utf-8")
+        self.shell = SHELL.read_text(encoding="utf-8")
+
+    def test_menu_emits_signal_instead_of_direct_minimize(self) -> None:
+        # The minimize row emits minimizeRequested(window) and must NOT call
+        # windowsService.minimize directly (that bypasses the invariant).
+        minimize_fn = slice_between(
+            self.dock_menu,
+            "root.windowMinimized ? \"已最小化\" : \"最小化\"",
+            "windowPinned ? \"从 Dock 移除\"",
+        )
+        self.assertIn("root.minimizeRequested(root.window)", minimize_fn)
+        self.assertNotIn("windowsService.minimize", minimize_fn)
+        self.assertIn("signal minimizeRequested(var window)", self.dock_menu)
+
+    def test_dock_declares_request_minimize_signal(self) -> None:
+        self.assertIn("signal requestMinimizeWindowButton(var window)", self.dock)
+
+    def test_window_button_handles_request_signal(self) -> None:
+        # WindowButton must connect to dockWindow's requestMinimizeWindowButton,
+        # match the source window to itself by STABLE id (not reference — the
+        # service layer rebuilds model objects on layout churn), and call
+        # root.minimize() (the invariant path).
+        conn = slice_code(
+            self.window_button,
+            "// T21: route the context-menu",
+            "// Mag/push are bound to targets",
+        )
+        self.assertIn("target: root.dockWindow", conn)
+        self.assertIn("function onRequestMinimizeWindowButton(window)", conn)
+        # id-based match (survives model rebuilds), with a ref fallback for the
+        # no-id case (mirrors onOpenWindowMenu's wasSameWindow fallback).
+        self.assertIn("svc.windowIdString(window)", conn)
+        self.assertIn("svc.windowIdString(self)", conn)
+        self.assertIn("a === b", conn)
+        self.assertIn("window === self", conn)
+        self.assertIn("root.minimize()", conn)
+        # Must NOT match by bare reference alone (that no-ops on model rebuild).
+        self.assertNotIn("window === root.windowModel", conn)
+
+    def test_shell_routes_menu_signal_to_dock(self) -> None:
+        # The DockWindowMenu instance handles onMinimizeRequested by calling the
+        # same-scope Dock instance's requestMinimizeWindowButton and closing the
+        # menu (the menu dismissed right after minimize, matching direct-minimize
+        # behavior where the menu also closes).
+        menu_instance = slice_between(self.shell, "id: dockWindowMenu", "onCloseRequested: shell.closeDockMenus()")
+        self.assertIn("onMinimizeRequested: function(window)", menu_instance)
+        self.assertIn("dock.requestMinimizeWindowButton(window)", menu_instance)
+        self.assertIn("shell.closeDockWindowMenu()", menu_instance)
+        # The Dock instance must have an id so the sibling DockWindowMenu can
+        # address it.
+        dock_instance = slice_between(self.shell, "Dock {", "DockAppMenu {")
+        self.assertIn("id: dock", dock_instance)
 
 
 if __name__ == "__main__":

@@ -188,6 +188,12 @@ PanelWindow {
     signal toggleLaunchpad()
     signal openPinnedAppMenu(var app, string appId, var anchorRect)
     signal openWindowMenu(var window, var anchorRect)
+    // T21: the context-menu minimize routes back to the WindowButton that owns
+    // this window (see shell.qml DockWindowMenu.onMinimizeRequested →
+    // root.requestMinimizeWindowButton), so it runs the publish-predicted-slot
+    // → stopDockRectangleTimers invariant instead of a bare
+    // windowsService.minimize that would retarget the Genie back at the icon.
+    signal requestMinimizeWindowButton(var window)
 
     // ScriptModel must key pinned delegates by the configured pin identity, not
     // the currently resolved DesktopEntry id. A fallback pin may resolve to a

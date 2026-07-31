@@ -1405,12 +1405,14 @@ Item {
             radius: 1
             color: root.accentBlue
             SequentialAnimation on x {
-                running: stripe.visible
+                // Reduced motion: stop the indeterminate cycle (the updating
+                // state still reads via opacity); no non-essential motion.
+                running: stripe.visible && !Motion.reducedMotion(root.settingsService)
                 loops: Animation.Infinite
                 NumberAnimation {
                     from: -stripe.width * 0.36
                     to: stripe.width
-                    duration: 1100
+                    duration: Motion.sidebarBusyStripeCycleMs
                     easing.type: Easing.InOutCubic
                 }
             }

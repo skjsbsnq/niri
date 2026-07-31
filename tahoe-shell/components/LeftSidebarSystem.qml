@@ -61,7 +61,8 @@ Item {
     property real slideProgress: 0
 
     Behavior on smoothMaxNet {
-        NumberAnimation { duration: 600; easing.type: Motion.emphasizedDecel }
+        enabled: !Motion.reducedMotion(root.settingsService)
+        NumberAnimation { duration: Motion.sidebarChartMaxSmoothMs; easing.type: Motion.emphasizedDecel }
     }
     onSmoothMaxNetChanged: chartCanvas.requestPaint()
     onSlideProgressChanged: chartCanvas.requestPaint()
@@ -72,7 +73,7 @@ Item {
         property: "slideProgress"
         from: 0
         to: 1
-        duration: 1000
+        duration: Motion.sidebarChartSlideDuration(root.settingsService)
     }
 
     property int currentChartTab: 0
@@ -146,7 +147,7 @@ Item {
             root.ramHistory = pushHistory(root.ramHistory, stats.ramUsage / 100.0);
             var rawNetMax = Math.max(maxOf(root.netDownHistory), maxOf(root.netUpHistory)) * 1.2;
             root.smoothMaxNet = rawNetMax > 0 ? rawNetMax : 1024;
-            slideAnim.duration = 1000;
+            slideAnim.duration = Motion.sidebarChartSlideDuration(root.settingsService);
             slideAnim.restart();
         }
 
@@ -1035,7 +1036,7 @@ Item {
         Behavior on displayProgress {
             enabled: !Motion.reducedMotion(root.settingsService)
             SmoothedAnimation {
-                duration: 500
+                duration: Motion.sidebarRingProgressMs
                 velocity: -1
                 easing.type: Easing.InOutQuad
             }

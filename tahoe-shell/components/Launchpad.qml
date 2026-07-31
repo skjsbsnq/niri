@@ -833,7 +833,7 @@ PanelWindow {
                     color: root.currentPage === index ? "#ffffff" : "#66ffffff"
                     Behavior on width {
                         NumberAnimation {
-                            duration: 120
+                            duration: Motion.fadeFast(root.settingsService)
                             easing.type: Motion.emphasizedDecel
                         }
                     }

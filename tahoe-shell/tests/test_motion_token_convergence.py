@@ -764,6 +764,127 @@ class MotionTokenConvergenceTests(unittest.TestCase):
 
         self.assertNotIn("buttonBorder", text)
 
+    def test_dock_minimized_window_hover_label_uses_unified_tokens(self) -> None:
+        """S-M9: the shelf minimized-window hover label shares the Dock hover
+        label vocabulary (opacity → fadeFast, y → elementMove), not the slower
+        panelExit token. The two labels are visually paired and must fade/rise
+        together; panelExit (200ms balanced) made the shelf label lag the Dock
+        label (fadeFast 120ms / elementMove 130ms).
+        """
+        shelf = (COMPONENTS_ROOT / "DockMinimizedWindow.qml").read_text(encoding="utf-8")
+        start = shelf.find("id: hoverLabel")
+        self.assertGreaterEqual(start, 0, "hover label block not found")
+        # The hover label Rectangle closes just before the thumbnail MouseArea.
+        end = shelf.find("MouseArea {", start)
+        self.assertGreater(end, start)
+        block = shelf[start:end]
+        self.assertIn("Behavior on opacity", block)
+        self.assertIn("Motion.fadeFast(root.settingsService)", block)
+        self.assertIn("Behavior on y", block)
+        self.assertIn("Motion.elementMove(root.settingsService)", block)
+        self.assertNotIn("Motion.panelExit", block)
+
+    def test_weather_busystripe_is_reduced_motion_gated_and_tokenized(self) -> None:
+        """S-M10: the weather BusyStripe indeterminate cycle reads its duration
+        from a Motion token (not a hardcoded 1100) and stops entirely under
+        reduced motion — no non-essential looping animation. The 'updating'
+        state is still conveyed via the stripe opacity.
+        """
+        weather = (COMPONENTS_ROOT / "LeftSidebarWeather.qml").read_text(encoding="utf-8")
+        self.assertIn("component BusyStripe: Rectangle", weather)
+        self.assertIn("Motion.sidebarBusyStripeCycleMs", weather)
+        self.assertIn(
+            "running: stripe.visible && !Motion.reducedMotion(root.settingsService)",
+            weather,
+        )
+        self.assertNotIn("duration: 1100", weather)
+
+    def test_launchpad_and_sidebar_hardcoded_durations_are_tokenized(self) -> None:
+        """S-L11: Launchpad / LeftSidebarSystem hardcoded motion durations are
+        routed through Motion tokens (and reduced-motion-gated where they are
+        smoothing/progress animations) instead of inline magic numbers.
+        """
+        motion = MOTION_JS.read_text(encoding="utf-8")
+        # New sidebar data-viz + busy tokens are the single source.
+        for decl in (
+            "var sidebarChartMaxSmoothMs = 600;",
+            "var sidebarChartSlideMs = 1000;",
+            "var sidebarRingProgressMs = 500;",
+            "var sidebarBusyStripeCycleMs = 1100;",
+            "function sidebarChartSlideDuration(settingsService)",
+            "var lockScreenShakeDurationsMs = [45, 55, 55, 55, 50, 40];",
+        ):
+            self.assertIn(decl, motion)
+
+        # Form-agnostic "no inline numeric duration" guard: catches BOTH the
+        # declarative `duration: N` and the imperative `.duration = N` override
+        # forms (the override form previously bypassed the reduced-motion gate).
+        duration_num_re = r"duration\s*[:=]\s*\d"
+
+        # Launchpad: no inline numeric durations remain (page-dot 120 → fadeFast).
+        launchpad = (COMPONENTS_ROOT / "Launchpad.qml").read_text(encoding="utf-8")
+        self.assertNotRegex(launchpad, duration_num_re)
+        self.assertIn("Motion.fadeFast(root.settingsService)", launchpad)
+
+        # LeftSidebarSystem: no inline numeric duration in either form.
+        system = (COMPONENTS_ROOT / "LeftSidebarSystem.qml").read_text(encoding="utf-8")
+        self.assertNotRegex(system, duration_num_re)
+        # smoothMaxNet Behavior: reduced-motion-gated (enabled flips off under
+        # reduced motion → instant rescale) + tokenized duration. Assert on the
+        # block, not the whole file, so a pre-existing gate elsewhere cannot
+        # mask a missing gate here (the original false-pass).
+        sm_start = system.find("Behavior on smoothMaxNet")
+        self.assertGreaterEqual(sm_start, 0, "smoothMaxNet Behavior not found")
+        sm_block = system[sm_start:system.find("onSmoothMaxNetChanged", sm_start)]
+        self.assertIn("enabled: !Motion.reducedMotion(root.settingsService)", sm_block)
+        self.assertIn("Motion.sidebarChartMaxSmoothMs", sm_block)
+        # slide-in: the helper is used at BOTH the declarative default and the
+        # imperative onFastDataChanged override — the override previously set a
+        # bare 1000 and bypassed the gate.
+        self.assertGreaterEqual(
+            system.count("Motion.sidebarChartSlideDuration(root.settingsService)"), 2
+        )
+        # Ring progress token.
+        self.assertIn("Motion.sidebarRingProgressMs", system)
+
+        # LockScreen: profile-relevant durations route through Motion via root
+        # properties; the password-failure shake step durations are tokenized
+        # (value-preserving) and the whole sequence is suppressed under reduced
+        # motion. No bare numeric duration survives in either form.
+        lock = (COMPONENTS_ROOT / "LockScreen.qml").read_text(encoding="utf-8")
+        self.assertNotRegex(lock, duration_num_re)
+        self.assertGreaterEqual(lock.count("Motion.lockScreenShakeDurationsMs["), 6)
+        self.assertIn("if (!root.reducedMotion)", lock)
+        self.assertIn("failureShakeAnimation.restart()", lock)
+
+    def test_swipe_thresholds_are_single_sourced(self) -> None:
+        """S-L12: side-swipe enter/return thresholds + vertical tolerance live
+        in ONE place. DynamicIslandMotion.js is the single source consumed by
+        NotificationToast.qml and services/DynamicIsland.qml; Motion.js used to
+        carry dead duplicates (toastSwipe*) that could drift from the real
+        values. Also: the v2GeometrySpringEpsilon comment must not claim the
+        progress-space settle threshold (0.6) is comparable to this px-space
+        epsilon (0.25).
+        """
+        motion = MOTION_JS.read_text(encoding="utf-8")
+        # Motion.js must not re-declare the swipe thresholds (no dual source).
+        self.assertNotIn("toastSwipeEnterThreshold", motion)
+        self.assertNotIn("toastSwipeReturnThreshold", motion)
+        self.assertNotIn("toastSwipeVerticalTolerance", motion)
+        # The single source lives in DynamicIslandMotion.js.
+        island = (COMPONENTS_ROOT / "DynamicIslandMotion.js").read_text(encoding="utf-8")
+        self.assertIn("var swipeEnterThreshold = 0.56;", island)
+        self.assertIn("var swipeReturnThreshold = 0.44;", island)
+        self.assertIn("var swipeVerticalTolerance = 24;", island)
+        # Consumers read the single source (not a Motion.js duplicate).
+        toast = (COMPONENTS_ROOT / "NotificationToast.qml").read_text(encoding="utf-8")
+        self.assertIn("IslandMotion.swipeEnterThreshold", toast)
+        self.assertIn("IslandMotion.swipeVerticalTolerance", toast)
+        # The px-space epsilon comment no longer makes the dimensionally-wrong
+        # "0.6 > this epsilon" comparison against a unitless progress value.
+        self.assertNotIn("0.6 > this epsilon", island)
+        self.assertIn("NOT comparable to the progress-space protocol", island)
+
 
 if __name__ == "__main__":
     unittest.main()

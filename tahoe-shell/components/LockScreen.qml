@@ -667,12 +667,12 @@ WlSessionLock {
             SequentialAnimation {
                 id: failureShakeAnimation
 
-                NumberAnimation { target: passwordShake; property: "x"; to: -9; duration: 45; easing.type: Easing.OutQuad }
-                NumberAnimation { target: passwordShake; property: "x"; to: 8; duration: 55; easing.type: Easing.InOutQuad }
-                NumberAnimation { target: passwordShake; property: "x"; to: -6; duration: 55; easing.type: Easing.InOutQuad }
-                NumberAnimation { target: passwordShake; property: "x"; to: 5; duration: 55; easing.type: Easing.InOutQuad }
-                NumberAnimation { target: passwordShake; property: "x"; to: -3; duration: 50; easing.type: Easing.InOutQuad }
-                NumberAnimation { target: passwordShake; property: "x"; to: 0; duration: 40; easing.type: Easing.OutQuad }
+                NumberAnimation { target: passwordShake; property: "x"; to: -9; duration: Motion.lockScreenShakeDurationsMs[0]; easing.type: Easing.OutQuad }
+                NumberAnimation { target: passwordShake; property: "x"; to: 8; duration: Motion.lockScreenShakeDurationsMs[1]; easing.type: Easing.InOutQuad }
+                NumberAnimation { target: passwordShake; property: "x"; to: -6; duration: Motion.lockScreenShakeDurationsMs[2]; easing.type: Easing.InOutQuad }
+                NumberAnimation { target: passwordShake; property: "x"; to: 5; duration: Motion.lockScreenShakeDurationsMs[3]; easing.type: Easing.InOutQuad }
+                NumberAnimation { target: passwordShake; property: "x"; to: -3; duration: Motion.lockScreenShakeDurationsMs[4]; easing.type: Easing.InOutQuad }
+                NumberAnimation { target: passwordShake; property: "x"; to: 0; duration: Motion.lockScreenShakeDurationsMs[5]; easing.type: Easing.OutQuad }
             }
 
             Connections {

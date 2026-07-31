@@ -55,11 +55,12 @@ var v2GeometrySpring = {
     spring: Motion.springBouncy.spring,
     damping: 0.28
 };
-// Stop the spring tail early so the settled snap engages promptly (protocol
-// settle threshold in the overlay is 0.6 > this epsilon). Tuned for the
-// GEOMETRY drivers, whose target is in px (range ~36-172) — 0.25px is
-// sub-pixel there. This is a px-space epsilon; do not reuse it for a 0..1
-// unitless progress value.
+// Stop the spring tail early so the settled snap engages promptly. Tuned for
+// the GEOMETRY drivers, whose target is in px (range ~36-172) — 0.25px is
+// sub-pixel there, so the residual is invisible when the snap fires. This is
+// a px-space epsilon; it is NOT comparable to the progress-space protocol
+// settle threshold (0.6) in the overlay — do not reuse it for a 0..1 unitless
+// progress value.
 var v2GeometrySpringEpsilon = 0.25;
 
 // Protocol quantization during morph (R08 #22). Width/height floor to the

@@ -141,7 +141,7 @@ class LeftSidebarWidgetTests(unittest.TestCase):
             "Behavior on displayProgress",
             "enabled: !Motion.reducedMotion(root.settingsService)",
             "SmoothedAnimation",
-            "duration: 500",
+            "duration: Motion.sidebarRingProgressMs",
             "property real p: ring.displayProgress",
             "ringCanvas.p",
             "onRingColorChanged: ringCanvas.requestPaint()",

@@ -94,9 +94,10 @@ var toastStackMaxDefault = 3;
 var toastStackYStep = 8;
 var toastStackScaleStep = 0.04; // index 0 → 1.0, 1 → 0.96, 2 → 0.92
 var toastEnterOffsetPx = 60;
-var toastSwipeEnterThreshold = 0.56; // share DynamicIslandMotion enter feel
-var toastSwipeReturnThreshold = 0.44;
-var toastSwipeVerticalTolerance = 24;
+// Swipe enter/return thresholds + vertical tolerance live ONLY in
+// DynamicIslandMotion.js (swipeEnterThreshold / swipeReturnThreshold /
+// swipeVerticalTolerance) — the single source consumed by NotificationToast.qml
+// and services/DynamicIsland.qml. Do not re-duplicate them here (S-L12).
 var toastSwipeDismissPx = 96; // absolute px fallback if width unknown
 var toastClearStaggerMs = 30;
 var toastClearStaggerBudgetMs = 450;
@@ -255,6 +256,30 @@ function sidebarCardStaggerDelay(index) {
 function sidebarCardEnterDuration(settingsService) {
     return reducedMotion(settingsService) ? 0 : sidebarCardEnterMs;
 }
+
+// Left sidebar widget data-viz + busy indicator (T25 / S-M10 / S-L11).
+// Chart axis smoothing, ring progress, and the indeterminate BusyStripe cycle
+// are profile-gated at the callsite (reduced motion → instant / no loop) so
+// these raw values stay the single source for the non-reduced feel. The
+// slide-in also has a helper because it is set imperatively on the live data
+// tick as well as declaratively — both sites must share one gate so the
+// override cannot re-introduce a hardcoded duration that bypasses it.
+var sidebarChartMaxSmoothMs = 600;    // network chart y-axis rescale settle
+var sidebarChartSlideMs = 1000;      // chart slide-in 0→1
+var sidebarRingProgressMs = 500;      // ring widget displayProgress settle
+var sidebarBusyStripeCycleMs = 1100;  // weather BusyStripe indeterminate cycle
+
+function sidebarChartSlideDuration(settingsService) {
+    return reducedMotion(settingsService) ? 0 : sidebarChartSlideMs;
+}
+
+// LockScreen password-failure shake (T25 / S-L11). A bespoke one-shot
+// decaying-shake micro-keyframe sequence; LockScreen.qml suppresses the whole
+// sequence under reduced motion (it gates failureShakeAnimation.restart()), so
+// these are non-profile durations — but the per-step timings are tokens, not
+// inline magic numbers, so a retune cannot leave the declarative and override
+// paths drifting apart. Values preserved verbatim from the prior inline form.
+var lockScreenShakeDurationsMs = [45, 55, 55, 55, 50, 40];
 
 // Spring vocabulary — QML SpringAnimation parameter groups. Glass region
 // geometry must never use these (guardrail 0704ea4); springs are only for

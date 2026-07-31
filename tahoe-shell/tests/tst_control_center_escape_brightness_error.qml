@@ -8,6 +8,12 @@ import Quickshell
 // (focusable: open); the runtime assertions below verify the panel surface
 // flips to focusable and that the brightness error row becomes visible with
 // the service's explanation when brightness is unavailable (VM / no backlight).
+//
+// Key-delivery note: this harness cannot inject a real Escape keypress (see
+// tst_topbar_keyboard_focus_model.qml); the catcher binding is asserted
+// structurally + its QML focus here. Manual check on a live session: open the
+// panel, press Escape → panel closes; open a Wi-Fi PSK row, Escape collapses
+// the row first, a second Escape closes the panel.
 ShellRoot {
     id: probe
 

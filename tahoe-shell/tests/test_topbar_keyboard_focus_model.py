@@ -104,6 +104,9 @@ class TopBarKeyboardStructureTests(unittest.TestCase):
             "function activateKeyboardCurrent()",
         ):
             self.assertIn(fn, self.topbar)
+        # F3: the walk position survives the current entry disappearing.
+        self.assertIn("property int keyboardIndex: -1", self.topbar)
+        self.assertIn("root.keyboardIndex", self.topbar)
 
     def test_entries_are_pushed_in_visual_order(self) -> None:
         body = self.topbar.split("function keyboardEntryList()", 1)[1].split(

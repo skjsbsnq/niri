@@ -7,6 +7,12 @@ import Quickshell
 // Tab/Backtab/arrows walk the visible interactive entries in visual order and
 // Return/Enter/Space activate the current one.
 //
+// Key-delivery note: this harness (qs -p) cannot inject real key events and
+// cannot deterministically grant the probe window compositor focus, so the
+// Keys handlers are asserted structurally and the catcher's QML focus binding
+// here. Real delivery must be walked through on a live session: click the bar,
+// Tab/arrows traverse with the focus ring, Return activates the ringed entry.
+//
 // Phase A runs with no services (only the always-visible entries exist) and
 // verifies traversal, wrap-around and activation. Phase B injects fakes so the
 // service-gated entries (app menu, clipboard, fan, battery, wifi, island chip,
@@ -250,7 +256,18 @@ ShellRoot {
             return;
         }
 
+        // The catcher's QML `focus` binding is the deterministic half of the
+        // delivery chain (Keys handlers are asserted structurally). Real key
+        // delivery additionally needs compositor focus, which the qs -p
+        // harness cannot grant deterministically (the probe window maps
+        // racy) and cannot inject keys into — verified manually: click the
+        // bar → Tab/arrows traverse with the focus ring, Return activates.
         if (stage === 3) {
+            var catcher = findByName(panel, "topbarKeyboardFocusCatcher");
+            if (!require(catcher !== null, "focus catcher not found")
+                    || !require(catcher.focus === true,
+                        "catcher must hold QML focus"))
+                return;
             var full = namesOf(panel.keyboardEntryList());
             var expectedFull = [
                 "topbarEntryNiriMenu",
@@ -301,9 +318,67 @@ ShellRoot {
                     "Tab after engage continues from engaged entry, got '"
                     + currentName() + "'"))
                 return;
+            schedule(4, 40);
+            return;
+        }
+
+        // ---- F3: a current entry that disappears does not reset the walk ----
+        if (stage === 4) {
+            if (!require(walkTo("topbarEntryNotifications"),
+                    "could not walk to notifications"))
+                return;
+            // Hide the current entry (service-gated button going away).
+            var notif = findByName(panel, "topbarEntryNotifications");
+            if (!require(notif !== null, "notification entry not found"))
+                return;
+            notif.visible = false;
+            panel.keyboardStep(1);
+            // The neighbor (clipboard) is next; a wrap-to-first would be wrong.
+            if (!require(currentName() === "topbarEntryClipboard",
+                    "Tab after entry disappears continues from neighbor, got '"
+                    + currentName() + "'"))
+                return;
+            schedule(5, 40);
+            return;
+        }
+
+        if (stage === 5) {
+            if (!require(walkTo("topbarEntryStatus"), "could not walk to status"))
+                return;
+            var statusEntry = findByName(panel, "topbarEntryStatus");
+            if (!require(statusEntry !== null, "status entry not found"))
+                return;
+            statusEntry.visible = false;
+            panel.keyboardStep(-1);
+            if (!require(currentName() === "topbarEntryWifi",
+                    "Backtab after entry disappears continues from neighbor, got '"
+                    + currentName() + "'"))
+                return;
             finish();
             return;
         }
+    }
+
+    function findByName(obj, name, depth) {
+        if (!obj || depth > 60)
+            return null;
+        if (obj.objectName === name)
+            return obj;
+        var result = null;
+        var kids = obj.children;
+        if (kids) {
+            for (var i = 0; i < kids.length; i++) {
+                result = findByName(kids[i], name, depth + 1);
+                if (result)
+                    return result;
+            }
+        }
+        if (obj.contentItem && obj.contentItem !== obj) {
+            result = findByName(obj.contentItem, name, depth + 1);
+            if (result)
+                return result;
+        }
+        return null;
     }
 
     Component.onCompleted: schedule(0, 40)

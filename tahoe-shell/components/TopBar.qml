@@ -111,6 +111,11 @@ PanelWindow {
     // stable even as services/tray/workspace entries appear or disappear.
     // ==================================================================
     property var keyboardCurrent: null
+    // Last known position of keyboardCurrent in the entry list; survives the
+    // current entry disappearing (service-gated button hidden, tray delegate
+    // destroyed) so the next Tab continues from the neighbor instead of
+    // jumping to the wrap edge (F3).
+    property int keyboardIndex: -1
 
     function keyboardEntryList() {
         var list = [];
@@ -155,19 +160,40 @@ PanelWindow {
         var list = root.keyboardEntryList();
         if (list.length === 0) {
             root.keyboardCurrent = null;
+            root.keyboardIndex = -1;
             return;
         }
         var idx = root.keyboardIndexOf(root.keyboardCurrent);
-        if (idx < 0)
-            idx = delta > 0 ? -1 : list.length;
-        root.keyboardCurrent = list[(idx + delta + list.length) % list.length];
+        var next = -1;
+        if (idx >= 0) {
+            root.keyboardIndex = idx;
+            next = (idx + delta + list.length) % list.length;
+        } else if (root.keyboardCurrent !== null) {
+            // Current entry disappeared (hidden/destroyed): continue from its
+            // last known position rather than jumping to the wrap edge. The
+            // remaining entries shifted left by one, so the forward neighbor
+            // is the item that slid into the current's old slot.
+            var pos = root.keyboardIndex < 0
+                ? (delta > 0 ? -1 : list.length)
+                : Math.min(root.keyboardIndex, list.length - 1);
+            next = delta > 0
+                ? (pos < 0 ? 0 : pos)
+                : (pos >= list.length ? list.length - 1 : (pos - 1 + list.length) % list.length);
+        } else {
+            next = delta > 0 ? 0 : list.length - 1;
+        }
+        root.keyboardCurrent = list[next];
+        root.keyboardIndex = next;
     }
 
     // Mouse engagement: a click makes the entry the keyboard current so the
     // next Tab continues from where the pointer was.
     function engageKeyboardEntry(entry) {
-        if (entry)
-            root.keyboardCurrent = entry;
+        if (!entry)
+            return;
+        root.keyboardCurrent = entry;
+        var idx = root.keyboardIndexOf(entry);
+        root.keyboardIndex = idx >= 0 ? idx : -1;
     }
 
     function activateKeyboardCurrent() {

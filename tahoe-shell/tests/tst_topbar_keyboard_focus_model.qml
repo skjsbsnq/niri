@@ -350,9 +350,11 @@ ShellRoot {
                 return;
             statusEntry.visible = false;
             panel.keyboardStep(-1);
-            if (!require(currentName() === "topbarEntryWifi",
-                    "Backtab after entry disappears continues from neighbor, got '"
-                    + currentName() + "'"))
+            // The true backward neighbor is spotlight (which slid into the
+            // old slot's predecessor position) — not wifi one step further.
+            if (!require(currentName() === "topbarEntrySpotlight",
+                    "Backtab after the last entry disappears lands on its "
+                    + "neighbor, got '" + currentName() + "'"))
                 return;
             finish();
             return;

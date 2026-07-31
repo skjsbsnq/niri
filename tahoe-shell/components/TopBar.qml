@@ -171,14 +171,18 @@ PanelWindow {
         } else if (root.keyboardCurrent !== null) {
             // Current entry disappeared (hidden/destroyed): continue from its
             // last known position rather than jumping to the wrap edge. The
-            // remaining entries shifted left by one, so the forward neighbor
-            // is the item that slid into the current's old slot.
-            var pos = root.keyboardIndex < 0
-                ? (delta > 0 ? -1 : list.length)
-                : Math.min(root.keyboardIndex, list.length - 1);
-            next = delta > 0
-                ? (pos < 0 ? 0 : pos)
-                : (pos >= list.length ? list.length - 1 : (pos - 1 + list.length) % list.length);
+            // remaining entries shifted left by one: the forward neighbor is
+            // the item that slid into the current's old slot; the backward
+            // neighbor is the one before the old slot (no clamping — when the
+            // disappeared entry was the last one, the true neighbor sits at
+            // keyboardIndex - 1, not at the clamped tail).
+            if (root.keyboardIndex < 0) {
+                next = delta > 0 ? 0 : list.length - 1;
+            } else if (delta > 0) {
+                next = Math.min(root.keyboardIndex, list.length - 1);
+            } else {
+                next = (root.keyboardIndex - 1 + list.length) % list.length;
+            }
         } else {
             next = delta > 0 ? 0 : list.length - 1;
         }

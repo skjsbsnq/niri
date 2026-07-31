@@ -200,6 +200,18 @@ PanelWindow {
     // Consecutive health misses required before tearing down an adopted
     // prestart engine. One-shot /proc glitches must not kill live wallpaper.
     property int prestartedHealthMisses: 0
+    // T-31 R-5 async state machine: FileView reads run on the IO thread pool and parsing
+    // happens in onLoaded/onLoadFailed, so the UI thread never blocks on /proc. Generation
+    // tokens make a completion signal from a superseded read a no-op (no stale adoption,
+    // no double teardown, no skipped kill).
+    property int prestartRecordGeneration: 0
+    property int prestartProcessGeneration: 0
+    property var prestartProcessCheck: null
+    property var prestartStopCheck: null
+    property int prestartStopCheckGeneration: 0
+    property int prestartReloadGeneration: 0
+    property bool prestartReloadWasAdopted: false
+    property bool prestartReloadWasStopPending: false
     readonly property string prestartedWallpaperRecordDir: Quickshell.stateDir + "/wallpaper-prestart"
     readonly property string prestartedWallpaperRecordPath: nestedSession ? ""
         : prestartedWallpaperRecordDir + "/" + safeOutputName(screenName()) + ".json"
@@ -586,32 +598,54 @@ PanelWindow {
         restartCoverVisible = false;
     }
 
-    function prestartedRecordProcessMatches(record) {
+    // Pure parser: does the /proc/<pid>/stat text match the record's startTime?
+    function prestartedProcStatMatches(record, text) {
         if (!record)
             return false;
-        var pid = Number(record.pid);
         var expectedStart = String(record.startTime || "");
-        if (!isFinite(pid) || pid <= 0 || !/^[0-9]+$/.test(expectedStart))
+        text = String(text || "").trim();
+        // Missing /proc entry means the process is gone.
+        if (text.length === 0)
             return false;
-        prestartedWallpaperProcessFile.path = "/proc/" + String(Math.round(pid)) + "/stat";
-        try {
-            prestartedWallpaperProcessFile.reload();
-            prestartedWallpaperProcessFile.waitForJob();
-            var text = String(prestartedWallpaperProcessFile.text() || "").trim();
-            // Missing /proc entry means the process is gone.
-            if (text.length === 0)
-                return false;
-            var close = text.lastIndexOf(")");
-            if (close < 0)
-                return false;
-            var fields = text.substring(close + 1).trim().split(/\s+/);
-            return fields.length > 19 && String(fields[19]) === expectedStart;
-        } catch (e) {
-            // Transient FileView/IO errors must NOT count as death — a single
-            // false-negative used to kill a healthy prestart engine and black
-            // the desktop (adversarial finding S3).
-            return true;
-        }
+        var close = text.lastIndexOf(")");
+        if (close < 0)
+            return false;
+        var fields = text.substring(close + 1).trim().split(/\s+/);
+        return fields.length > 19 && String(fields[19]) === expectedStart;
+    }
+
+    // Async process check: reload /proc/<pid>/stat and invoke callback(matches) from the
+    // FileView completion signal. Never blocks the UI thread (R-5).
+    function requestPrestartedProcessCheck(record, callback) {
+        if (!record)
+            return;
+        var generation = ++prestartProcessGeneration;
+        prestartProcessCheck = { generation: generation, record: record, callback: callback };
+        prestartedWallpaperProcessFile.path = "/proc/" + String(Math.round(Number(record.pid))) + "/stat";
+        prestartedWallpaperProcessFile.reload();
+    }
+
+    // Async stop pre-read: verify process identity before killing so a stale record can
+    // never kill a reused pid (test_stale_record_never_kills_a_reused_pid).
+    function requestPrestartedStopCheck(record) {
+        if (!record)
+            return;
+        // A stop supersedes any in-flight health/adoption process check: the process FileView
+        // completion must be consumed by the stop check, or the verified kill would never run
+        // (engine leak + prestartStopTimer polling forever).
+        prestartProcessCheck = null;
+        ++prestartProcessGeneration;
+        var generation = ++prestartStopCheckGeneration;
+        prestartStopCheck = { generation: generation, record: record };
+        prestartedWallpaperProcessFile.path = "/proc/" + String(Math.round(Number(record.pid))) + "/stat";
+        prestartedWallpaperProcessFile.reload();
+    }
+
+    function removePrestartedRecord() {
+        Quickshell.execDetached({
+            command: ["rm", "-f", "--", prestartedWallpaperRecordPath],
+            workingDirectory: ""
+        });
     }
 
     function stopPrestartedWallpaper() {
@@ -620,14 +654,26 @@ PanelWindow {
             return;
 
         var pid = Number(record.pid);
-        if (!isFinite(pid) || pid <= 0 || !prestartedRecordProcessMatches(record)) {
-            Quickshell.execDetached({
-                command: ["rm", "-f", "--", prestartedWallpaperRecordPath],
-                workingDirectory: ""
-            });
+        if (!isFinite(pid) || pid <= 0) {
+            // Cannot verify identity: only remove the record, never kill.
+            removePrestartedRecord();
             return;
         }
 
+        // Read-then-kill: the kill decision is made from the async /proc read.
+        requestPrestartedStopCheck(record);
+    }
+
+    // Completion of the stop pre-read: kill only a verified process, else just remove
+    // the record (stale-record safety).
+    function finishStopPrestartedWallpaper(record, matches) {
+        if (!record)
+            return;
+        if (!matches) {
+            removePrestartedRecord();
+            return;
+        }
+        var pid = String(Math.round(Number(record.pid)));
         Quickshell.execDetached({
             command: [
                 "sh",
@@ -640,7 +686,7 @@ PanelWindow {
                 "kill -KILL -- -\"$pid\" 2>/dev/null || kill -KILL \"$pid\" 2>/dev/null || true; fi; " +
                 "rm -f -- \"$record\"",
                 "sh",
-                String(Math.round(pid)),
+                pid,
                 prestartedWallpaperRecordPath
             ],
             workingDirectory: ""
@@ -648,40 +694,68 @@ PanelWindow {
     }
 
     function reloadPrestartedWallpaperState() {
-        var wasAdopted = prestartedWallpaperAdopted;
-        var wasStopPending = prestartedWallpaperStopPending;
-        var shouldResync = false;
-        prestartStateLoaded = false;
+        prestartReloadWasAdopted = prestartedWallpaperAdopted;
+        prestartReloadWasStopPending = prestartedWallpaperStopPending;
+        // Bump the generation: a completion signal from a previous read is stale.
+        prestartReloadGeneration = ++prestartRecordGeneration;
         prestartedWallpaperRecord = null;
+        prestartedWallpaperFile.reload();
+    }
+
+    // Completion of the async record read (prestartedWallpaperFile.onLoaded/onLoadFailed).
+    function finishPrestartedRecordLoad() {
+        // A completion from a superseded reload must not mutate state.
+        if (prestartReloadGeneration !== prestartRecordGeneration)
+            return;
+        var parsed = null;
         try {
-            prestartedWallpaperFile.reload();
-            prestartedWallpaperFile.waitForJob();
-            var parsed = JSON.parse(prestartedWallpaperFile.text());
-            if (parsed && Number(parsed.pid) > 0
-                    && String(parsed.output || "") === screenName()
-                    && prestartedRecordProcessMatches(parsed)) {
-                prestartedWallpaperRecord = parsed;
-                // A freshly validated record may replace one we previously
-                // released (health false-negative, intentional stop). Allow
-                // adoption again for this instance lifetime.
-                prestartedWallpaperReleased = false;
-            } else if (parsed && prestartedWallpaperRecordPath.length > 0) {
-                Quickshell.execDetached({
-                    command: ["rm", "-f", "--", prestartedWallpaperRecordPath],
-                    workingDirectory: ""
-                });
-            }
+            parsed = JSON.parse(String(prestartedWallpaperFile.text() || ""));
         } catch (e) {
-            prestartedWallpaperRecord = null;
+            parsed = null;
         }
+
+        if (parsed && Number(parsed.pid) > 0 && String(parsed.output || "") === screenName()) {
+            if (prestartedWallpaperStopPending) {
+                // A stop is in flight: keep the record until the kill script removes the
+                // file. Do not run a competing process read — it would supersede the stop
+                // check and could skip the verified kill.
+                prestartedWallpaperRecord = parsed;
+                finishPrestartReload();
+                return;
+            }
+            // Validate the process identity before adopting (async /proc read).
+            requestPrestartedProcessCheck(parsed, function(matches) {
+                if (matches) {
+                    prestartedWallpaperRecord = parsed;
+                    // A freshly validated record may replace one we previously
+                    // released (health false-negative, intentional stop). Allow
+                    // adoption again for this instance lifetime.
+                    prestartedWallpaperReleased = false;
+                } else if (prestartedWallpaperRecordPath.length > 0) {
+                    removePrestartedRecord();
+                }
+                finishPrestartReload();
+            });
+            return;
+        }
+        if (parsed && prestartedWallpaperRecordPath.length > 0) {
+            // Malformed / foreign-output record: remove it.
+            removePrestartedRecord();
+        }
+        finishPrestartReload();
+    }
+
+    // Tail shared by all record-read completions (mirrors the old synchronous tail).
+    function finishPrestartReload() {
+        var shouldResync = false;
         prestartStateLoaded = true;
 
         if (prestartedWallpaperStopPending && !prestartedWallpaperRecord) {
             prestartedWallpaperStopPending = false;
-            shouldResync = wasStopPending;
+            shouldResync = prestartReloadWasStopPending;
         }
 
-        if (wasAdopted && !prestartedRecordMatches(prestartedWallpaperMode)) {
+        if (prestartReloadWasAdopted && !prestartedRecordMatches(prestartedWallpaperMode)) {
             prestartedWallpaperAdopted = false;
             prestartedWallpaperMode = "";
             adoptedWallpaperCommand = "";
@@ -1289,16 +1363,21 @@ PanelWindow {
         onTriggered: {
             if (!root.prestartedWallpaperAdopted)
                 return;
-            if (root.prestartedRecordProcessMatches(root.prestartedWallpaperRecord)) {
+            // T-31 R-5: async /proc check — the health timer never blocks the UI thread.
+            root.requestPrestartedProcessCheck(root.prestartedWallpaperRecord, function(matches) {
+                // The adoption may have been released while the read was in flight.
+                if (!root.prestartedWallpaperAdopted)
+                    return;
+                if (matches) {
+                    root.prestartedHealthMisses = 0;
+                    return;
+                }
+                root.prestartedHealthMisses += 1;
+                // Require two consecutive misses (~10s) so a single /proc glitch
+                // cannot kill a healthy engine and leave a sticky cover.
+                if (root.prestartedHealthMisses < 2)
+                    return;
                 root.prestartedHealthMisses = 0;
-                return;
-            }
-            root.prestartedHealthMisses += 1;
-            // Require two consecutive misses (~10s) so a single /proc glitch
-            // cannot kill a healthy engine and leave a sticky cover.
-            if (root.prestartedHealthMisses < 2)
-                return;
-            root.prestartedHealthMisses = 0;
             Quickshell.execDetached({
                 command: ["rm", "-f", "--", root.prestartedWallpaperRecordPath],
                 workingDirectory: ""
@@ -1358,10 +1437,12 @@ PanelWindow {
     FileView {
         id: prestartedWallpaperFile
         path: root.prestartedWallpaperRecordPath
-        blockLoading: true
+        blockLoading: false
         printErrors: false
         watchChanges: true
         onFileChanged: root.reloadPrestartedWallpaperState()
+        onLoaded: root.finishPrestartedRecordLoad()
+        onLoadFailed: root.finishPrestartedRecordLoad()
         onPathChanged: {
             if (root.completed)
                 root.reloadPrestartedWallpaperState();
@@ -1371,8 +1452,41 @@ PanelWindow {
     FileView {
         id: prestartedWallpaperProcessFile
         path: ""
-        blockLoading: true
+        blockLoading: false
         printErrors: false
+        onLoaded: {
+            var check = root.prestartProcessCheck;
+            if (check && check.generation === root.prestartProcessGeneration) {
+                root.prestartProcessCheck = null;
+                check.callback(root.prestartedProcStatMatches(check.record, text()));
+                return;
+            }
+            var stopCheck = root.prestartStopCheck;
+            if (stopCheck && stopCheck.generation === root.prestartStopCheckGeneration) {
+                root.prestartStopCheck = null;
+                root.finishStopPrestartedWallpaper(
+                    stopCheck.record,
+                    root.prestartedProcStatMatches(stopCheck.record, text())
+                );
+            }
+        }
+        onLoadFailed: {
+            var check = root.prestartProcessCheck;
+            if (check && check.generation === root.prestartProcessGeneration) {
+                root.prestartProcessCheck = null;
+                // Transient FileView/IO errors must NOT count as death — a single
+                // false-negative used to kill a healthy prestart engine and black
+                // the desktop (adversarial finding S3).
+                check.callback(true);
+                return;
+            }
+            var stopCheck = root.prestartStopCheck;
+            if (stopCheck && stopCheck.generation === root.prestartStopCheckGeneration) {
+                root.prestartStopCheck = null;
+                // Transient read errors keep the old "assume alive" stop semantics.
+                root.finishStopPrestartedWallpaper(stopCheck.record, true);
+            }
+        }
     }
 
     FileView {

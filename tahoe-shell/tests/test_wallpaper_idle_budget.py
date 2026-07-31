@@ -85,8 +85,12 @@ class WallpaperIdleBudgetTests(unittest.TestCase):
         self.assertIn("prestartedWallpaperStopPending", text)
         self.assertIn("reloadPrestartedWallpaperState", text)
         self.assertIn("prestartedWallpaperRecordPath", text)
-        self.assertIn("prestartedRecordProcessMatches", text)
+        # T-31 R-5: /proc + record reads are async; parsing happens in onLoaded/onLoadFailed.
+        self.assertIn("requestPrestartedProcessCheck", text)
+        self.assertIn("prestartProcessGeneration", text)
+        self.assertIn("prestartRecordGeneration", text)
         self.assertIn("prestartedWallpaperHealthTimer", text)
+        self.assertNotIn("waitForJob", text)
         self.assertIn("nestedSession", text)
         self.assertRegex(text, re.compile(r"dynamicDesired:.*?&& !nestedSession", re.S))
         self.assertRegex(text, re.compile(r"externalDesired:.*?&& !nestedSession", re.S))
@@ -169,13 +173,16 @@ class WallpaperIdleBudgetTests(unittest.TestCase):
         )
         self.assertIsNotNone(health)
         self.assertIn("prestartedHealthMisses", health.group(1))
-        match_fn = re.search(
-            r"function prestartedRecordProcessMatches\(record\) \{(.*?)\n    \}",
+        # S3: transient FileView/IO errors must NOT count as death — the async process
+        # FileView loadFailed path reports "alive" instead of tearing down the engine.
+        proc_fail = re.search(
+            r"onLoadFailed: \{(.*?)\n        \}",
             text,
             re.S,
         )
-        self.assertIsNotNone(match_fn)
-        self.assertIn("return true", match_fn.group(1))
+        self.assertIsNotNone(proc_fail)
+        self.assertIn("check.callback(true)", proc_fail.group(1))
+        self.assertIn("must NOT count as death", proc_fail.group(1))
         # FPS budget skew must not break prestart adopt.
         self.assertIn("function normalizeWallpaperCommandForMatch(", text)
         self.assertIn("normalizeWallpaperCommandForMatch(recorded)", text)
@@ -332,6 +339,60 @@ class WallpaperIdleBudgetTests(unittest.TestCase):
         self.assertIn('shell_args=("bash" "$TAHOE_CONFIG_DIR/scripts/start-quickshell.sh")', session)
         self.assertEqual(config.count("prestart-wallpaper.sh"), 0)
 
+
+
+    def test_prestarted_proc_stat_matches_parser(self) -> None:
+        """T-31 R-5: the async /proc parser keeps the stale-record identity contract."""
+        import json
+        import shutil
+        import subprocess
+
+        if shutil.which("node") is None:
+            self.skipTest("node not available")
+
+        text = WALLPAPER.read_text(encoding="utf-8")
+        match_fn = re.search(
+            r"function prestartedProcStatMatches\(record, text\) \{(.*?)\n    \}",
+            text,
+            re.S,
+        )
+        self.assertIsNotNone(match_fn)
+        source = "function prestartedProcStatMatches(record, text) {" + match_fn.group(1) + "\n}"
+
+        helper = r"""
+const vm = require("vm");
+const source = process.argv[1];
+const request = JSON.parse(process.argv[2]);
+const context = { String, Number, isFinite, RegExp, JSON, Array };
+vm.createContext(context);
+vm.runInContext(source, context, { filename: "Wallpaper.qml" });
+const result = {
+  match: context.prestartedProcStatMatches(request.record, request.procText),
+};
+process.stdout.write(JSON.stringify(result));
+"""
+        proc_stat = (
+            "1234 (linux-wallpaper) S 1 1 1 0 -1 4194560 100 0 0 0 0 0 0 0 20 0 "
+            "1 0 456789 123456 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0"
+        )
+        record = {"pid": 1234, "startTime": "456789"}
+
+        def run(rec, proc):
+            result = subprocess.run(
+                ["node", "-e", helper, source, json.dumps({"record": rec, "procText": proc})],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            return json.loads(result.stdout)["match"]
+
+        self.assertTrue(run(record, proc_stat), "matching startTime must be alive")
+        stale = dict(record)
+        stale["startTime"] = "999999"
+        self.assertFalse(run(stale, proc_stat), "stale record must not match a reused pid")
+        self.assertFalse(run(record, ""), "missing /proc entry must count as gone")
+        self.assertFalse(run(record, "1234 (linux-wallpaper) S"), "truncated stat must not match")
+        self.assertFalse(run(None, proc_stat), "null record must not match")
 
 if __name__ == "__main__":
     unittest.main()

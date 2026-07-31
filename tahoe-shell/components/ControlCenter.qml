@@ -197,6 +197,20 @@ PanelWindow {
     implicitHeight: panel.implicitHeight
     color: "transparent"
     WlrLayershell.namespace: "tahoe-control-center"
+    // F-11: panel-level Escape close. OnDemand interactivity while open —
+    // niri focuses the panel on open/click, so keys reach the catcher below.
+    focusable: open
+
+    // F-11: sole QML focus owner while open. The Wi-Fi PSK field keeps its
+    // own Escape (collapse the row) — while it has focus its handler runs
+    // first and accepts, so panel close only happens once the row is closed.
+    Item {
+        id: ccKeyboardFocusCatcher
+
+        objectName: "controlCenterKeyboardFocusCatcher"
+        focus: root.open
+        Keys.onEscapePressed: root.closeRequested()
+    }
 
     anchors {
         top: true
@@ -374,6 +388,24 @@ PanelWindow {
                             if (root.controlsService)
                                 root.controlsService.commitBrightness(v);
                         }
+                    }
+
+                    // F-12: surface the service's brightnessErrorText (missing
+                    // brightnessctl in VMs / no backlight) instead of leaving a
+                    // silently disabled slider.
+                    Text {
+                        id: brightnessErrorText
+
+                        objectName: "brightnessErrorText"
+                        Layout.fillWidth: true
+                        visible: root.controlsService
+                            && String(root.controlsService.brightnessErrorText || "").length > 0
+                        text: root.controlsService
+                            ? "亮度不可用：" + String(root.controlsService.brightnessErrorText || "")
+                            : ""
+                        color: root.textTertiary
+                        font.pixelSize: 10
+                        wrapMode: Text.Wrap
                     }
 
                     GlassSlider {

@@ -115,7 +115,14 @@ PanelWindow {
     MouseArea {
         anchors.fill: parent
         enabled: root.open
-        onClicked: function(mouse) {
+        // F-13: left-click and right-click are both explicit dismiss
+        // gestures on the outside region. Wheel is deliberately inert: a
+        // scroll must never close a popup (the layer owns the input region,
+        // so it cannot reach the window underneath either — it is consumed
+        // here, documented as the policy rather than left implicit).
+        acceptedButtons: Qt.LeftButton | Qt.RightButton
+
+        function dismissFor(mouse) {
             if (root.suppressAfterimage) {
                 var pad = root.cutoutPadding;
                 var r = root.lastClosedRect;
@@ -125,10 +132,19 @@ PanelWindow {
                     // just closed (its visual afterimage) within the suppress
                     // window — ignore it so it does not dismiss the popup that
                     // opened in the same spot.
-                    return;
+                    return false;
                 }
             }
-            root.closeRequested();
+            return true;
+        }
+
+        onClicked: function(mouse) {
+            if (root.dismissFor(mouse))
+                root.closeRequested();
+        }
+        onWheel: function(wheel) {
+            // F-13: never dismiss on scroll; consume so the gesture is inert.
+            wheel.accepted = true;
         }
     }
 }

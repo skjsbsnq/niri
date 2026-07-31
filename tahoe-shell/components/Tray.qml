@@ -57,6 +57,15 @@ Item {
         root.openMenuRequested(item, root.anchorRectFor(sourceItem));
     }
 
+    // F-10: TopBar keyboard model — expose tray icons as focusable entries.
+    function keyboardItemCount() {
+        return trayList.count;
+    }
+
+    function keyboardItemAt(index) {
+        return trayList.itemAtIndex(index);
+    }
+
     function iconSource(item) {
         if (!item)
             return "";
@@ -170,6 +179,17 @@ Item {
 
             required property var modelData
             readonly property var trayObject: modelData ? modelData.item : null
+            objectName: "topbarEntryTrayItem"
+            // F-10: keyboard activation mirrors the left-click path
+            // (onlyMenu → menu, otherwise activate).
+            function keyboardActivate() {
+                if (!trayItem.trayObject)
+                    return;
+                if (trayItem.trayObject.onlyMenu && trayItem.trayObject.hasMenu)
+                    root.displayMenu(trayItem.trayObject, trayItem, 0, 0);
+                else
+                    trayItem.trayObject.activate();
+            }
             property real lifecycleOpacity: 1
             property real lifecycleScale: 1
             property real pressScale: Motion.pressScaleFor(root.settingsService, trayMouse.pressed)
@@ -195,6 +215,18 @@ Item {
                 Behavior on color {
                     ColorAnimation { duration: Motion.fadeFast(root.settingsService); easing.type: Motion.standardDecel }
                 }
+            }
+
+            // F-10: keyboard focus indicator (TopBar keyboardCurrent).
+            Rectangle {
+                anchors.fill: parent
+                radius: 7
+                color: "transparent"
+                border.color: root.panelWindow && root.panelWindow.keyboardCurrent === trayItem
+                    ? root.panelWindow.accentColor
+                    : "transparent"
+                border.width: 1
+                z: 2
             }
 
             IconImage {
@@ -227,6 +259,8 @@ Item {
                 cursorShape: Qt.PointingHandCursor
 
                 onClicked: function(mouse) {
+                    if (root.panelWindow && root.panelWindow.engageKeyboardEntry)
+                        root.panelWindow.engageKeyboardEntry(trayItem);
                     if (!trayItem.trayObject)
                         return;
 

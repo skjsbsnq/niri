@@ -58,7 +58,7 @@ PanelWindow {
     readonly property int islandInputCutoutWidth: Math.min(root.width, root.dynamicIslandInputWidth())
     readonly property int islandInputCutoutLeft: Math.max(0, Math.floor((root.width - root.islandInputCutoutWidth) / 2))
     readonly property int islandInputCutoutRight: Math.min(root.width, root.islandInputCutoutLeft + root.islandInputCutoutWidth)
-    readonly property bool batteryAvailable: batteryService && batteryService.available
+    readonly property bool batteryAvailable: !!batteryService && !!batteryService.available
     // Single InputMethod owner language glyph (中/EN/あ/한/Aa/--).
     readonly property string inputMethodDisplayText: inputMethodService
         ? String(inputMethodService.displayText || "--")
@@ -100,6 +100,88 @@ PanelWindow {
     signal triggerScreenshot()
     signal toggleInputMethod()
     signal openTrayMenu(var item, var anchorRect)
+
+    // ==================================================================
+    // F-10: keyboard focus model. The bar is click-focusable (OnDemand
+    // layer interactivity, see focusable below); once it holds keyboard
+    // focus, Tab/Backtab and arrow keys walk the visible interactive
+    // entries in visual order and Return/Enter/Space activate the current
+    // one. keyboardCurrent is the model (indicator + activation target);
+    // QML focus itself stays on topbarKeyboardFocusCatcher so the chain is
+    // stable even as services/tray/workspace entries appear or disappear.
+    // ==================================================================
+    property var keyboardCurrent: null
+
+    function keyboardEntryList() {
+        var list = [];
+        function push(item) {
+            if (item && item.visible)
+                list.push(item);
+        }
+        push(niriMenuButton);
+        push(leftSidebarButton);
+        push(applicationMenuButton);
+        for (var i = 0; i < workspaceRepeater.count; ++i)
+            push(workspaceRepeater.itemAt(i));
+        if (root.chipInteractive)
+            push(topbarTimeFallback);
+        if (tray.visible) {
+            var trayCount = tray.keyboardItemCount();
+            for (var j = 0; j < trayCount; ++j)
+                push(tray.keyboardItemAt(j));
+        }
+        push(notificationButton);
+        push(clipboardButton);
+        push(fanButton);
+        push(batteryButton);
+        push(wifiButton);
+        push(spotlightButton);
+        push(statusButton);
+        return list;
+    }
+
+    function keyboardIndexOf(entry) {
+        var list = root.keyboardEntryList();
+        for (var i = 0; i < list.length; ++i) {
+            if (list[i] === entry)
+                return i;
+        }
+        return -1;
+    }
+
+    // Move the keyboard current by delta entries (wrapping). Entries that
+    // became invisible since last navigation are skipped by the list.
+    function keyboardStep(delta) {
+        var list = root.keyboardEntryList();
+        if (list.length === 0) {
+            root.keyboardCurrent = null;
+            return;
+        }
+        var idx = root.keyboardIndexOf(root.keyboardCurrent);
+        if (idx < 0)
+            idx = delta > 0 ? -1 : list.length;
+        root.keyboardCurrent = list[(idx + delta + list.length) % list.length];
+    }
+
+    // Mouse engagement: a click makes the entry the keyboard current so the
+    // next Tab continues from where the pointer was.
+    function engageKeyboardEntry(entry) {
+        if (entry)
+            root.keyboardCurrent = entry;
+    }
+
+    function activateKeyboardCurrent() {
+        var entry = root.keyboardCurrent;
+        if (!entry || typeof entry.keyboardActivate !== "function")
+            return;
+        // Stale currents (destroyed tray icons / workspace churn) fall out of
+        // the fresh entry list; never activate them.
+        if (root.keyboardIndexOf(entry) < 0) {
+            root.keyboardCurrent = null;
+            return;
+        }
+        entry.keyboardActivate();
+    }
 
     function anchorRectFor(item) {
         if (!item)
@@ -191,6 +273,28 @@ PanelWindow {
     implicitHeight: 40
     color: "transparent"
     WlrLayershell.namespace: "tahoe-topbar"
+    // F-10: OnDemand keyboard interactivity — niri hands keyboard focus to
+    // the bar when it is clicked (or focused), which is what lets Tab/arrow
+    // traversal reach the bar instead of switching windows. When the bar is
+    // not focused, Tab keeps compositor semantics.
+    focusable: true
+
+    // Sole QML focus owner for keyboard traversal. Entries never take QML
+    // focus: the chain lives in keyboardCurrent so it survives entries
+    // appearing/disappearing (services, tray, workspaces).
+    Item {
+        id: topbarKeyboardFocusCatcher
+
+        objectName: "topbarKeyboardFocusCatcher"
+        focus: true
+        Keys.onTabPressed: root.keyboardStep(1)
+        Keys.onBacktabPressed: root.keyboardStep(-1)
+        Keys.onRightPressed: root.keyboardStep(1)
+        Keys.onLeftPressed: root.keyboardStep(-1)
+        Keys.onReturnPressed: root.activateKeyboardCurrent()
+        Keys.onEnterPressed: root.activateKeyboardCurrent()
+        Keys.onSpacePressed: root.activateKeyboardCurrent()
+    }
 
     // Floating, rounded glass bar — mirrors the Dock / ControlCenter form
     // so the top bar reads as "a piece of glass floating off the screen
@@ -258,6 +362,12 @@ PanelWindow {
                 Item {
                     id: niriMenuButton
 
+                    objectName: "topbarEntryNiriMenu"
+                    // F-10: keyboard activation mirrors the MouseArea click path.
+                    function keyboardActivate() {
+                        root.toggleAppMenu(root.anchorRectFor(niriMenuButton));
+                    }
+
                     width: 30
                     height: 24
                     scale: Motion.pressScaleFor(root.settingsService, niriMenuMouse.pressed)
@@ -279,6 +389,17 @@ PanelWindow {
                         }
                     }
 
+                    // F-10: keyboard focus indicator.
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: 12
+                        color: "transparent"
+                        border.color: root.accentColor
+                        border.width: 1
+                        visible: root.keyboardCurrent === niriMenuButton
+                        z: 4
+                    }
+
                     Image {
                         anchors.centerIn: parent
                         width: 18
@@ -294,12 +415,21 @@ PanelWindow {
                         anchors.fill: parent
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: root.toggleAppMenu(root.anchorRectFor(niriMenuButton))
+                        onClicked: {
+                            root.engageKeyboardEntry(niriMenuButton);
+                            root.toggleAppMenu(root.anchorRectFor(niriMenuButton));
+                        }
                     }
                 }
 
                 Item {
                     id: leftSidebarButton
+
+                    objectName: "topbarEntryLeftSidebar"
+                    // F-10: keyboard activation mirrors the MouseArea click path.
+                    function keyboardActivate() {
+                        root.toggleLeftSidebar();
+                    }
 
                     width: 30
                     height: 24
@@ -320,6 +450,17 @@ PanelWindow {
                         }
                     }
 
+                    // F-10: keyboard focus indicator.
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: 12
+                        color: "transparent"
+                        border.color: root.accentColor
+                        border.width: 1
+                        visible: root.keyboardCurrent === leftSidebarButton
+                        z: 4
+                    }
+
                     TahoeSymbol {
                         anchors.centerIn: parent
                         name: "\ue2bd" // wb_cloudy
@@ -333,7 +474,10 @@ PanelWindow {
                         anchors.fill: parent
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: root.toggleLeftSidebar()
+                        onClicked: {
+                            root.engageKeyboardEntry(leftSidebarButton);
+                            root.toggleLeftSidebar();
+                        }
                     }
                 }
 
@@ -349,6 +493,13 @@ PanelWindow {
 
                 Item {
                     id: applicationMenuButton
+
+                    objectName: "topbarEntryAppMenu"
+                    // F-10: keyboard activation mirrors the MouseArea click path.
+                    function keyboardActivate() {
+                        root.toggleApplicationMenu(root.anchorRectFor(applicationMenuButton));
+                    }
+
                     width: visible ? Math.min(applicationMenuLabel.implicitWidth + 18, root.width < 1500 ? 112 : 152) : 0
                     height: 24
                     visible: !!root.appMenuService
@@ -369,6 +520,17 @@ PanelWindow {
                         }
                     }
 
+                    // F-10: keyboard focus indicator.
+                    Rectangle {
+                        anchors.fill: parent
+                        radius: 12
+                        color: "transparent"
+                        border.color: root.accentColor
+                        border.width: 1
+                        visible: root.keyboardCurrent === applicationMenuButton
+                        z: 4
+                    }
+
                     Text {
                         id: applicationMenuLabel
                         anchors.centerIn: parent
@@ -386,7 +548,10 @@ PanelWindow {
                         anchors.fill: parent
                         hoverEnabled: true
                         cursorShape: Qt.PointingHandCursor
-                        onClicked: root.toggleApplicationMenu(root.anchorRectFor(applicationMenuButton))
+                        onClicked: {
+                            root.engageKeyboardEntry(applicationMenuButton);
+                            root.toggleApplicationMenu(root.anchorRectFor(applicationMenuButton));
+                        }
                     }
                 }
 
@@ -395,13 +560,23 @@ PanelWindow {
                     spacing: 5
 
                     Repeater {
+                        id: workspaceRepeater
+
                         model: ScriptModel {
                             values: root.niriService ? root.niriService.visibleWindowsets : []
                         }
 
                         delegate: Item {
+                            id: workspaceEntry
+
                             required property var modelData
                             required property int index
+                            objectName: "topbarEntryWorkspace"
+                            // F-10: keyboard activation mirrors the MouseArea click path.
+                            function keyboardActivate() {
+                                if (modelData.canActivate && root.niriService)
+                                    root.niriService.activateWorkspace(modelData);
+                            }
 
                             width: 28
                             height: 20
@@ -425,6 +600,17 @@ PanelWindow {
                                 }
                             }
 
+                            // F-10: keyboard focus indicator.
+                            Rectangle {
+                                anchors.fill: parent
+                                radius: 10
+                                color: "transparent"
+                                border.color: root.accentColor
+                                border.width: 1
+                                visible: root.keyboardCurrent === workspaceEntry
+                                z: 4
+                            }
+
                             Text {
                                 anchors.centerIn: parent
                                 text: root.niriService ? root.niriService.workspaceLabel(modelData, index) : String(index + 1)
@@ -439,6 +625,7 @@ PanelWindow {
                                 hoverEnabled: true
                                 cursorShape: modelData.canActivate ? Qt.PointingHandCursor : Qt.ArrowCursor
                                 onClicked: {
+                                    root.engageKeyboardEntry(workspaceEntry);
                                     if (root.niriService)
                                         root.niriService.activateWorkspace(modelData);
                                 }
@@ -464,6 +651,8 @@ PanelWindow {
                 }
 
             Tray {
+                id: tray
+
                 panelWindow: root
                 settingsService: root.settingsService
                 darkMode: root.darkMode
@@ -477,6 +666,12 @@ PanelWindow {
 
             Item {
                 id: notificationButton
+
+                objectName: "topbarEntryNotifications"
+                // F-10: keyboard activation mirrors the MouseArea click path.
+                function keyboardActivate() {
+                    root.toggleNotifications(root.anchorRectFor(notificationButton));
+                }
 
                 Layout.preferredWidth: root.statusIconWidth
                 Layout.preferredHeight: root.statusItemHeight
@@ -496,6 +691,17 @@ PanelWindow {
                     Behavior on color {
                         ColorAnimation { duration: Motion.fadeFast(root.settingsService); easing.type: Motion.standardDecel }
                     }
+                }
+
+                // F-10: keyboard focus indicator.
+                Rectangle {
+                    anchors.fill: parent
+                    radius: root.statusRadius
+                    color: "transparent"
+                    border.color: root.accentColor
+                    border.width: 1
+                    visible: root.keyboardCurrent === notificationButton
+                    z: 4
                 }
 
                 TahoeSymbol {
@@ -545,12 +751,21 @@ PanelWindow {
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: root.toggleNotifications(root.anchorRectFor(notificationButton))
+                    onClicked: {
+                        root.engageKeyboardEntry(notificationButton);
+                        root.toggleNotifications(root.anchorRectFor(notificationButton));
+                    }
                 }
             }
 
             Item {
                 id: clipboardButton
+
+                objectName: "topbarEntryClipboard"
+                // F-10: keyboard activation mirrors the MouseArea click path.
+                function keyboardActivate() {
+                    root.toggleClipboard(root.anchorRectFor(clipboardButton));
+                }
 
                 Layout.preferredWidth: visible ? root.statusIconWidth : 0
                 Layout.preferredHeight: root.statusItemHeight
@@ -571,6 +786,17 @@ PanelWindow {
                     Behavior on color {
                         ColorAnimation { duration: Motion.fadeFast(root.settingsService); easing.type: Motion.standardDecel }
                     }
+                }
+
+                // F-10: keyboard focus indicator.
+                Rectangle {
+                    anchors.fill: parent
+                    radius: root.statusRadius
+                    color: "transparent"
+                    border.color: root.accentColor
+                    border.width: 1
+                    visible: root.keyboardCurrent === clipboardButton
+                    z: 4
                 }
 
                 TahoeSymbol {
@@ -619,12 +845,21 @@ PanelWindow {
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: root.toggleClipboard(root.anchorRectFor(clipboardButton))
+                    onClicked: {
+                        root.engageKeyboardEntry(clipboardButton);
+                        root.toggleClipboard(root.anchorRectFor(clipboardButton));
+                    }
                 }
             }
 
             Item {
                 id: fanButton
+
+                objectName: "topbarEntryFan"
+                // F-10: keyboard activation mirrors the MouseArea click path.
+                function keyboardActivate() {
+                    root.toggleFan(root.anchorRectFor(fanButton));
+                }
 
                 Layout.preferredWidth: visible ? root.statusIconWidth : 0
                 Layout.preferredHeight: root.statusItemHeight
@@ -647,6 +882,17 @@ PanelWindow {
                     }
                 }
 
+                // F-10: keyboard focus indicator.
+                Rectangle {
+                    anchors.fill: parent
+                    radius: root.statusRadius
+                    color: "transparent"
+                    border.color: root.accentColor
+                    border.width: 1
+                    visible: root.keyboardCurrent === fanButton
+                    z: 4
+                }
+
                 TahoeSymbol {
                     anchors.centerIn: parent
                     // Semantic "fan" → assets/icons/symbols/fan.png (bitmap-only;
@@ -666,12 +912,21 @@ PanelWindow {
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: root.toggleFan(root.anchorRectFor(fanButton))
+                    onClicked: {
+                        root.engageKeyboardEntry(fanButton);
+                        root.toggleFan(root.anchorRectFor(fanButton));
+                    }
                 }
             }
 
             Item {
                 id: batteryButton
+
+                objectName: "topbarEntryBattery"
+                // F-10: keyboard activation mirrors the MouseArea click path.
+                function keyboardActivate() {
+                    root.toggleBattery(root.anchorRectFor(batteryButton));
+                }
 
                 Layout.preferredWidth: visible ? Math.max(root.batteryItemMinWidth, batteryContent.implicitWidth + 12) : 0
                 Layout.preferredHeight: root.statusItemHeight
@@ -692,6 +947,17 @@ PanelWindow {
                     Behavior on color {
                         ColorAnimation { duration: Motion.fadeFast(root.settingsService); easing.type: Motion.standardDecel }
                     }
+                }
+
+                // F-10: keyboard focus indicator.
+                Rectangle {
+                    anchors.fill: parent
+                    radius: root.statusRadius
+                    color: "transparent"
+                    border.color: root.accentColor
+                    border.width: 1
+                    visible: root.keyboardCurrent === batteryButton
+                    z: 4
                 }
 
                 RowLayout {
@@ -761,7 +1027,10 @@ PanelWindow {
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: root.toggleBattery(root.anchorRectFor(batteryButton))
+                    onClicked: {
+                        root.engageKeyboardEntry(batteryButton);
+                        root.toggleBattery(root.anchorRectFor(batteryButton));
+                    }
                 }
             }
 
@@ -811,6 +1080,12 @@ PanelWindow {
             Item {
                 id: wifiButton
 
+                objectName: "topbarEntryWifi"
+                // F-10: keyboard activation mirrors the MouseArea click path.
+                function keyboardActivate() {
+                    root.toggleWifi(root.anchorRectFor(wifiButton));
+                }
+
                 Layout.preferredWidth: visible ? root.statusIconWidth : 0
                 Layout.preferredHeight: root.statusItemHeight
                 Layout.alignment: Qt.AlignVCenter
@@ -832,6 +1107,17 @@ PanelWindow {
                     }
                 }
 
+                // F-10: keyboard focus indicator.
+                Rectangle {
+                    anchors.fill: parent
+                    radius: root.statusRadius
+                    color: "transparent"
+                    border.color: root.accentColor
+                    border.width: 1
+                    visible: root.keyboardCurrent === wifiButton
+                    z: 4
+                }
+
                 TahoeSymbol {
                     anchors.centerIn: parent
                     name: "\ue63e"
@@ -845,12 +1131,22 @@ PanelWindow {
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: root.toggleWifi(root.anchorRectFor(wifiButton))
+                    onClicked: {
+                        root.engageKeyboardEntry(wifiButton);
+                        root.toggleWifi(root.anchorRectFor(wifiButton));
+                    }
                 }
             }
 
             Item {
                 id: spotlightButton
+
+                objectName: "topbarEntrySpotlight"
+                // F-10: keyboard activation mirrors the MouseArea click path.
+                function keyboardActivate() {
+                    root.toggleSpotlight();
+                }
+
                 Layout.preferredWidth: root.statusIconWidth
                 Layout.preferredHeight: root.statusItemHeight
                 Layout.alignment: Qt.AlignVCenter
@@ -871,6 +1167,17 @@ PanelWindow {
                     }
                 }
 
+                // F-10: keyboard focus indicator.
+                Rectangle {
+                    anchors.fill: parent
+                    radius: root.statusRadius
+                    color: "transparent"
+                    border.color: root.accentColor
+                    border.width: 1
+                    visible: root.keyboardCurrent === spotlightButton
+                    z: 4
+                }
+
                 TahoeSymbol {
                     anchors.centerIn: parent
                     name: "\ue8b6"
@@ -883,12 +1190,22 @@ PanelWindow {
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: root.toggleSpotlight()
+                    onClicked: {
+                        root.engageKeyboardEntry(spotlightButton);
+                        root.toggleSpotlight();
+                    }
                 }
             }
 
             Item {
                 id: statusButton
+
+                objectName: "topbarEntryStatus"
+                // F-10: keyboard activation mirrors the MouseArea click path.
+                function keyboardActivate() {
+                    root.toggleControlCenter(root.anchorRectFor(statusButton));
+                }
+
                 Layout.preferredWidth: root.statusIconWidth
                 Layout.preferredHeight: root.statusItemHeight
                 Layout.alignment: Qt.AlignVCenter
@@ -907,6 +1224,17 @@ PanelWindow {
                     Behavior on color {
                         ColorAnimation { duration: Motion.fadeFast(root.settingsService); easing.type: Motion.standardDecel }
                     }
+                }
+
+                // F-10: keyboard focus indicator.
+                Rectangle {
+                    anchors.fill: parent
+                    radius: root.statusRadius
+                    color: "transparent"
+                    border.color: root.accentColor
+                    border.width: 1
+                    visible: root.keyboardCurrent === statusButton
+                    z: 4
                 }
 
                 Item {
@@ -958,9 +1286,28 @@ PanelWindow {
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: root.toggleControlCenter(root.anchorRectFor(statusButton))
+                    onClicked: {
+                        root.engageKeyboardEntry(statusButton);
+                        root.toggleControlCenter(root.anchorRectFor(statusButton));
+                    }
                 }
             }
+            }
+
+            // F-10: keyboard focus indicator for the island chip entry
+            // (sibling of the chip Text, behind it at z:1 vs z:2).
+            Rectangle {
+                id: islandChipFocusRing
+
+                anchors.centerIn: topbarTimeFallback
+                width: topbarTimeFallback.width + 12
+                height: topbarTimeFallback.height + 8
+                radius: 9
+                color: "transparent"
+                border.color: root.accentColor
+                border.width: 1
+                visible: root.keyboardCurrent === topbarTimeFallback
+                z: 1
             }
 
             // T12: ordinary readable time when island is disabled or Overlay does
@@ -970,6 +1317,15 @@ PanelWindow {
 
                 anchors.centerIn: islandReserve
                 z: 2
+                objectName: "topbarEntryIslandChip"
+                // F-10: keyboard activation mirrors the chip MouseArea's
+                // left-click path.
+                function keyboardActivate() {
+                    if (root.dynamicIslandService)
+                        root.dynamicIslandService.handleChipClick(
+                            Qt.LeftButton,
+                            root.screen ? String(root.screen.name || "") : "");
+                }
                 visible: root.showTopbarTimeFallback
                 text: root.dynamicIslandService
                       ? String(root.dynamicIslandService.fallbackTimeText || "")
@@ -991,6 +1347,7 @@ PanelWindow {
                     acceptedButtons: Qt.LeftButton | Qt.RightButton
                     cursorShape: root.chipInteractive ? Qt.PointingHandCursor : Qt.ArrowCursor
                     onClicked: function(mouse) {
+                        root.engageKeyboardEntry(topbarTimeFallback);
                         if (root.dynamicIslandService)
                             root.dynamicIslandService.handleChipClick(
                                 mouse.button,

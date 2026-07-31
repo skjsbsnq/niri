@@ -1,0 +1,4 @@
+# build artifacts (regenerate with: make)
+vpointer
+wlr-virtual-pointer-unstable-v1-client.h
+wlr-virtual-pointer-unstable-v1-protocol.c

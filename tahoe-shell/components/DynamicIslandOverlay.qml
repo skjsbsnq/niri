@@ -335,24 +335,32 @@ PanelWindow {
 
     function queueCompositorMorph() {
         var id = islandSurface.region.regionId;
-        root.holdMorphMask();
+        var ok;
         if (root.osdImmediateGeometry
                 || !IslandMotion.geometrySpringEnabled(root.settingsService, root.useSpring)) {
             // Eased fallback keeps the exact legacy curve: OutCubic over the
             // same per-kind duration (OSD 80ms, reduced motion 80ms).
-            return root.TahoeGlass.queueRegionMorphEased(
+            ok = root.TahoeGlass.queueRegionMorphEased(
                 id,
                 root.geometryEaseDurationMs(),
                 IslandMotion.v2CompositorGeometryBezier.x1,
                 IslandMotion.v2CompositorGeometryBezier.y1,
                 IslandMotion.v2CompositorGeometryBezier.x2,
                 IslandMotion.v2CompositorGeometryBezier.y2);
+        } else {
+            ok = root.TahoeGlass.queueRegionMorphSpring(
+                id,
+                IslandMotion.v2CompositorGeometrySpring.dampingRatio,
+                IslandMotion.v2CompositorGeometrySpring.stiffness,
+                IslandMotion.v2CompositorGeometrySpring.epsilon);
         }
-        return root.TahoeGlass.queueRegionMorphSpring(
-            id,
-            IslandMotion.v2CompositorGeometrySpring.dampingRatio,
-            IslandMotion.v2CompositorGeometrySpring.stiffness,
-            IslandMotion.v2CompositorGeometrySpring.epsilon);
+        // S-L4: arm the input-mask hold only after the morph was actually
+        // queued. Arming unconditionally swallowed clicks for the full 560ms
+        // hold window even when the queue request failed (no surface / bad
+        // region), leaving the island's input region expanded for nothing.
+        if (ok)
+            root.holdMorphMask();
+        return ok;
     }
 
     function retargetWidthDriver() {
@@ -462,9 +470,15 @@ PanelWindow {
                 && stR !== "resting_time"
                 && stR !== "resting_media"
                 && stR !== "expanded_media"
-                && !root.swipeInteractive && !root.swipeSettling) {
-            // Compositor morph: radius must land with the single region
-            // commit; the visual corner transition rides the surface morph.
+                && !root.swipeInteractive && !root.swipeSettling
+                && root.queueCompositorMorph()) {
+            // S-L4: read the queue result (not just compositorMorph) so a
+            // failed morph queue falls through to the eased radius instead of
+            // snapping to target while width/height animate via the client
+            // spring — radius/geometry would otherwise desync for the morph
+            // window. The morph is region-wide, so the (possibly redundant)
+            // queue call from the radius driver carries the same region/params
+            // as the width/height calls (last queued wins).
             root.islandDriverRadius = root.capsuleTargetRadius;
             return;
         }

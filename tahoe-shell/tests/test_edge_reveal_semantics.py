@@ -389,7 +389,21 @@ class DockRestoreRectangleTests(unittest.TestCase):
         # R04: production path goes through the Shell publisher owner.
         self.assertIn("submitDockRectangle", rectangle)
         self.assertEqual(clicked.count("root.restoreWindow()"), 1)
-        self.assertLess(clicked.index("root.restoreWindow()"), clicked.rfind("root.bounce()"))
+        # S-L8: the restore (left-click) branch does NOT bounce — the delegate
+        # is being destroyed, so a bounce would be truncated and its transform
+        # would contaminate the reverse genie hint. Only the right-click
+        # context-menu branch bounces.
+        self.assertEqual(clicked.count("root.bounce()"), 1)
+        else_branch = re.search(r"else\s*\{([^}]*)\}", clicked)
+        self.assertIsNotNone(else_branch)
+        assert else_branch
+        self.assertIn("root.restoreWindow()", else_branch.group(1))
+        self.assertNotIn("root.bounce()", else_branch.group(1))
+        # S-L8: restore sets the suppressor (after publishing the REST rect)
+        # and updateDockRectangle short-circuits while it is set so the dying
+        # delegate's geometry changes never reach niri mid-genie.
+        self.assertIn("root.restoredPending = true", restore)
+        self.assertIn("if (root.restoredPending)", rectangle)
 
 
 if __name__ == "__main__":

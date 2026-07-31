@@ -103,6 +103,10 @@ var toastClearStaggerMs = 30;
 var toastClearStaggerBudgetMs = 450;
 var toastClearStaggerMaxItems = 40;
 var toastHoverLiftPx = 4;
+// S-L6: PopupDismissLayer afterimage-suppress window — outlasts the popup
+// close animation so a click landing on a just-closed popup's footprint does
+// not dismiss the popup that opens in the same spot.
+var popupDismissAfterimageMs = 210;
 
 function toastStackScaleForIndex(stackIndex) {
     var idx = Math.max(0, Math.round(Number(stackIndex) || 0));

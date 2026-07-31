@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import Quickshell
 import Quickshell.Wayland
+import "Motion.js" as Motion
 
 PanelWindow {
     id: root
@@ -19,6 +20,48 @@ PanelWindow {
     readonly property int screenHeight: Math.max(1, Number(root.screen && root.screen.height) || root.height)
 
     signal closeRequested()
+
+    // S-L6: footprint of the popup that most recently closed, used to ignore
+    // dismiss clicks that land on its afterimage within the suppress window.
+    property rect lastOpenRect: Qt.rect(0, 0, 1, 1)
+    property rect lastClosedRect: Qt.rect(0, 0, 1, 1)
+    property bool suppressAfterimage: false
+
+    Timer {
+        id: afterimageSuppressTimer
+        // Outlasts the popup close animation so a click landing on a
+        // just-closed popup's footprint does not immediately dismiss the
+        // popup that opens in the same spot (S-L6).
+        interval: Motion.popupDismissAfterimageMs
+        repeat: false
+        onTriggered: root.suppressAfterimage = false
+    }
+
+    // Latch the live popup geometry while open; the width/height guard means
+    // the close tick's geometry clear (→ 0/1) does not overwrite the last real
+    // footprint, so onOpenChanged snapshots the just-closed popup's rect.
+    function refreshLastOpenRect() {
+        if (root.open && root.popupWidth > 1 && root.popupHeight > 1)
+            root.lastOpenRect = Qt.rect(root.popupLeft, root.popupTop, root.popupWidth, root.popupHeight);
+    }
+    onPopupLeftChanged: root.refreshLastOpenRect()
+    onPopupTopChanged: root.refreshLastOpenRect()
+    onPopupWidthChanged: root.refreshLastOpenRect()
+    onPopupHeightChanged: root.refreshLastOpenRect()
+    onOpenChanged: {
+        if (root.open) {
+            // S-L6: latch the live footprint now that open is true. The
+            // geometry-change handlers above early-return while open is false,
+            // so without this a popup whose geometry already settled before
+            // open flipped would leave lastOpenRect at the 1×1 default and
+            // the afterimage suppressor would protect only a corner box.
+            root.refreshLastOpenRect();
+        } else {
+            root.lastClosedRect = root.lastOpenRect;
+            root.suppressAfterimage = true;
+            afterimageSuppressTimer.restart();
+        }
+    }
 
     visible: open
     // P02: freeze scene-graph frames while this surface is unmapped/faded out.
@@ -72,6 +115,20 @@ PanelWindow {
     MouseArea {
         anchors.fill: parent
         enabled: root.open
-        onClicked: root.closeRequested()
+        onClicked: function(mouse) {
+            if (root.suppressAfterimage) {
+                var pad = root.cutoutPadding;
+                var r = root.lastClosedRect;
+                if (mouse.x >= r.x - pad && mouse.x <= r.x + r.width + pad
+                        && mouse.y >= r.y - pad && mouse.y <= r.y + r.height + pad) {
+                    // S-L6: the click lands on the footprint of a popup that
+                    // just closed (its visual afterimage) within the suppress
+                    // window — ignore it so it does not dismiss the popup that
+                    // opened in the same spot.
+                    return;
+                }
+            }
+            root.closeRequested();
+        }
     }
 }

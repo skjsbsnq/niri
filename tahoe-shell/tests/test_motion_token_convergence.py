@@ -203,6 +203,12 @@ class MotionTokenConvergenceTests(unittest.TestCase):
         # Enter spring targets content enterX, not glass x/y/width/height.
         self.assertIn('property: "enterX"', toast)
         self.assertIn('property: "contentScale"', toast)
+        # S-L5: the session-opening top card skips the QML enter slide when the
+        # layer surface is mapping that frame (the niri layer-rule slide
+        # already owns the enter motion) so the two slides do not stack.
+        self.assertIn("property bool layerJustMapped: false", toast)
+        self.assertIn("root.layerJustMapped = true", toast)
+        self.assertIn("if (root.layerJustMapped)", toast)
 
         # Center: app grouping + clear-all stagger budget + post-fly hold.
         self.assertIn("groupedHistory", center)
@@ -884,6 +890,33 @@ class MotionTokenConvergenceTests(unittest.TestCase):
         # "0.6 > this epsilon" comparison against a unitless progress value.
         self.assertNotIn("0.6 > this epsilon", island)
         self.assertIn("NOT comparable to the progress-space protocol", island)
+
+    def test_popup_dismiss_layer_afterimage_suppression(self) -> None:
+        """S-L6: a dismiss click landing on a just-closed popup's footprint
+        within the afterimage window is ignored, so closing popup A and opening
+        B in the same spot does not immediately close B.
+        """
+        text = (COMPONENTS_ROOT / "PopupDismissLayer.qml").read_text(encoding="utf-8")
+        self.assertIn("property rect lastClosedRect", text)
+        self.assertIn("property bool suppressAfterimage: false", text)
+        self.assertIn("afterimageSuppressTimer", text)
+        self.assertIn("interval: Motion.popupDismissAfterimageMs", text)
+        self.assertIn(
+            "var popupDismissAfterimageMs = 210;",
+            MOTION_JS.read_text(encoding="utf-8"),
+        )
+        # Suppressor armed on close; snapshot the latched live footprint.
+        self.assertIn("root.lastClosedRect = root.lastOpenRect", text)
+        self.assertIn("root.suppressAfterimage = true", text)
+        # lastOpenRect latches live geometry while open; the width/height guard
+        # means the close tick's geometry clear (→ 0/1) does not overwrite the
+        # real footprint.
+        self.assertIn("function refreshLastOpenRect", text)
+        self.assertIn("root.popupWidth > 1 && root.popupHeight > 1", text)
+        # The dismiss click checks the suppressor + footprint before closing.
+        self.assertIn("if (root.suppressAfterimage)", text)
+        self.assertIn("mouse.x >= r.x - pad", text)
+        self.assertIn("root.closeRequested()", text)
 
 
 if __name__ == "__main__":

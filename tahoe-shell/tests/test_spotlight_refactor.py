@@ -64,13 +64,15 @@ class SpotlightRefactorTests(unittest.TestCase):
         text = SPOTLIGHT.read_text(encoding="utf-8")
         self.assertIn("Motion.spotlightHeightDuration", text)
         self.assertIn("emphasizedDecel", text)
-        # Glass panel height Behavior must not be SpringAnimation.
-        height_block = re.search(
-            r"Behavior on height \{\s*NumberAnimation",
-            text,
-            re.S,
-        )
-        self.assertIsNotNone(height_block)
+        # Glass panel height Behavior must not be SpringAnimation. The S-L7
+        # snap-on-open gate (enabled: !snappingOpen) may precede the
+        # NumberAnimation, so match the Behavior + NumberAnimation loosely.
+        self.assertRegex(text, r"Behavior on height \{[\s\S]*?NumberAnimation")
+        # No SpringAnimation slipped in before the NumberAnimation (the loose
+        # regex above would otherwise let a Spring-first block pass).
+        self.assertNotRegex(text, r"Behavior on height \{[^}]*SpringAnimation")
+        self.assertIn("property bool snappingOpen: false", text)
+        self.assertIn("enabled: !root.snappingOpen", text)
         # Spring only on selection highlight y (content).
         self.assertIn("SpringAnimation", text)
         self.assertIn("useSpring", text)

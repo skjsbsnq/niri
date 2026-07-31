@@ -72,8 +72,16 @@ PanelWindow {
         bottom: true
     }
 
+    // S-L7: while true the height Behavior is disabled so the open transition
+    // snaps panelSurface to target height instead of animating from the stale
+    // mid-shrink value frozen by the closing snapshot (reopen within ~300ms
+    // otherwise showed a too-high first frame). Cleared one frame after open.
+    property bool snappingOpen: false
+
     onOpenChanged: {
         if (open) {
+            root.snappingOpen = true;
+            Qt.callLater(function() { root.snappingOpen = false; });
             query = "";
             selectedIndex = 0;
             previewEpoch = 0;
@@ -81,6 +89,12 @@ PanelWindow {
                 if (root.open)
                     searchInput.forceActiveFocus();
             });
+        } else {
+            // S-L7: a same-frame open→close (before the callLettered reset
+            // fires) would leave snappingOpen true and snap the close shrink.
+            // Clear it on close so the height shrink animates for the closing
+            // snapshot regardless.
+            root.snappingOpen = false;
         }
     }
 
@@ -475,6 +489,7 @@ PanelWindow {
             clip: true
 
             Behavior on height {
+                enabled: !root.snappingOpen
                 NumberAnimation {
                     duration: Motion.spotlightHeightDuration(root.settingsService)
                     easing.type: Motion.emphasizedDecel

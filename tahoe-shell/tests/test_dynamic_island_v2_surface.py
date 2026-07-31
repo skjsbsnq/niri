@@ -286,24 +286,34 @@ class DynamicIslandV2SurfaceTests(unittest.TestCase):
         self.assertIn("root.morphMaskHoldWidth", hold_body)
         self.assertIn("root.morphMaskHoldHeight", hold_body)
         self.assertIn("morphMaskHoldTimer.restart();", hold_body)
-        # The capture runs at the top of queueCompositorMorph, before any
-        # morph request is issued (and thus before the drivers snap).
+        # S-L4: the mask hold is armed only after a morph request succeeds —
+        # arming unconditionally swallowed clicks for the full hold window
+        # when the queue failed (no surface / bad region). It still runs
+        # inside queueCompositorMorph, which returns before the drivers snap,
+        # so the captured footprint is the pre-snap (old) value.
         queue_fn = re.search(
             r"function\s+queueCompositorMorph\(\)\s*\{([\s\S]*?)\n    \}",
             self.overlay,
         )
         self.assertIsNotNone(queue_fn)
         queue_body = queue_fn.group(1)
+        self.assertIn("var ok", queue_body)
+        self.assertIn("if (ok)", queue_body)
         hold_call = queue_body.find("root.holdMorphMask();")
         first_request = queue_body.find("root.TahoeGlass.queueRegionMorph")
         self.assertGreater(hold_call, -1)
-        self.assertGreater(first_request, hold_call)
+        self.assertGreater(first_request, -1)
+        # Hold is conditional on success AND runs after the morph request.
+        self.assertGreater(hold_call, first_request)
         # Both geometry drivers must queue the morph (capturing the pre-snap
         # footprint) before snapping to the target; a snap-first reorder
         # loses the old footprint from the union (historical hit-gap bug).
         for fn_name, snap_stmt in (
             ("retargetWidthDriver", "root.islandDriverWidth = root.capsuleTargetWidth;"),
             ("retargetHeightDriver", "root.islandDriverHeight = root.capsuleTargetHeight;"),
+            # S-L4: radius now reads the queue result too (no independent snap
+            # that desyncs from width/height on a failed queue).
+            ("retargetRadiusDriver", "root.islandDriverRadius = root.capsuleTargetRadius;"),
         ):
             with self.subTest(driver=fn_name):
                 driver = re.search(

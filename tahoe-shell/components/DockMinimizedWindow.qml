@@ -20,6 +20,11 @@ Item {
     // republish while the Dock layer is unmapped for fullscreen.
     property real dockFullscreenOffset: 0
     property bool dockFullscreenActive: false
+    // S-L8: set after restore() so the dying delegate stops publishing its
+    // geometry — the reverse (un-minimize) genie already has the REST rect
+    // and a stale / bounce-contaminated report from the destroying delegate
+    // would misdirect it. Cleared when a new window is assigned (recycle).
+    property bool restoredPending: false
     // T19/S-M3: ancestor scene offset trigger — mapToItem() establishes no
     // binding dependency, so Dock forwards the minimized-section scene offset
     // to refresh the foreign-toplevel hint while the shelf reflows/scrolls.
@@ -127,6 +132,12 @@ Item {
     }
 
     function updateDockRectangle(forcePublish) {
+        // S-L8: after restore the delegate is being destroyed; its geometry
+        // changes are stale / bounce-contaminated and must not reach niri
+        // while the reverse genie is in flight. restoreWindow publishes the
+        // REST rect before this flag goes true.
+        if (root.restoredPending)
+            return;
         if (!root.dockWindow || !root.windowsService || !root.windowsService.submitDockRectangle)
             return;
         var toplevel = root.windowModel ? root.windowModel.toplevel : null;
@@ -189,6 +200,11 @@ Item {
         root.updateDockRectangle(true);
         root.windowsService.restore(root.windowModel);
         root.activated(root.windowModel);
+        // S-L8: the REST rect is published above; from here the delegate is
+        // being destroyed, so suppress further reports (the dying-delegate
+        // geometry churn would otherwise pollute the reverse genie hint) and
+        // skip the click bounce, which would be truncated mid-flight.
+        root.restoredPending = true;
     }
 
     // Click bounce (R01 #74): animated InQuad up leg, dual-branch spring/ease
@@ -218,6 +234,10 @@ Item {
     }
 
     onWindowModelChanged: {
+        // S-L8: a new window assigned to a recycled delegate means it is alive
+        // again — clear the post-restore publish suppressor before the
+        // scheduled report below.
+        root.restoredPending = false;
         scheduleThumbnailRefresh();
         scheduleDockRectangleUpdate();
     }
@@ -419,8 +439,11 @@ Item {
                 root.bounce();
                 root.contextMenuRequested(root.windowModel, root);
             } else {
+                // S-L8: no bounce on restore — the delegate is being destroyed
+                // so the bounce would be truncated mid-flight (a dying-delegate
+                // visual glitch); restoredPending separately suppresses the
+                // geometry churn that would pollute the reverse genie hint.
                 root.restoreWindow();
-                root.bounce();
             }
         }
     }

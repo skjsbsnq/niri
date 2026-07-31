@@ -66,6 +66,12 @@ PanelWindow {
     property int measuredStackHeight: cardBaseHeight
     // Previous visible ids are used so promote/demote does not replay enter.
     property var prevStackIds: []
+    // S-L5: set true the frame the layer surface maps (displayItems 0→non-empty
+    // in reconcileStack). The session-opening top card consumes it to skip the
+    // QML enterX slide that frame — the niri layer-rule slide (distance 28,
+    // right) already carries the enter motion, so a second 60px QML slide
+    // would stack on top of it (double enter).
+    property bool layerJustMapped: false
 
     Component {
         id: toastEntryFactory
@@ -268,6 +274,11 @@ PanelWindow {
                 bounded.push(candidate);
         }
 
+        // S-L5: the layer surface maps on the 0→non-empty transition; mark it
+        // so the session-opening top card skips its QML enter slide (the niri
+        // layer-rule slide already owns that motion).
+        if ((!previous || previous.length === 0) && bounded.length > 0)
+            root.layerJustMapped = true;
         root.displayItemCache = cache;
         root.displayItems = bounded;
         root.prevStackIds = nextIds;
@@ -596,12 +607,22 @@ PanelWindow {
             if (lastEnterSerial !== entry.enterSerial) {
                 lastEnterSerial = entry.enterSerial;
                 if (stackIndex === 0 && entry.enterSerial > 0) {
-                    enterX = Motion.toastEnterOffsetPx;
-                    Qt.callLater(function () {
-                        if (cardRoot.entry && !cardRoot.entry.exiting
-                                && cardRoot.stackIndex === 0)
-                            cardRoot.animateEnterTo(0);
-                    });
+                    if (root.layerJustMapped) {
+                        // S-L5: the layer surface is mapping this frame and the
+                        // niri layer-rule slide (distance 28, right) already
+                        // carries the enter motion; a second 60px QML slide
+                        // would stack on top of it. Skip the QML enter this
+                        // once and let the layer animation own it.
+                        root.layerJustMapped = false;
+                        enterX = 0;
+                    } else {
+                        enterX = Motion.toastEnterOffsetPx;
+                        Qt.callLater(function () {
+                            if (cardRoot.entry && !cardRoot.entry.exiting
+                                    && cardRoot.stackIndex === 0)
+                                cardRoot.animateEnterTo(0);
+                        });
+                    }
                 } else {
                     enterX = 0;
                 }

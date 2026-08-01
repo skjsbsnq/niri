@@ -45,14 +45,22 @@ TestCase {
         property var events: []
         property var pendingByKey: ({})
         property int flushCount: 0
+        property int invalidateCount: 0
 
         function reset() {
             callCount = 0;
             events = [];
             pendingByKey = ({});
             flushCount = 0;
+            invalidateCount = 0;
             lastToplevel = null;
             lastScreen = null;
+        }
+
+        // Production Windows.qml service hook: the wire-dedup cache is dropped
+        // when the Dock layer unmaps for fullscreen (niri wipes rects).
+        function invalidateDockRectanglePublish(toplevel) {
+            invalidateCount += 1;
         }
 
         // Mirror production publisher entry used by WindowButton.
@@ -153,6 +161,10 @@ TestCase {
         button.updateDockRectangle(true);
         compare(windowsService.callCount, 1);
         compare(windowsService.events[0].force, true);
+
+        // Disarm the post-remap force timer armed by the false edge so it
+        // cannot fire into a later test.
+        button.stopDockRectangleTimers();
     }
 
     function test_visual_mag_push_excluded_from_rest_hint() {
@@ -182,6 +194,21 @@ TestCase {
         // Restore the default wave state for any later test in this case.
         button.magnification = 1.0;
         button.pushX = 0;
+    }
+
+    function test_fullscreen_transition_invalidates_dedup_cache() {
+        // niri wipes foreign-toplevel rects when the Dock layer unmaps for
+        // fullscreen; the delegate must drop the service-side dedup cache on
+        // both edges so the post-remap republish is not suppressed as
+        // "unchanged".
+        windowsService.reset();
+        button.dockFullscreenActive = true;
+        compare(windowsService.invalidateCount, 1);
+        button.dockFullscreenActive = false;
+        compare(windowsService.invalidateCount, 2);
+        // Disarm the timers armed by the false edge (refresh/settle/remap
+        // force) so none can fire into a later test.
+        button.stopDockRectangleTimers();
     }
 
     function test_no_direct_setrectangle_bypass() {

@@ -82,6 +82,12 @@ Item {
     // R04: frame-coalesced last-hint candidates keyed by wlr Toplevel identity.
     property var dockRectanglePending: ({})
     property bool dockRectangleFlushScheduled: false
+    // R04-dedup: exact wire state last published per handle (key = wlr
+    // Toplevel object identity). Non-force candidates identical to this are
+    // rejected before the flush is armed — a stationary minimized thumbnail
+    // must not feed a set_rectangle storm. Force always bypasses.
+    property var dockRectangleLastPublished: ({})
+    property int dockRectangleDedupCount: 0
     // Observable counters for tests / diagnostics (fail-closed ownership).
     property int dockRectanglePublishCount: 0
     property int dockRectangleRejectCount: 0
@@ -91,7 +97,15 @@ Item {
     readonly property string ipcError: lastError
     readonly property var workspaceList: sortedWorkspaceList(ipcWorkspaces)
 
-    onToplevelListChanged: rebuildMergedWindows()
+    onToplevelListChanged: {
+        rebuildMergedWindows();
+        // R04-dedup: drop last-published entries for handles that no longer
+        // exist (ToplevelManager removes closed handles here). Prevents
+        // unbounded growth over long sessions, O(n) copy churn on every
+        // publish, and stale-wrapper address-reuse false dedup when the
+        // allocator reuses a dead handle's address for a new window.
+        root.pruneDockRectangleLastPublished();
+    }
     Component.onCompleted: rebuildMergedWindows()
 
     // R11: identifier may land after the wlr handle is already in the model.
@@ -375,6 +389,25 @@ Item {
             return false;
         }
 
+        // R04-dedup: a non-force candidate byte-identical to the last wire
+        // publish (same handle/source/screen/rect) is pure churn — the
+        // compositor already holds that exact rect (last-wins protocol).
+        // Reject before arming the flush so a stationary thumbnail cannot
+        // feed a ~10/s set_rectangle storm. force (minimize/restore click,
+        // T-21 settle) always publishes. When a different value is already
+        // pending for this frame, accept anyway so frame-coalescing still
+        // ends on the latest candidate (last-wins within the flush).
+        if (!force && decision.entry
+                && DockRectanglePublisher.sameWirePublish(
+                    root.dockRectangleLastPublished[decision.entry.key],
+                    decision.entry)
+                && (!existing || DockRectanglePublisher.sameWirePublish(
+                    existing, decision.entry))) {
+            root.dockRectangleDedupCount += 1;
+            root.dockRectangleLastRejectReason = "unchanged";
+            return false;
+        }
+
         var pending = Object.assign({}, root.dockRectanglePending);
         pending[decision.entry.key] = decision.entry;
         root.dockRectanglePending = pending;
@@ -421,7 +454,57 @@ Item {
                 Qt.rect(r.x, r.y, r.width, r.height)
             );
             root.dockRectanglePublishCount += 1;
+            // Remember the exact wire state (immutable replace, same style as
+            // the pending map) so identical non-force candidates dedup in
+            // submitDockRectangle.
+            var lastPublished = Object.assign({}, root.dockRectangleLastPublished);
+            lastPublished[key] = entry;
+            root.dockRectangleLastPublished = lastPublished;
         }
+    }
+
+    /**
+     * Drop the dedup cache for one handle. Dock delegates call this when the
+     * Dock layer unmaps for fullscreen — niri wipes foreign-toplevel rects on
+     * unmap, so the post-remap republish of the same coordinates must not be
+     * suppressed as "unchanged".
+     */
+    function invalidateDockRectanglePublish(toplevel) {
+        var key = DockRectanglePublisher.toplevelObjectId(toplevel);
+        if (!key || !Object.prototype.hasOwnProperty.call(root.dockRectangleLastPublished, key))
+            return;
+        var last = Object.assign({}, root.dockRectangleLastPublished);
+        delete last[key];
+        root.dockRectangleLastPublished = last;
+    }
+
+    /**
+     * Remove last-published entries whose wlr handle is no longer live.
+     * Called from onToplevelListChanged (closed handles leave the manager's
+     * list). Keeps the dedup map bounded for the session lifetime.
+     */
+    function pruneDockRectangleLastPublished() {
+        var live = {};
+        var list = root.toplevelList;
+        var n = list ? list.length : 0;
+        for (var i = 0; i < n; i++) {
+            var key = DockRectanglePublisher.toplevelObjectId(list[i]);
+            if (key.length > 0)
+                live[key] = true;
+        }
+        var last = root.dockRectangleLastPublished;
+        var pruned = null;
+        for (var k in last) {
+            if (!Object.prototype.hasOwnProperty.call(last, k))
+                continue;
+            if (!live[k]) {
+                if (!pruned)
+                    pruned = Object.assign({}, last);
+                delete pruned[k];
+            }
+        }
+        if (pruned)
+            root.dockRectangleLastPublished = pruned;
     }
 
     /**

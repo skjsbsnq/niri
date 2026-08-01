@@ -259,8 +259,22 @@ Item {
     // them). While fullscreenActive, schedule is blocked above.
     onDockFullscreenOffsetChanged: scheduleDockRectangleUpdate()
     onDockFullscreenActiveChanged: {
-        if (!root.dockFullscreenActive)
+        // niri wipes foreign-toplevel rects when the Dock layer unmaps for
+        // fullscreen; drop the wire-dedup cache so the post-remap republish of
+        // identical coordinates is not suppressed as "unchanged".
+        if (root.windowsService && root.windowsService.invalidateDockRectanglePublish)
+            root.windowsService.invalidateDockRectanglePublish(
+                root.windowModel ? root.windowModel.toplevel : null);
+        if (!root.dockFullscreenActive) {
             scheduleDockRectangleUpdate();
+            // One force publish a beat after the layer remaps, NOT debounced by
+            // layout churn: niri may store the first post-remap report as
+            // Unresolved (source layer not mapped yet) and the wire-dedup gate
+            // would suppress identical retries. Floor 32ms (~2 frames at 60Hz)
+            // covers the layer remap commit in reduced-motion profiles where
+            // Motion.elementResize is 0.
+            dockRectangleRemapForce.restart();
+        }
     }
     Component.onCompleted: {
         scheduleThumbnailRefresh();
@@ -297,6 +311,17 @@ Item {
     Timer {
         id: dockRectangleSettle
         interval: Motion.elementResize(root.settingsService)
+        repeat: false
+        onTriggered: root.updateDockRectangle(true)
+    }
+
+    // R04-dedup hardening (see onDockFullscreenActiveChanged). Single-shot;
+    // never restarted by scheduleDockRectangleUpdate, so layout churn cannot
+    // starve it. Post-restore suppression (restoredPending) makes it a no-op
+    // if the delegate is dying when it fires.
+    Timer {
+        id: dockRectangleRemapForce
+        interval: Math.max(Motion.elementResize(root.settingsService), 32)
         repeat: false
         onTriggered: root.updateDockRectangle(true)
     }

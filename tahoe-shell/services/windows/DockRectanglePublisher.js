@@ -134,3 +134,36 @@ function canPublish(entry) {
         && entry.sourceWindow
         && entry.rect);
 }
+
+/**
+ * Whether two publish states are byte-identical on the wire. wlr
+ * foreign-toplevel set_rectangle is "last value wins": re-sending an unchanged
+ * rect (same handle, same source layer, same screen, same normalized integer
+ * rect) is pure protocol churn — observed as a ~10/s identical-report storm
+ * from a stationary minimized shelf thumbnail that fed niri's T-20 retarget
+ * path (and glass band re-capture) until the session froze.
+ *
+ * Dedup applies to non-force reports only; force (minimize/restore clicks,
+ * T-21 settle) always publishes so the compositor re-reads the anchor after
+ * unmap clears.
+ */
+function sameWirePublish(a, b) {
+    if (a === b)
+        return true;
+    if (!a || !b || !a.toplevel || !b.toplevel)
+        return false;
+    if (a.toplevel !== b.toplevel)
+        return false;
+    if (a.sourceWindow !== b.sourceWindow)
+        return false;
+    if (a.dockScreen !== b.dockScreen)
+        return false;
+    var ra = a.rect;
+    var rb = b.rect;
+    if (!ra || !rb)
+        return false;
+    return ra.x === rb.x
+        && ra.y === rb.y
+        && ra.width === rb.width
+        && ra.height === rb.height;
+}

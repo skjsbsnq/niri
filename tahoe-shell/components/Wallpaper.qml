@@ -1394,7 +1394,8 @@ PanelWindow {
                 root.syncDynamicProcess();
                 root.syncExternalProcess();
             });
-        }
+        });
+    }
     }
 
     Timer {

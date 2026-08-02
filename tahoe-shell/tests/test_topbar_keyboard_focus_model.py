@@ -96,6 +96,50 @@ class TopBarKeyboardStructureTests(unittest.TestCase):
         for key in ("Tab", "Backtab", "Right", "Left", "Return", "Enter", "Space"):
             self.assertIn(f"Keys.on{key}Pressed", self.topbar)
 
+    def test_focus_ring_clears_when_bar_loses_keyboard_focus(self) -> None:
+        """Clicks engage keyboardCurrent (F-10: Tab continues from the
+        pointer), but the ring must clear when the compositor moves keyboard
+        focus off the bar — it used to stay latched on the last-clicked entry
+        forever (blue ring surviving popup dismiss)."""
+        self.assertIn("readonly property bool barWindowActive: Window.active", self.topbar)
+        catcher = self.topbar.split("id: topbarKeyboardFocusCatcher", 1)[1]
+        clear = catcher.split("onBarWindowActiveChanged:", 1)
+        self.assertEqual(len(clear), 2, "focus catcher lost the active-state watch")
+        body = clear[1].split("Keys.onTabPressed", 1)[0]
+        self.assertIn("root.keyboardCurrent = null", body)
+        self.assertIn("root.keyboardIndex = -1", body)
+        self.assertIn("root.keyboardRingVisible = false", body)
+
+    def test_focus_ring_is_keyboard_only(self) -> None:
+        """macOS-style focus visibility: pointer clicks reposition the walk
+        but never summon the ring; only keyboard traversal reveals it. Every
+        ring binding must carry the visibility gate — an ungated binding
+        re-latches a permanent ring on click."""
+        self.assertIn("property bool keyboardRingVisible: false", self.topbar)
+        self.assertEqual(
+            self.topbar.count("root.keyboardCurrent ==="),
+            self.topbar.count("root.keyboardRingVisible && root.keyboardCurrent ==="),
+            "every TopBar ring binding must be gated on keyboardRingVisible",
+        )
+        step_body = self.topbar.split("function keyboardStep(delta)", 1)[1].split(
+            "function engageKeyboardEntry", 1
+        )[0]
+        self.assertIn("root.keyboardRingVisible = true", step_body)
+        engage_body = self.topbar.split("function engageKeyboardEntry(entry)", 1)[1].split(
+            "function activateKeyboardCurrent", 1
+        )[0]
+        self.assertIn("root.keyboardRingVisible = false", engage_body)
+        # Scoped to the delegate keyboard ring's own border.color expression
+        # (Tray has a second, attention-ring border.color above it).
+        ring_at = self.tray.find("keyboardCurrent === trayItem")
+        self.assertGreaterEqual(ring_at, 0, "tray delegate keyboard ring binding missing")
+        ring_expr = self.tray[self.tray.rfind("border.color:", 0, ring_at) : ring_at]
+        self.assertIn(
+            "root.panelWindow.keyboardRingVisible",
+            ring_expr,
+            "the tray delegate ring border must carry the same gate",
+        )
+
     def test_keyboard_model_functions_exist(self) -> None:
         for fn in (
             "function keyboardEntryList()",

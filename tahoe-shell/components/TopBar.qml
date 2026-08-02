@@ -116,6 +116,11 @@ PanelWindow {
     // destroyed) so the next Tab continues from the neighbor instead of
     // jumping to the wrap edge (F3).
     property int keyboardIndex: -1
+    // macOS-style focus visibility: the traversal ring shows only after
+    // actual keyboard navigation. Pointer clicks still engage the model
+    // (F-10: Tab continues from the pointer) but never summon the ring —
+    // clicks used to latch a visible ring on the last-clicked entry.
+    property bool keyboardRingVisible: false
 
     function keyboardEntryList() {
         var list = [];
@@ -157,6 +162,8 @@ PanelWindow {
     // Move the keyboard current by delta entries (wrapping). Entries that
     // became invisible since last navigation are skipped by the list.
     function keyboardStep(delta) {
+        // Real keyboard traversal: reveal the ring.
+        root.keyboardRingVisible = true;
         var list = root.keyboardEntryList();
         if (list.length === 0) {
             root.keyboardCurrent = null;
@@ -195,6 +202,8 @@ PanelWindow {
     function engageKeyboardEntry(entry) {
         if (!entry)
             return;
+        // Pointer engagement repositions the walk without showing the ring.
+        root.keyboardRingVisible = false;
         root.keyboardCurrent = entry;
         var idx = root.keyboardIndexOf(entry);
         root.keyboardIndex = idx >= 0 ? idx : -1;
@@ -317,6 +326,20 @@ PanelWindow {
 
         objectName: "topbarKeyboardFocusCatcher"
         focus: true
+        // The bar QWindow's active state tracks its wl_keyboard focus
+        // exactly. When the compositor moves keyboard focus off the bar
+        // (click elsewhere, popup dismissed, panel took focus) the traversal
+        // indicator must clear — clicks used to leave the focus ring latched
+        // on the last-clicked entry forever. Pure Tab traversal keeps the
+        // bar focused, so the ring survives it (F-10 intact).
+        readonly property bool barWindowActive: Window.active
+        onBarWindowActiveChanged: {
+            if (!barWindowActive) {
+                root.keyboardCurrent = null;
+                root.keyboardIndex = -1;
+                root.keyboardRingVisible = false;
+            }
+        }
         Keys.onTabPressed: root.keyboardStep(1)
         Keys.onBacktabPressed: root.keyboardStep(-1)
         Keys.onRightPressed: root.keyboardStep(1)
@@ -426,7 +449,7 @@ PanelWindow {
                         color: "transparent"
                         border.color: root.accentColor
                         border.width: 1
-                        visible: root.keyboardCurrent === niriMenuButton
+                        visible: root.keyboardRingVisible && root.keyboardCurrent === niriMenuButton
                         z: 4
                     }
 
@@ -487,7 +510,7 @@ PanelWindow {
                         color: "transparent"
                         border.color: root.accentColor
                         border.width: 1
-                        visible: root.keyboardCurrent === leftSidebarButton
+                        visible: root.keyboardRingVisible && root.keyboardCurrent === leftSidebarButton
                         z: 4
                     }
 
@@ -557,7 +580,7 @@ PanelWindow {
                         color: "transparent"
                         border.color: root.accentColor
                         border.width: 1
-                        visible: root.keyboardCurrent === applicationMenuButton
+                        visible: root.keyboardRingVisible && root.keyboardCurrent === applicationMenuButton
                         z: 4
                     }
 
@@ -637,7 +660,7 @@ PanelWindow {
                                 color: "transparent"
                                 border.color: root.accentColor
                                 border.width: 1
-                                visible: root.keyboardCurrent === workspaceEntry
+                                visible: root.keyboardRingVisible && root.keyboardCurrent === workspaceEntry
                                 z: 4
                             }
 
@@ -730,7 +753,7 @@ PanelWindow {
                     color: "transparent"
                     border.color: root.accentColor
                     border.width: 1
-                    visible: root.keyboardCurrent === notificationButton
+                    visible: root.keyboardRingVisible && root.keyboardCurrent === notificationButton
                     z: 4
                 }
 
@@ -825,7 +848,7 @@ PanelWindow {
                     color: "transparent"
                     border.color: root.accentColor
                     border.width: 1
-                    visible: root.keyboardCurrent === clipboardButton
+                    visible: root.keyboardRingVisible && root.keyboardCurrent === clipboardButton
                     z: 4
                 }
 
@@ -919,7 +942,7 @@ PanelWindow {
                     color: "transparent"
                     border.color: root.accentColor
                     border.width: 1
-                    visible: root.keyboardCurrent === fanButton
+                    visible: root.keyboardRingVisible && root.keyboardCurrent === fanButton
                     z: 4
                 }
 
@@ -986,7 +1009,7 @@ PanelWindow {
                     color: "transparent"
                     border.color: root.accentColor
                     border.width: 1
-                    visible: root.keyboardCurrent === batteryButton
+                    visible: root.keyboardRingVisible && root.keyboardCurrent === batteryButton
                     z: 4
                 }
 
@@ -1144,7 +1167,7 @@ PanelWindow {
                     color: "transparent"
                     border.color: root.accentColor
                     border.width: 1
-                    visible: root.keyboardCurrent === wifiButton
+                    visible: root.keyboardRingVisible && root.keyboardCurrent === wifiButton
                     z: 4
                 }
 
@@ -1204,7 +1227,7 @@ PanelWindow {
                     color: "transparent"
                     border.color: root.accentColor
                     border.width: 1
-                    visible: root.keyboardCurrent === spotlightButton
+                    visible: root.keyboardRingVisible && root.keyboardCurrent === spotlightButton
                     z: 4
                 }
 
@@ -1263,7 +1286,7 @@ PanelWindow {
                     color: "transparent"
                     border.color: root.accentColor
                     border.width: 1
-                    visible: root.keyboardCurrent === statusButton
+                    visible: root.keyboardRingVisible && root.keyboardCurrent === statusButton
                     z: 4
                 }
 
@@ -1336,7 +1359,7 @@ PanelWindow {
                 color: "transparent"
                 border.color: root.accentColor
                 border.width: 1
-                visible: root.keyboardCurrent === topbarTimeFallback
+                visible: root.keyboardRingVisible && root.keyboardCurrent === topbarTimeFallback
                 z: 1
             }
 

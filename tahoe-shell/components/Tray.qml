@@ -222,7 +222,8 @@ Item {
                 anchors.fill: parent
                 radius: 7
                 color: "transparent"
-                border.color: root.panelWindow && root.panelWindow.keyboardCurrent === trayItem
+                border.color: root.panelWindow && root.panelWindow.keyboardRingVisible
+                        && root.panelWindow.keyboardCurrent === trayItem
                     ? root.panelWindow.accentColor
                     : "transparent"
                 border.width: 1

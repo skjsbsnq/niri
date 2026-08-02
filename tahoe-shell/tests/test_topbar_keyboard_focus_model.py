@@ -10,6 +10,7 @@ The runtime probe exercises the chain under the Tahoe Quickshell runtime.
 from __future__ import annotations
 
 import re
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -159,6 +160,16 @@ class TopBarKeyboardStructureTests(unittest.TestCase):
     def test_tray_exposes_keyboard_entries(self) -> None:
         self.assertIn("function keyboardItemCount()", self.tray)
         self.assertIn("function keyboardItemAt(index)", self.tray)
+        # Scope lock (dismissFor-regression class): TopBar calls these as
+        # tray.keyboardItemCount()/keyboardItemAt() where `tray` is the Tray
+        # root Item — defined inside the ListView they would TypeError at
+        # runtime while every existence assertion above stays green.
+        self.assertLess(
+            self.tray.index("function keyboardItemCount()"),
+            self.tray.index("ListView {"),
+            "keyboard entry functions must live on the Tray root scope "
+            "that TopBar's `tray.` qualifier resolves to",
+        )
         self.assertIn('objectName: "topbarEntryTrayItem"', self.tray)
         self.assertIn("function keyboardActivate()", self.tray)
         self.assertIn("root.panelWindow.keyboardCurrent === trayItem", self.tray)

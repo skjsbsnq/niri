@@ -63,6 +63,27 @@ PanelWindow {
         }
     }
 
+    // S-L6 gate shared by the left/right dismiss clicks. Must live on root:
+    // the onClicked handler calls it as root.dismissFor() — defined on the
+    // MouseArea instead, that call threw TypeError on every click and the
+    // layer swallowed all outside input without ever emitting closeRequested
+    // (T-29 regression: popups stopped dismissing, windows unclickable).
+    function dismissFor(mouse) {
+        if (root.suppressAfterimage) {
+            var pad = root.cutoutPadding;
+            var r = root.lastClosedRect;
+            if (mouse.x >= r.x - pad && mouse.x <= r.x + r.width + pad
+                    && mouse.y >= r.y - pad && mouse.y <= r.y + r.height + pad) {
+                // S-L6: the click lands on the footprint of a popup that
+                // just closed (its visual afterimage) within the suppress
+                // window — ignore it so it does not dismiss the popup that
+                // opened in the same spot.
+                return false;
+            }
+        }
+        return true;
+    }
+
     visible: open
     // P02: freeze scene-graph frames while this surface is unmapped/faded out.
     // Extends the existing visible gate onto updatesEnabled (not a parallel path).
@@ -121,22 +142,6 @@ PanelWindow {
         // so it cannot reach the window underneath either — it is consumed
         // here, documented as the policy rather than left implicit).
         acceptedButtons: Qt.LeftButton | Qt.RightButton
-
-        function dismissFor(mouse) {
-            if (root.suppressAfterimage) {
-                var pad = root.cutoutPadding;
-                var r = root.lastClosedRect;
-                if (mouse.x >= r.x - pad && mouse.x <= r.x + r.width + pad
-                        && mouse.y >= r.y - pad && mouse.y <= r.y + r.height + pad) {
-                    // S-L6: the click lands on the footprint of a popup that
-                    // just closed (its visual afterimage) within the suppress
-                    // window — ignore it so it does not dismiss the popup that
-                    // opened in the same spot.
-                    return false;
-                }
-            }
-            return true;
-        }
 
         onClicked: function(mouse) {
             if (root.dismissFor(mouse))

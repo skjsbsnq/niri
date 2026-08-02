@@ -188,6 +188,12 @@ PanelWindow {
     // syncDynamicProcess when settingsReady flips wallpaperMode to live.
     property bool externalSyncSettled: false
     property bool dynamicSyncSettled: false
+    // Command each process was actually spawned with. The sync tails cycle a
+    // running engine only when the desired command differs from this — without
+    // it every stray resync (record rm echo, screen change) kills and
+    // restarts a healthy engine (sync was not idempotent).
+    property string dynamicSpawnedCommand: ""
+    property string externalSpawnedCommand: ""
     property bool completed: false
     property bool restartCoverVisible: false
     property bool prestartStateLoaded: false
@@ -212,6 +218,11 @@ PanelWindow {
     property int prestartReloadGeneration: 0
     property bool prestartReloadWasAdopted: false
     property bool prestartReloadWasStopPending: false
+    // True from a record-reload kick-off until the async record+proc chain
+    // resolves. Cold-start decisions must wait on it: starting an engine while
+    // the boot record is unresolved spawns a duplicate over the live prestart
+    // renderer (T-31 async regression — boot flash + double-engine leak).
+    property bool prestartReloadInFlight: false
     readonly property string prestartedWallpaperRecordDir: Quickshell.stateDir + "/wallpaper-prestart"
     readonly property string prestartedWallpaperRecordPath: nestedSession ? ""
         : prestartedWallpaperRecordDir + "/" + safeOutputName(screenName()) + ".json"
@@ -699,6 +710,15 @@ PanelWindow {
         // Bump the generation: a completion signal from a previous read is stale.
         prestartReloadGeneration = ++prestartRecordGeneration;
         prestartedWallpaperRecord = null;
+        // Empty record path (nested session) never emits a FileView
+        // completion: resolve inline, or the in-flight gate would hold off
+        // cold start forever.
+        if (prestartedWallpaperRecordPath.length === 0) {
+            prestartReloadInFlight = false;
+            finishPrestartReload();
+            return;
+        }
+        prestartReloadInFlight = true;
         prestartedWallpaperFile.reload();
     }
 
@@ -748,6 +768,7 @@ PanelWindow {
     // Tail shared by all record-read completions (mirrors the old synchronous tail).
     function finishPrestartReload() {
         var shouldResync = false;
+        prestartReloadInFlight = false;
         prestartStateLoaded = true;
 
         if (prestartedWallpaperStopPending && !prestartedWallpaperRecord) {
@@ -764,7 +785,11 @@ PanelWindow {
         }
         if (root.completed && !prestartedWallpaperStopPending)
             prestartStopTimer.stop();
-        if (root.completed && shouldResync) {
+        // T-31 regression fix: the boot syncs run before the async record chain
+        // resolves and are gated off by prestartReloadInFlight, so every
+        // resolution must resync — otherwise adopt never runs (the sync
+        // functions are idempotent when nothing changed).
+        if (root.completed && (shouldResync || !prestartedWallpaperStopPending)) {
             Qt.callLater(function() {
                 root.syncDynamicProcess();
                 root.syncExternalProcess();
@@ -849,6 +874,11 @@ PanelWindow {
                 releasePrestartedWallpaper();
             dynamicRestartPending = false;
             dynamicLaunchFailed = false;
+            // Clear alongside every non-cycle stop: Process.running keeps
+            // reading true through the SIGTERM teardown, so a desired-flip
+            // race (idle pause → wiggle) would otherwise hit the idempotent
+            // tail, skip the cycle, and strand launchFailed static fallback.
+            dynamicSpawnedCommand = "";
             dynamicProcess.running = false;
             if (!externalDesired && !externalProcess.running
                     && !prestartedWallpaperAdopted)
@@ -893,6 +923,12 @@ PanelWindow {
         if (prestartedWallpaperStopPending)
             return;
 
+        // The record read is still resolving (boot / screen change): never
+        // cold-start here — the prestart renderer may be alive and about to be
+        // adopted. finishPrestartReload() resyncs once the chain lands.
+        if (prestartReloadInFlight)
+            return;
+
         if (tryAdoptPrestartedWallpaper("dynamic")) {
             dynamicLaunchFailed = false;
             dynamicSyncSettled = true;
@@ -900,6 +936,13 @@ PanelWindow {
         }
 
         if (dynamicProcess.running) {
+            // Idempotency: a live engine already running the desired command
+            // is the settled state — never cycle it (record-rm echo resyncs
+            // and screen-change resyncs used to kill and restart it here).
+            if (dynamicSpawnedCommand === dynamicCommand) {
+                dynamicSyncSettled = true;
+                return;
+            }
             showRestartCover();
             dynamicRestartPending = true;
             dynamicProcess.running = false;
@@ -909,6 +952,9 @@ PanelWindow {
         dynamicActive = false;
         dynamicLaunchFailed = false;
         showRestartCover();
+        // Captured at the spawn site (not onStarted) so the comparison in the
+        // running-tail can never race a command change against signal delivery.
+        dynamicSpawnedCommand = dynamicCommand;
         dynamicProcess.running = true;
         dynamicSyncSettled = true;
     }
@@ -924,6 +970,8 @@ PanelWindow {
                 releasePrestartedWallpaper();
             externalRestartPending = false;
             externalLaunchFailed = false;
+            // Same teardown-window contract as the dynamic stop path.
+            externalSpawnedCommand = "";
             externalProcess.running = false;
             if (!dynamicDesired && !dynamicProcess.running
                     && !prestartedWallpaperAdopted)
@@ -961,6 +1009,7 @@ PanelWindow {
                 releasePrestartedWallpaper();
             externalRestartPending = false;
             externalLaunchFailed = true;
+            externalSpawnedCommand = "";
             externalProcess.running = false;
             if (!dynamicDesired && !dynamicProcess.running
                     && !prestartedWallpaperAdopted)
@@ -1006,6 +1055,11 @@ PanelWindow {
         if (prestartedWallpaperStopPending)
             return;
 
+        // Same in-flight gate as syncDynamicProcess: no cold start while the
+        // record chain is unresolved (T-31 duplicate-engine regression).
+        if (prestartReloadInFlight)
+            return;
+
         if (tryAdoptPrestartedWallpaper("external")) {
             externalLaunchFailed = false;
             externalSyncSettled = true;
@@ -1013,6 +1067,11 @@ PanelWindow {
         }
 
         if (externalProcess.running) {
+            // Same idempotency contract as the dynamic tail.
+            if (externalSpawnedCommand === externalCommand) {
+                externalSyncSettled = true;
+                return;
+            }
             showRestartCover();
             externalRestartPending = true;
             externalProcess.running = false;
@@ -1022,6 +1081,7 @@ PanelWindow {
         dynamicActive = false;
         externalLaunchFailed = false;
         showRestartCover();
+        externalSpawnedCommand = externalCommand;
         externalProcess.running = true;
         externalSyncSettled = true;
     }
@@ -1363,6 +1423,12 @@ PanelWindow {
         onTriggered: {
             if (!root.prestartedWallpaperAdopted)
                 return;
+            // A reload chain owns the proc-check slot while it resolves; a
+            // health tick here would supersede it and drop its convergence
+            // callback (in-flight gate stuck until the next reload event).
+            // The reload chain re-validates the process itself anyway.
+            if (root.prestartReloadInFlight)
+                return;
             // T-31 R-5: async /proc check — the health timer never blocks the UI thread.
             root.requestPrestartedProcessCheck(root.prestartedWallpaperRecord, function(matches) {
                 // The adoption may have been released while the read was in flight.
@@ -1419,8 +1485,10 @@ PanelWindow {
         repeat: false
         onTriggered: {
             root.dynamicRestartPending = false;
-            if (root.dynamicDesired && root.dynamicCommand.length > 0)
+            if (root.dynamicDesired && root.dynamicCommand.length > 0) {
+                root.dynamicSpawnedCommand = root.dynamicCommand;
                 dynamicProcess.running = true;
+            }
         }
     }
 
@@ -1430,8 +1498,10 @@ PanelWindow {
         repeat: false
         onTriggered: {
             root.externalRestartPending = false;
-            if (root.externalDesired && root.externalCommand.length > 0)
+            if (root.externalDesired && root.externalCommand.length > 0) {
+                root.externalSpawnedCommand = root.externalCommand;
                 externalProcess.running = true;
+            }
         }
     }
 
@@ -1471,21 +1541,31 @@ PanelWindow {
                 );
             }
         }
-        onLoadFailed: {
+        onLoadFailed: error => {
             var check = root.prestartProcessCheck;
             if (check && check.generation === root.prestartProcessGeneration) {
                 root.prestartProcessCheck = null;
-                // Transient FileView/IO errors must NOT count as death — a single
-                // false-negative used to kill a healthy prestart engine and black
-                // the desktop (adversarial finding S3).
-                check.callback(true);
+                // S3 amended: FileNotFound (= /proc entry gone) is definite
+                // death and must report dead — treating ENOENT as alive made
+                // boot adopt corpse records (infinite empty backdrop, nothing
+                // painting) and blinded the health timer's death detection.
+                // Only *transient* IO errors must NOT count as death — a
+                // single false-negative used to kill a healthy prestart
+                // engine and black the desktop (adversarial finding S3).
+                check.callback(error !== FileViewError.FileNotFound);
                 return;
             }
             var stopCheck = root.prestartStopCheck;
             if (stopCheck && stopCheck.generation === root.prestartStopCheckGeneration) {
                 root.prestartStopCheck = null;
-                // Transient read errors keep the old "assume alive" stop semantics.
-                root.finishStopPrestartedWallpaper(stopCheck.record, true);
+                // Same split for stops: a gone /proc entry must skip the kill
+                // script entirely (the pid could be reused between this read
+                // and the kill); transient errors keep "assume alive" stop
+                // semantics.
+                root.finishStopPrestartedWallpaper(
+                    stopCheck.record,
+                    error !== FileViewError.FileNotFound
+                );
             }
         }
     }

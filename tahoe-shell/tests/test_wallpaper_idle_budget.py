@@ -173,15 +173,22 @@ class WallpaperIdleBudgetTests(unittest.TestCase):
         )
         self.assertIsNotNone(health)
         self.assertIn("prestartedHealthMisses", health.group(1))
-        # S3: transient FileView/IO errors must NOT count as death — the async process
-        # FileView loadFailed path reports "alive" instead of tearing down the engine.
+        # S3 amended: only *transient* FileView/IO errors count as alive.
+        # FileNotFound (= /proc entry gone) is definite death — routing ENOENT
+        # into "assume alive" made boot adopt corpse records (infinite empty
+        # backdrop) and blinded the health timer's death detection.
         proc_fail = re.search(
-            r"onLoadFailed: \{(.*?)\n        \}",
+            r"onLoadFailed: error => \{(.*?)\n        \}",
             text,
             re.S,
         )
         self.assertIsNotNone(proc_fail)
-        self.assertIn("check.callback(true)", proc_fail.group(1))
+        self.assertEqual(
+            proc_fail.group(1).count("error !== FileViewError.FileNotFound"),
+            2,
+            "both the adopt-check and the stop-check must split "
+            "FileNotFound (dead) from transient errors (alive)",
+        )
         self.assertIn("must NOT count as death", proc_fail.group(1))
         # FPS budget skew must not break prestart adopt.
         self.assertIn("function normalizeWallpaperCommandForMatch(", text)
@@ -393,6 +400,113 @@ process.stdout.write(JSON.stringify(result));
         self.assertFalse(run(record, ""), "missing /proc entry must count as gone")
         self.assertFalse(run(record, "1234 (linux-wallpaper) S"), "truncated stat must not match")
         self.assertFalse(run(None, proc_stat), "null record must not match")
+
+    def test_boot_record_resolution_gates_cold_start_and_resyncs(self) -> None:
+        """T-31 async regression lock: while the prestart record read is in
+        flight, neither sync function may cold-start an engine (a duplicate
+        over the live prestart renderer = boot flash + double-engine leak),
+        and every record resolution must resync so adopt actually runs."""
+        text = WALLPAPER.read_text(encoding="utf-8")
+
+        def body_of(name: str) -> str:
+            match = re.search(
+                r"function " + re.escape(name) + r"\(\) \{(.*?)\n    \}", text, re.S
+            )
+            self.assertIsNotNone(match, name)
+            return match.group(1)
+
+        for name, spawn in (
+            ("syncDynamicProcess", "dynamicProcess.running = true"),
+            ("syncExternalProcess", "externalProcess.running = true"),
+        ):
+            body = body_of(name)
+            gate = body.find("if (prestartReloadInFlight)")
+            self.assertGreaterEqual(gate, 0, f"{name} lost the in-flight cold-start gate")
+            spawn_at = body.find(spawn)
+            self.assertGreaterEqual(spawn_at, 0, f"{name} lost its cold-start tail")
+            self.assertLess(gate, spawn_at, f"{name}: gate must precede cold start")
+            self.assertIn("return", body[gate : gate + 80], f"{name}: gate must early-return")
+
+        reload_body = body_of("reloadPrestartedWallpaperState")
+        raise_at = reload_body.find("prestartReloadInFlight = true")
+        kick_at = reload_body.find("prestartedWallpaperFile.reload()")
+        self.assertGreaterEqual(raise_at, 0, "reload must raise the in-flight flag")
+        self.assertGreaterEqual(kick_at, 0, "reload must kick the async read")
+        self.assertLess(raise_at, kick_at, "flag must be raised before the read is kicked")
+        # Empty record path (nested session / unbound output) may never emit a
+        # FileView completion: it must resolve inline or the gate deadlocks.
+        self.assertIn("prestartedWallpaperRecordPath.length === 0", reload_body)
+
+        finish_body = body_of("finishPrestartReload")
+        self.assertIn("prestartReloadInFlight = false", finish_body)
+        self.assertIn(
+            "shouldResync || !prestartedWallpaperStopPending",
+            finish_body,
+            "every non-stop resolution must resync or adopt never runs",
+        )
+
+        # Convergence contract: every record-load branch must reach
+        # finishPrestartReload — the in-flight gate deadlocks otherwise.
+        load_body = body_of("finishPrestartedRecordLoad")
+        self.assertGreaterEqual(
+            load_body.count("finishPrestartReload()"),
+            3,
+            "stop-pending, proc-callback and no-record branches must all converge",
+        )
+        adopt_cb = re.search(
+            r"requestPrestartedProcessCheck\(parsed, function\(matches\) \{"
+            r"(.*?)\n            \}\);",
+            text,
+            re.S,
+        )
+        self.assertIsNotNone(adopt_cb)
+        self.assertIn(
+            "finishPrestartReload()",
+            adopt_cb.group(1),
+            "the validated-record path converges only through the closure tail",
+        )
+
+        # Idempotent sync tails: a running engine with the desired command is
+        # the settled state — resync echoes (record rm, screen change) must
+        # not cycle it.
+        self.assertIn("dynamicSpawnedCommand === dynamicCommand", body_of("syncDynamicProcess"))
+        self.assertIn(
+            "externalSpawnedCommand === externalCommand", body_of("syncExternalProcess")
+        )
+        self.assertEqual(
+            text.count("dynamicSpawnedCommand = dynamicCommand")
+            + text.count("dynamicSpawnedCommand = root.dynamicCommand"),
+            2,
+            "spawn-site capture must cover the sync tail and the restart timer",
+        )
+        self.assertEqual(
+            text.count("externalSpawnedCommand = externalCommand")
+            + text.count("externalSpawnedCommand = root.externalCommand"),
+            2,
+            "spawn-site capture must cover the sync tail and the restart timer",
+        )
+        # Process.running keeps reading true through the SIGTERM teardown, so
+        # every non-cycle stop must clear the spawned command — otherwise a
+        # desired-flip race hits the idempotent tail, skips the cycle, and
+        # strands launchFailed static fallback until the next idle period.
+        self.assertEqual(
+            text.count('dynamicSpawnedCommand = ""'),
+            1,
+            "the dynamic off-branch stop must clear the spawned command",
+        )
+        self.assertEqual(
+            text.count('externalSpawnedCommand = ""'),
+            2,
+            "both external stop paths must clear the spawned command",
+        )
+
+        # Health ticks must yield the proc-check slot to an in-flight reload
+        # chain — superseding it drops the convergence callback.
+        health = re.search(
+            r"id: prestartedWallpaperHealthTimer(.*?)id: prestartStopTimer", text, re.S
+        )
+        self.assertIsNotNone(health)
+        self.assertIn("if (root.prestartReloadInFlight)", health.group(1))
 
 if __name__ == "__main__":
     unittest.main()

@@ -1157,6 +1157,17 @@ PanelWindow {
         // Adopt/start first. Prestart already paints; raising a cover before
         // adopt would hide the live wallpaper then drop it 1.6s later (flash).
         reloadPrestartedWallpaperState();
+        // Boot-only: resolve the record+proc chain synchronously (two tiny
+        // local reads, ~0.1ms) so adopt lands before the first frame ever
+        // renders — async resolution left 1-3 frames of the #1c1d20 gap
+        // plate visible on every boot (the residual gray blink). waitForJob
+        // emits the completion signals inline (quickshell fileview.cpp), so
+        // the normal finishPrestartedRecordLoad → proc-check →
+        // finishPrestartReload chain runs unchanged; every later reload
+        // (health, screen change, stop polling) stays fully async (T-31).
+        prestartedWallpaperFile.waitForJob();
+        if (prestartReloadInFlight)
+            prestartedWallpaperProcessFile.waitForJob();
         activeWallpaperFile.reload();
         syncDynamicProcess();
         syncExternalProcess();

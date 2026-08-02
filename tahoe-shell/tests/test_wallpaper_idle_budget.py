@@ -90,7 +90,17 @@ class WallpaperIdleBudgetTests(unittest.TestCase):
         self.assertIn("prestartProcessGeneration", text)
         self.assertIn("prestartRecordGeneration", text)
         self.assertIn("prestartedWallpaperHealthTimer", text)
-        self.assertNotIn("waitForJob", text)
+        # R-5 scope amendment: recurring paths (health ticks, stop polling,
+        # screen-change reloads) must stay async — waitForJob is permitted
+        # only as the boot-once resolution inside Component.onCompleted
+        # (locked in test_boot_record_resolution_gates_cold_start_and_resyncs)
+        # so adopt lands before the first frame instead of leaving 1-3 frames
+        # of gap plate (the residual boot blink).
+        completed_block = re.search(
+            r"Component\.onCompleted: \{.*?\n    \}", text, re.S
+        )
+        self.assertIsNotNone(completed_block)
+        self.assertNotIn("waitForJob", text.replace(completed_block.group(0), ""))
         self.assertIn("nestedSession", text)
         self.assertRegex(text, re.compile(r"dynamicDesired:.*?&& !nestedSession", re.S))
         self.assertRegex(text, re.compile(r"externalDesired:.*?&& !nestedSession", re.S))
@@ -507,6 +517,36 @@ process.stdout.write(JSON.stringify(result));
         )
         self.assertIsNotNone(health)
         self.assertIn("if (root.prestartReloadInFlight)", health.group(1))
+
+        # Boot-only synchronous resolution: adopt must land before the first
+        # frame renders (async left 1-3 frames of #1c1d20 plate = the
+        # residual boot blink). Order inside Component.onCompleted:
+        # reload kick → record waitForJob → conditional proc waitForJob →
+        # syncs. Later reloads stay async.
+        completed_block = re.search(
+            r"Component\.onCompleted: \{(.*?)\n    \}", text, re.S
+        )
+        self.assertIsNotNone(completed_block)
+        boot = completed_block.group(1)
+        reload_at = boot.find("reloadPrestartedWallpaperState()")
+        record_wait = boot.find("prestartedWallpaperFile.waitForJob()")
+        proc_wait = boot.find("prestartedWallpaperProcessFile.waitForJob()")
+        sync_at = boot.find("syncDynamicProcess()")
+        for name, pos in (
+            ("reload kick", reload_at),
+            ("record waitForJob", record_wait),
+            ("proc waitForJob", proc_wait),
+            ("sync", sync_at),
+        ):
+            self.assertGreaterEqual(pos, 0, f"boot block lost the {name}")
+        self.assertLess(reload_at, record_wait)
+        self.assertLess(record_wait, proc_wait)
+        self.assertLess(proc_wait, sync_at)
+        self.assertEqual(
+            text.count("waitForJob()"),
+            2,
+            "waitForJob is a boot-only device — later reloads must stay async",
+        )
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,7 +1,7 @@
 # Tahoe Desktop 路线图执行日志
 
 **用途**：T01-T24 的唯一状态锁与证据账本。
-**当前状态**：T02 完成——产品提交已推送并验证远端；docs-only 闭环 commit 待执行（closure reviewer 后）。
+**当前状态**：T03 产品实现完成、双审查与产品 commit/push 完成；docs-only 闭环 commit 待执行。
 **禁止**：预填测试结果、审查结论、commit/push 收据或把计划写成已完成事实。
 
 ---
@@ -12,7 +12,7 @@
 |---|---|---|---|---|
 | T01 | COMPLETE | niri `a44ce8b1`（tahoe-layer-animations）/ main `85adaaa`（fix/tray-menu-pinned-surface-height） | 3 轮双审查 CLEAN（rework 轮） | output layer teardown + rework（Tahoe pending/锁范围/实际 build） |
 | T02 | COMPLETE | niri `eeb7169a`（tahoe-layer-animations）/ main `4feff69`（fix/tray-menu-pinned-surface-height） | 7 轮双审查，最终轮双 CLEAN | window/output lifetime（is_none_or focus owner + STAB-03 证据关闭 + 7 测试） |
-| T03 | PENDING | - | - | layer lock/damage/redraw |
+| T03 | COMPLETE | niri `0b717b19`（tahoe-layer-animations）/ main `1e945e5`（fix/tray-menu-pinned-surface-height） | 4 轮双审查，最终两轮产品代码 CLEAN | layer lock/damage/redraw（guard 三阶段分离 + damage cap/drain + root 归因 + 8 红绿测试） |
 | T04 | PENDING | - | - | pointer/focus transaction |
 | T05 | PENDING | - | - | thumbnail budget |
 | T06 | PENDING | - | - | QsPaths |
@@ -484,6 +484,211 @@ git submodule status niri → eeb7169a（= 已推送 niri commit hash）
 - 产品 commit hash/remote receipt 是否逐项准确：待 closure reviewer 实测核对。
 - 状态是否可置 COMPLETE/RESOLVED-NO-CODE：是（COMPLETE）
 - docs-only closure commit subject：`docs(execution): T02 close task record`
+- closure push remote ref：`origin/fix/tray-menu-pinned-surface-height`
+- closure remote ancestor 验证 exit code：待 push 后以命令输出验证（本 commit 不记录自身 hash，由后续 `git log --format=%H -- execution-log.md` 解析）
+
+---
+
+## T03 layer map 锁边界与 damage/redraw 归因
+
+**状态**：COMPLETE（产品 commit/push 完成，docs-only 闭环 commit 待执行）
+**开始时间**：2026-08-03
+**roadmap 引用**：`roadmap.md#T03`（第 115-133 行）；发现 `research-report.md#STAB-04`（第 89-93 行）与 `GLASS-02` 的 damaged regions / root attribution（第 167-169 行）
+**执行者上下文**：OpenCode / DeepSeek V4 Flash 会话（niri 子仓库 `tahoe-layer-animations` 分支）
+
+### 1. 前提核实（2026-08-03）
+
+| 报告判断 | 当前证据 | 等级 | 结论 |
+|---|---|---|---|
+| STAB-04: `layer_shell_handle_commit` guard 跨映射对象构造 | `src/handlers/layer_shell.rs:126-290`：`let mut map = layer_map_for_output(&output)` 存活期间执行 `MappedLayer::new`（:169）、`add_mapped_layer_pre_commit_hook`（:168）、`start_open_animation`（:179）、`mapped_layer_surfaces.insert`（:183） | CURRENT-CONFIRMED | 成立（需分离） |
+| STAB-04: guard 跨 foreign rect 清理 | `layer_shell.rs:242` `clear_foreign_toplevel_rects_for_source` 在 guard（:126）存活期间调用 | CURRENT-CONFIRMED | 成立（需分离） |
+| STAB-04: guard 跨 pointer 查询 | `layer_shell.rs:178` `pointer_location_on_output`（`seat.get_pointer().current_location()` 取 PointerInternal mutex）在 guard 内；`start_close_animation_for_layer`（:325）同模式 | CURRENT-CONFIRMED | 成立（需分离） |
+| STAB-04: guard 跨 close snapshot 渲染 | `layer_shell.rs:253`/`:78` 在 guard 存活时调用 `start_close_animation_for_layer` → `backend.with_primary_renderer` + `store_unmap_snapshot` + `ClosingLayer::new`（渲染器 mutex + snapshot 渲染） | CURRENT-CONFIRMED | 成立（需分离） |
+| STAB-04: guard 跨 IPC | `layer_shell.rs:280-283` `send_scale_transform`/`send_configure` 在 guard 内；`map.arrange()`（:136）内部发送 configure 属 smithay map 读写阶段本身（所有合成器同模式，非 niri 可控） | CURRENT-CONFIRMED | 部分成立：niri 自己的 IPC 移出；arrange 属 map 原子阶段保留 |
+| STAB-04: guard 跨 config mutex | `layer_shell.rs:160/193/246` `self.niri.config.borrow()` 在 guard 内（锁序 map→config） | CURRENT-CONFIRMED | 成立（需分离） |
+| STAB-04: 已存在重入死锁 | 逐函数核实：`MappedLayer::new`（mapped.rs:142）、`ResolvedLayerRules::compute`（layer/mod.rs:49）、`start_open_animation`（mapped.rs:389）、`store_unmap_snapshot`（mapped.rs:429）、`ClosingLayer::new`（closing_layer.rs:97）、`output_geometry`（smithay GlobalSpace）、`clear_foreign_toplevel_rects_for_source`（handlers/mod.rs:571）均不取 layer map | CURRENT-SATISFIED | 无现役死锁；风险是结构性锁序（map→pointer vs pointer→map、map→renderer）与未来重入，任务按结构性分离处置 |
+| GLASS-02: subsurface 传入 redraw attribution 前应解析到 root | `handlers/mod.rs:1137` `queue_redraw_for_tahoe_glass_surface(surface)` 直接 `output_for_root(surface)`；smithay `layer_for_surface` 的 TOPLEVEL 匹配不含 SUBSURFACE（smithay layer.rs `WindowSurfaceType` 位掩码）；`is_wl_surface`（window/mapped.rs:1092）只比对 toplevel → 层/window subsurface 提交走 Unlocatable 全输出 fallback | CURRENT-CONFIRMED | 成立（subsurface 归因 bug） |
+| GLASS-02: redraw root 解析缺口 | `compositor.rs:69` `on_surface_commit` 先于 `:71-79` 的 root 解析与 `root_surface` 缓存写入 → 表面首次提交时 `find_root_shell_surface` 尚无缓存 | CURRENT-CONFIRMED | 成立（缓存写入需提前到 on_surface_commit 之前） |
+| GLASS-02: unmapped/destroyed 归因结果 | 旧行为：layer_surface.destroy 后 `queue_redraw_for_tahoe_glass_surface` → Unlocatable → `queue_redraw_all`（现有测试 `clear_with_unlocatable_root_queues_all_outputs` 固化该行为）；T01 已确认 post-removal Tahoe directive commit 同样落入该路径（T01 记录第 8 节） | CURRENT-CONFIRMED | 无可见 surface 时全输出 redraw 属无理由退化，按 A03.3 改为确定结果（skip + 记录） |
+| GLASS-02: damaged_regions 无上限 | `render_helpers/tahoe_glass.rs:26/60-72`：`damaged_regions` 只 union-dedup，无 rect 数/面积上限；`render_regions_for_layer` 是唯一 drain（:227 `mem::take`），但 `:212-214` 在 `regions.is_empty()` 时先 return，drain 不可达 | CURRENT-CONFIRMED | 成立（两个缺陷：无上限；empty regions 永不排空） |
+| GLASS-02: 锁屏/DPMS 下 damage 无排空 | `niri.rs:4838-4863`：锁定时 render 在 layer 渲染前 return；DPMS 关无帧 → layer 渲染不运行 → damage 只进不出 | CURRENT-CONFIRMED | 成立（cap 兜底 + 下次渲染恢复） |
+| 无平行 damage queue / 第二 redraw API 需要引入 | 全仓 rg：`damaged_regions` 仅 `render_helpers/tahoe_glass.rs` 一处 authority；`RedrawAttribution` 单一 apply 点 `niri.rs:4199` | CURRENT-CONFIRMED | 原地改造 |
+
+### 2. 工作树与范围
+
+开始时 niri 子模块干净（HEAD `eeb7169a`）；主仓库仅用户未跟踪项 `.zcode/`、`Testing/`、docs 目录。
+
+允许修改：
+
+- `niri/src/handlers/layer_shell.rs`（commit/destroy 路径 map 阶段分离——唯一产品结构改动）
+- `niri/src/render_helpers/tahoe_glass.rs`（damage 上限 + empty-regions 排空顺序）
+- `niri/src/handlers/compositor.rs`（root 缓存写入提前到 on_surface_commit 前）
+- `niri/src/handlers/mod.rs`（TahoeGlassHandler 归因：root 解析 + unmapped/destroyed 确定性处置）
+- `niri/src/utils/lifecycle_diag.rs`（新增 skip 计数器）
+- `niri/src/tests/layer_lock_scope.rs`（新测试文件）、`niri/src/tests/tahoe_glass.rs`、`niri/src/tests/mod.rs`
+- `execution-log.md`
+
+明确禁止修改：
+
+- `src/protocols/tahoe_glass.rs` 协议 authority（T09 范围，region 校验/反馈不动）
+- `src/layer/mapped.rs`、`src/layer/closing_layer.rs` 等渲染/动画 authority
+- `src/redraw_attribution.rs` 枚举（除非必要；当前设计不需要改）
+- Quickshell、Tahoe shell、主仓库用户项
+- T04 范围（pointer 缓存、focus transaction）
+
+定义/调用点/测试搜索（G01 清单）：
+
+| `rg` 命令 | 命中数 | 修改点 | 不修改点及理由 |
+|---|---:|---|---|
+| `layer_map_for_output` (src/ 非 tests) | 44 | `layer_shell.rs:126`（commit 路径 Phase A 化）、`:70`（destroy 路径 Phase A 化） | `niri.rs:1220/3631/3686/3848/4162/4903/5057/5124/5290/5577/5682/5796/5864/5956` 等：渲染路径把 guard 作为 `&LayerMap` 参数消费（`layers_in_render_order` 等，无重入，属渲染自然 owner）；`ipc/server.rs:370`、`handlers/mod.rs:729`、`xdg_shell.rs:296/381/1288/1312`、`workspace.rs:2350` 均为短查找；`niri.rs:3395/3422/3435` 为 T01 teardown（已满足锁范围）；`layer_shell.rs:50/61/111` 短 guard |
+| `damaged_regions` | 8 | `render_helpers/tahoe_glass.rs:26/64-72`（cap + collapse） | 其余为既有测试断言（:569-571 与 drain 语义） |
+| `queue_redraw_for_tahoe_glass_surface` | 4 | `handlers/mod.rs:1135`（归因逻辑）、`protocols/tahoe_glass.rs:313`（trait 默认 no-op，不动） | `protocols/tahoe_glass.rs:584/1060/1089/1272` 调用点全部经同一 handler，不改 |
+| `find_root_shell_surface` | 3 | `handlers/mod.rs:1137`（新增调用） | `niri.rs:6945` 定义保持；`handlers/mod.rs:717` 既有调用 |
+| `root_surface` (niri.rs) | 3 | `handlers/compositor.rs:77-79`（提前到 on_surface_commit 前） | `niri.rs:261/6946` 定义与读取保持 |
+| `RedrawAttribution::all(Unlocatable)` | 85 处 apply | `handlers/mod.rs:1144`（unmapped/destroyed 改 skip；mapped-unlocatable 保留） | 其余 fallback 调用点为窗口 lifecycle 路径（T02/T21 语义，不动）；`niri.rs:4211` apply 单一入口保持 |
+| `start_close_animation_for_layer` | 3 | `layer_shell.rs:78/253`（移出 guard） | `layer_shell.rs:302` 定义保持（内部 pointer 查询与渲染器阶段不动） |
+| `note_redraw_skip_unmapped`（新增） | 0 | `lifecycle_diag.rs` 新增计数器 | 遵循既有 note_redraw_fallback_* 模式 |
+
+### 3. 旧实现失败基线（红绿证明）
+
+在 eeb7169a（旧实现）上运行 8 个新/改造测试，全部按预期失败并命中目标缺陷：
+
+| 测试/probe | 旧结果 | 为什么能捕获根因 |
+|---|---|---|
+| `layer_shell_commit_guard_does_not_cross_phase_two_work`（静态 guard，A03.1） | FAIL：guard 存活区间内 10 处违禁（config.borrow ×3、add_mapped_layer_pre_commit_hook、MappedLayer::new、pointer_location_on_output、clear_foreign_toplevel_rects_for_source、start_close_animation_for_layer、send_scale_transform、send_configure） | 源码 brace 深度扫描界定 guard 作用域：旧 commit 路径 guard 从 :126 持有到函数尾 |
+| `layer_shell_destroy_guard_does_not_cross_phase_two_work`（A03.1） | FAIL：`start_close_animation_for_layer` 在 guard 区间内（renderer snapshot 渲染跨锁） | 旧 destroy 路径 :70-83 持有 guard 跨 close 动画 |
+| `new_layer_surface_guard_only_wraps_map_write`（A03.1） | FAIL：`LayerSurface::new` 在 guard 区间内 | 旧 new_layer_surface :50-52 构造在锁内 |
+| `ten_thousand_region_commits_without_render_stay_bounded_and_recoverable`（A03.2） | FAIL：10,000 次后 `damaged_regions.len()==19,926`（无上限，union 碎片化后超出提交数） | 锁屏/DPMS 渲染不运行 → 旧实现 damage 只进不出 |
+| `cap_collapse_keeps_union_coverage`（A03.2 守卫） | FAIL：1,000 次后 1,000+ rect（>64 预算） | 无 cap 时存储无界 |
+| `subsurface_glass_commit_attributes_to_root_output`（A03.3） | FAIL：`targeted=0, fallback=1`（subsurface 提交落 Unlocatable 全输出 fallback） | 旧 handler 未先解析 root；smithay `layer_for_surface` TOPLEVEL 掩码不含 SUBSURFACE |
+| `unmapped_destroyed_root_skips_redraw_without_queueing_all`（A03.3，改造既有 `clear_with_unlocatable_root_queues_all_outputs`） | FAIL：`fallback==1`（destroy 后 drive handler 仍 queue_redraw_all） | 旧行为把已 destroy 的 surface 归因为全输出 redraw；新语义为确定 skip |
+| `empty_regions_render_still_drains_pending_damage`（A03.2） | FAIL：empty regions 渲染推不出 ExtraDamage（早期 return 在 drain 前，旧实现 `[]`） | 旧实现 `:212` empty 分支使已记录 damage 永不排空；预渲染建立 renderer 后 destroy 清空 region 再渲染，旧顺序跳过 drain（以临时还原 drain 顺序的 A/B 复验红） |
+
+### 4. 实现机制（实际）
+
+- **锁范围（A03.1）**：`layer_shell_handle_commit` 拆三阶段——Phase A 短 guard（块作用域：`layer_for_surface` + arrange + 收集 close 动画几何，guard 即刻释放）；Phase B 无 guard（closing_layers retain、config/rules、hook、`MappedLayer::new`、`pointer_location_on_output`、open 动画、`mapped_layer_surfaces.insert`、焦点、directive/foreign rect 清理、初始 configure IPC）；之后 `output_resized`/`queue_redraw`。`layer_destroyed` 同模式：Phase A 短 guard 收集 `(output, layer, geo)`；Phase B 无 guard（mapped 移除、`clear_transform_directive_on_unmap`、close 动画）；Phase C 短 guard（`unmap_layer`）。`new_layer_surface` 构造移到 guard 外，guard 只包 `map_layer` 写。
+- **行为等价说明（轮次 1 F1 修正）**：close 动画几何在 Phase A 内双快照——arrange 之前与之后各取一次，`close_geo = pre_arrange_geo.or(post_arrange_geo)`，与旧代码 `close_geo.or_else(|| map.layer_geometry(&layer))`（优先最后一次渲染位置、None 回退 arrange 后值）逐位等价；同 commit 内无并发。
+- **damage 上限与排空（A03.2）**：`damage_regions` 在 rect 数 > `MAX_PENDING_DAMAGE_RECTS`(32) 时折叠为 union 包围盒（超集，正确性保持）；`render_regions_for_layer` 的 drain 移到 `regions.is_empty()` 之前（empty regions 也必须排空并推 ExtraDamage 重绘旧 glass 区域）；锁屏/DPMS 不渲染 → cap 兜底有界，恢复渲染即 drain（可恢复）。
+- **root 归因（A03.3）**：`compositor.rs` root 解析与 `root_surface` 缓存写入提前到 `on_surface_commit` 之前（首提交的 subsurface 也能解析 root）；`queue_redraw_for_tahoe_glass_surface` 先 `find_root_shell_surface` 再归因：可定位 → targeted；`layout.find_window_and_output` 命中（NoOutputs 已映射窗口）→ Unlocatable fallback（保留既有语义）；未映射/destroyed/已移除 output 的 layer → `RedrawAttribution::None` + `lifecycle_diag::note_redraw_skip_unmapped()`（T01 已记录 deferred 的 post-removal 全输出 redraw 由此消除）。
+- **为什么没有平行接口**：无新 map/queue/API；`RedrawAttribution` 与 `apply_redraw_attribution`（niri.rs:4199）单一 authority 不变；skip 复用 `None` 变体；计数器遵循既有 note_redraw_fallback_* 模式。
+- **为什么没有加入范围外功能**：diff 仅 8 文件 + 1 新测试文件，无配置/依赖/视觉变化；`tests/client.rs` 只加测试夹具（subcompositor 绑定 + 两个无事件 Dispatch impl）。
+
+### 5. 验收逐条
+
+| 验收编号 | 方法/命令 | 结果 | 证据 |
+|---|---|---|---|
+| G01 | rg 搜索见第 2 节 | PASS | 搜索表 + 未改点逐项理由 |
+| G02 | git diff 检查 | PASS | 无 V2/New/Fixed 命名（`rg '^\+.*(V2|New|Fixed|Alt|Legacy2|_new)\b'` 零命中）；无新接口/flag |
+| G03 | 专项+全量测试 | PASS | 见全量配置 |
+| G04 | 红绿证明 | PASS | 8 个新/改造测试旧实现失败、新实现通过（第 3 节）+ empty-drain 以临时还原顺序 A/B 复验 |
+| G05 | 双审查 | PASS | 第 6 节（四轮双审查；最终两轮产品代码 CLEAN，A4-F1/B4-F2-F4 账本处置于轮次 4） |
+| G06 | commit/push 顺序 | 待执行 | 第 7 节 |
+| G07 | execution-log 完整 | PASS | 本文档 |
+| G08 | 工作树/会话保护 | PASS | 未触碰用户项，未重启会话（全部 headless fixture） |
+| A03.1 | 3 个静态 guard 测试 | PASS | commit 10 违禁归零、destroy close 动画移出 guard、new_layer 构造移出 guard；渲染路径 guard 作为 `&LayerMap` 参数消费属自然 owner（niri.rs:4903/5057 等，无重入，已记录不修改点） |
+| A03.2 | `ten_thousand_region_commits_without_render_stay_bounded_and_recoverable` + `cap_collapse_keeps_union_coverage` + `empty_regions_render_still_drains_pending_damage` | PASS | 10,000 次无渲染提交 ≤33 rect（预算 64）；drain 后恢复空并再次有界；cap 覆盖超集；empty regions 渲染仍推 ExtraDamage 覆盖旧 rect (8,4,128,32)；锁屏/DPMS/不可见 layer 由 cap 兜底 + 恢复渲染 drain（源码证据 niri.rs:4838-4863 锁定时 layer 渲染不运行） |
+| A03.3 | `subsurface_glass_commit_attributes_to_root_output` + `unmapped_destroyed_root_skips_redraw_without_queueing_all` + 既有 targeted 测试 | PASS | subsurface（真实 wl_subcompositor 角色）transform 首 commit targeted ≥1 且 fallback==0；destroy 后 skip（output 全部未排队、`queue_redraw_all==0`、`redraw_fallback_unlocatable==0`、`redraw_skip_unmapped>=1`）；root/已映射 layer 既有测试保持 targeted；NoOutputs 窗口保留 Unlocatable（语义记录，书面裁决见第 6 节 Q4） |
+| A03.4 | TSAN 尝试 | 不可用（记录） | 两条路线均失败：`-Zsanitizer=thread` + `-Zbuild-std` 在 smithay 依赖上编译失败（AsFd 解析错误，环境限制）；无 build-std 时 build-deps（pkg-config/smallvec 等）在 sanitizer RUSTFLAGS 下失败。确定性重入 harness = 3 个静态 guard 测试（brace 深度界定 guard 存活区间，token 级判定跨阶段调用） |
+| A03.5 | PROTOCOL_FULL + 全量测试 | PASS | 见全量配置 |
+
+全量配置：
+
+| 配置 | 命令 | exit code | 通过/失败明细 |
+|---|---:|---|---|
+| NIRI_FULL | `cargo fmt --all -- --check` | 1（基线失败） | 70 处漂移全部改动前既有（与 T01/T02 基线一致）；本次 9 个改动/新增文件的 T03 hunk 零 fmt 漂移（3 个文件含 T03 之外的既有漂移，closure reviewer 以 `git show eeb7169a | rustfmt --check` 复验） |
+| NIRI_FULL | `cargo test -p niri --lib` | 0 | 564 passed / 0 failed（556 旧 + 8 新） |
+| NIRI_FULL | `cargo check --workspace --all-targets` | 0 | Finished，仅 1 条既有 warning（niri-visual-tests 未用 import） |
+| 实际二进制 | `cargo build -p niri` | 0 | debug 构建通过 |
+| 实际二进制 | `cargo build --release -p niri` | 0 | release 构建通过 |
+| PROTOCOL_FULL | `scripts/check-protocol-sync.sh` | 0 | IN_SYNC（niri/quickshell/权威 三处 sha256 一致） |
+| PROTOCOL_FULL | `scripts/check-tahoe-glass-guardrails.sh` | 0 | 全部 guardrail 通过 |
+
+### 6. 独立审查（轮次 1）
+
+#### Reviewer A（正确性/生命周期/并发）
+
+结论：NOT-CLEAN（2 条 PLAUSIBLE，无 CONFIRMED）。
+
+- **F1 PLAUSIBLE**：`close_geo` 快照时机——日志 §4 的"arrange 不改变已提交 layer 的位置语义"前提错误：smithay `arrange()` 会写 `LayerUserdata.location`（layer.rs:421-424），`layer_geometry` 含 location（layer.rs:146-154），arrange 前后值可不同；旧代码优先 arrange 前值（最后一次渲染位置）。→ **修复（接受）**：Phase A 恢复精确旧语义——先快照 `pre_arrange_geo`，arrange 后再取 `post_arrange_geo`，`close_geo = pre_arrange_geo.or(post_arrange_geo)`（与旧 `close_geo.or_else(|| map.layer_geometry(&layer))` 逐位等价）；两个取值都在同一短 guard 内完成。日志 §4 等价裁决同步更正。
+- **F2 PLAUSIBLE**：compositor.rs root 缓存提前写入无独立红绿证据（原测试先提交一次建立缓存，即使旧顺序测试也绿）。→ **修复（接受）**：`subsurface_glass_commit_attributes_to_root_output` 重构为 directive 骑在子 surface **首个 commit**（claim + set_transform 先于第一次 child commit）；该测试已双 A/B 复验：旧 handler（无 root 解析）→ FAIL（targeted=0）、旧 compositor 顺序（缓存写回 on_surface_commit 之后）→ FAIL（targeted=0）、新实现 → PASS。缓存重排现被红绿覆盖。
+- F3-F8 全部 NOT-A-FINDING（静态 guard 红绿真实且偏向假阳性方向、drain 前移的 renderer 创建代价可接受、cap 超集与 skip 均真实、锁序/生命周期/协议时序 CLEAN、不变量与测试强度 CLEAN、注释一致）。
+
+#### Reviewer B（范围/接口/UX/验收）
+
+结论：CLEAN（1 条 PLAUSIBLE，无 CONFIRMED）。
+
+- **Q4 PLAUSIBLE**：`handlers/mod.rs:1145` 的 NoOutputs 窗口分支（`layout.find_window_and_output(&root).is_some()` → Unlocatable fallback）无直接测试。→ **书面裁决（以证据反证，不加测试）**：该分支是旧行为 parity 保留——旧 handler 对任何不可定位 root 一律 Unlocatable fallback，本分支只把"已映射窗口（NoOutputs）"从 skip 中分出来保持旧语义，行为未变；原因经 `note_fallback_reason(Unlocatable)` 记录（满足"不得默认全输出而不记录原因"）；且 Tahoe glass 渲染仅作用于 layer surface（`render_for_layer` 仅 mapped.rs:687/820 调用），窗口 surface 的 glass 状态永不渲染，该分支无可见效果；r17 纪律测试（`r17_foreign_handler_source_has_zero_queue_redraw_all` 等）间接保护 fallback 纪律。裁决理由：分支语义为"既有行为保持"，红绿框架下无旧缺陷可捕获（旧代码同路径）。
+- 其余 Q1-Q3/Q5-Q6 全部 CLEAN；2 条 NOT-A-FINDING 记录（mod.rs:1146 注释张力可辩护；计数器命名 REDRAW_SKIP_UNMAPPED 实际也覆盖 removed-output layer）→ 已修复 lifecycle_diag 文档注释为 "unmapped, destroyed, or a layer whose output was removed"。
+
+#### 轮次 1 修复后复验
+
+| 检查 | 结果 |
+|---|---|
+| F1 修复（pre/post arrange 双快照） | `layer_shell_commit_guard_does_not_cross_phase_two_work` PASS；静态 guard 无违禁 |
+| F2 修复（首 commit directive 测试） | 旧 handler A/B FAIL、旧 compositor 顺序 A/B FAIL、新实现 PASS（双红绿） |
+| 全量 | `cargo test -p niri --lib` 564 passed / 0 failed；`git diff --check` 干净；fmt 70 处基线（本次文件零 diff） |
+
+#### 轮次 2（修复后新双审查）
+
+- Reviewer A2（全新）：产品代码 CLEAN（F1 双快照逐位等价独立验证、F2 首 commit 双 A/B 红绿独立验证、Q4 裁决成立）；**1 条 PLAUSIBLE F-T03-1**：`empty_regions_render_still_drains_pending_damage` 触发生产 handler 时未持 `test_redraw_counter_lock`，与 T01-era `output_teardown.rs:136-160` 的持锁精确零断言竞争（机制先于 T03 存在，T03 新增一个无锁干扰源）。→ **修复**：destroy 窗口持锁。另记录 NOT-A-FINDING：patch 未含未跟踪新文件（已用 `git add -N` 修正）。
+- Reviewer B2（全新）：**CLEAN**（Q1-Q6 全 CLEAN，A03.1-A03.5 逐条实测复验；NoOutputs 裁决独立成立；F1/F2 修复真实到位）。
+- 修复后子集实测：tahoe_glass 子集 11 测试 5 轮中仍 2 轮偶发失败——失败者全部为 T01-era 未修改测试（`destroy_controller_queues_redraw_only_on_root_output` 等，持锁精确断言 vs 无锁写入者），经 `git show eeb7169a:src/tests/tahoe_glass.rs` 证实同一竞争对在 T03 之前即可触发。
+
+#### 轮次 3（修复后新双审查）
+
+- Reviewer A3（全新）：产品代码 CLEAN（六问全 CLEAN，一次并行全量跑中 `orphaned_commits_do_not_reapply_tahoe_glass_state_after_output_removal` 偶发失败——真实 flake，隔离/子集 20+ 次复跑全过）；**1 条 CONFIRMED F-1（账本）**：execution-log 缺轮次 2 处置记录与 flake 记录、状态行陈旧；**1 条 PLAUSIBLE F-2**：flake 归因不精确——T03 的 skip 测试（严格 `targeted==0` 读者）与 empty-drain 测试的 `set_and_commit_region`（无锁写者）也是共同参与者；`git show eeb7169a` 证实严格断言模式为 T01-era 原样继承，"非 T03 引入"结论仍成立。
+- Reviewer B3（全新）：**CLEAN**（产品代码复核 CLEAN；flake 延期裁决实质成立）；**1 条 CONFIRMED**（同一账本缺失 F1）。
+- → **修复（本节）**：① T03 测试全部 handler 触发窗口持 `test_redraw_counter_lock`（skip 测试整段 + empty-drain 测试 region 提交与 clear）；② skip 测试的严格断言从 tahoe TEST_* 全局计数器改为**无竞争可观察量**：output redraw_state（`force_idle_redraw_states` + `count_outputs_queued`）+ lifecycle_diag 计数器（`with_enabled_for_test` 自有锁串行化；`redraw_skip_unmapped >= 1` 直接证明 skip 被记录）；③ 本节的账本补记。
+- 修复后实测：tahoe_glass 子集 10 轮零失败、output_teardown 子集 3 轮零失败、全量 3 轮 564 passed / 0 failed。T03 测试不再是该既有竞争的读者或写者。
+
+#### 轮次 4（修复后新双审查）
+
+- Reviewer A4（全新）：产品代码六问 CLEAN/CONFIRMED；**1 条 PLAUSIBLE F1**：skip 处置在 live-close 窗口违背"surface 不渲染"前提（被销毁的 Tahoe layer 在 close 动画期仍由 `render_close_effects` 实时绘制，孤岛 commit 可能被绘制但 skip 不排队帧）。→ **书面裁决（以代码反证，接受 skip）**：live-close 渲染使用 **unmap 时快照**而非实时 regions——`store_unmap_snapshot`（mapped.rs:437-439）捕获 `close_tahoe_glass_regions`，`render_close_effects`（mapped.rs:806-810）`close_tahoe_glass_regions.clone().unwrap_or_else(live read)` 优先快照——因此孤岛 commit 在 close 窗口**无任何可见效果**，skip 不丢失任何像素；残余边缘（unmap 时无 glass → 快照 None → live read）由 close 动画自身的帧循环覆盖（`redraw_sources.closing_layer`，niri.rs:5304-5308，动画未完成前每帧重绘 close 所在 output），延迟 ≤1 帧且不可见。旧代码在该窗口的 `queue_redraw_all` 为纯浪费（全输出重绘一个不可见变化），skip 严格更优。F2-F6 全部 NOT-A-FINDING（几何断言为真正红绿支柱、token 盲区已如实文档化、renderer 创建零成本、cap 坐标安全、日志表述见 B4-F3 处理）。
+- Reviewer B4（全新）：产品代码九文件零 CONFIRMED、零产品级 PLAUSIBLE（Q1-Q5 全 CLEAN，A03.1-A03.5 逐条 CONFIRMED）；**3 条 PLAUSIBLE 均为账本精确性**：
+  - **F2（计数）**："四轮双审查完成"在轮次 4 记录前属提前声明 → 本节记录后修正为准确；
+  - **F3（无竞争声称过强）**："T03 测试不再是读者或写者"字面过强：lifecycle_diag 计数器是门控（enabled 窗口内其他测试生产路径理论可写）；skip 测试仍持锁调用 `test_reset_redraw_counters`；subsurface 测试仍严格断言 `fallback==0`（但当前套件无任何测试再写 fallback 计数器——旧 fallback 写者已随 skip 改造消失）。→ **修复（措辞收窄）**：见本节"后续边界"修订；
+  - **F4（红跑回填未披露）**：轮次 3 起的 skip 测试 `redraw_skip_unmapped >= 1` 断言与 subsurface 测试的 subcompositor 夹具为旧树不存在符号；当前测试版本的红跑需回填（T01 rework 同例，见 T01 rework §4 红跑前置说明）。→ **修复（披露）**：红绿核心断言（`queue_redraw_all==0`、`fallback==0`、`targeted>=1`、ExtraDamage 几何）的旧树红跑在回填前版本上已实测（fallback left=1 right=0 等）；轮次 3 新增断言（`redraw_skip_unmapped>=1`）与夹具依赖的旧树红跑需按 T01 rework 同例回填 `#[cfg(test)]` 符号，机制等价（旧 handler 不调用 note → 计数为 0 → 断言红）。
+- 处置结果：A4-F1 书面裁决成立（快照优先机制 + 动画帧循环覆盖残余边缘）；B4-F2/F3/F4 账本已修正（本节记录 + 措辞收窄 + 回填披露）。产品 diff 自轮次 4 审查输入以来未再变更。
+
+#### 后续边界（T03 范围外，只记录未修改）
+
+- **T01-era 测试计数器竞争（待 T24）**：`TEST_TARGETED_REDRAW`/`TEST_FALLBACK_REDRAW_ALL`/`TEST_LAST_DAMAGED_OLD_RECTS` 为无门槛全局原子；T01-era 测试（`recreate_controller_does_not_inherit_previous_committed_regions`、`destroy_is_idempotent_when_double_invoked`、`abnormal_client_disconnect_clears_committed_glass`、`destroy_controller_queues_redraw_only_on_root_output` 的写入段、`output_teardown.rs:136-160` 的持锁精确零断言）之间在并行 libtest 下偶发竞争，`git show eeb7169a` 证实 T03 之前即可触发。T03 的处置与残余理论窗口（按轮次 4 B4-F3 收窄）：T03 不再新增**无锁**写者；skip 测试不再严格读取 TEST_* 计数器（改为门控 lifecycle 计数器 + output redraw_state，均为无竞争可观察量——lifecycle 计数器由 `with_enabled_for_test` 的自有锁串行化窗口断言，output 状态为 fixture 局部）；subsurface 测试仅保留 `>=` 语义断言且当前套件无 fallback 写者。残余理论窗口（其他测试生产路径在 enabled 窗口内写 lifecycle 计数器）为既有/理论性，10 轮子集 + 3 轮全量未触发。按 §3.1 禁止顺手改范围外测试，属 T24 收尾范围。
+- **TSAN 环境限制（A03.4 已记录）**：`-Zsanitizer=thread` 在 smithay（build-std 路线 AsFd 解析错误）与 build-deps（无 build-std 路线）两处编译失败；确定性 harness（3 静态 guard + 行为测试）为替代证据。
+- **轮次 3/4 红跑回填披露**：skip 测试的 `redraw_skip_unmapped >= 1` 断言与 subsurface 测试的 subcompositor 夹具为旧树不存在符号（T01 rework 同例：红跑需把 test-only accessor/夹具回填旧树）；红绿核心断言在回填前版本上已实测红。
+
+---
+
+### 7. 产品 Commit 与 push 收据
+
+| 仓库 | Commit hash | Commit subject | Branch | Remote ref | push 结果 | ancestor 验证 |
+|---|---|---|---|---|---|---|
+| niri | `0b717b19578451956fdc53f855fa42e0463b1620` | `fix(layer): T03 layer map lock scopes, bounded damage, root attribution` | `tahoe-layer-animations` | `origin/tahoe-layer-animations` | `eeb7169a..0b717b19` 成功 | `git merge-base --is-ancestor 0b717b19 origin/tahoe-layer-animations` exit 0 |
+| main | `1e945e5e51c7f055696d2de9fe9c8fc648b1fd25` | `fix(submodule): bump niri for T03 layer map lock scopes, bounded damage, root attribution` | `fix/tray-menu-pinned-surface-height` | `origin/fix/tray-menu-pinned-surface-height` | `c39482e..1e945e5` 成功 | `git merge-base --is-ancestor 1e945e5 origin/fix/tray-menu-pinned-surface-height` exit 0 |
+
+主仓库子模块指针是否只指向已推送 commit：
+
+```text
+git submodule status niri → 0b717b19（= 已推送 niri commit hash）
+```
+
+### 8. 未覆盖、用户现场项与后续边界
+
+- 未覆盖：无产品代码缺口（A03.1-A03.5 全通过）。渲染路径 guard 作为 `&LayerMap` 参数消费（niri.rs:4903/5057 等）为渲染自然 owner，未分离（无重入，已记录不修改理由）。
+- 需要用户授权的实时验证：无（纯源码/测试任务，未重启会话、未真实拔插；锁屏/DPMS 场景以确定性 harness 模拟）。
+- 发现但属于后续任务的事项（只记录，未修改）：见第 6 节"后续边界"——T01-era 测试计数器竞争（T24）、TSAN 环境限制（A03.4 记录）、轮次 3/4 红跑回填披露。
+
+### 9. 完成判定
+
+**最终状态**：COMPLETE（待 §10 闭环 commit push 后）
+**理由**：A03.1-A03.5 + G01-G08 满足；8 个红绿测试（含 subsurface 双 A/B 复验）；四轮双审查最终两轮产品代码 CLEAN（A4-F1 以快照优先机制代码反证裁决、B4-F2-F4 账本修正）；fmt 70 处基线为改动前既有；564 全量测试通过；debug+release 实际构建通过；PROTOCOL_FULL 通过；niri 产品 commit 已 push 且远端 ancestor 验证 exit 0。
+**下一任务是否允许开始**：YES（本文档闭环 commit push 完成后）
+
+### 10. 闭环记录审查与推送
+
+- Closure reviewer（全新只读上下文）：完成，全部 PASS —— 两仓库 full hash/subject/parent/branch/remote ref/ancestor exit code/子模块指针/测试计数/fmt 基线/状态机逐项实测一致（抽查复跑测试与 `git show eeb7169a | rustfmt --check` 复验既有漂移归属）；工作树冻结（niri 干净，主仓库仅用户原有未跟踪项与本文档）；无未执行事项写成已完成；确认状态可置 COMPLETE，允许 docs-only closure commit。2 处措辞小瑕疵已随本 closure 修正（L4/L494 状态行措辞；L598 fmt"零 diff"改为"T03 hunk 零新增漂移"并注明复验）。
+- 产品 commit hash/remote receipt 是否逐项准确：是（closure reviewer 实测核对）
+- 状态是否可置 COMPLETE/RESOLVED-NO-CODE：是（COMPLETE）
+- docs-only closure commit subject：`docs(execution): T03 close task record`
 - closure push remote ref：`origin/fix/tray-menu-pinned-surface-height`
 - closure remote ancestor 验证 exit code：待 push 后以命令输出验证（本 commit 不记录自身 hash，由后续 `git log --format=%H -- execution-log.md` 解析）
 

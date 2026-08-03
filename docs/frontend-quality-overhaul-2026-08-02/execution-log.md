@@ -1,7 +1,7 @@
 # Tahoe Desktop 路线图执行日志
 
 **用途**：T01-T24 的唯一状态锁与证据账本。
-**当前状态**：T01 rework 完成——产品提交已推送并验证远端；docs-only 闭环 commit 待执行（closure reviewer 后）。
+**当前状态**：T02 完成——产品提交已推送并验证远端；docs-only 闭环 commit 待执行（closure reviewer 后）。
 **禁止**：预填测试结果、审查结论、commit/push 收据或把计划写成已完成事实。
 
 ---
@@ -11,7 +11,7 @@
 | 任务 | 状态 | Commit subject / remote ref | 终审 | 备注 |
 |---|---|---|---|---|
 | T01 | COMPLETE | niri `a44ce8b1`（tahoe-layer-animations）/ main `85adaaa`（fix/tray-menu-pinned-surface-height） | 3 轮双审查 CLEAN（rework 轮） | output layer teardown + rework（Tahoe pending/锁范围/实际 build） |
-| T02 | PENDING | - | - | window/output lifetime |
+| T02 | COMPLETE | niri `eeb7169a`（tahoe-layer-animations）/ main `4feff69`（fix/tray-menu-pinned-surface-height） | 7 轮双审查，最终轮双 CLEAN | window/output lifetime（is_none_or focus owner + STAB-03 证据关闭 + 7 测试） |
 | T03 | PENDING | - | - | layer lock/damage/redraw |
 | T04 | PENDING | - | - | pointer/focus transaction |
 | T05 | PENDING | - | - | thumbnail budget |
@@ -340,6 +340,150 @@ git submodule status niri → a44ce8b1（= 已推送 niri commit hash）
 - 产品 commit hash/remote receipt 是否逐项准确：是（closure reviewer 实测核对）
 - 状态是否可置 COMPLETE/RESOLVED-NO-CODE：是（COMPLETE）
 - docs-only closure commit subject：`docs(execution): T01 close task record`
+- closure push remote ref：`origin/fix/tray-menu-pinned-surface-height`
+- closure remote ancestor 验证 exit code：待 push 后以命令输出验证（本 commit 不记录自身 hash，由后续 `git log --format=%H -- execution-log.md` 解析）
+
+---
+
+## T02 window/output 生命周期 panic 清理
+
+**状态**：IN_PROGRESS（产品实现 + 双审查完成，commit/push 进行中）
+**开始时间**：2026-08-03
+**roadmap 引用**：`roadmap.md#T02`（第 95-114 行）；发现 `research-report.md#STAB-02/STAB-03`（第 77-88 行）
+**执行者上下文**：OpenCode / DeepSeek V4 Flash 会话（niri 子仓库 `tahoe-layer-animations` 分支）
+
+### 1. 前提核实
+
+| 报告判断 | 当前证据 | 等级 | 结论 |
+|---|---|---|---|
+| STAB-02: 最小化父窗口后创建 transient dialog，`Workspace::add_tile` 的 NextTo 分支 `active_window().unwrap()` panic | `src/layout/workspace.rs:646`；`active_window()`（workspace.rs:474-480）在 `scrolling.active_window()`（scrolling.rs:575-586，active tile 最小化返回 None）或 `floating.active_window()`（floating.rs:426-433，active_window_id 最小化返回 None）时为 None | CURRENT-CONFIRMED | 成立（红测试在 a44ce8b1 上于 workspace.rs:646:75 真实 abort：`called Option::unwrap() on a None value` + `panic in a function that cannot unwind`，即 FFI 回调内 abort） |
+| STAB-03: `queue_redraw()` 对 `output_state` 无保护取值与 grab/动画定时器在 hot-unplug 时交叉 | 全部延迟 output 回调已有守卫：动画 redraw timer（niri.rs:4246 `let Some(...) else Drop`）、estimated-vblank timer（tty.rs:1813 `let Some(...) else`）、tty idle redraw（tty.rs:1558-1563 `contains_key`）、screencast timer（pw_utils.rs:943-945 `contains_key`）、screencast cast redraw（screencasting/mod.rs:160-162 `Weak::upgrade`）、vblank（tty.rs:1681-1697 现查 + guard）；`remove_output`（niri.rs:3300-3309）移除两类已跟踪 timer token | CURRENT-SATISFIED | 前提不成立（无 core、无 panic）：按 roadmap「若前提不成立，应以证据关闭任务，不做防御式散改」以测试+审计证据关闭，不修改生产代码 |
+| 无 `queue_redraw_safe`/平行接口需要引入 | 全仓 rg 无该符号；`queue_redraw` 的 unwrap（niri.rs:4191）保留为活-output 不变量哨兵，所有延迟回调在调用前先验证成员资格 | CURRENT-CONFIRMED | 符合 roadmap 必须机制「不引入 queue_redraw_safe() 与旧 queue_redraw() 长期并存」 |
+
+### 2. 工作树与范围
+
+开始时 niri 子模块干净（HEAD `a44ce8b1`）；主仓库仅用户未跟踪项 `.zcode/`、`Testing/`、docs 目录。
+
+允许修改：
+
+- `niri/src/layout/workspace.rs`（NextTo 分支激活判定，唯一产品改动）
+- `niri/src/tests/window_lifecycle.rs`（新增测试文件，7 个测试）
+- `niri/src/tests/mod.rs`（注册一行，字母序）
+- `execution-log.md`
+
+明确禁止修改：
+
+- `src/niri.rs`、`src/backend/`、`src/screencasting/`（STAB-03 已有守卫 authority 文件，前提已满足）
+- Quickshell、Tahoe shell、主仓库用户项
+
+定义/调用点/测试搜索（G01 清单）：
+
+| `rg` 命令 | 命中数 | 修改点 | 不修改点及理由 |
+|---|---:|---|---|
+| `active_window()\.unwrap\|active_window_mut()\.unwrap` (src/ 非 tests) | 1 | `workspace.rs:646`（唯一失效前提调用点，已修） | 其余 14 处 `active_window()` 均 `.map`/`.is_some_and`/`.is_none` 安全组合（workspace.rs:476/478/805/874/1637、floating.rs:1741、monitor.rs:885/1042、layout/mod.rs:2656/3737/4811、ipc/server.rs:730/778、input/mod.rs:2281 等）；`workspace.rs:661-665` `tiles_with_render_positions().find().unwrap()` 前提不同（next_to 必须仍在布局；父已销毁时 compositor.rs:185-199 查找失败回退 Auto，测试 3 实证） |
+| `output_state\.(get_mut\|get)\(.+\)\.unwrap()` (src/ 非 tests) | 20 | 无（STAB-03 证据关闭） | 延迟回调类全部已守卫：tty.rs:1558-1563（contains_key）、pw_utils.rs:943-945（contains_key）、niri.rs:4246-4249（get_mut else Drop）、tty.rs:1694/1813（入口 guard）、screencasting/mod.rs:160（Weak::upgrade + niri.rs:3311 stop_casts_for_target）；同步渲染路径（niri.rs:2224/2416/4789/4804/5055/5109/5227/5245/5355/5749/7122、tty.rs:1914/1941/1991/2300/3010、winit.rs:238/285、headless.rs:158）在 `redraw_queued_outputs` 对 output_state 的活遍历内或同步 IPC/render 路径，output 必存活；`queue_redraw`（niri.rs:4191）unwrap 哨兵仅被已验证成员资格的调用者触及（M2 变异证明） |
+| `queue_redraw_safe\|QueueRedrawSafe` (全仓) | 0 | - | 未引入（roadmap 禁止替代） |
+
+### 3. 旧实现失败基线（红绿证明）
+
+在 a44ce8b1（旧实现）上运行新测试：
+
+| 测试/probe | 旧结果 | 为什么能捕获根因 |
+|---|---|---|
+| `dialog_of_minimized_parent_maps_visible_and_focused`（A02.1） | FAIL：`workspace.rs:646:75` `called Option::unwrap() on a None value` + FFI 内 abort | 父窗口最小化后 `active_window()==None`，NextTo 分支 Smart 激活判定 unwrap panic，dialog 无法放置 |
+| `dialog_of_minimized_floating_parent_maps_without_panic`（A02.2 floating） | FAIL：同一 panic | floating 父窗口最小化同样使 active_window()==None（floating.rs:426-433），panic 在分支前发生，与布局无关 |
+
+STAB-03 侧（A02.3）双变异证明（G04 确定性 A/B，在最终代码上复现，均恢复）：
+
+- M1（回调错误重绘剩余 output）：`assertion failed: stale callback must not redraw the remaining output, left: "Idle" right: "Queued"`（window_lifecycle.rs:509）——证明 out2 状态比较断言有判别力。
+- M2（去掉 contains_key 守卫，回调对已移除 output 直接 queue_redraw）：`niri.rs:4191:55 called Option::unwrap() on a None value`——证明守卫是防 stale-callback panic 的必要机制，且 queue_redraw unwrap 仍存在（不变量哨兵）。
+
+### 4. 实现机制
+
+- 原 authority：`Workspace::add_tile` 的 `WorkspaceAddWindowTarget::NextTo` 分支（workspace.rs:645-692）。
+- 原地修复：`self.active_window().unwrap().id() == next_to` → `self.active_window().is_none_or(|win| win.id() == next_to)`（workspace.rs:651-652），加 why 注释。三态语义：`ActivateWindow::Yes/No` 经 `map_smart`（layout/mod.rs:877-883）原样透传不变；`Smart` 分支 `Some(win)` 与旧行为逐位等价（`win.id() == next_to`）；唯一行为变化是 `None`（工作区所有窗口最小化，父窗口被最小化的 dialog 场景）从 abort 变为激活新 dialog——「选择合法 placement owner，而非 early return 丢窗口」：窗口在 `add_tile` 中无条件放置（floating `add_tile_above`/scrolling `add_tile_right_of`），激活语义与 Auto 分支一致。
+- 被删除的旧 authority：`active_window().unwrap()`（生产代码清零）。
+- STAB-03：无生产改动。三种处置明确：受跟踪 timer（animation-redraw/estimated-vblank）由 `remove_output`（niri.rs:3300-3309）取消；到达的 stale 回调（tty idle/pw timer 形态）由 contains_key 守卫丢弃；其余同步路径 output 必存活。
+- 为什么没有平行接口：不改签名、不新增 API；`queue_redraw` 及其 unwrap 保持单一 authority。
+- 为什么没有加入范围外功能：diff 仅 3 文件（workspace.rs +8/-1、tests/mod.rs +1、新测试文件），无配置/依赖/视觉变化。
+
+### 5. 验收逐条
+
+| 验收编号 | 方法/命令 | 结果 | 证据 |
+|---|---|---|---|
+| G01 | rg 搜索见第 2 节 | PASS | 搜索表 + 未改点逐项理由 |
+| G02 | git diff 检查 | PASS | 无 V2/New/Fixed 命名、无 `queue_redraw_safe`、无新接口/flag |
+| G03 | 专项+全量测试 | PASS | 见全量配置 |
+| G04 | 红绿证明 | PASS | 2 红测试旧实现 panic（第 3 节）+ M1/M2 双变异 A/B 证据 |
+| G05 | 双审查 | PASS | 第 6 节（7 轮，最终轮双 CLEAN） |
+| G06 | commit/push 顺序 | 进行中 | 第 7 节 |
+| G07 | execution-log 完整 | PASS | 本文档 |
+| G08 | 工作树/会话保护 | PASS | 未触碰用户项，未重启会话（全部 headless fixture） |
+| A02.1 | `dialog_of_minimized_parent_maps_visible_and_focused` | PASS | 双 output 夹具：父最小化 → 切 active output → dialog 打开：mapped、非 minimized、成为其 workspace 的 active window（focus owner）、与父同 output 同 workspace（位置合法，错误放置到 active output 会失败）；session 不 abort；restore 父窗口后 dialog 保持 mapped |
+| A02.2 | floating / destroy / restore | PASS | floating 父最小化不 panic（测试 2）；父销毁先于 map → compositor.rs 父查找失败回退 Auto 不 panic（测试 3）；restore 后 dialog 存活（测试 1 尾段）；tiled(scrolling) 由测试 1 覆盖 |
+| A02.3 | cancel / drop / queued-at-removal 三个测试 | PASS | ①animation deadline 排队中移除 output，compositor loop 越过 deadline 不 panic、out2 保持 tracked（取消 token niri.rs:3300-3309 为源码证据）；②合成 deferred 回调（生产同模式）在移除后真实到达（fired 标志断言），contains_key 守卫丢弃，out2 排空后 Idle 前后不变；③仅 Queued 时移除不 panic；M1/M2 变异证明判别力 |
+| A02.4 | 同类 unwrap 全仓审计 | PASS | 唯一 `active_window().unwrap()` 已修复；20 处 `output_state.*.unwrap()` 逐点不变量见第 2 节 |
+| A02.5 | 全量 lib 测试 + `dialog_of_unfocused_parent_does_not_steal_focus` | PASS | 557 passed（含 placement/fullscreen/minimize 既有套件）；不聚焦父的 dialog 不抢焦点（锁定 Some≠next_to 旧语义） |
+
+全量配置：
+
+| 配置 | 命令 | exit code | 通过/失败明细 |
+|---|---:|---|---|
+| NIRI_FULL | `cargo fmt --all -- --check` | 1（基线失败） | 70 处漂移全部改动前既有（与 T01 基线一致）；本次 3 个文件 fmt 零 diff |
+| NIRI_FULL | `cargo test -p niri --lib` | 0 | 557 passed / 0 failed（550 旧 + 7 新） |
+| NIRI_FULL | `cargo check --workspace --all-targets` | 0 | Finished，仅 1 条既有 warning（niri-visual-tests 未用 import） |
+| 实际二进制 | `cargo build -p niri` | 0 | `target/debug/niri`（780,684,504 bytes） |
+| 实际二进制 | `cargo build --release -p niri` | 0 | `target/release/niri`（138,732,056 bytes） |
+| PROTOCOL_FULL | `scripts/check-protocol-sync.sh` | 0 | IN_SYNC |
+| PROTOCOL_FULL | `scripts/check-tahoe-glass-guardrails.sh` | 0 | 全部 guardrail 通过 |
+
+### 6. 独立审查（7 轮，最终轮双 CLEAN）
+
+| 轮次 | Reviewer A | Reviewer B | 处理 |
+|---|---|---|---|
+| 1 | CLEAN；1 PLAUSIBLE（A02.3 断言措辞） | CLEAN；2 PLAUSIBLE（同断言措辞 + contains_key 代理） | 修注释；A02.1 改双 output 位置断言 + workspace 级 focus-owner 断言 |
+| 2 | 1 PLAUSIBLE（双 output 位置断言在单 output 夹具下恒真） | 空返回（并入第 3 轮） | A02.1 改双 output + focus_output 切活动 output 可失败断言 |
+| 3 | CLEAN（记录要求：STAB-03 按证据关闭） | NOT CLEAN：1 CONFIRMED（回调到达场景未构造、注释过度声明） | 新增第 7 测试（合成回调真实到达 + fired 标志 + 排空比较）；修注释 |
+| 4 | CLEAN | 1 PLAUSIBLE（out2 状态比较恒真：排空位置在 remove 之前） | 排空移到 remove_output 之后 + Idle premise；M1/M2 复现 |
+| 5 | NOT CLEAN：1 CONFIRMED（排空位置错误导致比较死代码）+ 2 PLAUSIBLE（注释过度声明） | NOT CLEAN：1 CONFIRMED（同注释）+ 2 PLAUSIBLE（记录义务） | 修正排空位置；取消测试注释改写为复合安全性质并 dispatch compositor loop；fixture 注释改正 |
+| 6 | CLEAN | CLEAN（1 个 nit：行号引用） | 注释行号放宽为 3300-3309 |
+| 7（最终） | **CLEAN**（根因消除 CONFIRMED、无遗漏、锁/生命周期/协议 CLEAN、Axx 证据真实、M1/M2 构成 G04 确定性 A/B、注释一致） | **CLEAN**（迁移完整、无平行接口、范围 3 文件、A02.1-A02.5 逐条可复跑、合成回调测试有效、G01-G08 满足） | - |
+
+审查的最终 diff 标识：niri 工作树 diff（`src/layout/workspace.rs +8/-1`、`src/tests/mod.rs +1`、新 `src/tests/window_lifecycle.rs` 约 540 行），`git diff --check` 干净。
+
+### 7. 产品 Commit 与 push 收据
+
+| 仓库 | Commit hash | Commit subject | Branch | Remote ref | push 结果 | ancestor 验证 |
+|---|---|---|---|---|---|---|
+| niri | `eeb7169a352e928123871a74475cbe52d8e93b2d` | `fix(layout): T02 window/output lifecycle panic cleanup — dialog focus owner when all minimized, stale redraw disposition tests` | `tahoe-layer-animations` | `origin/tahoe-layer-animations` | `a44ce8b1..eeb7169a` 成功 | `git merge-base --is-ancestor eeb7169a origin/tahoe-layer-animations` exit 0 |
+| main | `4feff6970a37c08a6e1b423badf65ad926bc9b33` | `fix(submodule): bump niri for T02 window/output lifecycle panic cleanup` | `fix/tray-menu-pinned-surface-height` | `origin/fix/tray-menu-pinned-surface-height` | `73f7186..4feff69` 成功 | `git merge-base --is-ancestor 4feff69 origin/fix/tray-menu-pinned-surface-height` exit 0 |
+
+主仓库子模块指针是否只指向已推送 commit：
+
+```text
+git submodule status niri → eeb7169a（= 已推送 niri commit hash）
+```
+
+### 8. 未覆盖、用户现场项与后续边界
+
+- 未覆盖：无产品代码缺口（A02.1-A02.5 全通过）。STAB-03 侧 tty estimated-vblank/vblank 与 screencast 的真实守卫路径在 headless 夹具不可达，以源码审计 + M1/M2 变异证据闭合（headless 中可构造的 arrival 路径已直接测试）。
+- 需要用户授权的实时验证：无（纯源码/测试任务，未重启会话、未真实拔插）。
+- 发现但属于后续任务的事项（只记录，未修改）：
+  - NextTo Smart 激活不切换 `active_monitor_idx`（layout/mod.rs:1306 `map_smart(\|\| false)`）：多显示器下 dialog 聚焦于非活动 monitor 是既有模型（旧代码此处 abort，无回归），非 T02 范围。
+  - `queue_redraw` 的 unwrap（niri.rs:4191）作为活-output 不变量哨兵保留：未来新增延迟回调若忘记先验证成员资格将 abort 会话；已在测试中以 M2 变异固化该契约，属 T03/T11 归因体系的长期 guardrail。
+
+### 9. 完成判定
+
+**最终状态**：COMPLETE
+**理由**：A02.1-A02.5 + G01-G08 满足；2 个红测试旧实现 panic、新实现通过；M1/M2 双变异构成 G04 确定性 A/B；7 轮双审查最终轮双 CLEAN；fmt 基线 70 处为改动前既有；557 全量测试通过；实际二进制 debug+release 构建通过；niri 与主仓库产品 commit 均已 push 且远端 ancestor 验证 exit 0。
+**下一任务是否允许开始**：YES（本文档闭环 commit push 完成后）
+
+### 10. 闭环记录审查与推送
+
+- Closure reviewer（全新只读上下文）：待执行。
+- 产品 commit hash/remote receipt 是否逐项准确：待 closure reviewer 实测核对。
+- 状态是否可置 COMPLETE/RESOLVED-NO-CODE：是（COMPLETE）
+- docs-only closure commit subject：`docs(execution): T02 close task record`
 - closure push remote ref：`origin/fix/tray-menu-pinned-surface-height`
 - closure remote ancestor 验证 exit code：待 push 后以命令输出验证（本 commit 不记录自身 hash，由后续 `git log --format=%H -- execution-log.md` 解析）
 

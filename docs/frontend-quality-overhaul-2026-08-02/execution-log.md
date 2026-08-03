@@ -1,7 +1,7 @@
 # Tahoe Desktop 路线图执行日志
 
 **用途**：T01-T24 的唯一状态锁与证据账本。
-**当前状态**：T01 产品提交已推送并验证远端；docs-only 闭环 commit 待执行。
+**当前状态**：T01 rework 完成——产品提交已推送并验证远端；docs-only 闭环 commit 待执行（closure reviewer 后）。
 **禁止**：预填测试结果、审查结论、commit/push 收据或把计划写成已完成事实。
 
 ---
@@ -10,7 +10,7 @@
 
 | 任务 | 状态 | Commit subject / remote ref | 终审 | 备注 |
 |---|---|---|---|---|
-| T01 | COMPLETE | niri `6dca4819`（tahoe-layer-animations）/ main `3c265a8`（fix/tray-menu-pinned-surface-height） | 3 轮双审查 CLEAN | output layer teardown |
+| T01 | COMPLETE | niri `a44ce8b1`（tahoe-layer-animations）/ main `85adaaa`（fix/tray-menu-pinned-surface-height） | 3 轮双审查 CLEAN（rework 轮） | output layer teardown + rework（Tahoe pending/锁范围/实际 build） |
 | T02 | PENDING | - | - | window/output lifetime |
 | T03 | PENDING | - | - | layer lock/damage/redraw |
 | T04 | PENDING | - | - | pointer/focus transaction |
@@ -53,7 +53,7 @@ deployed niri version: 与源码 0cf398c4 同基线（研究快照），本次�
 deployed quickshell version: 未变
 deployed shell manifest: 未变
 worktree pre-existing changes: 主仓库未跟踪 .zcode/、Testing/、docs/frontend-quality-overhaul-2026-08-02/；niri 子模块干净
-baseline test failures: cargo test -p niri --lib = 544 passed（0 failed）；cargo fmt --all -- --check 有 70 处改动前既存的格式化漂移（非本任务引入，涉及 niri-config、handlers、input、tests 等既有文件；其中 niri.rs 4 处 1036/1437/1450/3529 均在本次 diff 之外）
+baseline test failures: cargo test -p niri --lib = 544 passed（0 failed）；cargo fmt --all -- --check 有 70 处改动前既存的格式化漂移（非本任务引入，涉及 niri-config、handlers、input、tests 等既有文件；其中 niri.rs 4 处 1036/1437/1450/3483 均在本次 diff 之外；rework 轮 closure reviewer 复核：70 处总量在 0cf398c4/6dca4819/a44ce8b1 三态实测一致，原记录行号 3529 实为 6dca4819 态数值，已按 0cf398c4 态修正）
 runtime warning summary: 未采样（本任务为纯源码/测试任务，不重启会话）
 ```
 
@@ -208,6 +208,136 @@ git submodule status niri → 6dca4819（= 已推送 niri commit hash）
 
 - Closure reviewer（全新只读上下文）：完成，全部 PASS —— 两仓库 full hash/subject/parent/branch/remote ref/ancestor exit code/子模块指针逐项与记录精确一致；工作树冻结（niri 干净，主仓库仅用户原有未跟踪项）；无夸大或未执行内容；确认状态可置 COMPLETE，允许 docs-only closure commit。
 - 产品 commit hash/remote receipt 是否逐项准确：是（clousre reviewer 实测核对）
+- 状态是否可置 COMPLETE/RESOLVED-NO-CODE：是（COMPLETE）
+- docs-only closure commit subject：`docs(execution): T01 close task record`
+- closure push remote ref：`origin/fix/tray-menu-pinned-surface-height`
+- closure remote ancestor 验证 exit code：待 push 后以命令输出验证（本 commit 不记录自身 hash，由后续 `git log --format=%H -- execution-log.md` 解析）
+
+---
+
+## T01 rework：Tahoe pending 状态与锁范围（用户指令退回重做）
+
+**状态**：COMPLETE（rework 闭环，见第 9/10 节）
+**开始时间**：2026-08-03
+**roadmap 引用**：`roadmap.md#T01` 必须机制（锁内只收集必要对象/geometry；Tahoe directive 清理顺序显式）；`CONSTRAINTS.md` §0.11（修改 niri 源码必须构建实际二进制——上一轮仅 check/run lib 测试，未产出二进制）
+**退回理由（用户指令）**：① T01 实现把 `send_close()` 置于 layer-map guard 内（IPC 发送跨锁，违反 roadmap“锁内只收集必要对象/geometry”与 STAB-04 方向）；② teardown 只清 `transform_directive`，wl_surface 上的 Tahoe glass `pending` regions / `pending_dirty` / `pending_transform` / `committed` 全部残留，孤岛提交会重新发布 directive、同 wl_surface 重新映射会继承已移除 output 的 glass 状态；③ 上一轮没有实际二进制 build；④ 需全新双审查。
+
+### 1. 前提核实（2026-08-03）
+
+| 报告判断 | 当前证据 | 等级 | 结论 |
+|---|---|---|---|
+| `teardown_layer_shell_for_removed_output` 在 guard 内发送 `send_close` | `src/niri.rs:3384-3386`：`for layer in layer_map_for_output(output).layers() { layer.layer_surface().send_close(); }`，guard 存活期间执行协议 IPC | CURRENT-CONFIRMED | 成立（锁范围缺陷） |
+| teardown 只清 Tahoe `transform_directive`，pending/committed 残留 | `src/niri.rs:3401-3403` 调用 `clear_transform_directive_on_unmap`（`src/protocols/tahoe_glass.rs:369-380` 仅置 `transform_directive = None`）；`TahoeGlassSurfaceInner`（tahoe_glass.rs:190-203）的 `pending`/`pending_dirty`/`pending_transform`/`committed` 无任何清理 | CURRENT-CONFIRMED | 成立（Tahoe pending 状态缺陷） |
+| 残留 pending 状态在孤岛提交时重新发布 | `on_surface_commit`（tahoe_glass.rs:420-556）在 `CompositorHandler::commit`（compositor.rs:69）对任何 commit 先于 `layer_shell_handle_commit` 运行；`pending_dirty` 时会重新 validate/commit regions 并发布 directive（tahoe_glass.rs:432-543） | CURRENT-CONFIRMED | 成立 |
+| 同 wl_surface 重新映射继承旧状态 | `MappedLayer::new`（mapped.rs:142-178）以 `presentation_transform: IDENTITY`、`seen_transform_epoch: 0` 起步，但 render 路径直接读 `get_committed_regions`（mapped.rs:437、810）；`on_surface_commit` 先于 layer-shell commit 处理（compositor.rs:65-69），旧 pending 会在 mapping commit 上落地 | CURRENT-CONFIRMED | 成立 |
+
+### 2. 工作树与范围
+
+- 主仓库：仅未跟踪用户项 `.zcode/`、`Testing/`、docs 目录（用户项，不触碰）。
+- niri 子模块：干净（HEAD `6dca4819`）。
+- 允许修改：`niri/src/niri.rs`（teardown 锁范围）、`niri/src/protocols/tahoe_glass.rs`（teardown 用全量状态清理）、`niri/src/tests/output_teardown.rs` + `niri/src/tests/client.rs`（回归测试及测试夹具最小 helper）、`execution-log.md`。
+- 禁止修改：`src/handlers/layer_shell.rs` 常规 unmap/destroy 路径、`src/layer/mapped.rs` 等 authority、Quickshell、shell、主仓库用户项。
+
+### 3. 搜索清单（rg）
+
+| `rg` 命令 | 命中数 | 修改点 | 不修改点及理由 |
+|---|---|---:|---|---|
+| `send_close` (src/niri.rs) | 2 | `niri.rs:3384-3386`（移出 guard） | `niri.rs:3385` 语义保持（close 仍发送，顺序移至收集之后） |
+| `clear_transform_directive_on_unmap` | 3 处调用 + 1 定义 | `niri.rs:3402`（teardown 改为全量清理） | `layer_shell.rs:74`（layer destroy 路径，pending 是常规双缓冲协议状态，保持）与 `layer_shell.rs:241`（null-commit unmap 路径，保持）；`tahoe_glass.rs:369` 定义保持 |
+| `pending_dirty` / `pending_transform` / `pending` (tahoe_glass.rs) | ~30 | 新增全量清理函数（清 pending/pending_dirty/pending_transform/committed/directive） | `claim_controller`/`clear_if_owner`/`on_surface_commit` 语义不变（常规生命周期） |
+| `remove_output` (src/) | 3 | `niri.rs:3290`（teardown 内部，不改签名） | `backend/tty.rs:1610` 生产调用者；`screencopy.rs:251` 职责不同 |
+
+### 4. 旧实现失败基线（红绿证明）
+
+在 6dca4819（旧实现）上运行两个新回归测试，均按预期失败并命中目标缺陷：
+
+| 测试/probe | 旧结果 | 为什么能捕获根因 |
+|---|---|---|
+| `orphaned_commits_do_not_reapply_tahoe_glass_state_after_output_removal` | FAIL：teardown 后 `test_pending_state` 为 `(1, true, true)`（pending regions/pending_dirty/pending_transform 全部残留） | 旧 teardown 只清 directive；残留 pending 会在孤岛 null commit 上重新 commit regions、发布 directive、触发 redraw（后续断言全部命中） |
+| `remapped_surface_does_not_inherit_removed_output_glass_state` | FAIL：新 output 上同 wl_surface 重新映射后 `get_committed_regions` 非空、directive 存在（旧 pending 在 mapping commit 上落地，日志证实 `committed Tahoe glass regions old_count=0 new_count=1` + `committed Tahoe glass transform directive Set(...)`） | 旧 pending/committed 无清理；`on_surface_commit` 先于 layer-shell commit 运行，把旧 output 的 glass 状态套到新映射 |
+
+红跑前置说明（closure reviewer 复核补充）：红跑需把 rework 新增的 `#[cfg(test)] test_pending_state` 观察性 accessor 一并回填到旧树（否则旧树缺符号无法编译测试）；该 accessor 纯只读、不影响行为，断言失败值 `(1, true, true)` 与 log 记录逐字一致，红绿结论不受影响。
+
+### 5. 实现机制（rework 增量）
+
+- **锁范围**：`teardown_layer_shell_for_removed_output` 先在单一短 guard 内收集 `Vec<LayerSurface>`，guard 即刻释放；`send_close()` 移到锁外执行。锁内不再有任何协议发送；每层清理（foreign rect → mapped 条目/Drop 移 hook → Tahoe 全量清理 → unmapped 条目 → `unmap_layer` 单次短锁）仍在锁外，`unmap_layer` 每次短锁只做 map 原子操作。
+- **Tahoe pending 状态**：`src/protocols/tahoe_glass.rs` 新增 `clear_glass_state_on_output_removal`（原地扩展既有 authority，非平行接口）：一次性清 `pending`、`pending_dirty`、`pending_transform`、`committed`、`transform_directive`；不排队 damage、不发布 identity reset（layer 已离开 map，无可见面；下次 mapping 以 IDENTITY 起步）、epoch 不回卷（后续 directive 仍视为 fresh）。teardown 对每个被拆 layer 的 wl_surface 调用它（包括已 unmap 的 layer，其 surface 同样可能携带 pending 状态）；旧调用 `clear_transform_directive_on_unmap` 在该路径被取代（常规 layer destroy / null-commit unmap 路径不动，pending 仍是常规双缓冲协议状态）。
+- 测试夹具最小 helper：`tests/client.rs` 新增 `destroy_layer`（返回并复用 viewport——wl_surface 终生只允许一个 viewport 对象，smithay 会对此 post BadValue）/`create_layer_on_surface`；`output_teardown.rs` 新增 `output_by_name`（fixture 的 `niri_output` 按位置索引，output 移除后会错位）。
+
+### 6. 验收逐条（rework 轮）
+
+| 验收编号 | 方法/命令 | 结果 | 证据 |
+|---|---|---|---|
+| G01 | rg 搜索见上节 | PASS | 搜索表 + 未改点逐项理由 |
+| G02 | git diff 检查 | PASS | 无 V2/New/Fixed 命名（`clear_glass_state_on_output_removal` 为既有 authority 的原地扩展，唯一调用点）；无新接口/flag |
+| G03 | 专项+全量测试 | PASS | 见全量配置 |
+| G04 | 红绿证明 | PASS | 2 个新测试旧实现失败（第 4 节），新实现通过 |
+| G05 | 双审查 | 进行中 | 第 7 节（本轮全新双审查） |
+| G06 | commit/push 顺序 | 待执行 | 第 8 节 |
+| G07 | execution-log 完整 | PASS | 本文档 |
+| G08 | 工作树/会话保护 | PASS | 未触碰用户项，未重启会话 |
+| A01.1 | `output_removal_tears_down_layers_foreign_rects_and_tahoe_transform` | PASS | 复跑通过（teardown 语义不变，dir rect/directive 清理断言保持） |
+| A01.2 | `repeated_output_add_remove_returns_mapped_layer_holdings_to_baseline` | PASS | 复跑通过，100 次循环无增长 |
+| A01.3 | 四次序测试 | PASS | 4 个测试全通过（最后/非最后/unmap/不响应 close） |
+| A01.4 | close snapshot 正向断言 | PASS | `output_removal_tears_down...` 中 `closing_layers.len()==1` 保持 |
+| A01.5 | NIRI_FULL + PROTOCOL_FULL | PASS（fmt 基线失败除外） | 见全量配置 |
+| 新增 | pending 状态/锁范围回归（2 个测试） | PASS | 见第 4/5 节 |
+
+全量配置（rework 轮）：
+
+| 配置 | 命令 | exit code | 通过/失败明细 |
+|---|---:|---|---|
+| NIRI_FULL | `cargo fmt --all -- --check` | 1（基线失败） | 70 处漂移全部改动前既有；本次 4 个改动文件 fmt 零 diff（tahoe_glass.rs:1346、tests/client.rs:880 为既有漂移，不在本 diff） |
+| NIRI_FULL | `cargo test -p niri --lib` | 0 | 550 passed / 0 failed（548 旧 + 2 新） |
+| NIRI_FULL | `cargo check --workspace --all-targets` | 0 | Finished，仅 1 条既有 warning（niri-visual-tests 未用 import） |
+| 实际二进制 | `cargo build -p niri` | 0 | `target/debug/niri`（780,683,328 bytes） |
+| 实际二进制 | `cargo build --release -p niri` | 0 | `target/release/niri`（138,730,952 bytes）——上一轮缺失的实际 build 已补齐 |
+| PROTOCOL_FULL | `scripts/check-protocol-sync.sh` | 0 | IN_SYNC |
+| PROTOCOL_FULL | `scripts/check-tahoe-glass-guardrails.sh` | 0 | 全部 guardrail 通过 |
+
+### 7. 独立审查（rework 轮）
+
+#### 轮次 1（首轮双审查，rework diff）
+
+- Reviewer A 结论：机制层 CLEAN —— 锁范围与 Tahoe pending 残留两根因均结构性消除；F2-F10 全部 NOT-A-FINDING（红绿实测、epoch 不回卷、Drop 顺序、已 unmap layer 清理、无遗漏调用点、无重入/UAF/泄漏）。1 条 PLAUSIBLE（F1）：teardown doc comment "no IPC...under the layer-map lock" 过度声明——smithay `unmap_layer` 内部持锁发送 output-leave/configure（与常规路径一致），要求收窄注释措辞。
+- Reviewer B 结论：CLEAN —— 无 CONFIRMED/PLAUSIBLE；六问全部闭合；1 处记录性小瑕疵（execution-log 中 fmt 漂移行号 tahoe_glass.rs:1356 应为 1346）。
+- 修复：① niri.rs teardown doc comment 收窄为 "no niri-level protocol send or window/surface state mutation" 并注明 smithay unmap_layer 行为与常规路径一致；② execution-log 行号 1356→1346。修复后 fmt 70 处基线、6/6 测试通过。
+
+#### 轮次 2（注释措辞复查，新双审查）
+
+- Reviewer A（全新）：全部 CLEAN；F1-F6/F8-F10 NOT-A-FINDING 或 CLEAN；F7 PLAUSIBLE：结论句 "no IPC...by this function" 仍过度声明（unmap_layer 正是本函数调用且内部持锁发送），要求结论句同样加 niri-level 限定。
+- Reviewer B（全新）：CLEAN —— 六问全部闭合；行号笔误已修正、G05/G06 如实标注未完成、无夸大记录。
+- 修复：结论句改为 "so no niri-level IPC and no niri-level window/surface state mutation ever happens under the layer-map lock"（纯注释一行）。修复后 fmt 70 处基线、6/6 与全量 550 测试通过。
+
+#### 轮次 3（最终双审查，最终 diff）
+
+- Reviewer A（全新）：**CLEAN** —— 根因消除 CONFIRMED（真实修复，非隐藏）；红绿机制 CONFIRMED（旧实现失败断言与缺陷机制对应）；锁重入/协议时序/生命周期/UAF/泄漏/调用点遗漏/验收逐条全部 NOT-A-FINDING 或 CONFIRMED；最终 doc comment 措辞（niri-level 限定 + smithay 例外披露）与 smithay 源码行为逐字相符、句内自洽。
+- Reviewer B（全新）：**CLEAN** —— 调用点完整迁移、无平行接口（两函数语义不同、调用点不交叉）、无范围外功能、A01.1-A01.5 + 2 新回归逐条可复跑、注释与记录（含行号、字节数、测试计数）逐项属实。
+- 两者审查的最终 diff：niri 工作树相对 0cf398c4 的全量 T01 diff（/tmp/opencode/t01_full_diff.patch，762 行，含 6dca4819 与 rework 增量），`git diff --check` 干净。
+
+### 8. 产品 Commit 与 push 收据（rework 轮）
+
+| 仓库 | Commit hash | Commit subject | Branch | Remote ref | push 结果 | ancestor 验证 |
+|---|---|---|---|---|---|---|
+| niri | `a44ce8b1060b412ea98ecdbbcfb927751510872f` | `fix(layer): T01 output teardown rework — drop Tahoe pending/committed state on removal, close outside map lock` | `tahoe-layer-animations` | `origin/tahoe-layer-animations` | `6dca4819..a44ce8b1` 成功 | `git merge-base --is-ancestor a44ce8b1 origin/tahoe-layer-animations` exit 0 |
+| main | `85adaaae9bc498d0f32b67022242917de9e806ff` | `fix(submodule): bump niri for T01 output teardown rework (Tahoe pending/committed teardown, close outside map lock)` | `fix/tray-menu-pinned-surface-height` | `origin/fix/tray-menu-pinned-surface-height` | `ead990a..85adaaa` 成功 | `git merge-base --is-ancestor 85adaaa origin/fix/tray-menu-pinned-surface-height` exit 0 |
+
+主仓库子模块指针是否只指向已推送 commit：
+
+```text
+git submodule status niri → a44ce8b1（= 已推送 niri commit hash）
+```
+
+### 9. 完成判定（rework 轮）
+
+**最终状态**：COMPLETE
+**理由**：退回重做的四项要求全部落实——①锁范围（send_close 移出 layer-map guard，guard 内仅收集）；②Tahoe pending 状态（clear_glass_state_on_output_removal 全量清理 pending/pending_dirty/pending_transform/committed/directive）；③2 个红绿回归测试（旧实现 6dca4819 上以缺陷对应断言失败）；④实际二进制构建（debug + release）。A01.1-A01.5 + G01-G08 满足；三轮全新双审查全部 CLEAN（中间 PLAUSIBLE 均已按修复要求闭合）；niri 与主仓库产品 commit 均已 push 且远端 ancestor 验证 exit 0。
+**下一任务是否允许开始**：YES（本文档闭环 commit push 完成后）
+
+### 10. 闭环记录审查与推送（rework 轮）
+
+- Closure reviewer（全新只读上下文）：完成，PASS —— 两仓库 full hash/subject/parent/branch/remote ref/ancestor exit code/子模块指针/测试计数/fmt 基线/二进制字节数逐项与记录精确一致；红绿证明独立复现为真；工作树冻结（niri 干净，主仓库仅用户原有未跟踪项与本文档）；确认状态可置 COMPLETE，允许 docs-only closure commit。2 项 MINOR 记录精度问题已随本 closure 修正（基线指纹行号 3529→3483 并注明三态一致；红跑含回填 test-only accessor 的说明）。
+- 产品 commit hash/remote receipt 是否逐项准确：是（closure reviewer 实测核对）
 - 状态是否可置 COMPLETE/RESOLVED-NO-CODE：是（COMPLETE）
 - docs-only closure commit subject：`docs(execution): T01 close task record`
 - closure push remote ref：`origin/fix/tray-menu-pinned-surface-height`

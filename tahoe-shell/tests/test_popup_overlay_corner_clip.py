@@ -18,6 +18,7 @@ from __future__ import annotations
 import re
 import unittest
 from pathlib import Path
+from typing import NamedTuple
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -84,6 +85,57 @@ def fills_parent(body: str) -> bool:
     return False
 
 
+def paints_into_corners(body: str) -> bool:
+    """True when a full-fill child would paint outside a rounded silhouette.
+
+    Presence of `radius` is not enough: `radius: 4` inside an 18-radius card
+    still notches, and `radius: 0.0` is a zero that string comparison misses.
+    """
+    radius = own_property(body, "radius")
+    if radius is None:
+        return True
+    try:
+        return float(radius) == 0.0
+    except ValueError:
+        # A binding (e.g. `menuSurface.radius`) tracks the container; the
+        # dedicated scrim test pins that the binding is the right one.
+        return False
+
+
+class Child(NamedTuple):
+    type: str
+    body: str
+
+
+def paints_a_fill(child: "Child") -> bool:
+    """True when this child actually rasterizes pixels across its whole box.
+
+    Layout and input types (RowLayout, MouseArea, Item…) paint nothing, so a
+    missing radius on them is irrelevant. Only fills that rasterize can notch.
+    """
+    if child.type == "Rectangle":
+        color = own_property(child.body, "color")
+        if own_property(child.body, "gradient") is not None:
+            return True
+        return color is not None and color != '"transparent"'
+    if child.type in ("Image", "AnimatedImage", "ShaderEffect", "ShaderEffectSource"):
+        return True
+    # A component instantiation paints only if it is handed a visible fill.
+    background = own_property(child.body, "backgroundColor")
+    return background is not None and background != '"transparent"'
+
+
+def direct_children(body: str) -> list["Child"]:
+    """Immediate child element blocks, skipping grandchildren and groups."""
+    children: list[Child] = []
+    for match in re.finditer(r"^([ \t]*)([A-Z][A-Za-z0-9_.]*)\s*\{", body, re.MULTILINE):
+        prefix = body[: match.start()]
+        if prefix.count("{") - prefix.count("}") != 0:
+            continue
+        children.append(Child(match.group(2), block_at(body, body.index("{", match.start()))))
+    return children
+
+
 class PopupOverlayCornerClipTests(unittest.TestCase):
     def setUp(self) -> None:
         self.menu = MENU_POPUP.read_text(encoding="utf-8")
@@ -124,11 +176,69 @@ class PopupOverlayCornerClipTests(unittest.TestCase):
             if not paints:
                 continue
             radius = own_property(body, "radius")
-            if radius is not None and radius != "0":
+            if radius is not None and not paints_into_corners(body):
                 continue
             line = self.menu[: match.start()].count("\n") + 1
             offenders.append(f"{MENU_POPUP.name}:{line} color={color}")
         self.assertEqual(offenders, [], f"square fill overlays: {offenders}")
+
+
+class RoundedClipMisconceptionTests(unittest.TestCase):
+    """Repo-wide: `clip: true` on a rounded card does NOT round its children.
+
+    This is the misconception itself rather than one instance of it. Every
+    known real occurrence sets `clip: true` on a rounded Rectangle and then
+    fills it with an un-rounded child, so the signature is the guard.
+
+    Entries in ALLOWED are corner-safe for a stated reason. A child inset by
+    M inside a card of radius R never reaches a notch when M >= R*(1-1/sqrt2).
+    """
+
+    # path:line -> why it is not fixed here. These are pre-existing thumbnail
+    # and album-art plates: their notches expose the parent card rather than
+    # the wallpaper, so they read as "square art", not as dark blocks. Listed
+    # so the guard still fails on any NEW occurrence. Remove an entry when the
+    # site is fixed; do not add one without a reason.
+    ALLOWED: dict[str, str] = {
+        "ControlCenter.qml:1383": "album art plate, notch shows the panel",
+        "DockMinimizedWindow.qml:329": "dock thumbnail + opaque fallback bg",
+        "DynamicIslandCompactMediaView.qml:87": "art plate; view is not hosted",
+        "DynamicIslandMediaView.qml:347": "art plate, notch shows the pill",
+        "TaskSwitcher.qml:603": "window thumbnail, notch shows the card",
+        "WindowOverview.qml:1106": "window thumbnail, notch shows the card",
+    }
+
+    def test_rounded_clipping_cards_do_not_rely_on_clip_to_round_children(self) -> None:
+        offenders: list[str] = []
+        for path in sorted(COMPONENTS.rglob("*.qml")):
+            if "+test" in str(path):
+                continue
+            src = path.read_text(encoding="utf-8")
+            for match in re.finditer(r"^[ \t]*Rectangle\s*\{", src, re.MULTILINE):
+                body = block_at(src, src.index("{", match.start()))
+                if own_property(body, "clip") != "true":
+                    continue
+                radius = own_property(body, "radius")
+                if radius is None or radius == "0":
+                    continue
+                line = src[: match.start()].count("\n") + 1
+                key = f"{path.relative_to(COMPONENTS)}:{line}"
+                if key in self.ALLOWED:
+                    continue
+                for child in direct_children(body):
+                    if not fills_parent(child.body):
+                        continue
+                    if not paints_a_fill(child):
+                        continue
+                    if not paints_into_corners(child.body):
+                        continue
+                    offenders.append(f"{key} <- {child.type}(fills, no radius)")
+        self.assertEqual(
+            offenders,
+            [],
+            "clip: true is a rectangular scissor; these children paint into "
+            f"the card's corner notches: {offenders}",
+        )
 
 
 if __name__ == "__main__":

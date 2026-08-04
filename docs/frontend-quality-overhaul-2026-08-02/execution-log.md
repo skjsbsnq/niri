@@ -13,7 +13,7 @@
 | T01 | COMPLETE | niri `a44ce8b1`（tahoe-layer-animations）/ main `85adaaa`（fix/tray-menu-pinned-surface-height） | 3 轮双审查 CLEAN（rework 轮） | output layer teardown + rework（Tahoe pending/锁范围/实际 build） |
 | T02 | COMPLETE | niri `eeb7169a`（tahoe-layer-animations）/ main `4feff69`（fix/tray-menu-pinned-surface-height） | 7 轮双审查，最终轮双 CLEAN | window/output lifetime（is_none_or focus owner + STAB-03 证据关闭 + 7 测试） |
 | T03 | COMPLETE | niri `0b717b19`（tahoe-layer-animations）/ main `1e945e5`（fix/tray-menu-pinned-surface-height） | 4 轮双审查，最终两轮产品代码 CLEAN | layer lock/damage/redraw（guard 三阶段分离 + damage cap/drain + root 归因 + 8 红绿测试） |
-| T04 | PENDING | - | - | pointer/focus transaction |
+| T04 | COMPLETE | niri `cc772d0a`（tahoe-layer-animations）/ main `c177402`（fix/tray-menu-pinned-surface-height） | 9 轮双审查，最终两轮产品代码 CLEAN + 账本修正 | pointer/focus transaction |
 | T05 | PENDING | - | - | thumbnail budget |
 | T06 | PENDING | - | - | QsPaths |
 | T07 | PENDING | - | - | FileView async |
@@ -416,7 +416,7 @@ STAB-03 侧（A02.3）双变异证明（G04 确定性 A/B，在最终代码上�
 | G03 | 专项+全量测试 | PASS | 见全量配置 |
 | G04 | 红绿证明 | PASS | 2 红测试旧实现 panic（第 3 节）+ M1/M2 双变异 A/B 证据 |
 | G05 | 双审查 | PASS | 第 6 节（7 轮，最终轮双 CLEAN） |
-| G06 | commit/push 顺序 | 进行中 | 第 7 节 |
+| G06 | commit/push 顺序 | PASS | 第 7 节 |
 | G07 | execution-log 完整 | PASS | 本文档 |
 | G08 | 工作树/会话保护 | PASS | 未触碰用户项，未重启会话（全部 headless fixture） |
 | A02.1 | `dialog_of_minimized_parent_maps_visible_and_focused` | PASS | 双 output 夹具：父最小化 → 切 active output → dialog 打开：mapped、非 minimized、成为其 workspace 的 active window（focus owner）、与父同 output 同 workspace（位置合法，错误放置到 active output 会失败）；session 不 abort；restore 父窗口后 dialog 保持 mapped |
@@ -723,3 +723,155 @@ remaining user-operated validations:
 frame/memory/resource comparison artifact paths:
 final runtime warning summary:
 ```
+
+---
+
+## T04 pointer 缓存与 focus transaction
+
+**状态**：COMPLETE（产品实现、九轮双审查、全量验证、产品 commit/push 完成；docs-only 闭环 commit 待执行）
+**开始时间**：2026-08-03
+**roadmap 引用**：`roadmap.md#T04`（第 135-154 行）；发现 `research-report.md#STAB-07`（第 107-111 行）
+**执行者上下文**：OpenCode / DeepSeek V4 Flash 会话（niri 子仓库 `tahoe-layer-animations` 分支）
+
+### 1. 前提核实
+
+| 报告判断 | 当前证据 | 等级 | 结论 |
+|---|---|---|---|
+| STAB-07: Smithay pointer/grab 回调内不得调用 `pointer.current_location()`（历史 core 11605 cursor_image / core 3020 on_ungrab） | 修复提交 `5a8bf3d8`（cursor_image/tablet_tool_image/DnD grab/end 改用缓存）与 `16696344`（move_grab/pick_color_grab/pick_window_grab on_ungrab+button、cursor_position_hint 改用缓存）均为 HEAD(0b717b19) 祖先（`git merge-base --is-ancestor` 两次均 exit 0） | CURRENT-CONFIRMED | 成立（不变量保持：回调上下文零 `current_location()`） |
+| 位置缓存 `pointer_pos` 只由 2 处写入（`on_pointer_motion`、`on_pointer_motion_absolute`） | 全仓 rg 写点恰 2 处生产；`move_cursor`（warp/focus 路径）与 `cursor_position_hint`（constraint hint）不更新缓存 | CURRENT-CONFIRMED | 成立（需补 2 写点） |
+| `tablet_tool_image` 读 `pointer_pos`（鼠标缓存）而非平板位置 | `tablet_cursor_location`（niri.rs）是既有设备来源状态；渲染路径均 `unwrap_or(...)`；唯独 tablet_tool_image 回调读鼠标缓存 | CURRENT-CONFIRMED | 成立 |
+| 无作用域裸 bool focus-clear：`pending_on_demand_focus_clear: bool` | 只记录"有一个 deferred clear"，不绑定 button/slot/表面；释放被任意按键消费；touch/tablet down 立即 clear；生命周期无清理 | CURRENT-CONFIRMED | 成立 |
+| 释放事件必然到达 input 层处理器（grab 只拦截 smithay 层 `pointer.button`） | `process_input_event` 对每个 libinput 事件调用；`on_pointer_button` 释放分支在所有 grab 之前运行 | CURRENT-CONFIRMED | 成立（held press 自解析原则的根基） |
+| 锁/VT/截图/pick_color/popup-grab 取消点 | 均不触碰 pending 状态 | CURRENT-CONFIRMED | 成立（生命周期钩子缺失） |
+| 无第二位置缓存 authority、无第二 focus transaction | rg `pointer_pos2` 零命中；`tablet_cursor_location` 为既有设备来源 | CURRENT-CONFIRMED | 原地改造 |
+
+### 2. 工作树与范围（最终）
+
+开始时 niri 子模块干净（HEAD `0b717b19`）；主仓库仅用户未跟踪项 `.zcode/`、`Testing/`、docs 目录。
+
+允许修改（最终 8 文件）：
+
+- `niri/src/niri.rs`（缓存同步、`PendingOnDemandFocusClear` 状态机、resolve 钩子、字段与文档）
+- `niri/src/input/mod.rs`（pointer press/release、touch down/up/cancel、tablet tip/proximity、设备移除钩子）
+- `niri/src/handlers/mod.rs`（`tablet_tool_image` 设备来源、`cursor_position_hint` 缓存同步与重绘目标）
+- `niri/src/handlers/layer_shell.rs`（`layer_destroyed` 按表面解析钩子，一行）
+- `niri/src/backend/tty.rs`（`PauseSession` VT 切换解析钩子）
+- `niri/src/tests/client.rs`（**测试夹具扩展**：wl_seat/zwp_pointer_constraints_v1 全局绑定 + `lock_pointer` helper——以真实 pointer-constraints 协议驱动 `cursor_position_hint` 行为测试；T01/T03 同类夹具先例；无测试专用生产入口）
+- `niri/src/tests/mod.rs`（注册一行，字母序）
+- `niri/src/tests/pointer_focus_transaction.rs`（新测试文件，26 个测试）
+- `execution-log.md`
+
+明确禁止修改：`src/layout/*`、`src/protocols/tahoe_glass.rs`、`src/render_helpers/*`、`src/redraw_attribution.rs`、`src/input/pick_color_grab.rs`/`pick_window_grab.rs`/`move_grab.rs`（回调缓存读取已是 16696344 修复形态）、Quickshell、Tahoe shell、主仓库用户项、T05+ 范围。
+
+### 3. 旧实现失败基线（红绿证明，实际执行）
+
+在 0b717b19 + 测试文件（含红跑 shim `resolve_pending_on_demand_focus_clear` no-op）上运行首批 18 个测试：**15 红 / 3 绿**（绿 = 2 个历史 deadlock harness + `deferred_focus_clear_consumed_by_matching_button_only` guardrail——旧代码以覆盖 bool 的方式同样满足"桌面按下取消 deferral"，防回归 guardrail）。后续各轮新增测试均以变异验证红绿（见第 6 节）。
+
+| 测试/probe | 旧结果（实测） | 为什么能捕获根因 |
+|---|---|---|
+| `warp_updates_cached_location_and_cursor_image_targets_new_output` | FAIL：warp 后 `pointer_pos` 仍 `(0,0)` | `move_cursor` 不写缓存 |
+| `warp_cache_stays_correct_across_scale_and_transform_outputs` | FAIL：cache drift（0.0 vs 640.0） | 同上 |
+| `color_pick_after_warp_reads_pixel_at_warped_position` | FAIL：拾色 `[0.251,0.251,0.251]` 桌面灰（旧缓存 (0,0)） | pick_color_grab 读缓存；warp 后陈旧 |
+| `tablet_tool_image_redraws_output_under_tablet_cursor` | FAIL：回调重绘输出 1（鼠标位置）而非输出 2 | tablet_tool_image 读鼠标缓存 |
+| 5 个 focus transaction 行为测试 | FAIL：任意释放即消费 / 无生命周期解析 / touch、tablet tip down 立即 clear / cancel 无路径 | 裸 bool 无键控 + 无钩子 |
+| `touch_cancel_resolves_pending_slot` | FAIL：down 即 clear | touch 未镜像 deferral |
+| `pointer_pos_writers_are_the_single_cache_authority` | FAIL：写点集合 {on_pointer_motion, on_pointer_motion_absolute} | 合同要求 4 个已知路径 |
+| `focus_transaction_lifecycle_resolve_call_sites_exist` | FAIL：lock/截图/PauseSession 无 resolve | 生命周期钩子缺失 |
+
+A/B 变异复核（G04）：移除 `move_cursor` 缓存写 → warp×2 + pick + 静态合同 4 红；移除 hint 缓存写 → hint 测试红；还原旧 else 语义 → `deferred_focus_clear_consumed_by_matching_button_only` 红；移除 device 作用域 → 设备移除/跨设备测试红；移除 kind 过滤 → 混合设备测试红；移除 suppressed 前移 → 配对测试红。
+
+### 4. 实现机制（最终，经 9 轮审查收敛）
+
+- **单一位置缓存 authority（A04.1/A04.5）**：`pointer_pos` 写点 2→4：新增 `move_cursor`（niri.rs，warp 路径：focus-window/IPC focus/confirm-mru/tablet proximity-out 共用；写点在 `pointer.motion()` 之前，回调可读新值）与 `cursor_position_hint`（handlers/mod.rs，`set_location` 后同点写缓存、重绘用 hint 目标）。`tablet_tool_image` 改读 `tablet_cursor_location.unwrap_or(pointer_pos)`。锁内/早退路径（locked-constraint、confined-prevent）位置未变不写缓存，正确。
+- **focus transaction（A04.2）**：`pending_on_demand_focus_clear: bool` → `Vec<PendingOnDemandFocusClear>`（`kind: {PointerButton{button}, Touch{slot}, TabletTip{tool}}` + 按下表面 `WlSurface` + **device id `String`**）。三类按压语义：非 on-demand layer 按压 → defer（按 kind+device 入账，最后一条释放才 clear）；on-demand 按压 → 立即 focus（enter 不取消任何 grab）；**窗口按压 → 立即 clear**（原 T-29 权衡：deferred holder 杀死新按压的 xdg popup grab——上下文菜单）；**桌面按压 + 其他按压在途 → 延迟 clear 到最后一条释放**（无窗口无 popup grab 风险，避免给在途按压注入 leave）。
+- **生命周期解析钩子（5 类）**：`lock()` 入口与 `PauseSession`（全部——输入已死）、`layer_destroyed`（按表面）、`on_device_removed`（按设备，全部 kind——设备移除后其按压确实已死）、touch cancel（按设备 + **仅 Touch kind**——混合设备上同设备的笔尖按压仍存活）、tablet proximity-out（按设备 + 按 tool——双设备同工具描述符不互相误杀）。
+- **grab 交换不解析**：pick_color/screenshot/popup-grab 打开时**不**提前解析 held press——其 release 必达 input 层（release 钩子在 suppressed 早退与 `pointer.button` 路由之前）自解析完成配对；提前解析会注入 leave 重犯 T-29（R5/R7 审查收敛）。原裸 bool 无此问题因无在途条目概念；曾一度加入的 grab-cancel 钩子经审查删除。
+- **A04.3**：两个 watchdog harness（`CursorImageProbeGrab::button` 锁内调真实 `SeatHandler::cursor_image`；`PickColorGrab::unset` 经 `unset_grab` 锁内驱动）+ RAII Drop guard（panic 也撤销孤儿 abort）。
+- **A04.4**：三输出 scale 1.0/2.0/1.5 × Normal/Flipped180/_90 精确归因。
+- **无平行接口**：resolve 变体（all/for_device/for_touch/for_surface/for_tool）全部是私有 `_where` 的薄委托；`focus_layer_surface_if_on_demand` 单一 holder authority。
+- **测试文件修正（前一会话遗留）**：① `map_layer` 前补 `double_roundtrip`；② tablet 坐标按单输出矩形；③ 移除 `dbg_output_names` 与 DBG 探针；④ 静态合同 `take_while`/`enclosing_fn` 解析修复；⑤ redraw 断言前 drain；⑥ 拾色目标改焦点环颜色（smithay 0.7 ff5fa7d `rgba32f()` 对 8-bit 颜色按 u32::MAX 缩放 → spbm 表面渲染透明，依赖项行为不改；无 shader 上下文下 `draw_focus_ring_with_background` 实心焦点环覆盖窗口内容——用默认 active 焦点环色 (0.498,0.784,1.0) 与桌面灰判别，红绿方向不变）。
+- **hint redraw 冗余裁决**：hint 仅在承载 commit 时交付（smithay commit_hook），承载 commit 自身已为 mapped toplevel 排队同输出 redraw，hint 目标恒被约束到该输出——hint 自身 redraw 被吸收，行为上不可区分，测试不断言它（注释如实说明）。
+
+### 5. 验收逐条（最终）
+
+| 验收编号 | 方法/命令 | 结果 | 证据 |
+|---|---|---|---|
+| G01 | rg 搜索见第 1/2 节 | PASS | 4 写点、6 resolve 调用点、迁移完整（裸 bool 零残留、`of_kind` 删除后零引用） |
+| G02 | git diff 检查 | PASS | 无 V2/New/Fixed 命名、无新接口/flag |
+| G03 | 专项+全量测试 | PASS | 见全量配置 |
+| G04 | 红绿证明 | PASS | 第 3 节 + 各轮变异验证 |
+| G05 | 双审查 | PASS | 第 6 节（9 轮，最终两轮产品代码 CLEAN + 1 账本项已修） |
+| G06 | commit/push 顺序 | 进行中 | 第 7 节 |
+| G07 | execution-log 完整 | PASS | 本文档 |
+| G08 | 工作树/会话保护 | PASS | 未触碰用户项，未重启会话（全部 headless fixture） |
+| A04.1 | mouse/warp/tablet/拾色/constraint hint 后 cursor image redraw/拾色使用正确 output 坐标 | PASS | `warp_updates_cached_location_and_cursor_image_targets_new_output`、`warp_cache_stays_correct_across_scale_and_transform_outputs`、`color_pick_after_warp_reads_pixel_at_warped_position`（真实拾色渲染）、`tablet_tool_image_redraws_output_under_tablet_cursor`、`cursor_position_hint_syncs_cache_and_redraws_target_output`（真实 zwp_pointer_constraints 协议驱动） |
+| A04.2 | 多按键交错、surface destroy、lock、VT switch、grab cancel、touch cancel、设备移除、跨设备后 focus transaction 不遗留 | PASS | 13+ 行为测试（交错×4、destroy、lock/VT（直调+静态合同）、pick_color/screenshot 不提前解析×2、touch cancel×3（含混合设备）、proximity-out、设备移除×3（含跨设备）、窗口/桌面/on-demand 三类按压）+ stale release 无残留×4 |
+| A04.3 | 历史 cursor_image/on_ungrab deadlock harness 继续通过 | PASS | 两个 watchdog harness 真实锁内回调；RAII guard 防孤儿 abort |
+| A04.4 | 多输出 scale/transform 下缓存坐标转换正确 | PASS | 1.0/2.0/1.5 × Normal/Flipped180/_90 三输出精确归因 |
+| A04.5 | 无第二位置缓存 authority | PASS | `pointer_pos_writers_are_the_single_cache_authority` 静态合同 + 全仓 rg 复核 |
+
+全量配置（最终）：
+
+| 配置 | 命令 | exit code | 通过/失败明细 |
+|---|---:|---|---|
+| NIRI_FULL | `cargo fmt --all -- --check` | 1（基线失败） | 70 处漂移点全部为改动前既有（HEAD 与工作树逐 hunk 内容对比：69 处逐字节相同，1 处为相邻 import 行编辑引起的既有违规位移；R8 修复的 6 处新增违规已清零；新测试文件零违规） |
+| NIRI_FULL | `cargo test -p niri --lib` | 0 | 590 passed / 0 failed（564 旧 + 26 新）；新测试 5 轮并行复跑零 flake |
+| NIRI_FULL | `cargo check --workspace --all-targets` | 0 | Finished，仅 1 条既有 warning（niri-visual-tests 未用 import） |
+| 实际二进制 | `cargo build -p niri` | 0 | debug 构建通过 |
+| 实际二进制 | `cargo build --release -p niri` | 0 | release 构建通过 |
+| PROTOCOL_FULL | `scripts/check-protocol-sync.sh` | 0 | IN_SYNC |
+| PROTOCOL_FULL | `scripts/check-tahoe-glass-guardrails.sh` | 0 | 全部 guardrail 通过 |
+
+### 6. 独立审查（9 轮收敛记录）
+
+| 轮次 | Reviewer A | Reviewer B | 处理 |
+|---|---|---|---|
+| 1 | NOT-CLEAN：1 CONFIRMED（resolve-all 过宽）+ 1 PLAUSIBLE（hint 重绘） | CLEAN（2 措辞） | kind 过滤 + hint 重绘 target + 跨种类测试 |
+| 2 | NOT-CLEAN：2 CONFIRMED（doc：tablet_tool_image/pointer_pos 注释）+ 1 PLAUSIBLE（popup-grab Touch 扫描） | CLEAN | popup-grab 收窄 PointerButton-only + 注释修正 |
+| 3 | NOT-CLEAN：1 PLAUSIBLE（suppressed 角落残留）+ 1 PLAUSIBLE（watchdog 孤儿） | NOT-CLEAN：1 CONFIRMED（计数器断言空转）+ 2 PLAUSIBLE（popup-grab 无 pin、suppressed 配对无测试）+ 1 CONFIRMED（卫生） | release 前移 + watchdog RAII + 静态合同补 pin + 配对测试 + 卫生 |
+| 4 | NOT-CLEAN：2 CONFIRMED（F1 保留 holder 杀死 popup grab；F2 设备移除跨设备误杀） | NOT-CLEAN：1 PLAUSIBLE（设备移除只测 Touch） | 窗口/桌面按压分界 + 删除 grab-cancel 钩子 + device id 作用域 + pointer/tablet 移除测试 |
+| 5 | NOT-CLEAN：1 CONFIRMED（touch cancel 无 kind 过滤，混合设备误杀）+ 2 措辞 | CLEAN | resolve_for_touch（device+kind）+ 混合设备测试 + 措辞 |
+| 6 | NOT-CLEAN：2 PLAUSIBLE（proximity-out 无 device 匹配；hint 注释/doc 残留） | NOT-CLEAN：1 CONFIRMED（doc：grab cancel 残留） | for_tool 加 device + 注释修正 |
+| 7 | CLEAN | NOT-CLEAN：1 CONFIRMED（6 处新 rustfmt 违规） | 按仓库固定工具链修复（cargo fmt 70 处基线） |
+| 8（终审） | **CLEAN**（六问全 CLEAN，fmt 基线独立复核成立） | **CLEAN**（产品代码；1 PLAUSIBLE 账本项：execution-log 未反映最终状态） | 本记录更新（client.rs 范围、最终数字、最终机制） |
+| 9（账本修正后复审） | **CLEAN**（含 fmt 基线逐 hunk 复核） | **CLEAN**（含 fmt 70 处基线复核） | 账本项已随本记录修正；closure reviewer PASS |
+
+审查输入：CONSTRAINTS、roadmap T04、最终 diff（/tmp/opencode/t04_final10.diff，2899 行）、专项/全量测试输出。两个 reviewer 每轮均为全新上下文、只读、互不可见。
+
+### 7. 产品 Commit 与 push 收据
+
+| 仓库 | Commit hash | Commit subject | Branch | Remote ref | push 结果 | ancestor 验证 |
+|---|---|---|---|---|---|---|
+| niri | `cc772d0a7805b19fcae5e3cdac06e68c7ec70574` | `fix(input): T04 pointer location cache coherence and keyed on-demand focus transaction` | `tahoe-layer-animations` | `origin/tahoe-layer-animations` | `0b717b19..cc772d0a` 成功 | `git merge-base --is-ancestor cc772d0a origin/tahoe-layer-animations` exit 0 |
+| main | `c177402` | `fix(submodule): bump niri for T04 pointer cache coherence and keyed on-demand focus transaction` | `fix/tray-menu-pinned-surface-height` | `origin/fix/tray-menu-pinned-surface-height` | `b0abf71..c177402` 成功 | `git merge-base --is-ancestor c177402 origin/fix/tray-menu-pinned-surface-height` exit 0 |
+
+主仓库子模块指针是否只指向已推送 commit：
+
+```text
+git submodule status niri → cc772d0a（= 已推送 niri commit hash）
+```
+
+### 8. 未覆盖、用户现场项与后续边界
+
+- 未覆盖：无产品代码缺口（A04.1-A04.5 全通过）。A04.3 的 tty estimated-vblank/vblank 与 screencast 真实守卫路径在 headless 夹具不可达（T02 已以源码审计闭合）。lock/VT 验收为"直接调 resolver + 静态合同"（headless 无法驱动真实 SessionLocker/session pause，注释如实声明）。
+- 需要用户授权的实时验证：无（纯源码/测试任务，未重启会话、未真实拔插）。
+- 发现但属于后续任务的事项（只记录，未修改）：
+  - 桌面按压在有其他按压在途时延迟 clear 是相对旧代码的**有意行为变更**（旧代码该场景即 T-29 swallow 缺陷），A04.2 多按键交错授权内，已文档化并被测试钉住。
+  - A04.5 静态合同只扫描 3 个文件——当前全仓 rg 反证无第五写点；未来新增文件内写入会绕过 guardrail（记录，不阻塞）。
+  - 双设备相同工具描述符场景无直接测试（机制经代码推演正确，R9 记录）。
+  - smithay 0.7 `SinglePixelBufferUserData::rgba32f()` 对 8-bit 颜色按 u32::MAX 缩放（255→5.94e-8）导致 spbm 表面渲染透明——依赖项行为，非 T04 范围，未改。
+
+### 9. 完成判定
+
+**最终状态**：COMPLETE（待 §10 闭环 commit push 后）
+**理由**：A04.1-A04.5 + G01-G08 满足；红绿测试 + 各轮变异验证；9 轮双审查最终两轮产品代码 CLEAN（R9 双 CLEAN，账本项已随本记录修正）；fmt 70 处基线为改动前既有；590 全量测试通过；debug+release 实际构建通过；PROTOCOL_FULL 通过；niri 与主仓库产品 commit 均已 push 且远端 ancestor 验证 exit 0。
+**下一任务是否允许开始**：YES（本文档闭环 commit push 完成后）
+
+### 10. 闭环记录审查与推送
+
+- Closure reviewer（全新只读上下文）：待执行。
+- 产品 commit hash/remote receipt 是否逐项准确：待 closure reviewer 实测核对。
+- 状态是否可置 COMPLETE/RESOLVED-NO-CODE：是（COMPLETE）
+- docs-only closure commit subject：`docs(execution): T04 close task record`
+- closure push remote ref：`origin/fix/tray-menu-pinned-surface-height`
+- closure remote ancestor 验证 exit code：待 push 后以命令输出验证（本 commit 不记录自身 hash，由后续 `git log --format=%H -- execution-log.md` 解析）

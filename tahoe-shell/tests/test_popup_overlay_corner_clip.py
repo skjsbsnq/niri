@@ -160,6 +160,25 @@ class PopupOverlayCornerClipTests(unittest.TestCase):
         surface = extract_block(self.menu, r"^\s*id:\s*menuSurface\b")
         self.assertEqual(own_property(surface, "radius"), "GlassStyle.RadiusMenu")
 
+    def test_confirm_scrim_absorbs_hover_not_just_clicks(self) -> None:
+        """A dim that blocks clicks but not hover lights rows up underneath.
+
+        MenuRow's MouseArea is hoverEnabled, and a MouseArea that does not
+        accept hover lets hover fall through to it — so the row beneath the
+        scrim turns accent-blue while the confirm card is up.
+        """
+        scrim = extract_block(self.menu, r"^\s*id:\s*confirmScrim\b")
+        area = None
+        for child in direct_children(scrim):
+            if child.type == "MouseArea":
+                area = child.body
+        self.assertIsNotNone(area, "confirmScrim must keep its input-absorbing MouseArea")
+
+        self.assertEqual(own_property(area, "hoverEnabled"), "enabled")
+        # Gated on the painted dim, not confirmOpen: during the cancel fade-out
+        # the scrim is still visible, so input must still be absorbed.
+        self.assertEqual(own_property(area, "enabled"), "confirmScrim.visible")
+
     def test_no_squarecornered_fill_overlay_inside_the_menu_card(self) -> None:
         """Any visible fill-parent Rectangle in MenuPopup must carry a radius."""
         offenders: list[str] = []

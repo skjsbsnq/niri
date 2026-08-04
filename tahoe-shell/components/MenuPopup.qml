@@ -299,7 +299,15 @@ PanelWindow {
 
             MouseArea {
                 anchors.fill: parent
-                enabled: root.confirmOpen
+                // Absorb input for as long as the dim is painted, not just
+                // while confirmOpen: during the cancel fade-out the scrim is
+                // still visible, and a narrower gate would let clicks reach
+                // live rows under an apparently-blocked menu.
+                enabled: confirmScrim.visible
+                // Hover too, or rows light up accent-blue under the dim: the
+                // row MouseAreas are hoverEnabled, and a MouseArea that does
+                // not accept hover lets hover fall through to them.
+                hoverEnabled: enabled
                 // Swallow clicks so menu rows under the scrim cannot re-fire.
                 onClicked: {
                     if (root.powerService)

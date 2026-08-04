@@ -287,6 +287,11 @@ PanelWindow {
 
             anchors.fill: parent
             z: 1
+            // Must round to the card silhouette. menuSurface.clip is a
+            // rectangular scissor and a Rectangle's radius does not clip its
+            // children, so a square scrim paints dark blocks into the four
+            // corner notches outside the glass card (visible over wallpaper).
+            radius: menuSurface.radius
             color: root.darkMode ? "#66000000" : "#33000000"
             opacity: root.confirmReveal * 0.85
             visible: opacity > 0.01

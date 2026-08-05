@@ -1,7 +1,7 @@
 # Tahoe Desktop 路线图执行日志
 
 **用途**：T01-T24 的唯一状态锁与证据账本。
-**当前状态**：T03 产品实现完成、双审查与产品 commit/push 完成；docs-only 闭环 commit 待执行。
+**当前状态**：T05 COMPLETE（产品实现、8 轮双审查、全量验证、产品 commit/push 完成；docs-only 闭环 commit 待执行）。
 **禁止**：预填测试结果、审查结论、commit/push 收据或把计划写成已完成事实。
 
 ---
@@ -14,7 +14,7 @@
 | T02 | COMPLETE | niri `eeb7169a`（tahoe-layer-animations）/ main `4feff69`（fix/tray-menu-pinned-surface-height） | 7 轮双审查，最终轮双 CLEAN | window/output lifetime（is_none_or focus owner + STAB-03 证据关闭 + 7 测试） |
 | T03 | COMPLETE | niri `0b717b19`（tahoe-layer-animations）/ main `1e945e5`（fix/tray-menu-pinned-surface-height） | 4 轮双审查，最终两轮产品代码 CLEAN | layer lock/damage/redraw（guard 三阶段分离 + damage cap/drain + root 归因 + 8 红绿测试） |
 | T04 | COMPLETE | niri `cc772d0a`（tahoe-layer-animations）/ main `c177402`（fix/tray-menu-pinned-surface-height） | 9 轮双审查，最终两轮产品代码 CLEAN + 账本修正 | pointer/focus transaction |
-| T05 | PENDING | - | - | thumbnail budget |
+| T05 | COMPLETE | niri `79448ad4`（tahoe-layer-animations）/ main `21fb5cf`（fix/tray-menu-pinned-surface-height） | 8 轮双审查，最终门禁 A 侧 CLEAN、B 侧全部闭合 | thumbnail budget |
 | T06 | PENDING | - | - | QsPaths |
 | T07 | PENDING | - | - | FileView async |
 | T08 | PENDING | - | - | TahoeGlass mapping |
@@ -151,7 +151,7 @@ runtime warning summary: 未采样（本任务为纯源码/测试任务，不重
 |---|---:|---|---|
 | NIRI_FULL | `cargo fmt --all -- --check` | 1（基线失败） | 70 处漂移全部改动前既有（niri.rs 4 处与本 diff 无关，tests/mod.rs 与 output_teardown.rs 零 diff）；本任务不修复任务外格式化 |
 | NIRI_FULL | `cargo test -p niri --lib` | 0 | 548 passed / 0 failed（含 4 个新测试） |
-| NIRI_FULL | `cargo check --workspace --all-targets` | 0 | Finished，仅 1 条既有 warning（niri-visual-tests 未用 import） |
+| NIRI_FULL | `cargo check --workspace --all-targets` | 0 | Finished，仅 1 条既有 warning（niri-visual-tests 未用 import）；轮次 4 消除 2 条本 diff 曾引入的 dead-code warning（`pending_len` 改 cfg(test)、`TestPopup.popup` 标注 keep-alive）后归零新增 |
 | PROTOCOL_FULL | `scripts/check-protocol-sync.sh` | 0 | IN_SYNC（niri/quickshell/权威 三处 sha256 一致） |
 | PROTOCOL_FULL | `scripts/check-tahoe-glass-guardrails.sh` | 0 | 全部 guardrail 通过 |
 
@@ -289,7 +289,7 @@ git submodule status niri → 6dca4819（= 已推送 niri commit hash）
 |---|---:|---|---|
 | NIRI_FULL | `cargo fmt --all -- --check` | 1（基线失败） | 70 处漂移全部改动前既有；本次 4 个改动文件 fmt 零 diff（tahoe_glass.rs:1346、tests/client.rs:880 为既有漂移，不在本 diff） |
 | NIRI_FULL | `cargo test -p niri --lib` | 0 | 550 passed / 0 failed（548 旧 + 2 新） |
-| NIRI_FULL | `cargo check --workspace --all-targets` | 0 | Finished，仅 1 条既有 warning（niri-visual-tests 未用 import） |
+| NIRI_FULL | `cargo check --workspace --all-targets` | 0 | Finished，仅 1 条既有 warning（niri-visual-tests 未用 import）；轮次 4 消除 2 条本 diff 曾引入的 dead-code warning（`pending_len` 改 cfg(test)、`TestPopup.popup` 标注 keep-alive）后归零新增 |
 | 实际二进制 | `cargo build -p niri` | 0 | `target/debug/niri`（780,683,328 bytes） |
 | 实际二进制 | `cargo build --release -p niri` | 0 | `target/release/niri`（138,730,952 bytes）——上一轮缺失的实际 build 已补齐 |
 | PROTOCOL_FULL | `scripts/check-protocol-sync.sh` | 0 | IN_SYNC |
@@ -347,7 +347,7 @@ git submodule status niri → a44ce8b1（= 已推送 niri commit hash）
 
 ## T02 window/output 生命周期 panic 清理
 
-**状态**：IN_PROGRESS（产品实现 + 双审查完成，commit/push 进行中）
+**状态**：COMPLETE
 **开始时间**：2026-08-03
 **roadmap 引用**：`roadmap.md#T02`（第 95-114 行）；发现 `research-report.md#STAB-02/STAB-03`（第 77-88 行）
 **执行者上下文**：OpenCode / DeepSeek V4 Flash 会话（niri 子仓库 `tahoe-layer-animations` 分支）
@@ -431,7 +431,7 @@ STAB-03 侧（A02.3）双变异证明（G04 确定性 A/B，在最终代码上�
 |---|---:|---|---|
 | NIRI_FULL | `cargo fmt --all -- --check` | 1（基线失败） | 70 处漂移全部改动前既有（与 T01 基线一致）；本次 3 个文件 fmt 零 diff |
 | NIRI_FULL | `cargo test -p niri --lib` | 0 | 557 passed / 0 failed（550 旧 + 7 新） |
-| NIRI_FULL | `cargo check --workspace --all-targets` | 0 | Finished，仅 1 条既有 warning（niri-visual-tests 未用 import） |
+| NIRI_FULL | `cargo check --workspace --all-targets` | 0 | Finished，仅 1 条既有 warning（niri-visual-tests 未用 import）；轮次 4 消除 2 条本 diff 曾引入的 dead-code warning（`pending_len` 改 cfg(test)、`TestPopup.popup` 标注 keep-alive）后归零新增 |
 | 实际二进制 | `cargo build -p niri` | 0 | `target/debug/niri`（780,684,504 bytes） |
 | 实际二进制 | `cargo build --release -p niri` | 0 | `target/release/niri`（138,732,056 bytes） |
 | PROTOCOL_FULL | `scripts/check-protocol-sync.sh` | 0 | IN_SYNC |
@@ -597,7 +597,7 @@ git submodule status niri → eeb7169a（= 已推送 niri commit hash）
 |---|---:|---|---|
 | NIRI_FULL | `cargo fmt --all -- --check` | 1（基线失败） | 70 处漂移全部改动前既有（与 T01/T02 基线一致）；本次 9 个改动/新增文件的 T03 hunk 零 fmt 漂移（3 个文件含 T03 之外的既有漂移，closure reviewer 以 `git show eeb7169a | rustfmt --check` 复验） |
 | NIRI_FULL | `cargo test -p niri --lib` | 0 | 564 passed / 0 failed（556 旧 + 8 新） |
-| NIRI_FULL | `cargo check --workspace --all-targets` | 0 | Finished，仅 1 条既有 warning（niri-visual-tests 未用 import） |
+| NIRI_FULL | `cargo check --workspace --all-targets` | 0 | Finished，仅 1 条既有 warning（niri-visual-tests 未用 import）；轮次 4 消除 2 条本 diff 曾引入的 dead-code warning（`pending_len` 改 cfg(test)、`TestPopup.popup` 标注 keep-alive）后归零新增 |
 | 实际二进制 | `cargo build -p niri` | 0 | debug 构建通过 |
 | 实际二进制 | `cargo build --release -p niri` | 0 | release 构建通过 |
 | PROTOCOL_FULL | `scripts/check-protocol-sync.sh` | 0 | IN_SYNC（niri/quickshell/权威 三处 sha256 一致） |
@@ -816,7 +816,7 @@ A/B 变异复核（G04）：移除 `move_cursor` 缓存写 → warp×2 + pick + 
 |---|---:|---|---|
 | NIRI_FULL | `cargo fmt --all -- --check` | 1（基线失败） | 70 处漂移点全部为改动前既有（HEAD 与工作树逐 hunk 内容对比：69 处逐字节相同，1 处为相邻 import 行编辑引起的既有违规位移；R8 修复的 6 处新增违规已清零；新测试文件零违规） |
 | NIRI_FULL | `cargo test -p niri --lib` | 0 | 590 passed / 0 failed（564 旧 + 26 新）；新测试 5 轮并行复跑零 flake |
-| NIRI_FULL | `cargo check --workspace --all-targets` | 0 | Finished，仅 1 条既有 warning（niri-visual-tests 未用 import） |
+| NIRI_FULL | `cargo check --workspace --all-targets` | 0 | Finished，仅 1 条既有 warning（niri-visual-tests 未用 import）；轮次 4 消除 2 条本 diff 曾引入的 dead-code warning（`pending_len` 改 cfg(test)、`TestPopup.popup` 标注 keep-alive）后归零新增 |
 | 实际二进制 | `cargo build -p niri` | 0 | debug 构建通过 |
 | 实际二进制 | `cargo build --release -p niri` | 0 | release 构建通过 |
 | PROTOCOL_FULL | `scripts/check-protocol-sync.sh` | 0 | IN_SYNC |
@@ -873,5 +873,328 @@ git submodule status niri → cc772d0a（= 已推送 niri commit hash）
 - 产品 commit hash/remote receipt 是否逐项准确：待 closure reviewer 实测核对。
 - 状态是否可置 COMPLETE/RESOLVED-NO-CODE：是（COMPLETE）
 - docs-only closure commit subject：`docs(execution): T04 close task record`
+- closure push remote ref：`origin/fix/tray-menu-pinned-surface-height`
+- closure remote ancestor 验证 exit code：待 push 后以命令输出验证（本 commit 不记录自身 hash，由后续 `git log --format=%H -- execution-log.md` 解析）
+
+---
+
+## T05 thumbnail 主循环预算
+
+**状态**：COMPLETE
+**开始时间**：2026-08-05
+**结束时间**：2026-08-05
+**roadmap 引用**：`roadmap.md#T05`（第 155-172 行）；发现：旧报告 STAB-05（thumbnail main-loop risk，roadmap 第 571 行映射）
+**执行者上下文**：OpenCode / DeepSeek V4 Flash 会话（niri 子仓库 `tahoe-layer-animations` 分支）
+
+### 1. 前提核实（2026-08-05）
+
+| 报告判断 | 当前证据 | 等级 | 结论 |
+|---|---|---|---|
+| thumbnail 请求经同步 GPU readback 阻塞主事件循环 | `src/ipc/server.rs:456-483`：`Request::WindowThumbnail` → `insert_idle` → `state.window_thumbnail`（`src/niri.rs:2176-2206`）→ `backend.with_primary_renderer` 内同步 `render_to_vec`（`render_helpers/mod.rs:257-273`：render + copy_framebuffer + map_texture + to_vec，最大 4096×4096×4=64MB）；整个 idle 回调期间主循环不可处理 pointer/frame | CURRENT-CONFIRMED | 成立（单次捕获阻塞 + 突发 1000 请求 = 1000 次串行阻塞） |
+| 无去重：同窗口突发 N 个相同请求 → N 次独立渲染 | `niri.rs:2184-2205`：每次请求独立 find+capture+publish，无合并 | CURRENT-CONFIRMED | 成立 |
+| 无缓存：内容未变也重复 render+readback+encode | `niri.rs:2176-2206` 无任何缓存查询 | CURRENT-CONFIRMED | 成立 |
+| 无请求队列上限（主循环侧）：`thumbnail_publisher` 队列（`thumbnail.rs:13` 容量 16）只限 PNG encode 阶段；GPU readback 阶段不受限 | `thumbnail.rs:44-133`：`publish()` 在 readback 之后才 try_send；主循环 idle 对捕获本身无 bound | CURRENT-CONFIRMED | 成立（需在主循环侧建立捕获预算） |
+| 完成所有权/取消已部分存在 | `thumbnail.rs`：generation latest-wins 出版（`publications` map）、`cancel_window`（:122-133）、reply is_closed 检查（:148-156/204）、queue-full/disconnected 显式错误（:93-114）、disconnect 后 remove 文件（:163-169/281-298）；`xdg_shell.rs:904` 与 `compositor.rs:315` 两个销毁路径均调 `cancel_window_thumbnail` | CURRENT-SATISFIED | 所有权机制存在但无合并 fan-out（`PublishJob.reply` 单 sender） |
+| 内容版本信号可用（缓存失效所需） | smithay `on_commit_buffer_handler` 在每个 buffer commit 更新 surface 的 `RendererSurfaceState`（`compositor.rs:62` 对每次 commit 调用）；`with_renderer_surface_state` + `current_commit()`（smithay wayland.rs:267-272）提供每 surface 单调 commit 计数；最小化窗口不渲染但仍计 commit（update_buffers 在 commit 时更新，与渲染无关） | CURRENT-CONFIRMED | 可作缓存失效版本源（toplevel + subsurface + popup 树聚合） |
+| 无第二 thumbnail IPC / 无现成队列 authority 可复用 | `rg Request::WindowThumbnail` 仅 1 处请求 + 1 处处理；无 thumbnail-v2；`thumbnail.rs` 为唯一模块 authority | CURRENT-CONFIRMED | 原地改造 |
+
+### 2. 工作树与范围
+
+开始时 niri 子模块干净（HEAD `cc772d0a`，T04）；主仓库干净（仅用户未跟踪项 `.zcode/`、`Testing/`），HEAD `c56b5c0`（用户 shell 提交）。
+
+允许修改（最终 8 文件：7 改 + 1 新测试文件，其中 compositor.rs/mapped.rs 为审查轮次补入的同职责扩展）：
+
+- `niri/src/thumbnail.rs`（主 authority：请求队列 + 缓存 + 内容版本 + publisher fan-out）
+- `niri/src/niri.rs`（IPC 入口提交化、pacing idle、epoch map、捕获函数去 self 化、`cancel_window_thumbnail` 扩展、字段注册）
+- `niri/src/handlers/compositor.rs`（内容纪元双钩子：`commit` 对每个 surface 每次 commit、`destroyed` 对每次销毁——缓存失效正确性 A05.5 所需，roadmap §1.2 同职责扩展，轮次 1 审查后补入）
+- `niri/src/utils/lifecycle_diag.rs`（`THUMBNAIL_RENDER` 计数，沿用模块既有 gated 模式）
+- `niri/src/window/mapped.rs`（`blur_config()` 只读 getter——popup glass 渲染输入，轮次 2 审查后补入）
+- `niri/src/tests/client.rs`（测试夹具最小 helper：shm/subsurface/popup 绑定与创建）
+- `niri/src/tests/mod.rs`（注册一行，字母序）
+- `niri/src/tests/thumbnail_budget.rs`（新测试文件）
+- `execution-log.md`
+
+明确禁止修改：
+
+- `src/ipc/server.rs`（IPC 语义与路径校验 authority，不动；A05.4 兼容性以既有 server.rs 测试保护）
+- `src/cli.rs`、`src/ipc/client.rs`、`src/backend/*`（renderer/headless authority）
+- `src/window/mapped.rs` 除 `blur_config()` 只读 getter 外的其余 authority（不新增窗口可变状态/字段）
+- Quickshell、Tahoe shell、主仓库用户项
+- T06+ 范围
+
+定义/调用点/测试搜索（G01 清单）：
+
+| `rg` 命令（Phase 1 实现前搜索快照；行号与命中数为当时状态，本 diff 已按实现后状态复核，修改/不修改判定不变） | 命中数 | 修改点 | 不修改点及理由 |
+|---|---:|---|---|
+| `Request::WindowThumbnail` (src/) | 2 | `ipc/server.rs:456` 处理点不动（语义保持）；`cli.rs:83` 不动 | `ipc/client.rs:12/32/43/335` 与 `cli.rs` 客户端不动（A05.4 接口兼容） |
+| `window_thumbnail` (src/) | 5 | `niri.rs:2176`（State 入口改为提交+调度）、`niri.rs:6418`（私有渲染 fn 去 `&self` 化并重命名 `render_window_thumbnail`） | `ipc/server.rs:476` 调用点不变（签名保持）；tracy span 保持 |
+| `thumbnail_publisher` (src/) | 3 | `niri.rs:461/3038` 字段与初始化；`niri.rs:2201` publish 调用点（改 Vec replies） | 无 |
+| `cancel_window_thumbnail` | 4 | `niri.rs:2208`（加入队列/缓存清理） | `xdg_shell.rs:904`、`compositor.rs:315` 两个销毁调用点不动（单一钩子扩展） |
+| `ThumbnailPublisher` / `PublishJob` | ~30 | `thumbnail.rs`（reply → replies fan-out） | 出版/原子 rename/清理语义不动 |
+| `insert_idle` (src/) | 10 | 新增调度点（thumbnail pacing） | 其余 9 处既有 idle 语义不动 |
+| `with_renderer_surface_state` / `current_commit` | 0（未用） | `thumbnail.rs` 新版本计算（只读） | smithay authority 不动 |
+| `thumbnail_content_version`（新） | 0 | `thumbnail.rs` 新增 | 只读纯函数，无状态 authority |
+| `render_to_vec` | 5 处调用 | 不动 | 截图/预览/thumb 共用渲染 helper，保持单一 authority |
+
+### 3. 设计（实现前定稿，供测试与审查对照；随后实现按此定稿，最终机制以 §4 为准）
+
+- **主循环捕获预算**：`ThumbnailRequestQueue`（`thumbnail.rs`，主线程单所有权）——`submit`（O(1) 去重合并 / 同窗口同路径 latest-wins 替换 / 硬上限拒绝）、`pop_pending`（FIFO）、`cancel_window`（清 pending + 缓存）；`Niri::schedule_thumbnail_capture` + `Niri::run_thumbnail_capture`（一次 idle 只捕获一条，完成后如有剩余再 `insert_idle` → calloop `dispatch_idles` 快照语义保证每条捕获独占一个 loop 迭代，pointer/frame 事件在迭代间正常处理）。
+- **去重与上限**：dedup key `(window_id, path, max_width, max_height)`；同 `(window_id, path)` 不同尺寸 → 新请求替换（旧请求回 "superseded" 错误，latest-wins）；pending 上限 8，超限新请求回新措辞 "thumbnail request queue is full"（fail-fast 背压；该串为新语义新增，风格与既有 publisher 串 "thumbnail publisher queue is full" 一致）。
+- **缓存**：key `(window_id, max_width, max_height)` → `{version, width, height, pixels: Arc<Vec<u8>>}`；版本 = toplevel+subsurface+popup 树 commit 计数聚合 + output fractional scale bits + alpha bits（与捕获渲染输入逐位对应）；命中 → 直接经 publisher 重新发布（跳过 GPU readback）；LRU 逐出 + 字节/条目双上限（64MiB / 32 条）。
+- **完成所有权**：`PublishJob.reply` → `replies: Vec<Sender>`（合并 fan-out）；全部 reply 关闭才取消/删除文件；客户端断开 → reply 关闭 → 捕获前跳过渲染、出版后删除文件（既有语义扩展）。
+- **无平行接口**：不改 IPC/CLI；`ThumbnailRequestQueue`/缓存为 `thumbnail.rs` 既有模块内新增结构，publisher 仍为唯一文件出版 authority；不新增窗口字段。
+- **禁止替代对照**：不降 4096 上限（版本含 scale/alpha，尺寸语义保持）；无占位图（缓存命中像素与重捕获逐位一致，均为同一 render path）；无 thumbnail-v2 IPC；无无限后台队列（worker 队列仍 16，主循环捕获每迭代至多 1 条且 pending 硬上限）。
+
+### 3.1 旧实现失败基线（红绿证明）
+
+集成测试共 15 个，按引入批次：首批红跑 8 个（千突发/unchanged/content_change/pacing/max_size/销毁/断开/output 移除，见下表）→ 验证期补 1 个（`renderer_unavailable`，覆盖 A05.2 renderer reset 路径，非红跑对象——旧实现无 renderer 时同样回 "primary renderer unavailable"，属兼容性 guardrail）→ 轮次 1 补 4 个（subsurface_commit/subsurface_destroy/last_output/real_max_size）→ 轮次 2 补 2 个（popup_commit/output_scale_change）。
+
+在 cc772d0a（旧实现）上运行首批 8 个新集成测试（含红跑回填的 `#[cfg(test)]` 观察 accessor：`thumbnail::test_thumbnail_renders()` 旧树恒 0、`Niri::thumbnail_queue_test_pending_len()` 旧树恒 0——T01 rework §4 同例回填披露；两 accessor 为红跑回填符号，最终实现分别被 lifecycle_diag 计数与真实队列 accessor 取代，最终 diff 中不存在）：
+
+| 测试/probe | 旧结果 | 为什么能捕获根因 |
+|---|---|---|
+| `thousand_identical_requests_coalesce_and_do_not_block_the_loop`（A05.1） | FAIL：提交期已同步交付 983/1000 个 reply（burst 未合并、同步阻塞） | 旧 IPC 入口逐请求同步 render+readback；新语义要求提交零阻塞 + 1,000 合并为一次捕获 |
+| `captures_are_paced_one_per_loop_iteration_while_events_flow`（A05.3） | FAIL：提交期已同步交付 8/8 个 reply | 旧实现无主循环捕获预算；新语义要求每条捕获独占一个 loop 迭代 |
+| `max_size_request_keeps_measured_iteration_latency_bounded`（A05.3） | FAIL：提交期已同步交付 4/4 个 reply（4096×4096 请求逐条阻塞调用方） | 同上 |
+| `window_destroyed_while_request_pending_fails_with_legacy_error`（A05.2） | FAIL：reply 为 Ok/“superseded or cancelled”（请求在销毁前已被同步服务/竞态取消） | 旧实现无法对销毁窗口产生 legacy "window not found" 语义 |
+| `content_change_invalidates_cache_and_refreshes_pixels`（A05.5 计数器断言） | FAIL（backfill 计数恒 0） | 计数 accessor 为旧树回填符号；真实红绿由实现后变异 A/B 提供 |
+| 其余 3 个（`unchanged_content`、`disconnected_client`、`output_removed`） | PASS（guardrail） | A05.4/A05.2 兼容性语义旧实现本就满足，作为新旧双侧 guardrail 保留 |
+
+实现后变异 A/B（G04 确定性证据，均恢复）：
+
+| 变异 | 结果 |
+|---|---|
+| 缓存版本检查改为恒真（`if false`） | `content_change` FAIL（陈旧像素被缓存命中）——版本失效逻辑有判别力 |
+| 移除 all-replies-closed 捕获前检查 | `disconnected_client` FAIL（渲染计数 1≠0）——断开跳过机制有判别力 |
+| 移除 submit 去重合并 | `thousand` FAIL（992 请求立即被 cap 拒绝，ready 计数 992≠0）——去重合并有判别力 |
+| 移除捕获后 re-schedule idle | `captures_are_paced` FAIL（step 2 计数 1≠2）——pacing 有判别力 |
+| 版本 content_epoch 置 0（轮次 1 F1 修复后） | `subsurface_commit` FAIL（渲染计数 0≠1）——epoch 有判别力 |
+| 移除 destroyed() epoch bump + surface-set 折叠（轮次 1 F1 修复后） | `subsurface_destroy` FAIL（渲染计数 0≠1）——destroy 失效有判别力 |
+
+### 4. 实现机制（实际）
+
+- **请求预算（A05.1）**：`ThumbnailRequestQueue`（`thumbnail.rs`，主线程单所有权）：`submit` 三序去重/替换/上限——(1) 相同 `(window_id, path, max_width, max_height)` 合并 replies（一次捕获、fan-out 应答）；(2) 同 `(window_id, path)` 不同尺寸 → latest-wins 替换（旧请求回显式 "superseded" 错误）；(3) pending 达 `MAX_PENDING_THUMBNAIL_REQUESTS`(8) 时新请求回显式 "thumbnail request queue is full"（fail-fast 背压，每被接受请求必被服务）。注：去重/替换为对 ≤8 条 pending 的线性扫描（非 O(1)）。
+- **主循环 pacing（A05.3）**：`Niri::schedule_thumbnail_capture`（`capture_scheduled` 标志防重复调度）+ `Niri::run_thumbnail_capture`（每个 idle 回调至多一条捕获；完成后如有剩余经 `insert_idle` 重排——calloop `dispatch_idles` 快照语义保证每条捕获独占一个 loop 迭代，pointer/frame 事件在迭代间正常处理）；渲染闭包只捕获局部量（`backend` 经参数传入，`&mut self.backend` 与 `&self.layout` 字段级借用分离）。
+- **缓存（A05.5）**：key `(window_id, max_width, max_height)` → `{version, width, height, pixels: Arc<Vec<u8>>, last_used}`；LRU 逐出 + 双上限（32 条 / 64MiB）。
+- **内容版本（轮次 1 F1 修复后定稿）**：`ThumbnailVersion` = (a) `content_epoch`——按窗口 root surface 键控的单调纪元（`Niri::bump_thumbnail_content_epoch`，在 `CompositorHandler::commit` 对**每个** surface 的每次 commit 推进、在 `destroyed` 对每次 surface 销毁推进；经既有 `find_root_shell_surface` 把 subsurface/popup commit 归因到窗口 toplevel——该归因含 `popups.find_popup` 扫描，为 commit 热路径新增 O(活 popup 数) 成本，有界且正确性安全，轮次 4 记录接受；dead root 按阈值剪除（`MAX_THUMBNAIL_EPOCH_ENTRIES`=2048，超阈值才全表 retain，每 commit 摊销 O(1)）；u64 回绕时全表清空强制 miss）；(b) `surface_set`——捕获树（toplevel+subsurface+popup）surface id 折叠，popup/subsurface 增删即使无后续 commit 也改版本；(c) output fractional scale bits；(d) alpha bits（`thumbnail_alpha` 与渲染共用单一 alpha 来源）；(e) `block_out_from` 判别（ScreenCapture block-out 规则把缩略图内容替换为纯色块）；(f) popup opacity bits（规则变化无 commit）。命中直接经 publisher 重新发布（跳过 GPU readback）。
+- **完成所有权（A05.2/A05.4）**：`PublishJob.reply` → `replies: Vec<Sender>`（合并 fan-out，全部关闭才取消/删除文件）；`run_thumbnail_capture` 在渲染前检查 all-closed（客户端断开 → 跳过捕获）；`cancel_window_thumbnail` 现同时清队列 pending（回 legacy "window not found" 错误）与缓存；渲染失败/渲染器不可用回显式错误且队列继续。
+- **被替代的旧 authority**：`State::window_thumbnail` 原内联同步捕获（find+render+readback+publish）→ 提交+调度；私有渲染 fn 去 `&self` 化并改名 `render_window_thumbnail`（关联函数，经闭包局部捕获调用）。
+- **为什么没有平行接口**：不改 IPC/CLI/server.rs；`ThumbnailRequestQueue`/缓存/epoch 为 `thumbnail.rs` + `Niri` 字段 + compositor 钩子的同一职责内扩展（roadmap §1.2 同职责扩展记录：缓存失效正确性 A05.5 需要内容纪元，替代方案 per-surface commit 计数聚合经审查确认有 CONFIRMED 陈旧漏洞）；`ThumbnailPublisher` 仍为唯一文件出版 authority；无测试专用生产入口（`thumbnail_queue_test_pending_len` 为 `#[cfg(test)]` 门控观察 accessor）。
+- **为什么没有加入范围外功能**：diff 8 文件（7 改 + 1 新测试文件：compositor.rs、niri.rs、tests/client.rs、tests/mod.rs、thumbnail.rs、utils/lifecycle_diag.rs、window/mapped.rs + 新 tests/thumbnail_budget.rs）；无配置/依赖/视觉变化。
+
+### 5. 验收逐条
+
+| 验收编号 | 方法/命令 | 结果 | 证据 |
+|---|---|---|---|
+| G01 | rg 搜索见第 2 节 | PASS | 搜索表 + 未改点逐项理由 |
+| G02 | git diff 检查 | PASS | 无 V2/New/Fixed 命名；无新接口/flag/第二 IPC |
+| G03 | 专项+全量测试 | PASS | 见全量配置 |
+| G04 | 红绿证明 | PASS | 第 3 节（旧实现 4 红 + 6 变异 A/B） |
+| G05 | 双审查 | 进行中 | 第 6 节（轮次 1-6 已闭合，最终门禁审查进行中；见轮次 7/8 记录） |
+| G06 | commit/push 顺序 | 待执行 | 第 7 节 |
+| G07 | execution-log 完整 | PASS | 本文档 |
+| G08 | 工作树/会话保护 | PASS | 未触碰用户项，未重启会话（全部 headless fixture） |
+| A05.1 | 1,000 突发同窗口 + 去重 + 硬上限 | PASS | `thousand_identical...`（提交零阻塞、999+1 全回复、renders==1）+ 单测 `identical_requests_merge_and_latest_wins_for_same_window` + `full_queue_rejects_new_requests_fail_fast`（pending 上限 8，拒绝带显式错误） |
+| A05.2 | 客户端断开/窗口销毁/output 移除（含最后 output）/renderer reset 无泄漏或 UAF | PASS | `disconnected_client...`（渲染跳过 + 无文件 + 队列空）、`window_destroyed...`（legacy 错误 + 队列/缓存空）、`output_removed...`（确定性应答 + 无残留）、`last_output_removed...`（legacy "window not found" + 无残留）、`renderer_unavailable...`（"primary renderer unavailable" + 恢复后可服务） |
+| A05.3 | 4096×4096 上限请求 event-loop latency 有测量上限，pointer/frame 继续推进 | PASS | `max_size...`（提交 0 阻塞 + 单次迭代实测 <1s）、`real_max_size...`（真实 4096×4096 窗口捕获，实测单迭代 82ms，回复尺寸 4096×4096）、`captures_are_paced...`（每迭代恰好 1 捕获 + 捕获 pending 期间真实 roundtrip 完成且队列推进） |
+| A05.4 | 像素/尺寸/权限/错误响应与旧接口兼容 | PASS | 像素解码断言（RGBA 字节序实测固定）、尺寸断言（`min(max, 窗口)` 不放大、reply 报告实际尺寸）、权限（既有 `validate_tahoe_thumbnail_path` 4 测试不动）、错误串——四条 legacy 串（"window not found or not on an output: {id}"、"thumbnail publisher queue is full"、"thumbnail publisher is unavailable"、"primary renderer unavailable"）对照 HEAD 逐字保持；两条新串（"thumbnail request queue is full"、"thumbnail request superseded by a newer request for the same window"）为 A05.1 硬上限/去重新增语义，措辞与既有风格一致 |
+| A05.5 | 缓存内存上限 + 失效 | PASS | 单测 `cache_evicts_least_recently_used_until_under_caps`（LRU + 字节/条目双上限）、`cache_hit_requires_matching_version_and_stale_entries_are_evicted`、`cancel_window_answers_pending_requests_and_drops_cache`；集成 `unchanged_content...`（renders delta 0）+ `content_change...`（renders delta 1 + 新像素）+ `subsurface_commit...`（subsurface commit 必须失效 + 新像素）+ `subsurface_destroy...`（销毁无后续 commit 也必须失效） |
+
+全量配置（最终）：
+
+| 配置 | 命令 | exit code | 通过/失败明细 |
+|---|---:|---|---|
+| NIRI_FULL | `cargo fmt --all -- --check` | 1（基线失败） | 70 处漂移全部改动前既有（与 HEAD 实测 70 一致；其中 6 处在本次修改文件内、全部位于本 diff hunk 之外：niri.rs 1088/1489/1502/3711、tests/client.rs 1137、lifecycle_diag.rs 317）；本次 7 个文件 hunk 零新增漂移 |
+| NIRI_FULL | `cargo test -p niri --lib` | 0（偶发 EGL 级联，见下） | 613 passed / 0 failed（590 旧 + 23 新：8 新单测 + 15 集成）；并行复跑多数轮次全绿；~6% 轮次发生 smithay EGL 全局态级联 burst（详见 §5.1） |
+| NIRI_FULL | `cargo check --workspace --all-targets` | 0 | Finished，仅 1 条既有 warning（niri-visual-tests 未用 import）；轮次 4 消除 2 条本 diff 曾引入的 dead-code warning（`pending_len` 改 cfg(test)、`TestPopup.popup` 标注 keep-alive）后归零新增 |
+| 实际二进制 | `cargo build -p niri` | 0 | debug 构建通过 |
+| 实际二进制 | `cargo build --release -p niri` | 0 | release 构建通过 |
+| PROTOCOL_FULL | `scripts/check-protocol-sync.sh` | 0 | IN_SYNC |
+| PROTOCOL_FULL | `scripts/check-tahoe-glass-guardrails.sh` | 0 | 全部 guardrail 通过 |
+
+#### 5.1 既有 smithay EGL 全局态并行级联（真实 flake，A/B 归因）
+
+并行全量跑中约 6% 轮次（约 1/17）出现 14-17 个测试同时失败，全部 panic 于 `smithay/src/backend/egl/display.rs`：
+
+- **根 panic**（本 burst 为 `r17_restore_includes_previous_active_when_focus_moves`，T04-era 未修改测试）：`display.rs:279:68` `called Option::unwrap() on a None value` —— smithay 全局 `DISPLAYS`（`LazyLock<Mutex<HashSet<WeakEGLDisplayHandle>>>`）去重逻辑的 `displays.get(&weak_disp).unwrap().handle.upgrade().unwrap()`：并行测试 A 创建 surfaceless EGL display 后在其线程结束/渲染器 drop 使 strong count 归零，恰在测试 B 的 `insert`-check 与 `upgrade()` 之间发生 → upgrade 为 None → 持锁 panic。
+- **级联**：根 panic 持锁 → `DISPLAYS` mutex 永久 poison → 之后所有 `lock().unwrap()`（`:273:48` `PoisonError`）的渲染器测试全部失败（含未修改的 T02-era `window_lifecycle` 7 测试与 T05 测试——均为受害者，非根因）。
+- **A/B 归因**：HEAD（stash 本 diff）并行全量 10 轮零失败；本 diff 全量 ~50 轮 3 次 burst（约 6%，账本统一采用该数字）——本 diff 最终含 13 个 `init_renderer` 调用（15 个集成测试中 12 个需渲染 + `renderer_unavailable` 恢复段；仅 `window_destroyed`、`disconnected_client` 未调用；`last_output_removed` 虽调用但其断言不依赖渲染）提高并行 EGL display 创建并发度，使既有 smithay 竞态暴露概率上升；根 panic 与级联均不涉及本 diff 逻辑（未修改测试也可为根）。归因数据随最终 diff 修正（早期按 9 测试版本统计的 "7 个 add_renderer" 已更新）。
+- **处置**：smithay 外部竞态，T05 范围不可修（不改 smithay；§3.1 禁止顺手改写范围外测试）；专项/子集（thumbnail 31 测试 20+ 轮：15 集成 + 12 thumbnail.rs 单测 + 4 既有 ipc 路径）、串行全量、以及多数并行全量轮次全绿；按 T03 flake 同例如实记录，最终回归与（如可行）上游修复归 T24。
+
+### 6. 独立审查
+
+#### 轮次 1（首次双审查）
+
+**Reviewer A（正确性/生命周期/并发）结论**：NOT-CLEAN。1 条 CONFIRMED + 11 条 CLEAN/NOT-A-FINDING：
+
+- **F1 CONFIRMED（版本聚合漏洞）**：`ThumbnailVersion.surface_commits` 取树内各 surface commit 计数 max——非 max surface（popup/subsurface，计数低于 toplevel）的 commit 或销毁不改变 max → 版本不变 → 缓存确定性命中陈旧像素/陈旧尺寸（popup hover、subsurface 视频帧、已销毁 subsurface 残留），违反 A05.4 与两处 doc 声明（thumbnail.rs "pixel-identical iff version unchanged"、niri.rs "cached captures stay pixel-identical"）。修复要求：聚合改单调量或树级内容纪元，补双 surface 集成测试，修正 doc。
+- F2-F9、F11、F12：CLEAN（根因真实消除；调用点无遗漏；`windows` 借用与 `drop(windows)` 正确；锁序与重入规避核实；`send_blocking` 只阻塞 worker；`capture_scheduled` 无竞态；缓存命中尺寸/路径正确；IPC 语义/错误串/publisher 语义（对照 HEAD）保持；EGL flake 归因如实；`Arc<Vec<u8>>` 所有权无泄漏）。
+- F10（测试有效性弱项，随 F1 修复）：`max_iteration < 1s` 宽松；无多 surface 版本漏洞测试（F1 逃逸原因）——修复后补测。
+
+**Reviewer B（范围/接口/UX/验收）结论**：NOT-CLEAN。3 条 PLAUSIBLE 代码/证据缺口 + 1 条 PLAUSIBLE 文档失真（F5-F8 全部 NOT-A-FINDING/CLEAN，含 `thumbnail_queue_test_pending_len` 非生产入口、无平行接口、diff 7 文件无范围蔓延）：
+
+- **F1 PLAUSIBLE（A05.3 证据夸大）**：`max_size` 测试窗口仅 256×256，实际 GPU 工作非 4096×4096；"测量上限"表述与实测不符。修复：真实 4096×4096 窗口捕获并实测记录。
+- **F2 PLAUSIBLE（缓存版本模型不完整）**：渲染路径还消费 `rules().block_out_from`（ScreenCapture block-out 把缩略图换成纯色块）与 popup 规则 opacity——规则变化无 commit，缓存返回陈旧图像。修复：并入版本 + 补失效测试。
+- **F3 PLAUSIBLE（A05.2 矩阵缺口）**：最后 output 移除用例未测。修复：补测试。
+- **F4 PLAUSIBLE（账本失真）**："8 个新集成测试"实际 9；回填 probe 未披露生命周期；"无测试专用生产入口"与 backfill accessor 措辞矛盾；"O(1) 去重合并"实为 O(n)。修复：本记录已逐项更正（§3 披露、§4 措辞、计数更新为最终 20 新测试）。
+
+**轮次 1 修复（全部落实并复验）**：
+
+1. **F1（Reviewer A）**：放弃 per-surface 计数聚合（smithay `CommitCounter` 无值访问器，sum 不可行；max 有确认漏洞）→ 树级内容纪元：`Niri::thumbnail_content_epochs`（按 root surface 键控）+ `bump_thumbnail_content_epoch`（`CompositorHandler::commit` 对每个 surface 每次 commit 推进、`destroyed` 对每次销毁推进；经既有 `find_root_shell_surface` 归因 popup/subsurface 到窗口 toplevel；剪枝 dead root；u64 回绕清表强制 miss）+ `surface_set`（捕获树 surface id 折叠，覆盖无 commit 的增删）+ block_out/popup-opacity 并入版本（F2）。两处 doc 声明同步修正。
+2. **F10（Reviewer A）/F3（Reviewer B）**：新增 4 个集成测试：`subsurface_commit_invalidates_cache_and_refreshes_pixels`（subsurface commit 必须失效 + 新像素）、`subsurface_destroy_invalidates_cache`（销毁无后续 commit 也必须失效）、`last_output_removed_with_pending_request_fails_with_legacy_error`、`real_max_size_capture_keeps_measured_iteration_latency_bounded`（真实 4096×4096 窗口捕获：单迭代实测 82ms < 2s 界，回复尺寸 4096×4096）。
+3. **F4（Reviewer B）**：账本更正（本记录）。
+4. 修复后复验：2 项新变异 A/B 红（epoch 置 0 → `subsurface_commit` FAIL；destroyed bump + surface-set 移除 → `subsurface_destroy` FAIL）；610 全量测试通过；fmt 70 处基线（7 文件 hunk 零新增）；debug/release 构建 + PROTOCOL_FULL 通过。
+
+#### 轮次 2（修复后全新双审查）
+
+**Reviewer A2（正确性/生命周期/并发）结论**：NOT-CLEAN。3 条 PLAUSIBLE（F1-F3）+ 1 条 NOT-A-FINDING（F4）：
+
+- **F1 PLAUSIBLE（版本完整性残留）**：版本只含 popup opacity/block_out，渲染还消费 `popups.background_effect`（glass 参数）、`popups.geometry_corner_radius` 与窗口 `blur_config`（mapped.rs:859-867）——配置重载/规则重算无 commit 时缓存返回陈旧 popup 像素；与轮次 1 F1/F2 同族未闭合。另指出 `thumbnail.rs:59-67` "covers every input" doc 过度声明。
+- **F2 PLAUSIBLE**：`max_size` 提交期 `<5ms`、迭代 `<1s/2s` 墙钟断言在慢 CI 有 flake 风险（核心判别断言均确定性）。
+- **F3 PLAUSIBLE（账本）**：EGL 归因 "7 个 add_renderer" 与最终 diff（13 个 init_renderer）不符。
+- F4 NOT-A-FINDING：epoch 每次 commit 全表 retain 为热路径 O(n) 注记。
+
+**Reviewer B2（范围/接口/UX/验收）结论**：NOT-CLEAN。4 条 PLAUSIBLE（F1-F4）+ 2 条 CLEAN/NOT-A-FINDING（F5-F6）：
+
+- **F1 PLAUSIBLE**：同 A2-F1（popup background_effect/blur_config 未入版本 + 两处 doc 过度声明）。
+- **F2 PLAUSIBLE**：`bump_thumbnail_content_epoch` 每次任意 surface commit 全表 `retain(alive)` 为 compositor 最热路径新增 O(n)；layer/lock 等非窗口 root 也累积条目。
+- **F3 PLAUSIBLE（账本）**：a) §2 允许修改清单缺 compositor.rs/lifecycle_diag.rs；b) `renderer_unavailable` 无出处记录（8+4=12≠13）；c) fmt 行号微差。
+- **F4 PLAUSIBLE（证据矩阵）**：popup commit/destroy 失效机制完整但零端到端测试（A-F1 点名 "popup hover" 只补了 subsurface 两条）；scale 变化失效无直测。
+- F5 NOT-A-FINDING（renderer_unavailable 近似 EGL reset 可接受）；F6 CLEAN。
+
+**轮次 2 修复（全部落实并复验）**：
+
+1. **F1（A2/B2）**：`ThumbnailVersion` 新增 `popup_effect_bits`（`background_effect` 全字段 + `geometry_corner_radius` 的确定性折叠）与 `blur_config_bits`（`Mapped::blur_config()` 只读 getter 补入 mapped.rs，`Blur` 全字段折叠）；doc 声明修正为实际覆盖项。
+2. **F2（A2）**：`max_size` 提交期 `<5ms` 墙钟断言改为确定性功能断言（`thumbnail_queue_test_pending_len()==4`——旧实现同步服务后队列为空，判别力更强）；1s/2s 迭代界保留并标注为宽松机器相关 sanity。
+3. **F2（B2）**：epoch 剪枝改阈值式（`MAX_THUMBNAIL_EPOCH_ENTRIES`=2048，超阈值才全表 retain）——每 commit 摊销 O(1)，死条目有界。
+4. **F4（B2）**：新增 `popup_commit_invalidates_cache_and_refreshes_pixels`（真实 xdg_popup 夹具：create→首 commit 触发 initial configure→ack→attach→map→捕获→popup commit→必须失效+新像素）与 `output_scale_change_invalidates_cache_and_refreshes_size`（真实 output scale 1.0→2.0，版本 scale bits 变化→重渲染+新尺寸 128×128）。popup 规则折叠（blur/background_effect 等）的端到端判别在 headless fixture 无法驱动配置重载，以书面裁决关闭：折叠为渲染消费的同一规则值的纯函数，任何规则差异必然改变版本（miss 方向安全）；变异 A/B 覆盖 epoch/surface_set 判别。
+5. **F3（A2/B2）**：账本修正（本记录 + §2 允许清单 + §5.1 归因计数更新为最终 diff）。
+6. 修复后复验：612 全量测试通过；fmt 70 处基线（8 文件 hunk 零新增）；debug/release 构建 + PROTOCOL_FULL 通过。
+
+#### 轮次 3（修复后全新双审查）
+
+**Reviewer A3（正确性/生命周期/并发）结论**：NOT-CLEAN。1 条 CONFIRMED + 2 条 PLAUSIBLE + 2 条 NOT-A-FINDING：
+
+- **F-1 CONFIRMED（折叠编码碰撞）**：`fold_option_f64`/`popup_opacity_bits` 用 `map_or(0, to_bits)`——`None` 与 `Some(0.0)` 折叠相同（bits(0.0)=0），但渲染端明确区分（popup opacity `None`=全不透明 vs `Some(0.0)`=全透明；`contrast`/`saturation` `Some(0.0)` 可见效果 vs 未设置）；配置重载（无 commit）后可稳定复现陈旧像素，违反 "version unchanged ⇒ pixel-identical" 不变量，并推翻轮次 2 对规则折叠的书面裁决。
+- **F-2 PLAUSIBLE**：`output_scale_change` 测试未隔离 scale-bits 分量（理论共因：scale 变更后 layout 可能下发 resize configure 使客户端 commit → epoch 失效掩盖 scale bits 判别）。
+- **F-3 PLAUSIBLE（3 处注释/账本失真）**：bump doc "pruned on each bump" 与阈值剪枝实现矛盾；`ThumbnailVersion` doc 被 F-1 证伪；账本把新串 "thumbnail request queue is full" 标为"逐字保持"。
+- **F-6 NOT-A-FINDING（流程）**：diff 工件不含 untracked 集成测试文件（已 `git add -N` 修正，本工件 2612 行含全部 15 集成测试）。
+- 其余（轮次 2 修复真实到位、回绕/剪枝交互安全、popup 夹具归因链真实连通、无新锁/UAF/泄漏、§3.2 保持、EGL 归因如实）CLEAN。
+
+**Reviewer B3（范围/接口/UX/验收）结论**：NOT-CLEAN。5 条 PLAUSIBLE（F1-F5）+ 6 条 NOT-A-FINDING（F6-F11）：
+
+- **F1-F4 PLAUSIBLE（账本/注释失真）**：① bump doc "pruned on each bump" 陈旧（同 A3-F3.1）；② §5.1 init_renderer 归因列举错误（`last_output_removed` 实际调用了 init_renderer）+ flake 概率 8%/10% 前后不一；③ "thumbnail request queue is full" 误标为既有措辞（HEAD 对照仅 publisher 串存在）；④ 文件计数 7/8 互斥。
+- **F5 PLAUSIBLE（证据缺口）**：popup 无 commit 增/删的失效无端到端判别，且轮次 2 书面裁决只覆盖规则折叠、未覆盖 surface_set 的 popup 分量。
+- F6-F11 全部 NOT-A-FINDING（A-F2 功能断言落实、规则折叠+getter+doc 落实、无平行接口、范围克制 8 文件、测试算术 612=590+22 与并行安全、错误串兼容主张成立）。
+
+**轮次 3 修复（全部落实并复验）**：
+
+1. **F-1（A3，CONFIRMED）**：`fold_option_f32`/`fold_option_f64` 改为单射编码（`map_or(0, |v| bits(v).wrapping_add(1))`——`None`→0、`Some(0.0)`→1、`Some(1.0)`→bits(1.0)+1）；`popup_opacity_bits` 改用 `fold_option_f32`；`ThumbnailVersion` doc 修正并注明单射性；新增单测 `option_folds_distinguish_none_from_zero`（None/Some(0.0)/Some(1.0) 两两不同 + option-bool 三态不同）。
+2. **F-2（A3）**：scale-bits 判别变异 A/B 实测红（`output_scale_bits` 置常量 → `output_scale_change` FAIL，renders delta 0≠1）——证明失效由 scale bits 驱动（fixture 在 scale 变更后无 commit，epoch 不变），记录为本轮证据。
+3. **F-3（A3）/F1-F4（B3）**：bump doc 改为阈值剪枝措辞（niri.rs + 本记录）；账本 A05.4 错误串表述修正（四条 legacy 逐字保持 + 两条新串标注）；§5.1 init_renderer 归因列举与概率数字统一（~6%）。
+4. **F-5（B3）**：书面裁决补记——popup 增/删失效由两条既有机制覆盖：增（含首 commit）走 commit 钩子 + `find_popup` 归因（`popup_commit` 测试端到端实证该归因链）；删走 `destroyed()` 钩子（`subsurface_destroy` 测试实证同一钩子路径）且捕获时 `surface_set` 折叠（popup 枚举在 `thumbnail_content_version` 内）随 PopupManager 返回集变化，二者均 miss 方向安全。
+5. **F-6（A3）**：`git add -N` 纳入新测试文件，本工件 2612 行含完整 diff。
+6. 修复后复验：613 全量测试通过（590 旧 + 23 新：7 新单测 + 15 集成 + 1 折叠单测）；fmt 70 处基线；debug/release 构建 + PROTOCOL_FULL 通过。
+
+#### 轮次 4（修复后全新双审查）
+
+**Reviewer A4（正确性/生命周期/并发）结论**：NOT-CLEAN。1 条 PLAUSIBLE + 3 条 NOT-A-FINDING：
+
+- **F-1 PLAUSIBLE**：`option_folds_distinguish_none_from_zero` 只测 helper，不经 `thumbnail_content_version` 版本路径——路由行（`popup_opacity_bits` 经 `fold_option_f32`）若被回退为裸 `map_or(0, to_bits)`，该测试不变红；对轮次 3 已修缺陷判别力成立，但版本路径回归无防护。→ **书面裁决（接受单点风险）**：路由行为单行且 helper 契约注释明确（"single-injective"）；集成夹具无法在 headless 中驱动配置重载构造 `Some(0.0)` 规则（`Fixture::with_config` 无运行中 reload 路径）；版本路径其余字段（scale/alpha/epoch/surface_set/block_out）均有集成级判别；单点风险记录在案，回归由轮次 3 单测 + 版本路径集成测试（scale/alpha/epoch）组合防护。
+- **F-3 NOT-A-FINDING（记录）**：4096×4096 条目（67MB）> 64MiB 缓存字节上限 → 发布后立即逐出 → 上限尺寸窗口不缓存——符合 A05.5 规格（发布先于逐出，无正确性影响）。
+- F-2/F-4 NOT-A-FINDING（墙钟 sanity、worker 轮询窗口充裕）。
+
+**Reviewer B4（范围/接口/UX/验收）结论**：NOT-CLEAN。2 条 CONFIRMED（账本/卫生）+ 2 条 PLAUSIBLE + 2 条 NOT-A-FINDING：
+
+- **F1 CONFIRMED（账本）**：§4 仍写"每次 bump 剪除 dead root"，与阈值剪枝实现矛盾。
+- **F2 CONFIRMED（账本+构建卫生）**：全量配置行"仅 1 条既有 warning"不实——实测 3 条，其中 2 条为本 diff 新增 dead-code（`pending_len` 非测试构建无调用者、`TestPopup.popup` 未读）。
+- **F3 PLAUSIBLE**：§2 "6 改 + 2 扩展"与 §4 "7 改 + 1 新"子划分互斥。
+- **F4 PLAUSIBLE**：commit 钩子新增 O(活 popup 数) 扫描未记录。
+- F5/F6 NOT-A-FINDING（NaN 理论碰撞配置不可达；单测计数算术）。
+
+**轮次 4 修复（全部落实并复验）**：
+
+1. **F1（B4）**：§4 内容版本段改为阈值剪枝措辞（本记录）。
+2. **F2（B4）**：`pending_len` 改 `#[cfg(test)]`；`TestPopup.popup` 标注 keep-alive `#[allow(dead_code)]`；`cargo check --workspace --all-targets` 复验仅剩 1 条既有 warning；账本更正。
+3. **F3（B4）**：§2 与 §4 文件子划分统一为"7 改 + 1 新"。
+4. **F4（B4）**：§4 记录 commit 热路径 O(popups) 归因成本为接受项。
+5. **F-1（A4）**：书面裁决（见上）。
+6. 修复后复验：613 全量测试通过；fmt 70 处基线；debug/release 构建 + PROTOCOL_FULL 通过。
+
+#### 轮次 5（账本修正后全新双审查）
+
+**Reviewer A5（正确性/生命周期/并发）结论**：**CLEAN** —— 轮次 4 全部 finding 修复/裁决核实到位（5/5）；版本不变量对穷举反例全部成立（含几何动画反例经渲染路径核实无效、popup 移动必走 commit、64 位折叠碰撞方向安全）；测试判别力与并行安全独立重跑核实；锁/生命周期/UAF/泄漏/时序 CLEAN；§3.2 与任务外行为保持；A05.1-A05.5 证据链完整可重复；注释账本一致；A4-F1 单点风险裁决合理。唯一注意项（F9：real_max_size 计时不含旧实现 submit 期阻塞，作为"测量上限"证据弱，但判别性由 max_size/pacing 承担）为证据强度注记，账本已如实披露（82ms 实测记录）。
+
+**Reviewer B5（范围/接口/UX/验收）结论**：NOT-CLEAN（3 条 PLAUSIBLE 账本文档失真，均已修复）：F1 §3 设计段仍把新串 "thumbnail request queue is full" 标为"既有措辞"；F2 fmt 漂移行号与实测不符（client.rs 1081→1137、niri.rs 3712→3711）；F3 §3 出现重复 "### 3." 编号 + `renderer_unavailable` 引入批次无记录。F4/F5 NOT-A-FINDING（A4-F1 裁决合理、EGL flake 记录真实），F6 CONFIRMED（轮次 4 修复全部到位）。
+
+轮次 5 修复：三处账本修正（措辞改"新措辞/新语义新增"；行号按实测 3711/1137 更新；§3 设计段编号与 §3.1 批次记录——首批红跑 8 + 验证期补 1（renderer_unavailable，非红跑对象）+ 轮次 1 补 4 + 轮次 2 补 2 = 15 集成测试）。
+
+#### 轮次 6（最终门禁双审查）
+
+**Reviewer A6（正确性/生命周期/并发）结论**：NOT-CLEAN（1 条 CONFIRMED + 7 条 NOT-A-FINDING/CLEAN）：
+
+- **Finding 1 CONFIRMED（IME popup 合成器侧重定位）**：IME input-method popup 经 `zwp_input_method` `set_text_input_rectangle` → smithay `popup_repositioned` → niri `position_popup_within_rect` IME 分支 `popup.set_location()` **无 wl_surface commit 立即生效**；捕获渲染 popup 位置 = `offset - popup.geometry().loc`（mapped.rs:842-862，offset 实时读 `PopupSurface::location()`）；`set_location` 改变该差分 → 缩略图像素改变但 epoch/surface_set/规则/scale 全不变 → 版本相同 → 缓存命中陈旧 popup 位置。XDG popup 重定位均走 commit（epoch 覆盖），仅 IME 路径在 commit 外改渲染输入。相对旧实现（每请求重渲染）为正确性回归，击穿 "version unchanged ⇒ pixel-identical" 不变量。
+- 其余（轮次 5 账本修正到位、版本不变量其余分类穷举成立、测试判别/并行安全/锁生命周期/§3.2/A05 验收/注释）全部 NOT-A-FINDING/CLEAN；两条账本微瑕记录（§5.1 "thumbnail 28 测试"与实测差 1、iff 文档随 Finding 1 修复同步收窄）。
+
+**Reviewer B6（范围/接口/UX/验收）结论**：NOT-CLEAN（仅 F1 账本记录未闭合，无产品缺陷）：F1 PLAUSIBLE §6 轮次 5 记录缺失（B5 修正已入正文但轮次记录本身未写）；F2 CLEAN（产品代码 8 文件、613 计数、legacy 串、无平行接口/范围蔓延、A05.1-5 证据全部 CONFIRMED）。
+
+**轮次 6 修复（全部落实并复验）**：
+
+1. **A6-F1（CONFIRMED，产品修复）**：`thumbnail_content_version` 的 popup 循环把每个 popup 的渲染位置差分（`offset - geometry.loc`，与 `render_popups` 消费的同一值）折叠进 `surface_set`——IME `set_location` 无需 commit 即改变该差分 → 版本必然变化（miss 方向安全）；XDG popup 移动仍由 epoch 覆盖（位置折叠对 commit 路径冗余但无害——只会造成保守 miss）。`ThumbnailVersion` doc 更新为覆盖"per-popup render positions / 非 commit 重定位（IME）"。
+2. **A6-F1 测试裁决（书面）**：headless fixture 无法驱动 `zwp_input_method` 协议构造 IME popup 重定位；位置折叠为渲染消费同一值的纯函数（构造性正确）；commit 驱动路径（XDG popup/subsurface）已有端到端判别测试；残余风险记录在案。
+3. **B6-F1（账本）**：§6 轮次 5 记录（本节）与本轮门禁记录。
+4. 修复后复验：613 全量测试通过；fmt 70 处基线；debug/release 构建 + PROTOCOL_FULL 通过。
+
+#### 轮次 7（位置折叠修复后全新双审查）
+
+**Reviewer A7（正确性/生命周期/并发）结论**：**CLEAN** —— 轮次 6 位置折叠修复真实到位（折叠与 `render_popups` 消费同一活值；IME `set_location` 系 smithay `input_method_popup_surface.rs:88-94` 纯 mutex 写、无 commit 改差分）；版本不变量穷举全部成立；测试判别力与并行安全独立复跑核实；锁/生命周期/UAF/泄漏/时序 CLEAN；§3.2 与任务外行为保持；A05.1-5 证据可重复；两条账本微瑕记录（§5.1 计数、4096² 条目恰 64MiB 的表述）不构成阻断。
+
+**Reviewer B7（范围/接口/UX/验收）结论**：NOT-CLEAN（2 条 PLAUSIBLE 账本计数失实，均已修正）：F1 §2 G01 搜索表命中数与 HEAD 实测不符（Phase 1 实现前快照 vs 实现后状态；`thumbnail_publisher` 3 vs 现 4、`cancel_window_thumbnail` 4 vs 3、`with_renderer_surface_state` 0 vs HEAD ~32、`render_to_vec` 5 vs 11）——修改/不修改判定全部正确，仅计数口径需披露；F2 §5.1 "thumbnail 28 测试" 与实测 31 不符。其余（轮次 6 修复到位、迁移完整、无平行接口/范围蔓延、矩阵/A05/G01-G08 除 F1/F2 外成立、错误串准确）全部 NOT-A-FINDING/CLEAN。
+
+轮次 7 修复：G01 表头标注"Phase 1 实现前搜索快照；行号与命中数为当时状态，本 diff 已按实现后状态复核，修改/不修改判定不变"；§5.1 计数改为 31（15 集成 + 12 thumbnail.rs 单测 + 4 既有 ipc 路径）。
+
+#### 轮次 8（最终门禁双审查）
+
+**Reviewer A8（正确性/生命周期/并发）结论**：**CLEAN** —— 轮次 7 两条账本修正实测到位（31 计数 15+12+4 精确、Phase-1 标注与 diff 一致）；版本不变量穷举（commit/destroy/增删/XDG+IME 位置/scale/alpha/block_out/popup 规则/blur/单射/几何动画/transform/窗口自身 background_effect 非缩略图输入）全部成立；测试判别力与并行安全复跑核实；锁/生命周期/时序 CLEAN；§3.2 保持；A05.1-5 证据可重复；注释账本一致；残余风险（find_popup O(活 popup)、64 位折叠理论碰撞、EGL 并行 flake 外部根因）均已书面记录或裁决。
+
+**Reviewer B8（范围/接口/UX/验收）结论**：NOT-CLEAN（1 条 CONFIRMED 账本文本 + 完成义务项，均已处理）：F1 §5 G05 行括号"轮次 2 进行中"与 §6 已记录的轮次 2-6 闭合事实矛盾（一行文本，已修正）；F2 补记本轮门禁记录与 §7/§8（G07 完成义务，随 §7 commit/push 收据执行）。其余（Phase-1 标注语义、window_destroyed 弱断言判别力由 legacy 串承担、EGL 归因 13 个 init_renderer 实测、reduced-motion/几何动画反例、版本不变量残余风险裁决、迁移/平行接口/范围/矩阵/A05/错误串/并行安全）全部 NOT-A-FINDING/CLEAN。
+
+**最终门禁结论**：产品代码 8 文件（7 改 + 1 新测试文件）历经 8 轮全新只读双审查——A 侧轮次 5/7/8 三次 CLEAN，B 侧全部 CONFIRMED/PLAUSIBLE 均已修复或书面裁决，最终账本无未裁决 finding。613 全量测试通过（590 旧 + 23 新），fmt 70 处基线（修改文件内 6 处既有漂移全部位于 hunk 外），debug/release 实际二进制构建通过，PROTOCOL_FULL 通过。进入第 7 节 commit/push。
+
+### 7. 产品 Commit 与 push 收据
+
+| 仓库 | Commit hash | Commit subject | Branch | Remote ref | push 结果 | ancestor 验证 |
+|---|---|---|---|---|---|---|
+| niri | `79448ad4ef55981c79844119d12c1e273a08f077` | `fix(thumbnail): T05 thumbnail main-loop budget — bounded latest-wins queue, pacing, content-versioned cache` | `tahoe-layer-animations` | `origin/tahoe-layer-animations` | `cc772d0a..79448ad4` 成功（首次推送遇 github 网络瞬断，重试成功） | `git merge-base --is-ancestor 79448ad4 origin/tahoe-layer-animations` exit 0 |
+| main | `21fb5cfcb4785b86f2fa097cdd80b05d65a5351c` | `fix(submodule): bump niri for T05 thumbnail main-loop budget (bounded latest-wins queue, pacing, content-versioned cache)` | `fix/tray-menu-pinned-surface-height` | `origin/fix/tray-menu-pinned-surface-height` | `b919921..21fb5cf` 成功 | `git merge-base --is-ancestor 21fb5cf origin/fix/tray-menu-pinned-surface-height` exit 0 |
+
+主仓库子模块指针是否只指向已推送 commit：
+
+```text
+git submodule status niri → 79448ad4（= 已推送 niri commit hash）
+```
+
+### 8. 未覆盖、用户现场项与后续边界
+
+- 未覆盖：无产品代码缺口（A05.1-A05.5 全通过）。IME input-method popup 重定位与配置重载规则变化的端到端判别在 headless fixture 不可达（无 zwp_input_method 绑定、无运行中 config reload 路径），以版本折叠的构造性正确 + 书面裁决闭合（见 §6 轮次 6 A6-F1）。
+- 需要用户授权的实时验证：无（纯源码/测试任务，未重启会话、未真实拔插、未部署）。
+- 发现但属于后续任务的事项（只记录，未修改）：
+  - **smithay EGL display 全局态并行级联（T24）**：见 §5.1——根 panic 在 smithay `egl/display.rs:279:68`（DISPLAYS 去重 `upgrade().unwrap()` 竞态），持锁 panic → 全局 mutex poison → 级联；本 diff 以 13 个 `init_renderer` 测试提高暴露概率；未修改测试也可为根；最终回归与（如可行）上游修复归 T24。
+  - **T01-era 测试计数器竞争（T24）**：T03 记录在案的既有并行竞争，本任务未新增无锁写者（lifecycle 计数经 `with_enabled_for_test` 序列化）。
+  - **版本折叠残余理论风险（已记录接受）**：64 位折叠的对抗性碰撞（需配置不可达的 NaN 位型或 2^-64 级碰撞）；`find_popup` 归因为 commit 热路径新增 O(活 popup 数) 扫描（有界、正确性安全）；A4-F1 单点路由风险（折叠单测不经版本路径）。
+  - **4096×4096 条目与缓存上限**：67MB（=64MiB 边界）条目发布后即逐出，上限尺寸窗口不缓存——符合 A05.5 规格（发布先于逐出）。
+
+### 9. 完成判定
+
+**最终状态**：COMPLETE
+**理由**：A05.1-A05.5 + G01-G08 满足；旧实现 4 红 + 8 变异 A/B 红证；8 轮全新只读双审查（A 侧轮次 5/7/8 CLEAN，B 侧全部 CONFIRMED/PLAUSIBLE 已修复或书面裁决，最终门禁无未裁决 finding）；fmt 70 处基线为改动前既有（修改文件内 6 处既有漂移全部位于 hunk 外）；613 全量测试通过（590 旧 + 23 新）；debug+release 实际构建通过；PROTOCOL_FULL 通过；niri 与主仓库产品 commit 均已 push 且远端 ancestor 验证 exit 0；子模块指针只指向已推送 commit。
+**下一任务是否允许开始**：YES（本文档闭环 commit push 完成后）
+
+### 10. 闭环记录审查与推送
+
+- Closure reviewer（全新只读上下文）：待执行。
+- 产品 commit hash/remote receipt 是否逐项准确：待 closure reviewer 实测核对。
+- 状态是否可置 COMPLETE/RESOLVED-NO-CODE：是（COMPLETE）
+- docs-only closure commit subject：`docs(execution): T05 close task record`
 - closure push remote ref：`origin/fix/tray-menu-pinned-surface-height`
 - closure remote ancestor 验证 exit code：待 push 后以命令输出验证（本 commit 不记录自身 hash，由后续 `git log --format=%H -- execution-log.md` 解析）

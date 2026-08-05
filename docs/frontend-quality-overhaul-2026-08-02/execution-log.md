@@ -1192,9 +1192,9 @@ git submodule status niri → 79448ad4（= 已推送 niri commit hash）
 
 ### 10. 闭环记录审查与推送
 
-- Closure reviewer（全新只读上下文）：待执行。
-- 产品 commit hash/remote receipt 是否逐项准确：待 closure reviewer 实测核对。
+- Closure reviewer（全新只读上下文）：完成，结论 PASS（Git/产品收据一致；§10 之前的日志闭环缺口已确认）。
+- 产品 commit hash/remote receipt 是否逐项准确：是；主仓库 `21fb5cf`、niri `79448ad4` 均已推送，两个 remote ancestor 验证 exit 0，子模块指针一致。
 - 状态是否可置 COMPLETE/RESOLVED-NO-CODE：是（COMPLETE）
 - docs-only closure commit subject：`docs(execution): T05 close task record`
 - closure push remote ref：`origin/fix/tray-menu-pinned-surface-height`
-- closure remote ancestor 验证 exit code：待 push 后以命令输出验证（本 commit 不记录自身 hash，由后续 `git log --format=%H -- execution-log.md` 解析）
+- closure remote ancestor 验证 exit code：0（当前 `HEAD=ed1d9047` 已在 `origin/fix/tray-menu-pinned-surface-height`；本 commit 不记录自身 hash，由后续 `git log --format=%H -- execution-log.md` 解析）

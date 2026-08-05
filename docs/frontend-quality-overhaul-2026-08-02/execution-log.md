@@ -1,7 +1,7 @@
 # Tahoe Desktop 路线图执行日志
 
 **用途**：T01-T24 的唯一状态锁与证据账本。
-**当前状态**：T05 COMPLETE（产品实现、8 轮双审查、全量验证、产品 commit/push 完成；docs-only 闭环 commit 待执行）。
+**当前状态**：T06 COMPLETE（Quickshell 产品与主仓库指针已推送并远端验证；本次 docs-only closure 完成后可开始 T07）。
 **禁止**：预填测试结果、审查结论、commit/push 收据或把计划写成已完成事实。
 
 ---
@@ -15,7 +15,7 @@
 | T03 | COMPLETE | niri `0b717b19`（tahoe-layer-animations）/ main `1e945e5`（fix/tray-menu-pinned-surface-height） | 4 轮双审查，最终两轮产品代码 CLEAN | layer lock/damage/redraw（guard 三阶段分离 + damage cap/drain + root 归因 + 8 红绿测试） |
 | T04 | COMPLETE | niri `cc772d0a`（tahoe-layer-animations）/ main `c177402`（fix/tray-menu-pinned-surface-height） | 9 轮双审查，最终两轮产品代码 CLEAN + 账本修正 | pointer/focus transaction |
 | T05 | COMPLETE | niri `79448ad4`（tahoe-layer-animations）/ main `21fb5cf`（fix/tray-menu-pinned-surface-height） | 8 轮双审查，最终门禁 A 侧 CLEAN、B 侧全部闭合 | thumbnail budget |
-| T06 | PENDING | - | - | QsPaths |
+| T06 | COMPLETE | Quickshell `4712657a`（quickshell-tahoe-desktop）/ main `aea8b30e`（fix/tray-menu-pinned-surface-height） | 最终双 CLEAN + closure reviewer PASS | QsPaths sticky failure state machine |
 | T07 | PENDING | - | - | FileView async |
 | T08 | PENDING | - | - | TahoeGlass mapping |
 | T09 | PENDING | - | - | TahoeGlass feedback |
@@ -1198,3 +1198,148 @@ git submodule status niri → 79448ad4（= 已推送 niri commit hash）
 - docs-only closure commit subject：`docs(execution): T05 close task record`
 - closure push remote ref：`origin/fix/tray-menu-pinned-surface-height`
 - closure remote ancestor 验证 exit code：0（当前 `HEAD=ed1d9047` 已在 `origin/fix/tray-menu-pinned-surface-height`；本 commit 不记录自身 hash，由后续 `git log --format=%H -- execution-log.md` 解析）
+
+## T06 QsPaths 失败状态机
+
+**状态**：COMPLETE
+**开始时间**：2026-08-05
+**roadmap 引用**：`roadmap.md#T06`（第 174-192 行）；发现 `research-report.md#STAB-05`
+**执行者上下文**：OpenCode / Codex 会话（Quickshell 子模块 `quickshell-tahoe-desktop`）
+
+### 1. 前提核实
+
+| 报告判断 | 当前证据 | 等级 | 结论 |
+|---|---|---|---|
+| `instanceRunDir()` 失败后检查了错误的状态字段 | 旧 `quickshell/src/core/paths.cpp:143-144`：创建失败写 `instanceRunState=Failed`，返回前却检查 `shellRunState` | CURRENT-CONFIRMED | 成立；红跑同时证明两个方向：instance 失败错误返回非空、shell 失败错误返回空 instance |
+| base 失败后 path helper/link 入口可崩溃或产生错误相对路径 | 旧 `paths.cpp:53` 直接解引用 `baseRunDir()`；旧 `ipcPath()` 把空 `QString` 包成 `QDir` 可形成相对 `ipc.sock`；旧 `linkRunDir()` 直接 `baseRunDir()->filePath(...)` | CURRENT-CONFIRMED | 成立；红跑在 `QsPaths::basePath -> QDir::filePath` 真实 SIGSEGV |
+| Unknown/Ready/Failed 应为 sticky 单向状态 | `paths.hpp:51-55` 定义三态；四个 runtime getter 仅在 Unknown 时执行 `mkpath` | CURRENT-CONFIRMED | 保持现有单次初始化契约；失败后移除 blocker 仍不得重试，成功/失败只能由新进程重新初始化 |
+| `linkRunDir()`/`linkPathDir()` 重复取 base pointer | 旧 `paths.cpp:172-218`、`:221-248`：依赖 getter 内部验证后再次直接解引用 base | CURRENT-CONFIRMED | 原地保存并复用已验证 pointer；不新增 helper |
+| 成功路径 authority 为 base/by-id、by-pid、by-shell、by-path | 旧 `paths.cpp:53-60`、`:172-248`；生产入口 `launch.cpp:171-173` | CURRENT-CONFIRMED | 路径布局、绝对 canonical symlink target 与调用顺序保持 |
+| 没有第二套 path helper 或独立失败 authority | 全仓检索：runtime 状态/目录 authority 全部在 `src/core/paths.hpp/.cpp`；唯一生产 `QsPaths::init` 为 `src/launch/launch.cpp:171` | CURRENT-CONFIRMED | 原地修改 |
+
+### 2. 工作树与范围
+
+开始时主仓库有用户未跟踪项 `.zcode/`、`Testing/`，以及已建立的本 T06 execution-log；Quickshell 子模块存在前一执行上下文遗留的 T06 未提交草稿。该草稿逐行审阅后保留任务内正确部分、删除不必要的 `init()` 全状态重置，并补全测试与 pointer 复用。Quickshell 基线 HEAD `5a984c7f1a80ed523017de8b6158ded39b14fa74`，branch `quickshell-tahoe-desktop`。
+
+最终产品修改文件（3 个；另更新本 `execution-log.md`）：
+
+- `quickshell/src/core/paths.cpp`：现有 QsPaths 状态返回、空 path 传播、base pointer 复用。
+- `quickshell/src/core/test/paths.cpp`：新增临时目录/权限/mkdir/link 行为测试；每个场景 fork 独立进程，避免 singleton sticky 状态互相污染。
+- `quickshell/src/core/test/CMakeLists.txt`：注册现有 core test authority 下的 QsPaths 测试。
+- `execution-log.md`：当前任务证据与闭环记录。
+
+明确禁止修改：
+
+- `quickshell/src/launch/*`、`src/ipc/*`、Dock/launcher 调用者：调用者无需旁路 try/catch，错误由 QsPaths 现有 pointer contract 与既有支配 guard 收敛。
+- 新增 `safeInstanceRunDir()`、QsPaths V2 或长期 feature flag。
+- 主仓库用户项 `.zcode/`、`Testing/` 和 T07 及后续任务文件。
+
+定义/调用点/测试搜索：
+
+| `rg` 命令 | 当前命中/结论 | 修改点 | 不修改点及理由 |
+|---|---|---|---|
+| `DirState|baseRunDir|shellRunDir|shellVfsDir|instanceRunDir|basePath|ipcPath|linkRunDir|linkPathDir`（core/launch/ipc） | 全部生产与测试命中已分类；定义均在 `paths.hpp/.cpp` | `paths.cpp` 单一 authority | launch/command/ipc/logging/tooling 调用者由既有 guard 支配；API/signature 不变 |
+| `QsPaths::init` | 生产调用唯一 `src/launch/launch.cpp:171`，测试调用 `core/test/paths.cpp:39` | 不修改生产 init 语义 | singleton 测试用 fork 隔离；避免加入重复 init/旧 link 清理等 roadmap 外生命周期语义 |
+| `linkRunDir|linkPathDir` | 生产入口 `launch.cpp:172-173` | 两函数内部保存 `baseRunDir` pointer 并复用；行为测试走原入口 | 不新增 link helper/返回值/错误接口 |
+| `BUILD_TESTING|qs_test` | `src/core/CMakeLists.txt:64`、`src/core/test/CMakeLists.txt:1-17` | 现有 core test 列表增加 `qspaths` | 不新建框架或依赖 |
+| nullable getter 直接解引用 | tooling 的 `shellVfsDir()` 仍有 3 处既有直接解引用 | 不修改 | T06 验收限定 base/shell/instance runtime 与 link 状态机；tooling 独立调用契约不在 roadmap 当前边界，记录但不越界 |
+| `basePath|ipcPath` 生产消费者 | `readLogFile()` 与 `IpcClient::connect()`；所有现有调用均先通过 `selectInstance()` 的 `baseRunDir()` Ready guard | 不修改 | Ready/Failed sticky 保证同一进程后续 getter 不会转为空；空路径分支在真实生产调用链不可达。为不可达防御分支增加宏替身白盒测试/产品 seam 会制造 T06 范围外旁路 |
+
+### 3. 旧实现失败基线
+
+临时 worktree 固定原始 HEAD `5a984c7`，只应用最终 `src/core/test/paths.cpp` 与 CMake 注册，不应用任何生产修复。构建成功后运行 `ctest -R '^qspaths$' --output-on-failure`：exit 8，QtTest **6 passed / 3 failed**（7 个行为 slot 中 4 guardrail pass、3 根因 fail；另含 init/cleanup pass）。临时 worktree 随后删除。
+
+| 测试 | 旧结果 | 根因判别 |
+|---|---|---|
+| `baseFailureIsStickyAndSafe` | **SIGSEGV**：`QsPaths::basePath -> QDir::filePath` 解引用 null | 直接捕获 base 失败的崩溃；同测试还要求 `basePath/ipcPath` 为空且两个 link 入口不崩 |
+| `instanceFailureIsStickyAndPreservesIndependentPathLink` | FAIL：`instanceRunDir() == nullptr` 为 false | instance mkdir 失败写 `instanceRunState=Failed`，旧返回却检查 Unknown `shellRunState`，泄漏失败 QDir pointer |
+| `shellFailureIsStickyAndKeepsPidLinkOnly` | FAIL：已成功创建的 `instanceRunDir()` 返回 null | shell Failed 反向污染 instance getter 返回，导致应保留的 by-pid link 丢失 |
+| `basePermissionFailureIsStickyAndSafe` | PASS（guardrail） | 非 root 下 0500 临时目录确定性制造 permission failure，失败保持 sticky |
+| combined failure/link parent failure/success recreate | PASS（guardrail） | 固化组合失败不建错误 link、父目录 mkdir 失败不覆盖普通文件、成功路径兼容 |
+
+红跑测试全部使用临时目录；普通文件阻断 base/shell/instance 组件在 root/non-root 均确定，permission 用例在 root 下明确 skip（当前 euid=1000，已真实执行）。`linkTargets` 先证明 target 为目录、两端 canonical path 非空、link 确为 symlink，避免“两个空 canonical path 相等”的假阳性；PID link 使用真实 `getpid()` authority。
+
+### 4. 实现机制
+
+- **状态返回**：四个 runtime getter 在执行 Unknown→Ready/Failed 后统一以 `state != Ready` 返回 null；`instanceRunDir()` 改检查自己的 `instanceRunState`，消除 instance/shell 交叉污染。Unknown/Ready/Failed 无新枚举、无重试旁路。
+- **空 path 传播**：`basePath()` 保存并检查 `baseRunDir()`；失败返回空 `QString`。`ipcPath()` 对空 basePath 继续返回空，避免 `QDir("").filePath("ipc.sock")` 退化为相对路径。
+- **pointer 复用**：`linkRunDir()` 与同结构的 `linkPathDir()` 各自在入口保存一次经验证的 `baseRunDir` pointer，后续 `by-pid`/`by-path` 构造只使用该 pointer，不再直接重复解引用 getter。
+- **成功/部分失败兼容**：instance 失败且 shell Ready 时，by-pid/by-shell 不建，但独立 `linkPathDir()` 仍创建 by-path；shell 失败且 instance Ready 时仍创建 by-pid，不建 shell/by-path；两者失败不建任何 link；成功路径仍以 canonical absolute target 创建 by-pid/shell/by-path。
+- **重复调用与清理**：Failed 状态在 blocker 移除后仍 sticky；link 目标被普通文件/错误 symlink 替换后，重复调用用既有 `QFile::remove + symlinkat` 原地重建；by-pid/by-path parent 被普通文件阻断时不崩、不产生错误 symlink。
+- **测试隔离**：不修改 `QsPaths::init()`。每个 QtTest 行为 slot fork 独立子进程，使 singleton 从 Unknown 开始；父进程检查正常退出或 signal，旧实现 SIGSEGV 可稳定转成测试失败。无测试专用生产入口。
+- **无平行接口/范围蔓延**：不改 header/signature、launch/IPC/QML/tooling，不新增 helper、flag、依赖、设置或用户行为。
+
+### 5. 验收状态
+
+| 验收编号 | 当前状态 | 证据 |
+|---|---|---|
+| G01 | PASS | 前提/调用点/不修改点分类见 §1-2 |
+| G02 | PASS | 最终产品 diff 3 文件；无 V2/New/Fixed/flag/第二接口；新增文件仅现有 core test |
+| G03 | PASS | 专项、实际全构建、全量 ctest、全新 ASan 与 Clang ASan+UBSan 见下 |
+| G04 | PASS | 原始 HEAD 3 个独立根因红；新实现 7/7 行为 slot 绿，20 轮重复绿 |
+| G05 | PASS | 最终冻结三文件产品 diff 经两名全新独立只读 reviewer 审查，均为 CLEAN；此前 findings/失效轮次保留于 §6 |
+| G06 | PASS | Quickshell 产品与主仓库指针 commit/push 均完成且远端验证；docs-only closure 由本次独立 commit 完成，push 后另行命令验证 |
+| G07 | PASS | 产品证据、双审、两级远端收据、closure review 与完成裁决均已记录 |
+| G08 | PASS | 未重启/部署实时会话；未触碰 `.zcode/`、`Testing/` 或下一任务 |
+| A06.1 | PASS | base（普通文件+权限）、shell、instance、组合、by-pid/by-path parent mkdir failure 全部不崩且 link 矩阵正确 |
+| A06.2 | PASS | 三类 blocker 移除后重复 getter 仍 null；失败 QDir pointer 不泄漏 |
+| A06.3 | PASS | by-id 目录与 by-pid/shell/by-path symlink 创建、错误对象覆盖、三次重复 link 均兼容 |
+| A06.4 | PASS | 全新 GCC ASan build + qspaths 通过；全新 Clang 22 ASan+UBSan build + qspaths 通过。GCC 16 ASan+UBSan 组合在未修改 FileView 模板处编译失败，作为编译器特定限制记录 |
+| A06.5 | PASS | `cmake --build build-tahoe` actual binary + `ctest` 16/16 通过 |
+
+验证命令与结果：
+
+| 配置 | 命令 | exit | 结果 |
+|---|---|---:|---|
+| 格式/静态 | `git diff --check`; `clang-format --dry-run --Werror src/core/paths.cpp src/core/test/paths.cpp` | 0 / 0 | clean |
+| 专项 | `cmake --build build-tahoe --target qspaths -j2`; `ctest -R '^qspaths$'` | 0 / 0 | 7 behavior slots pass |
+| 稳定性 | `ctest -R '^qspaths$' --repeat until-fail:20` | 0 | 20/20 pass，0.81s |
+| QUICKSHELL_FULL build | `cmake --build build-tahoe -j2` | 0 | `src/quickshell` 实际二进制链接成功；仅既有 GCC/Qt SFINAE warnings |
+| QUICKSHELL_FULL tests | `ctest --test-dir build-tahoe --output-on-failure` | 0 | 16/16 pass，4.06s（撤销范围外 launch guard 后最终冻结态） |
+| GCC ASan | 全新 `/tmp/quickshell-t06-asan.PoqsR1`；`ASAN=ON`, `USE_JEMALLOC=OFF`, Debug，build `qspaths` 后 ctest | 0 | 145 步真实编译链接；1/1 pass，2.47s；`detect_leaks=1:halt_on_error=1` |
+| GCC ASan+UBSan probe | 全新 `/tmp/quickshell-t06-asan-ubsan.TL0ppf`；ASan + `-fsanitize=undefined` | 1（编译） | 未修改 `src/io/fileview.cpp` 经 `core/util.hpp:196-197` 出现 constant-expression/return 编译错误；未进入测试，限定为 GCC 16 组合不兼容 |
+| Clang ASan+UBSan | 全新 `/tmp/quickshell-t06-clang-asan-ubsan.ga1BDs`；Clang 22.1.8、`ASAN=ON`、`USE_JEMALLOC=OFF`、`-fsanitize=undefined` | 0 | 145 步真实编译链接；1/1 pass，2.52s；ASan/UBSan 均 halt-on-error |
+
+### 6. 独立审查
+
+- 第一轮 Reviewer A/B（全新只读上下文）：均 **CLEAN**，确认状态机、link 矩阵、fork 隔离和 tooling guard；其后记录 diff 变化，结论按门禁失效。
+- 第二轮最终门禁 Reviewer A：**CONFIRMED** ASan 收据不可由现场陈旧 `build/tahoe-asan-tests` 支撑。处置：不沿用该目录；以三个全新 `/tmp` 构建分别完成 GCC ASan、GCC 组合探测和 Clang ASan+UBSan，逐项记录真实配置、编译与测试结果。
+- 第二轮最终门禁 Reviewer B：初判 `readLogFile()` 局部表达式可把空 `basePath()` 退化为相对 `log.qslog`。后续完整消费者/调用图审计确认该分支受 `selectInstance()->baseRunDir()` Ready guard 支配，且状态 sticky，生产不可达；先行防御改动随后因缺少可达红绿路径被下一轮 reviewer 正确指出。最终处置：撤销该范围外改动，不引入宏替身白盒测试或测试专用产品 seam，书面裁定为 **NOT-A-FINDING**。
+- 两轮 reviewer 均将 `toolsupport.cpp` 的既有 `shellVfsDir()` 直接解引用裁定为 **NOT-A-FINDING**：生产入口 `QmlToolingSupport::updateTooling()` 先检查 null 并返回，后续私有调用只在 Ready 分支执行，sticky 状态保证同一调用链指针有效。
+- 第三/四轮改派均因服务端 `429` 未产生结果，不计审查。第五轮 Reviewer A 为 CLEAN；Reviewer B 确认先行 `readLogFile()` 防御改动无旧红/新绿，促成上述撤销；因产品 diff 再次变化，两份结论均不计 G05。
+- 第六轮并发改派再次因服务端 `429` 未产生结果，不计审查；为避免重复空转，在保持 diff 冻结的前提下串行改派两名全新只读 reviewer。
+- 最终 Reviewer A（全新只读上下文）：**CLEAN**。核验 roadmap/约束、最终三文件 diff、sticky 状态、link 矩阵、fork 红绿、sanitizer 收据与 `readLogFile()` 调用链裁决，无 finding。
+- 最终 Reviewer B（全新独立只读上下文）：**CLEAN**。从 nullable/交叉状态/错误 symlink/测试假绿/记录夸报角度独立复核，无 finding。
+- 最终双审后 Quickshell 产品 diff 未再修改；G05 PASS。
+
+### 7. Commit 与 push 收据
+
+- Quickshell 产品 commit：`4712657a638b15afb3f2acff63de7e6eb36a3f2b`，subject `fix(paths): make runtime directory failures sticky and safe`，branch/ref `quickshell-tahoe-desktop` / `origin/quickshell-tahoe-desktop`。
+- Quickshell push：成功，`5a984c7..4712657`；push 后 `git fetch origin quickshell-tahoe-desktop`，`git merge-base --is-ancestor 4712657a638b15afb3f2acff63de7e6eb36a3f2b origin/quickshell-tahoe-desktop` exit 0。
+- 主仓库产品指针 commit：`aea8b30e97035cc767406410b819c90a982f94c3`，subject `fix(submodule): bump quickshell for T06 paths state machine`，branch/ref `fix/tray-menu-pinned-surface-height` / `origin/fix/tray-menu-pinned-surface-height`；该 commit 只更新 Quickshell submodule pointer 到已推送的 `4712657a...`。
+- 主仓库产品 push：成功，`f304f73..aea8b30`；push 后 `git fetch origin fix/tray-menu-pinned-surface-height`，`git merge-base --is-ancestor aea8b30e97035cc767406410b819c90a982f94c3 origin/fix/tray-menu-pinned-surface-height` exit 0。
+- docs-only closure commit subject：`docs(execution): T06 close task record`；目标 ref `origin/fix/tray-menu-pinned-surface-height`；不会与产品 commit 混合，也不在本文自引用自身 hash，push 后以命令输出验证 remote ancestor。
+
+### 8. 未覆盖、现场项与后续边界
+
+- 无需用户现场操作；未部署或重启 Quickshell。
+- `toolsupport.cpp` 有三处既有 `shellVfsDir()` 直接解引用；双审确认它们都位于 `updateTooling()` 先行 null guard 之后的私有 Ready-only 调用链，不构成当前失败崩溃路径或第二套 authority，故不越界修改。
+- `QsPaths` 不是线程安全类型；生产 `init/link` 调用均在启动串行路径，本任务不新增并发 authority。
+
+### 9. 完成裁决
+
+**结论**：COMPLETE。
+
+**理由**：A06.1-A06.5 与 G01-G08 均满足；原始 HEAD 上 3 个独立根因红，最终 7 个行为 slot 绿且 20 轮稳定；Quickshell 实际二进制与 16/16 全测通过；GCC ASan 与 Clang ASan+UBSan 专项通过；最终冻结三文件 diff 经独立双审 CLEAN；Quickshell `4712657a...` 与主仓库指针 `aea8b30e...` 均已 push 且远端 ancestor exit 0；无 live restart/deploy，未触碰 `.zcode/`、`Testing/` 或 T07。
+
+**下一任务是否允许开始**：YES（本 docs-only closure commit push 并远端验证后）。
+
+### 10. 闭环记录审查与推送
+
+- Closure reviewer 1（全新只读上下文）：产品/hash/远端/工作树均通过；发现一处账本措辞——“3 个文件”同时列出 3 个产品文件与 execution-log，已改为“3 个产品文件；另更新 execution-log”。
+- Closure reviewer 2（修正后全新只读上下文）：**PASS**；复核产品范围、两级 commit/gitlink/remote ancestor、最终双 CLEAN、专项/全测/sanitizer 收据与未触碰用户项，可置 COMPLETE。
+- 产品 commit hash/remote receipt 是否逐项准确：是；Quickshell `4712657a638b15afb3f2acff63de7e6eb36a3f2b`、主仓库 `aea8b30e97035cc767406410b819c90a982f94c3` 均已推送，两个 remote ancestor 验证 exit 0，子模块指针一致。
+- 状态是否可置 COMPLETE：是。
+- docs-only closure commit subject：`docs(execution): T06 close task record`。
+- closure push remote ref：`origin/fix/tray-menu-pinned-surface-height`。
+- closure remote ancestor 验证：由本 commit push 后命令输出给出；本文不记录自身 hash，避免自引用。

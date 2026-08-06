@@ -1,7 +1,7 @@
 # Tahoe Desktop 路线图执行日志
 
 **用途**：T01-T24 的唯一状态锁与证据账本。
-**当前状态**：T06 COMPLETE（Quickshell 产品与主仓库指针已推送并远端验证；本次 docs-only closure 完成后可开始 T07）。
+**当前状态**：T07 COMPLETE（Quickshell 产品与主仓库指针已推送并远端验证）；T08 IN_PROGRESS。
 **禁止**：预填测试结果、审查结论、commit/push 收据或把计划写成已完成事实。
 
 ---
@@ -16,8 +16,8 @@
 | T04 | COMPLETE | niri `cc772d0a`（tahoe-layer-animations）/ main `c177402`（fix/tray-menu-pinned-surface-height） | 9 轮双审查，最终两轮产品代码 CLEAN + 账本修正 | pointer/focus transaction |
 | T05 | COMPLETE | niri `79448ad4`（tahoe-layer-animations）/ main `21fb5cf`（fix/tray-menu-pinned-surface-height） | 8 轮双审查，最终门禁 A 侧 CLEAN、B 侧全部闭合 | thumbnail budget |
 | T06 | COMPLETE | Quickshell `4712657a`（quickshell-tahoe-desktop）/ main `aea8b30e`（fix/tray-menu-pinned-surface-height） | 最终双 CLEAN + closure reviewer PASS | QsPaths sticky failure state machine |
-| T07 | PENDING | - | - | FileView async |
-| T08 | PENDING | - | - | TahoeGlass mapping |
+| T07 | COMPLETE | quickshell `827c8b6`（quickshell-tahoe-desktop）/ main `bf53257`（fix/tray-menu-pinned-surface-height） | 5 轮双审查，最终双 CLEAN | FileView non-blocking write state machine |
+| T08 | IN_PROGRESS | - | - | TahoeGlass mapping |
 | T09 | PENDING | - | - | TahoeGlass feedback |
 | T10 | PENDING | - | - | blur reuse |
 | T11 | PENDING | - | - | glass capture semantics |
@@ -1550,3 +1550,144 @@ Reviewer A：NOT CLEAN——3 CONFIRMED + 1 PLAUSIBLE：F1'（setPath("") 卸载
 **理由**：A07.1-A07.5 与 G01-G08 均满足；旧实现 2 个根因红（慢写阻塞 GUI + setPath 阻塞），新实现 14/14 绿（plain + ASan 双跑无泄漏）且 5 次重复稳定；Quickshell 实际二进制 + ctest 17/17；tahoe-shell 1010 passed（唯一失败为 T08 预知前置）；五轮双审查最终双 CLEAN；无 live restart/deploy，未触碰 `.zcode/`、`Testing/` 或 T08。
 
 **下一任务是否允许开始**：YES（本 docs-only closure commit push 并远端验证后）。
+
+---
+
+## T08 TahoeGlass mapping 生命周期
+
+**状态**：IN_PROGRESS
+**开始时间**：2026-08-06
+**roadmap 引用**：`roadmap.md#T08`（第 214-232 行）；对应发现：当前 Dock `undefined -> double` 告警
+**执行者上下文**：Claude Code 会话（主仓库 `fix/tray-menu-pinned-surface-height`；Quickshell 子模块 `quickshell-tahoe-desktop`）
+
+### 1. 前提核实
+
+| 报告判断 | 当前证据 | 等级 | 结论 |
+|---|---|---|---|
+| Dock.qml 引用不存在的 `TahoeGlass.mappingGeneration` | `tahoe-shell/components/Dock.qml:68` `readonly property real tahoeGlassMappingGeneration: root.TahoeGlass.mappingGeneration`；`quickshell/src/wayland/tahoe_glass/qml.hpp/.cpp` 无该属性 | SOURCE-CONFIRMED | 成立：生产属性名已就位，协议层缺失 → `undefined -> double` 告警 |
+| `TahoeGlass` attached 类型是既有 authority，可承载 generation | `qml.hpp:204` class TahoeGlass: AttachedSurfaceLifecycle，QML_ATTACHED，生命周期钩子齐备 | SOURCE-CONFIRMED | 成立（原地扩展，不新建 service） |
+| `waylandSurfaceCreated()` 是每次新 wl_surface generation 的唯一通知点 | `attached_surface_lifecycle.cpp` `onWaylandSurfaceCreated()` 由 `surfaceCreated` 信号/初始 surface 触发，只调 `waylandSurfaceCreated()`；`qml.cpp:702-738` 已处理 surface swap/重建 | SOURCE-CONFIRMED | 成立 |
+| 同一 mapping 的普通 commit 不应改变 generation | 普通 commit 不经过 surface 生命周期钩子（`surfaceCreated` 每 surface 一次） | SOURCE-CONFIRMED | 成立 |
+| 协议不可用时需有明确值 | `available=false` 时 surface 为 null；Dock `compositorSlide=false` 走非 compositor slide 路径 | SOURCE-CONFIRMED | 成立（A08.4） |
+| 既有长期失败 Dock mapping 测试 | `tahoe-shell/tests/test_r17_dock_layout_motion.py:258-300` `test_dock_replays_compositor_slide_for_each_surface_mapping` | CURRENT-CONFIRMED | 成立（当前 1 failed） |
+
+### 2. 工作树与范围
+
+开始时 `git status --short`（主仓库）：
+
+```text
+?? .zcode/
+?? Testing/
+```
+
+Quickshell 子模块干净；niri 子模块干净。`.zcode/`、`Testing/` 为用户项，不触碰。
+
+允许修改：
+
+- `quickshell/src/wayland/tahoe_glass/qml.hpp`（新增 `mappingGeneration` Q_PROPERTY + 私有 `advanceMappingGeneration()` + 测试 friend seam）
+- `quickshell/src/wayland/tahoe_glass/qml.cpp`（`waylandSurfaceCreated()` 内调用 advance；生成值语义）
+- `quickshell/src/wayland/tahoe_glass/test/mapping_lifecycle.hpp/.cpp`（新增专项测试；沿用单一 tahoe-glass-tests harness）
+- `quickshell/src/wayland/tahoe_glass/test/CMakeLists.txt`（注册 mapping_lifecycle.cpp）
+- `quickshell/src/wayland/tahoe_glass/test/main.cpp`（注册 TestMappingLifecycle）
+- `tahoe-shell/components/Dock.qml`：不改（已完整使用 `TahoeGlass.mappingGeneration`；A08.3 无需新代码）
+- 主仓库：execution-log + 指针 commit
+
+明确禁止修改：
+
+- `niri/` 子模块（本任务无协议/niri 变更；协议 v4 已支持 transform）
+- `tahoe-glass-v1.xml` 协议文件及 niri 副本（T09 协议反馈才可能扩展版本；本任务不加协议）
+- `tahoe-shell/components/` 其他文件、`.zcode/`、`Testing/`
+- 其他 quickshell 模块（fileview/io/window 等）
+
+定义/调用点/测试搜索（G01）：
+
+- `mappingGeneration`：仅 Dock.qml:68（生产）与 test_r17（契约）；quickshell 零命中 → 新属性是唯一 authority。
+- `waylandSurfaceCreated`：定义 `qml.cpp:702`；override 链 `attached_surface_lifecycle.cpp:150-160`（onWaylandSurfaceCreated）；唯一入口，无旁路。
+- `setAvailable`：`qml.cpp:939`；在 `waylandSurfaceCreated` 内调用（725 行）。R17 契约要求 `setAvailable` 先于 `advanceMappingGeneration()`。
+- `replayCompositorSlideForMapping`：Dock.qml:348-362；`onTahoeGlassMappingGenerationChanged` 绑定于 364 行 → 每次 remap 恰重放一次 slide（A08.3）。
+- `transformAvailable`：Dock `compositorSlide`（68 行附近）→ 协议不可用时 false → replay early-return（A08.4 非 compositor 路径）。
+
+不改动点及理由：
+
+- Dock.qml：不改（生产调用已正确，仅协议层缺属性）。
+- 协议 XML：不改（v4 已含 transform；本任务不新增协议，A08 只要求 generation/lifecycle 值）。
+- 生命周期基类 `attached_surface_lifecycle.*`：不改（钩子已完备）。
+
+### 3. 基线验证（改动前）
+
+| 配置 | 命令 | exit | 结果 |
+|---|---:|---|
+| SHELL_FULL | `pytest tahoe-shell/tests/` | 1 | 1010 passed + 1 failed（`test_r17_dock_layout_motion` 缺 `mappingGeneration`） |
+| QUICKSHELL build | `cmake --build build-tahoe -j$(nproc)` | 0 | no work to do |
+| QUICKSHELL ctest | `ctest --test-dir build-tahoe --output-on-failure` | 0 | 17/17 pass |
+| PROTOCOL_FULL | `scripts/check-protocol-sync.sh` | 0 | IN_SYNC |
+| PROTOCOL_FULL | `scripts/check-tahoe-glass-guardrails.sh` | 0 | passed |
+
+### 4. 实现机制
+
+- **mappingGeneration Q_PROPERTY**（qml.hpp）：`quint64 mappingGeneration READ mappingGeneration NOTIFY mappingGenerationChanged`，`mMappingGeneration` 初值 0。
+- **advanceMappingGeneration()**：`++mMappingGeneration; emit mappingGenerationChanged()` —— 每次新 wl_surface mapping 恰递增一次并发信号（A08.2）。
+- **waylandSurfaceCreated()**（qml.cpp）：在 `setAvailable(surface != nullptr)`、`pendingRegions=true`、`mRepaintInFlight=false`、`schedulePolish()`、`prev->deleteLater()` 之后调用 `advanceMappingGeneration()` —— 满足 R17 契约「mapping notification 必须观察到新协议 surface 为 available」（setAvailable 先于 advance）。
+- **协议不可用早退**（A08.4）：`if (!this->surface) return;` 置于既有 deleteLater 逻辑之后 —— 无协议 surface 时不递增 generation、不崩溃、走非 compositor slide 路径。
+- **manager 可用性修复**（manager.cpp，既有缺陷）：`TahoeGlassManager::instance()` 由 `isInitialized()` 改为 `isActive()` —— 比 background_effect 现有 `instance()`（仍用 isInitialized 弱模式）更严格的活跃绑定测试；`createGlassSurface` 增加 `!window` 防御。无 Wayland/协议未绑定时不再把未激活 extension 当可用 —— 修复协议不可用时的空指针崩溃（A08.4 前置）。
+- **无平行接口**：全部改动在既有 TahoeGlass attached 类型与既有 manager 内；Dock.qml 不改（已使用同一 `TahoeGlass.mappingGeneration`）。
+
+### 5. 测试
+
+新增 `test/mapping_lifecycle.cpp/.hpp`，注册进既有单一 harness（CMakeLists + main.cpp）。诚实 scope：无 Wayland 连接的环境无法创建真实 wl_surface，因此「协议可用递增」由 seam 驱动 advance 状态机 + R17 结构契约（`test_r17_dock_layout_motion.py` 断言 `waylandSurfaceCreated` 调 `advanceMappingGeneration` 且在 setAvailable 之后）共同覆盖；「协议不可用」用真实 `waylandSurfaceCreated()` 调用证明不崩溃、不递增、available=false。
+
+| 测试 | 断言 |
+|---|---|
+| startsAtZero | 初始 generation == 0 |
+| advanceAdvancesGeneration | advance 后递增 |
+| advanceIsMonotonicAcrossMultiple | 多次 advance 严格单调（A08.2） |
+| advanceEmitsOneSignal | 每次 advance 恰发一次 mappingGenerationChanged（A08.3 每次 mapping 恰一次重放的信号源） |
+| notifyObservesNewValue | notify 时 generation 已为新值 |
+| ordinaryCommitsDoNotAdvanceGeneration | updateRegions/sendTransform 不改变 generation（A08.2 普通 commit 不变化） |
+| surfaceDestroyedDoesNotAdvanceGeneration | waylandSurfaceDestroyed 不递增 |
+| protocolUnavailableDoesNotAdvanceGeneration | 真实 waylandSurfaceCreated（无 manager）不崩溃、不递增、available=false（A08.4） |
+
+红证明：改动前（无 mappingGeneration 属性）测试无法编译（缺 Q_PROPERTY/signal/member），即旧实现失败；实现后 10/10 绿。
+
+### 6. 验证结果（Phase 4）
+
+| 配置 | 命令 | exit | 结果 |
+|---|---:|---|
+| 专项红 | 实现前构建 | 1 | 编译失败（缺 mappingGeneration 属性/signal/member）——旧实现失败的确定性证据 |
+| 专项绿 | `./tahoe-glass-tests` | 0 | TestMappingLifecycle 10/10 + 既有测试全过 |
+| QUICKSHELL_FULL | `cmake --build build-tahoe -j$(nproc)` | 0 | 实际二进制链接成功 |
+| QUICKSHELL_FULL | `ctest --test-dir build-tahoe --output-on-failure` | 0 | 17/17 pass |
+| SHELL_FULL | `pytest tahoe-shell/tests/` | 0 | 1011 passed（含 R17 转绿，基线 1010+1 failed） |
+| PROTOCOL_FULL | `scripts/check-protocol-sync.sh` | 0 | IN_SYNC（未改协议） |
+| PROTOCOL_FULL | `scripts/check-tahoe-glass-guardrails.sh` | 0 | passed |
+| WORKTREE_GUARD | `git diff --check` | 0 | 干净 |
+
+### 7. 验收状态
+
+| 编号 | 状态 | 证据 |
+|---|---|---|
+| A08.1 | PASS（源码级） | 告警根因 = Dock.qml:68 读取不存在的 `TahoeGlass.mappingGeneration`；现属性已存在且类型 `quint64` 匹配 `double` 绑定；无运行时采样（不重启会话），由源码/测试证明；待部署后运行时确认告警消失 |
+| A08.2 | PASS | advance 单调递增 + 普通 commit 不变化（专项测试 + R17 结构契约） |
+| A08.3 | PASS | 每次 mapping 恰一个 mappingGenerationChanged → Dock `onTahoeGlassMappingGenerationChanged` 恰一次 `replayCompositorSlideForMapping()`；input mask/视觉位置语义未改（Dock.qml 未动） |
+| A08.4 | PASS | manager 不可用（协议未绑定时）走 fallback 非 compositor 路径：waylandSurfaceCreated 早退不递增、available=false、sendTransform 返回 false → Dock compositorSlide=false 走遗留动画；无新开关 |
+| A08.5 | PASS | `test_r17_dock_layout_motion` 转绿；QUICKSHELL_FULL 17/17；SHELL_FULL 1011 passed |
+
+### 8. 双独立审查
+
+**第一轮（两个全新 reviewer，最终 diff 含产品 + 测试）**：
+
+| Reviewer | 裁决 | Findings |
+|---|---|---|
+| Reviewer A（正确性/生命周期） | **CLEAN** | 根因完整消除；无遗漏调用点；无锁重入/UAF/时序问题（advance 在 setAvailable 后、协议不可用早退正确、swap/快速 remap 恰一次 advance）；2 处 PLAUSIBLE 注释-机制不符：manager.cpp `instance()` 注释机制描述错误（isInitialized 是生成代理绑定标志，无连接时实为 false）；qml.hpp Q_PROPERTY 文档声称值 undefined（实为 0） |
+| Reviewer B（范围/验收） | **CLEAN** | 唯一 authority、无平行接口/新开关/范围外功能；A08.2/3/4/5 证据充分可重复（重跑全部测试）；A08.1 仅结构消除无运行时日志证据（诚实记录）；同 2 处注释 PLAUSIBLE |
+
+**PLAUSIBLE 处置（接受修复）**：修正 manager.cpp `instance()` 注释（isInitialized = 生成代理绑定标志、isActive = 活跃绑定测试、createGlassSurface 保留自身守卫）；修正 qml.hpp Q_PROPERTY 文档（"0 until the first protocol surface exists and has no mapping semantics"）。A08.1 记录补"待部署后运行时确认告警消失"。
+
+**第二轮（注释修正后，两个全新 reviewer，最终 diff v2）**：
+
+| Reviewer | 裁决 | Findings |
+|---|---|---|
+| Reviewer A2（正确性） | **CLEAN** | 注释修正与真实机制一致（生成代理 isInitialized 语义、isActive 活跃绑定语义、0 值语义均实证核实）；第一轮功能结论全部复验成立；A08 证据链完整且诚实性说明保留；1 条 NOT-A-FINDING：main.cpp 注释未含 08（已顺手修正） |
+| Reviewer B2（范围） | **CLEAN** | 注释修正准确；范围结论全部成立；A08.1 证据诚实；2 处任务记录文案问题（非代码）：section 4"与 BackgroundEffectManager 一致"方向错误（background_effect 仍用 isInitialized 弱模式，实为向更严 isActive 靠拢）；A08.1 补显式"待部署后运行时确认"——均已修正 |
+
+**最终门禁**：两轮各 2 个全新独立 reviewer，最终双 CLEAN；无未裁决 CONFIRMED/PLAUSIBLE。

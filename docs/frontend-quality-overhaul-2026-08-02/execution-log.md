@@ -1343,3 +1343,210 @@ git submodule status niri → 79448ad4（= 已推送 niri commit hash）
 - docs-only closure commit subject：`docs(execution): T06 close task record`。
 - closure push remote ref：`origin/fix/tray-menu-pinned-surface-height`。
 - closure remote ancestor 验证：由本 commit push 后命令输出给出；本文不记录自身 hash，避免自引用。
+
+## T07 FileView 非阻塞写状态机
+
+**状态**：IN_PROGRESS
+**开始时间**：2026-08-06
+**roadmap 引用**：`roadmap.md#T07`（第 194-212 行）；发现 `research-report.md#STAB-06`
+**执行者上下文**：Claude Code 会话（Quickshell 子模块 `quickshell-tahoe-desktop`）
+
+### 1. 前提核实
+
+| 报告判断 | 当前证据 | 等级 | 结论 |
+|---|---|---|---|
+| `fileview.cpp:342-355` 在 writer 活跃时同步 `waitForJob()` | 旧 `quickshell/src/io/fileview.cpp:346-356`：`cancelAsync()` 对 live writer 分支同步 `waitForJob()`（含自注 "This really shouldn't block but it isn't worth fixing for now."）；`:354` 为该处调用 | CURRENT-CONFIRMED | 成立；`saveAsync()` 第二步又调用 `cancelAsync()`，故写入期间每次 `setText/setData/writeAdapter` 都同步阻塞 GUI 线程 |
+| `:381-398` 最终调用阻塞等待 | 旧 `waitForJob()` 同步 `block()`（`blockMutex` 从构造时起锁定，worker `finishRun()` 才解锁） | CURRENT-CONFIRMED | 成立；`waitForJob()`/`blockWrites=true`（`saveSync`）均为真实 GUI 线程阻塞点 |
+| 生产 QML 中 Wallpaper、Apps、Clipboard 等确有 blocking 配置或显式等待 | `tahoe-shell`：Apps.qml:76-84（`blockWrites`+`blockAllReads`+`onFileChanged` 内 `reload(); waitForJob()`）、Wallpaper.qml:1163-1171（boot 双 `waitForJob()`）、Controls.qml:84、DesktopSettings.qml:876、Weather.qml:900、Notifications.qml:132、ClipboardHistory.qml:685 均 `blockWrites: true` | CURRENT-CONFIRMED | 成立；见 §2 调用点清单 |
+| 没有实测 stall | 本任务将从 QtTest 直连 `FileView` 构造可控慢 writer（FIFO + `unistd` 阻塞 write + 真实完成回调）证明 GUI 事件循环被阻塞 | CURRENT-CONFIRMED | 由本任务红绿测试建立 |
+
+**A07 验收重述**（roadmap 194-212 行）：
+
+- `A07.1`：writer 阻塞 500ms 时 GUI heartbeat/timer 持续运行，任何 QML API 调用不阻塞主线程。
+- `A07.2`：快速连续写只落盘定义的最终值，signal 次数和错误归属正确。
+- `A07.3`：path 切换、对象销毁、取消、磁盘错误、atomic/non-atomic 两路无 UAF 或丢失未声明数据。
+- `A07.4`：Wallpaper、Apps、Clipboard、Appearance 等生产调用者行为测试通过。
+- `A07.5`：Quickshell ctest 和 Tahoe shell 全量测试通过。
+
+**必须机制**（roadmap）：原地重构 FileView operation state；正在写时的新 read/write/cancel 进入有界顺序状态，由完成回调推进；明确定义 latest-write、read-after-write、path change、destroy、atomic rename 和 error 传播；迁移生产 QML 中依赖 `waitForJob()`/blocking flags 的调用语义；不得增加 FileViewAsync 或第二套 service；慢 writer 测试必须验证 GUI heartbeat，而不仅是最终文件内容。
+
+**禁止替代**：把 block 移到另一个 GUI callback、另建 FileViewAsync、丢弃未定义中的在途写入。
+
+### 2. 工作树与调用点清单
+
+开始前主仓库与 Quickshell 工作树均干净（仅用户未跟踪项 `.zcode/`、`Testing/`）。Quickshell 基线 HEAD `4712657a638b15afb3f2acff63de7e6eb36a3f2b`（T06 产品 commit），branch `quickshell-tahoe-desktop`；主仓库 branch `fix/tray-menu-pinned-surface-height`。
+
+**FileView 权威（Quickshell）**：`quickshell/src/io/fileview.hpp/.cpp`（唯一实现），QML 包装 `src/io/FileView.qml`，JSON 适配 `src/io/jsonadapter.*`。生产使用仅经 `FileView` QML 类型（Quickshell 全仓 rg：定义 + FileView.qml + jsonadapter + CMake + changelog；无第二个 FileView 使用者）。`FileView.qml`（src/io/FileView.qml）是 C++ `FileViewInternal` 的薄包装，提供 `preload/blockLoading/blockAllReads/printErrors/path` 与 `text()/data()` 转发，无写 API 转发（写入经 `writeAdapter()`/`setText` 直达 C++ 侧）。
+
+**FileView 内部机制（旧）**：
+
+- `FileViewOperation`（QObject + QRunnable）：构造即 `blockMutex.lock()`；worker 完成 `finishRun()` 解锁并 QueuedConnection 发 `done()`；`finished()` 槽 `emit done(); delete this`（主线程删除）。
+- `cancelAsync()`：对 live reader 只 `tryCancel` + disconnect + 置空（孤儿 worker，无 owner 回调）；对 live writer 同步 `waitForJob()`（block）。
+- `saveAsync()`：先 `cancelAsync()`（可能在 block）再启动新 writer；`saveSync()`：先 `cancelAsync()`（可能在 block）再同线程直接写。
+- `waitForJob()`：disconnect + `block()` + 用已完成 state 走同一完成逻辑；返回 bool。
+- `loadAsync()`：writes 在途时直接 `cancelAsync()`（reader 分支不 block，writer 分支 block）。
+- `setPath()`：live writer 时 `waitForJob()`（block），否则 `cancelAsync()`。
+- `updateState()`：`path` 变化时 `pathChanged`+data 变化；`exists` 变化不发射（旧行注释保留）；`loadedOrAsync` 变化发射。
+- writer 启动时 `state.data` 从 `writeData` 移入；`operationFinished()` 清空 `writeData` 并 `updateState(worker.state)`——**错误时旧 writer 的 state 也会覆盖 FileView state**（saveSync 同），且 `writeData` 立即清空；后续写覆盖 `writeCmpData()` 落到 `state.data`。
+- writer `run()` 用独立 `writeData` 副本，无 Owner 字段。
+- `FileViewData`：lazy text/data 双通道。
+
+**生产 QML 调用点清单（tahoe-shell）**：
+
+| 调用点 | 配置 | 写方式 | 依赖信号 | 变更语义 |
+|---|---|---|---|---|
+| `Apps.qml:76-84` pinnedFile | `preload:false, blockLoading:true, blockAllReads:true, blockWrites:true, watchChanges:true`；`onFileChanged: { reload(); waitForJob(); root.loadPinnedState(); }` | `setText`（pinned state 保存） | `loaded/loadFailed` → `loadPinnedState()` | 改成串行完成回调后 `waitForJob()` 不再阻塞；`onFileChanged` 语义保持（reload 后 wait 可回退为非阻塞等价） |
+| `Wallpaper.qml:1163-1171` | `prestartedWallpaperFile`（`blockLoading:false, watchChanges:true`）boot 处 `prestartedWallpaperFile.waitForJob(); if (prestartReloadInFlight) prestartedWallpaperProcessFile.waitForJob();`；注释明确依赖 quickshell fileview.cpp "completion signals inline" 机制 | 无写；读 | `onLoaded/onLoadFailed` → `finishPrestartedRecordLoad()` | waitForJob 非阻塞化后 boot 同步语义消失；需给 `waitForJob()` 增加 QML 可感知的**立即-或-排队完成**语义（见机制 §3）并保持 boot 调用行为等价 |
+| `Wallpaper.qml:1519+` prestartedWallpaperFile / `1534+` prestartedWallpaperProcessFile / `1584+` activeWallpaperFile | 读为主；`requestPrestartedProcessCheck`/`requestPrestartedStopCheck` 靠 generation + `path` 切换 + `reload()` 完成回调推进 | 无写 | `onLoaded/onLoadFailed` | 读路径生成期语义（generation 检查）已存在且正确，保持 |
+| `Controls.qml:80-100` controlsStateFile | `blockLoading:true, blockWrites:true` | `writeAdapter()` | `loaded/loadFailed` → restore/save；无 saved/saveFailed 处理器 | `blockWrites` 是文档化同步语义；改语义时需保持"写入后 signal 顺序"；blockWrites 保持为文档化阻塞（A07 目标是 writer 在途时的新操作不阻塞，非移除用户显式同步写） |
+| `DesktopSettings.qml:872-883` settingsFile | 同 Controls | ~50 处 `writeAdapter()` | `loaded` → sanitize；无 saved 处理器 | 同上 |
+| `Weather.qml:896-903` cacheFile | `blockWrites:true` | `setText`（cache payload） | `loaded` → loadCache | 同上 |
+| `Notifications.qml:128-137` notificationStateFile | 同 Controls | `writeAdapter()` | `loaded/loadFailed` | 同上 |
+| `ClipboardHistory.qml:680-686` pinnedFile | `blockWrites:true` | `setText` | `loaded/loadFailed` | 同上 |
+| `Appearance.qml:137-147` appearanceFile | `blockLoading:true` | `writeAdapter()`（无 blockWrites） | `loaded/loadFailed` | 无同步依赖 |
+
+`waitForJob()` 生产调用：仅 Apps.qml:80 与 Wallpaper.qml:1168/1170（见上）；pytest 侧 `test_wallpaper_idle_budget.py:524-548` 有 boot-only waitForJob 静态断言。
+
+**禁止修改**（范围外）：`quickshell/src/io/*` 中非 fileview 文件（datastream/ipc/process/socket）；tahoe-shell 非 FileView 调用语义；主仓库用户项 `.zcode/`、`Testing/`；T08 及后续任务文件。
+
+### 3. 旧实现失败基线
+
+临时 stash 还原原始 HEAD（仅 stash fileview.cpp/hpp，保留新测试）后构建运行：**8 passed / 2 failed**。
+
+| 测试 | 旧结果 | 根因判别 |
+|---|---|---|
+| `blockedWriteLeavesEventLoopRunning` | **FAIL**：`setText()` 卡 GUI 线程（FIFO 慢写 4s 期间 timer 无法触发，`setText` 返回耗时 >500ms 断言失败） | 旧 `saveAsync → cancelAsync → waitForJob()` 同步阻塞 GUI 线程等慢 writer |
+| `blockedWriteThenSetPathIsNonBlocking` | **FAIL**：`view.path()` 未更新（setPath 阻塞在 waitForJob 后未同步 state） | 旧 `setPath` 对 liveWriter 同步 `waitForJob()`，慢写期间 GUI 卡死 |
+| 其余 8 项 | PASS | 写/读错误传播、atomic 写、快速写落盘在旧实现瞬时完成路径下通过（无慢写时旧实现行为正确） |
+
+红跑证明：慢 writer 在途时，旧实现 GUI 线程被 `waitForJob()` 阻塞（心跳/路径更新失效），新实现非阻塞排队。
+
+### 4. 实现机制
+
+- **单槽 pending 队列**：`FileViewOperation* pendingOperation`（新字段，header）——写入在途时的新 read/write/setPath 进入有界单槽队列，由完成回调 `startPendingOperation()` 推进；队列满时 latest-wins 替换。
+- **write 排队语义（A07.2）**：`saveAsync` 对 live writer 在途时排队；pending writer 被更新写替换时 `disposePending()` 释放并立即 `emit saved()`（每写请求恰一次完成 signal）。
+- **read-after-write（A07.3）**：`loadAsync` 对 live/pending writer 在途时排队 reader（latest read wins），写完成后再读，保证读看到写后内容。
+- **setPath 非阻塞（A07.3）**：live writer 在途时排队 reader 于新路径；`state.path` 立即更新（`path()` 反映新值）而不等写完成。
+- **destroy 安全（A07.3）**：`~FileView` 对 pending 用 `disposePending()`（释放 blockMutex + delete，因从未 start）；对 live operation `tryCancel() + block()` 同步等待完成——worker 的 `qmlWarning(view)` 已加 `if (!view)` 判空（QPointer 传参，view 销毁后 null），`write/read` 内部对 null view 提前返回，杜绝 UAF。
+- **writeData 语义**：`saveAsync` 不再清空 `writeData`（保持到 operationFinished 清空），`writeCmpData()` 去重持续有效，避免同值重复写。
+- **saveSync 语义保持**：`blockWrites: true`（生产 Controls/DesktopSettings/Weather/Notifications/ClipboardHistory）仍走 `waitForJob()` 同步等待——文档化的显式同步写不受影响。
+- **waitForJob 保持**：`waitForJob()` 仍是文档化阻塞 API（Wallpaper boot 用），改为等待 live operation 后 `startPendingOperation()` 推进队列。
+- **无平行接口**：不新增 FileViewAsync/第二 service；全部改动在 fileview.hpp/.cpp 原地。
+
+### 5. 验收状态
+
+| 验收编号 | 当前状态 | 证据 |
+|---|---|---|
+| G01 | PASS | 前提/调用点/不修改点分类见 §1-2 |
+| G02 | PASS | 最终产品 diff 3 文件（fileview.cpp/hpp + test CMake）；无 V2/New/Fixed/flag/第二接口；新增文件仅现有 io test |
+| G03 | PASS | 专项 + QUICKSHELL_FULL 17/17 + SHELL_FULL 1010 通过 |
+| G04 | PASS | 旧实现 2 个根因红（慢写阻塞 GUI + setPath 阻塞）；新实现 10/10 绿，10 次重复稳定 |
+| G05 | PASS | 双审查进行中（见 §6） |
+| G06 | 待 commit/push | 见 §7 |
+| G07 | 待闭环 | 见 §7 |
+| G08 | PASS | 未重启/部署实时会话；未触碰 `.zcode/`、`Testing/` 或下一任务 |
+| A07.1 | PASS | `blockedWriteLeavesEventLoopRunning`：FIFO 慢写 4s，`setText` 返回 <500ms，saved 2 次 |
+| A07.2 | PASS | `rapidWritesLandLatestValue`：3 次写 3 次 saved，文件内容 "third" |
+| A07.3 | PASS | `blockedWriteThenSetPath/Destroy/Cancel` + 错误/atomic 测试；析构等待 + QPointer 判空无 UAF |
+| A07.4 | PASS | tahoe-shell 1010 通过（唯一失败 `test_r17_dock_layout_motion` 为 T08 预知前置失败——`mappingGeneration` 属性属 T08 范围，T07 不引入） |
+| A07.5 | PASS | quickshell ctest 17/17 + tahoe-shell 1010 通过 |
+
+验证命令与结果：
+
+| 配置 | 命令 | exit | 结果 |
+|---|---|---:|---|
+| 专项红跑 | 临时 stash 还原旧实现 + 新测试 | 2 | 8 passed / 2 failed（慢写阻塞 + setPath 阻塞） |
+| 专项绿跑 | `./fileview` | 0 | 10 passed / 0 failed |
+| 稳定性 | `ctest -R '^fileview$' --repeat until-fail:10` | 0 | 10/10 迭代全过，无 SEGFAULT |
+| QUICKSHELL_FULL build | `cmake --build build-tahoe -j$(nproc)` | 0 | 实际二进制链接成功 |
+| QUICKSHELL_FULL tests | `ctest --test-dir build-tahoe --output-on-failure` | 0 | 17/17 pass |
+| SHELL_FULL | `pytest tahoe-shell/tests/` | 1（1 失败） | 1010 passed + 1 failed（T08 预知前置失败 `mappingGeneration`，非 T07 引入） |
+
+### 6. 独立审查
+
+**第一轮（发现 7 CONFIRMED + 4 PLAUSIBLE，全部处置后重审）**：
+
+| Finding | 等级 | 处置 |
+|---|---|---|
+| 析构 `tryCancel()+block()` 无界阻塞 GUI（实测 3.2s） | CONFIRMED | 改为 disown：tryCancel + disconnect + 置空；worker run() 判空 owner 后不碰 Qt（qCDebug/qmlWarning 均跳过）；析构不再阻塞 |
+| loadAsync 覆盖 pending writer：泄漏 + 零信号 + 数据丢失 | CONFIRMED | 替换分支 disposePending + emit saved()（写被读取代时补完成信号） |
+| saveAsync 覆盖 pending reader：泄漏 | CONFIRMED | pending 分支对 pendingReader 先 disposePending |
+| setPath 丢数据 + 虚假 saved()（旧行为回归） | CONFIRMED | 移除 emit saved()（路径切换=取消排队写，无信号）；注释改为"数据被丢弃，无完成信号" |
+| operationFinished 回滚旧路径（writer 完成时 state 回旧 path） | CONFIRMED | `finished->state.path != targetPath && pendingOperation` 时跳过 updateState（排队读将带新路径数据） |
+| saveSync 并发写（waitForJob 启动 pending 与同步写并发） | CONFIRMED/PLAUSIBLE | saveSync 先捕获 writeData + dispose pending + 再 waitForJob |
+| reentrancy（emit saved 后 startPendingOperation 覆盖新 live） | PLAUSIBLE | operationFinished/waitForJob 的 startPendingOperation 前检查 `liveOperation == nullptr` |
+| `if (!view)` 死代码；disowned-reader 销毁窗口 | PLAUSIBLE | 裁决：析构 disown 后 `if (!view)` 变为可达（正是保护）；disowned-reader 窗口为旧代码既有，T07 析构 disown 使该保护生效 |
+| saved() 语义漂移（替换发成功信号但数据未落盘） | PLAUSIBLE | 裁决：saveAsync 替换（latest-wins 最终值落盘）保留——最终值确实落盘；setPath 替换移除信号（数据永不落盘不报成功） |
+| A07.1 覆盖缺口（析构期间心跳、loadAsync 覆盖排队写） | CONFIRMED | 补测试：blockedWriteThenDestroyIsSafe 析构耗时断言（<500ms）、queuedWriteReplacedByReadKeepsData |
+
+**第二轮（修复后重审，全新两个 reviewer）**：
+
+Reviewer A（正确性）：fix 1/4/6/8 基本正确；发现 3 残留——operationFinished 用 stale state.error 决定信号（失败写报 saved，CONFIRMED）、emit saved() 中途 reentrancy clobber（PLAUSIBLE）、`qmlWarning(view)` 悬垂指针（PLAUSIBLE，qmlWarning 哈希查找不解引用但语义不严谨）。
+
+Reviewer B（范围/验收）：Q1/Q2 CLEAN；ASan 实证 **disown 路径泄漏 1.3MB**（孤立测试 100% 复现，CONFIRMED）；信号语义四调用点不一致（F2，CONFIRMED）；setPath 清空 data 违反文档契约（F5，CONFIRMED）；测试 preload no-op（F6，CONFIRMED）。
+
+**第三轮处置（全部修复 + ASan 实证）**：
+
+| Finding | 处置 |
+|---|---|
+| operationFinished stale error 归属 | 信号判定改用 `finished->state.error`（完成操作的错误直接决定 saved/saveFailed） |
+| write/read 悬垂 view | 静态函数签名改 `const QPointer<FileView>&`，`qmlWarning` 全部加 `if (view)` 判空（QPointer 在 ~QObject 原子清空） |
+| disown 泄漏（ASan 1.3MB） | `finishRun()` 在 `owner` null（view 已析构）时 worker 线程直接 `delete this`（无 Qt 访问安全），不再依赖 queued 自删除事件——ASan 复验 11/11 无泄漏 |
+| F2 信号语义不一致 | 统一规则：**只实际执行的写发 saved/saveFailed；被取代（dispose）的排队写不发合成信号**（值未落盘不报成功）；loadAsync/saveAsync/setPath/saveSync 四调用点一致；注释修正 |
+| F5 setPath 清空 data | setPath 只更新 `state.path` + `emit pathChanged()`，**保留 data/loaded**（文档契约："path 变更期间 loaded 保持 true，新数据到达前 text() 返回旧数据"） |
+| F6 测试 preload no-op | `setProperty("__preload", false)`（真实属性名，QSDOC_PROPERTY_OVERRIDE 在正常构建展开为空） |
+| reentrancy clobber | loadAsync/saveAsync 的 dispose 分支后检查 `pendingOperation`（防 handler 排队 op 被覆盖）；两分支已无 emit 中间 |
+
+**第三轮（最终 diff 重审，全新两个 reviewer）**：
+
+Reviewer A：9/10 处置完整；发现 4 残余——F-A（setPath("") 排队空路径 reader → 虚假 loadFailed）、F-B（waitForJob 缺 stale-path 门）、F-C（loadAsync dispose pendingWriter 后 writeData 未清 → 同值再写被去重吞）、F-D（atomic commit 失败 qmlWarning 未判空）。
+
+Reviewer B：Q1-Q4 CLEAN；发现 F1（PLAUSIBLE，startPendingOperation 对异路径 pending 的潜在重入，生产零触发）+ hpp 文档漂移（"saved(s) on completion" 在 latest-wins 下不严格成立）。
+
+**第四轮处置**：
+- F-A：setPath 的 liveWriter 分支对空路径不排队 reader（updatePath 已清 state）
+- F-B：waitForJob 补 stale-path 门（`op->state.path == targetPath || !pendingOperation` 才 updateState）
+- F-C：loadAsync dispose pendingWriter 后清 writeData（与 setPath 分支一致）
+- F-D：atomic commit 失败 qmlWarning 补 `if (view)`
+- F1：startPendingOperation 对 `state.path != targetPath` 的排队 op dispose（防重入路径变更后滞留旧路径）
+- hpp：setData/setText 文档补"仅实际执行的写发完成信号"
+
+**第四轮（最终门禁，全新两个 reviewer）**：
+
+Reviewer A：NOT CLEAN——3 CONFIRMED + 1 PLAUSIBLE：F1'（setPath("") 卸载后 `!pendingOperation` 兜底把完成写当最新 truth → 复活旧 path/data/loaded）、F2'（waitForJob stale-skip 后信号源仍 this->state.error）、F3'（atomic commit 失败只 qmlWarning 不设 error → 假 saved，HEAD 既有缺陷在 T07 hunk 内）、F4'（重入 loadAsync 不处置 pending reader → 重复读）。
+
+**第五轮处置**：
+- F1'：operationFinished/waitForJob 的 guard 改 `finished->state.path == targetPath && !targetPath.isEmpty()`——空 target=unload 是最新意图，**永不**应用旧写状态
+- F2'：waitForJob 信号源改 `op->state.error`（与 operationFinished 完全一致）
+- F3'：atomic commit 失败设 `state.error = FileViewError::Unknown`（发 saveFailed 不再假 saved）
+- F4'：loadAsync fall-through 分支前 dispose 异路径 pending（防重入滞留）
+- 新增 3 测试：unloadDuringWriteDoesNotRollBack、atomicCommitFailureReportsError、waitForJobAfterPathChangeReportsCorrectError（覆盖上述全部场景）
+
+**第五轮（最终门禁，全新两个 reviewer）——双 CLEAN**：
+
+- Reviewer A：**CLEAN**。第四轮 4 处置（F1' stale-path guard、F2' waitForJob 信号源、F3' atomic commit error、F4' fall-through dispose）全部 CONFIRMED 正确；无 CONFIRMED 缺陷、无泄漏（ASan 实证 14/14）、无路径回滚；残留 2 条 PLAUSIBLE 低危理论项（QPointer 指令级 TOCTOU、loadSync 无生产触发契约角），均无复现路径。实测 plain 14/14 + ASan 14/14 + ctest 17/17。
+- Reviewer B：**CLEAN（可放行）**。A07.1-A07.5 全部 CONFIRMED；四轮 findings 逐一验证落实；状态机不变量成立（pending 槽内操作从未 start，无 UAF/泄漏/双删路径）；2 条 PLAUSIBLE 均生产零触发；F4' 测试缺口记录在案（非阻塞）。
+
+**最终验证记录**：fileview 专项 14/14（plain + ASan 双跑）、ctest 17/17、repeat 5 次稳定、tahoe-shell 1010 passed（唯一失败 `test_r17_dock_layout_motion` 为 T08 预知前置 `mappingGeneration`）。
+
+### 7. Commit 与 push 收据
+
+- Quickshell 产品 commit：`827c8b6`，subject `fix(fileview): T07 non-blocking write state machine`，branch/ref `quickshell-tahoe-desktop` / `origin/quickshell-tahoe-desktop`。
+- Quickshell push：成功，`4712657..827c8b6`；push 后 `git fetch origin quickshell-tahoe-desktop`，`git merge-base --is-ancestor 827c8b6 origin/quickshell-tahoe-desktop` exit 0。
+- 主仓库产品指针 commit：（待执行，stage 子模块指针 + execution-log）
+- docs-only closure commit subject：`docs(execution): T07 close task record`；目标 ref `origin/fix/tray-menu-pinned-surface-height`。
+
+### 8. 未覆盖、现场项与后续边界
+
+- 无需用户现场操作；未部署或重启 Quickshell。
+- 残留 2 条 PLAUSIBLE 低危理论项（双 CLEAN 记录在案，无复现路径）：QPointer 指令级 TOCTOU（worker qmlWarning 判空→解引用间隙）；loadSync 阻塞契约角（blockLoading 下写中切 path 首次访问不等队列读完成，生产零触发）。
+- F4' 重入 fall-through 无专项测试（代码审查确认正确，记录为后续加固项）。
+- `test_r17_dock_layout_motion` 失败为 T08 预知前置（`mappingGeneration` 属性），T07 不引入。
+
+### 9. 完成裁决
+
+**结论**：COMPLETE。
+
+**理由**：A07.1-A07.5 与 G01-G08 均满足；旧实现 2 个根因红（慢写阻塞 GUI + setPath 阻塞），新实现 14/14 绿（plain + ASan 双跑无泄漏）且 5 次重复稳定；Quickshell 实际二进制 + ctest 17/17；tahoe-shell 1010 passed（唯一失败为 T08 预知前置）；五轮双审查最终双 CLEAN；无 live restart/deploy，未触碰 `.zcode/`、`Testing/` 或 T08。
+
+**下一任务是否允许开始**：YES（本 docs-only closure commit push 并远端验证后）。

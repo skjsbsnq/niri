@@ -1,7 +1,7 @@
 # Tahoe Desktop 路线图执行日志
 
 **用途**：T01-T24 的唯一状态锁与证据账本。
-**当前状态**：T07 COMPLETE（Quickshell 产品与主仓库指针已推送并远端验证）；T08 IN_PROGRESS。
+**当前状态**：T08 COMPLETE（Quickshell 产品 b022253 与主仓库指针 3cc4d4d 已推送并远端验证）；可开始 T09。
 **禁止**：预填测试结果、审查结论、commit/push 收据或把计划写成已完成事实。
 
 ---
@@ -17,7 +17,7 @@
 | T05 | COMPLETE | niri `79448ad4`（tahoe-layer-animations）/ main `21fb5cf`（fix/tray-menu-pinned-surface-height） | 8 轮双审查，最终门禁 A 侧 CLEAN、B 侧全部闭合 | thumbnail budget |
 | T06 | COMPLETE | Quickshell `4712657a`（quickshell-tahoe-desktop）/ main `aea8b30e`（fix/tray-menu-pinned-surface-height） | 最终双 CLEAN + closure reviewer PASS | QsPaths sticky failure state machine |
 | T07 | COMPLETE | quickshell `827c8b6`（quickshell-tahoe-desktop）/ main `bf53257`（fix/tray-menu-pinned-surface-height） | 5 轮双审查，最终双 CLEAN | FileView non-blocking write state machine |
-| T08 | IN_PROGRESS | - | - | TahoeGlass mapping |
+| T08 | COMPLETE | quickshell `b022253`（quickshell-tahoe-desktop）/ main `3cc4d4d`（fix/tray-menu-pinned-surface-height） | 2 轮双审查，最终双 CLEAN | TahoeGlass per-wl_surface mapping generation |
 | T09 | PENDING | - | - | TahoeGlass feedback |
 | T10 | PENDING | - | - | blur reuse |
 | T11 | PENDING | - | - | glass capture semantics |
@@ -1555,8 +1555,9 @@ Reviewer A：NOT CLEAN——3 CONFIRMED + 1 PLAUSIBLE：F1'（setPath("") 卸载
 
 ## T08 TahoeGlass mapping 生命周期
 
-**状态**：IN_PROGRESS
+**状态**：COMPLETE
 **开始时间**：2026-08-06
+**结束时间**：2026-08-06
 **roadmap 引用**：`roadmap.md#T08`（第 214-232 行）；对应发现：当前 Dock `undefined -> double` 告警
 **执行者上下文**：Claude Code 会话（主仓库 `fix/tray-menu-pinned-surface-height`；Quickshell 子模块 `quickshell-tahoe-desktop`）
 
@@ -1584,6 +1585,7 @@ Quickshell 子模块干净；niri 子模块干净。`.zcode/`、`Testing/` 为�
 
 允许修改：
 
+- `quickshell/src/wayland/tahoe_glass/manager.cpp`（`instance()` isInitialized→isActive 修复 + `createGlassSurface` `!window` 防御，A08.4 协议不可用安全路径前置）
 - `quickshell/src/wayland/tahoe_glass/qml.hpp`（新增 `mappingGeneration` Q_PROPERTY + 私有 `advanceMappingGeneration()` + 测试 friend seam）
 - `quickshell/src/wayland/tahoe_glass/qml.cpp`（`waylandSurfaceCreated()` 内调用 advance；生成值语义）
 - `quickshell/src/wayland/tahoe_glass/test/mapping_lifecycle.hpp/.cpp`（新增专项测试；沿用单一 tahoe-glass-tests harness）
@@ -1647,14 +1649,14 @@ Quickshell 子模块干净；niri 子模块干净。`.zcode/`、`Testing/` 为�
 | surfaceDestroyedDoesNotAdvanceGeneration | waylandSurfaceDestroyed 不递增 |
 | protocolUnavailableDoesNotAdvanceGeneration | 真实 waylandSurfaceCreated（无 manager）不崩溃、不递增、available=false（A08.4） |
 
-红证明：改动前（无 mappingGeneration 属性）测试无法编译（缺 Q_PROPERTY/signal/member），即旧实现失败；实现后 10/10 绿。
+红证明：改动前（无 mappingGeneration 属性）测试无法编译（缺 Q_PROPERTY/signal/member），即旧实现失败；实现后 8 个测试槽全绿（QTest Totals: 10 passed）。
 
 ### 6. 验证结果（Phase 4）
 
 | 配置 | 命令 | exit | 结果 |
 |---|---:|---|
 | 专项红 | 实现前构建 | 1 | 编译失败（缺 mappingGeneration 属性/signal/member）——旧实现失败的确定性证据 |
-| 专项绿 | `./tahoe-glass-tests` | 0 | TestMappingLifecycle 10/10 + 既有测试全过 |
+| 专项绿 | `./tahoe-glass-tests` | 0 | TestMappingLifecycle 8 个测试槽 + init/cleanup 共 10 项 PASS（QTest Totals: 10 passed, 0 failed）+ 既有测试全过 |
 | QUICKSHELL_FULL | `cmake --build build-tahoe -j$(nproc)` | 0 | 实际二进制链接成功 |
 | QUICKSHELL_FULL | `ctest --test-dir build-tahoe --output-on-failure` | 0 | 17/17 pass |
 | SHELL_FULL | `pytest tahoe-shell/tests/` | 0 | 1011 passed（含 R17 转绿，基线 1010+1 failed） |
@@ -1691,3 +1693,26 @@ Quickshell 子模块干净；niri 子模块干净。`.zcode/`、`Testing/` 为�
 | Reviewer B2（范围） | **CLEAN** | 注释修正准确；范围结论全部成立；A08.1 证据诚实；2 处任务记录文案问题（非代码）：section 4"与 BackgroundEffectManager 一致"方向错误（background_effect 仍用 isInitialized 弱模式，实为向更严 isActive 靠拢）；A08.1 补显式"待部署后运行时确认"——均已修正 |
 
 **最终门禁**：两轮各 2 个全新独立 reviewer，最终双 CLEAN；无未裁决 CONFIRMED/PLAUSIBLE。
+
+### 9. Commit 与 push 收据
+
+- Quickshell 产品 commit：`b022253`，subject `fix(tahoe-glass): T08 per-wl_surface mapping generation lifecycle`，branch/ref `quickshell-tahoe-desktop` / `origin/quickshell-tahoe-desktop`。
+- Quickshell push：成功，`827c8b6..b022253`；push 后 `git fetch origin quickshell-tahoe-desktop`，`git merge-base --is-ancestor b022253 origin/quickshell-tahoe-desktop` exit 0。
+- 主仓库产品指针 commit：`3cc4d4d`，subject `fix(submodule): bump quickshell for T08 TahoeGlass mapping lifecycle`，branch/ref `fix/tray-menu-pinned-surface-height` / `origin/fix/tray-menu-pinned-surface-height`；该 commit 更新 Quickshell submodule pointer 到已推送的 `b022253...`，并含本 T08 execution-log 记录（docs 内容与指针 commit 合并，闭环实质一致）。
+- 主仓库 push：成功，`e0b9192..3cc4d4d`；push 后 `git merge-base --is-ancestor 3cc4d4d origin/fix/tray-menu-pinned-surface-height` exit 0。
+- 本闭环记录不含自引用 hash，由后续 `git log --format=%H -- execution-log.md` 解析。
+
+### 10. 未覆盖、现场项与后续边界
+
+- 无需用户现场操作；未部署或重启 Quickshell/niri。
+- A08.1 为源码级证明（属性存在消除 undefined 转换告警成因），无运行时日志采样（不重启会话）；待部署后运行时确认告警消失。
+- 测试诚实 scope：无 Wayland 连接环境无法构造真实 wl_surface，"协议可用边递增"由 seam 状态机测试 + R17 结构契约（waylandSurfaceCreated 内 advance、setAvailable 先于 advance）双覆盖；"协议不可用边"由真实 waylandSurfaceCreated 早退路径行为测试覆盖。
+- 既有边界（surfaceCreated 无 surfaceDestroyed 被基类 mHasWaylandSurface 守卫吞掉 → 无 advance）为预先存在的生命周期行为，非 T08 引入。
+
+### 11. 完成裁决
+
+**结论**：COMPLETE。
+
+**理由**：A08.1-A08.5 与 G01-G08 均满足；旧实现红（缺 mappingGeneration 属性 → Dock 告警 + R17 失败），新实现 TestMappingLifecycle 8 测试槽全绿（QTest Totals: 10 passed） + ctest 17/17 + SHELL_FULL 1011 passed（R17 转绿）+ PROTOCOL_FULL IN_SYNC；两轮各 2 个全新独立 reviewer 最终双 CLEAN，无未裁决 finding；无 live restart/deploy，未触碰 `.zcode/`、`Testing/` 或 T09。
+
+**下一任务是否允许开始**：YES（本 docs-only closure commit push 并远端验证后）。

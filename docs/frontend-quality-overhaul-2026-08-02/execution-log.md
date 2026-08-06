@@ -1346,7 +1346,7 @@ git submodule status niri → 79448ad4（= 已推送 niri commit hash）
 
 ## T07 FileView 非阻塞写状态机
 
-**状态**：IN_PROGRESS
+**状态**：COMPLETE
 **开始时间**：2026-08-06
 **roadmap 引用**：`roadmap.md#T07`（第 194-212 行）；发现 `research-report.md#STAB-06`
 **执行者上下文**：Claude Code 会话（Quickshell 子模块 `quickshell-tahoe-desktop`）
@@ -1533,8 +1533,8 @@ Reviewer A：NOT CLEAN——3 CONFIRMED + 1 PLAUSIBLE：F1'（setPath("") 卸载
 
 - Quickshell 产品 commit：`827c8b6`，subject `fix(fileview): T07 non-blocking write state machine`，branch/ref `quickshell-tahoe-desktop` / `origin/quickshell-tahoe-desktop`。
 - Quickshell push：成功，`4712657..827c8b6`；push 后 `git fetch origin quickshell-tahoe-desktop`，`git merge-base --is-ancestor 827c8b6 origin/quickshell-tahoe-desktop` exit 0。
-- 主仓库产品指针 commit：（待执行，stage 子模块指针 + execution-log）
-- docs-only closure commit subject：`docs(execution): T07 close task record`；目标 ref `origin/fix/tray-menu-pinned-surface-height`。
+- 主仓库产品指针 commit：`bf53257`，subject `fix(submodule): bump quickshell for T07 FileView non-blocking write state machine`，branch/ref `fix/tray-menu-pinned-surface-height` / `origin/fix/tray-menu-pinned-surface-height`；该 commit 更新 Quickshell submodule pointer 到已推送的 `827c8b6...`，并含本 T07 execution-log 记录（docs 内容与指针 commit 合并，未拆独立 docs-only commit——闭环实质一致：内容已提交推送，远端验证 exit 0）。
+- 本闭环记录不含自引用 hash，由后续 `git log --format=%H -- execution-log.md` 解析。
 
 ### 8. 未覆盖、现场项与后续边界
 

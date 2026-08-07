@@ -193,22 +193,23 @@ class DynamicIslandPublicContractTests(unittest.TestCase):
         self.assertIn("mask: Region", self.overlay)
         # Mask follows the painted capsule footprint — not full screen, not
         # the raw settled target. P05: maskWidth/maskHeight are the animated
-        # footprint, unioned with the pre-snap size during the compositor
-        # morph hold window.
+        # footprint, unioned with the pre-snap size until matching compositor
+        # terminal feedback arrives.
         self.assertIn("width: root.capsuleShown ? Math.round(root.maskWidth) : 0", self.overlay)
         self.assertIn("height: root.capsuleShown ? Math.round(root.maskHeight) : 0", self.overlay)
         self.assertIn(
-            "readonly property real maskWidth: morphMaskHoldTimer.running\n"
+            "readonly property real maskWidth: morphMaskHeld\n"
             "        ? Math.max(root.morphMaskHoldWidth, root.islandAnimatedWidth)\n"
             "        : root.islandAnimatedWidth",
             self.overlay,
         )
         self.assertIn(
-            "readonly property real maskHeight: morphMaskHoldTimer.running\n"
+            "readonly property real maskHeight: morphMaskHeld\n"
             "        ? Math.max(root.morphMaskHoldHeight, root.islandAnimatedHeight)\n"
             "        : root.islandAnimatedHeight",
             self.overlay,
         )
+        self.assertNotIn("morphMaskHoldTimer", self.overlay)
         # Panel is full width for positioning, but input mask must not use screen size.
         self.assertIn("implicitWidth: screenWidth", self.overlay)
         self.assertNotRegex(

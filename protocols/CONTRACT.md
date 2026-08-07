@@ -25,7 +25,7 @@ coupling the hard way.
 
 | # | Channel | Transport | Direction | Owner of schema | Primary consumers |
 |---|---|---|---|---|---|
-| 1 | **tahoe_glass_v1** | Wayland private protocol | shell → compositor (requests only; no events yet) | [`protocols/tahoe-glass-v1.xml`](./tahoe-glass-v1.xml) (authoritative); copies in `niri/resources/` and `quickshell/src/wayland/tahoe_glass/` | quickshell `TahoeGlass*` QML types; niri `niri/src/protocols/tahoe_glass.rs` + render helpers |
+| 1 | **tahoe_glass_v1** | Wayland private protocol | shell → compositor requests; compositor → shell v5 capability/terminal feedback | [`protocols/tahoe-glass-v1.xml`](./tahoe-glass-v1.xml) (authoritative); copies in `niri/resources/` and `quickshell/src/wayland/tahoe_glass/` | quickshell `TahoeGlass*` QML types; niri `niri/src/protocols/tahoe_glass.rs` + render helpers |
 | 2 | **niri event-stream** | `niri msg --json event-stream` (newline-delimited JSON over a long-lived process) | compositor → shell | `niri/niri-ipc/src/lib.rs` `Event` enum | `tahoe-shell/services/Windows.qml` |
 | 3 | **niri msg action** | one-shot `niri msg action <verb> …` (and a few non-action `niri msg` queries) | shell → compositor | `niri/niri-ipc/src/lib.rs` `Action` enum + CLI | `Windows.qml` `action()`, `CommandRunner.qml`, `Power.qml`, `NiriSettings.qml`, `ThumbnailProvider.qml` |
 
@@ -36,10 +36,8 @@ genie minimize and must be kept in the same mental model:
 |---|---|---|---|
 | 4 | **wlr foreign-toplevel `set_rectangle`** | Wayland (wlr-foreign-toplevel-management) | Dock publishes the genie target rect via `Toplevel.setRectangle(sourceWindow, x, y, w, h)`. Protocol is wlr's; Tahoe policy lives in `DockRectanglePublisher.js`. niri handles it in `niri/src/handlers/mod.rs` (`ForeignToplevelHandler::set_rectangle`) which writes `Mapped::set_foreign_toplevel_rect_hint` (`ForeignToplevelRectHint`). |
 
-There is currently **no compositor→shell animation-completion event** on
-channel 1. The only roadmap item that would need a new protocol event is
-S-L10 (`transform_done`); everything else in the 2026-07-27 roadmap stays
-inside the existing three channels.
+Channel 1 v5 adds serial-correlated transform capability and terminal feedback.
+Older v1-v4 clients retain the original silent request behavior.
 
 ---
 
@@ -76,9 +74,10 @@ Skipping step 4 leaves the forks unshipped even if the superproject looks
 green. Skipping step 5 leaves CI / other machines on the old submodule
 SHAs.
 
-Current version: **v4** (manager and surface interfaces are kept in
+Current version: **v5** (manager and surface interfaces are kept in
 lockstep so surface objects inherit the bound manager version and can
-negotiate the presentation-transform requests added in v4).
+negotiate the presentation-transform requests added in v4 and the
+serial-correlated completion feedback added in v5).
 
 ### Interfaces and requests
 
@@ -102,11 +101,21 @@ Summary only — the XML is authoritative if this table drifts.
 | `set_transform` | 4 | `x, y, scale_x, scale_y` | set presentation transform immediately (cancels running anim); identity = `(0,0,1,1)` |
 | `set_transform_target` | 4 | `x, y, scale_x, scale_y, curve, p1..p5` | animate presentation transform to target; spring carries velocity on retarget |
 | `set_region_morph` | 4 | `region_id, curve, p1..p5` | on the commit that changes that region's rect, morph from old visual footprint to identity |
+| `set_transform_serial` | 5 | `serial` | tag the next transform/morph request for exactly-once terminal feedback |
 
-Enums: `error.invalid_region`; `region_flags` bitfield (`blur=1`, `shadow=2`,
+Enums: `error.invalid_region`; v5 `error.invalid_serial` for zero/reused
+in-flight transform serials; `region_flags` bitfield (`blur=1`, `shadow=2`,
 `clip=4`); `transform_curve` (`spring=0`, `eased=1`) with p1..p5 laid out
 as damping/stiffness/epsilon (spring) or duration-ms + cubic-bezier
-(eased).
+(eased); v5 `capability.transform_feedback`; and v5 `feedback_status`
+(`completed`, `rejected`, `superseded`, `cancelled`). A v5 controller receives
+one `capabilities` event and one `transform_feedback(serial, status)` terminal
+event for every accepted non-zero serial while the controller object remains
+alive. Replacing an unconsumed tag produces `superseded`; committing one
+without a transform produces `rejected`. Destroying the protocol object
+precludes further wire feedback; the Quickshell attached object emits local
+`cancelled` feedback before its wrapper is destroyed. v1-v4 clients receive
+neither protocol event.
 
 ### Commit / double-buffer contract (load-bearing)
 
@@ -138,12 +147,11 @@ as damping/stiffness/epsilon (spring) or duration-ms + cubic-bezier
 - `PanelWindow` files need a `tahoe-*` namespace; `TahoeGlassRegion`
   declarations need material + radius (same guardrail script).
 
-### Known absences
+### Known absence
 
-- No `transform_done` / `morph_done` event (S-L10). Shell cannot precisely
-  sequence post-animation work off the compositor clock.
-- No compositor→client region ack. Clients that need confirmation must
-  observe side effects (damage, visual) or stay conservative.
+- There is no general compositor→client region acknowledgement. v5 feedback
+  covers tagged transform/morph completion and rejection, not arbitrary region
+  updates; clients must still keep region submission conservative.
 
 ---
 

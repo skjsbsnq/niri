@@ -1,7 +1,7 @@
 # Tahoe Desktop 路线图执行日志
 
 **用途**：T01-T24 的唯一状态锁与证据账本。
-**当前状态**：T08 COMPLETE（Quickshell 产品 b022253 与主仓库指针 3cc4d4d 已推送并远端验证）；可开始 T09。
+**当前状态**：T09 IN_PROGRESS（TahoeGlass completion/rejection/capability feedback）。
 **禁止**：预填测试结果、审查结论、commit/push 收据或把计划写成已完成事实。
 
 ---
@@ -18,7 +18,7 @@
 | T06 | COMPLETE | Quickshell `4712657a`（quickshell-tahoe-desktop）/ main `aea8b30e`（fix/tray-menu-pinned-surface-height） | 最终双 CLEAN + closure reviewer PASS | QsPaths sticky failure state machine |
 | T07 | COMPLETE | quickshell `827c8b6`（quickshell-tahoe-desktop）/ main `bf53257`（fix/tray-menu-pinned-surface-height） | 5 轮双审查，最终双 CLEAN | FileView non-blocking write state machine |
 | T08 | COMPLETE | quickshell `b022253`（quickshell-tahoe-desktop）/ main `3cc4d4d`（fix/tray-menu-pinned-surface-height） | 2 轮双审查，最终双 CLEAN | TahoeGlass per-wl_surface mapping generation |
-| T09 | PENDING | - | - | TahoeGlass feedback |
+| T09 | IN_PROGRESS | - | - | TahoeGlass completion/rejection/capability feedback |
 | T10 | PENDING | - | - | blur reuse |
 | T11 | PENDING | - | - | glass capture semantics |
 | T12 | PENDING | - | - | shared backdrop gate |
@@ -1334,15 +1334,197 @@ git submodule status niri → 79448ad4（= 已推送 niri commit hash）
 
 **下一任务是否允许开始**：YES（本 docs-only closure commit push 并远端验证后）。
 
-### 10. 闭环记录审查与推送
+## T09 TahoeGlass 完成/拒绝反馈
 
-- Closure reviewer 1（全新只读上下文）：产品/hash/远端/工作树均通过；发现一处账本措辞——“3 个文件”同时列出 3 个产品文件与 execution-log，已改为“3 个产品文件；另更新 execution-log”。
-- Closure reviewer 2（修正后全新只读上下文）：**PASS**；复核产品范围、两级 commit/gitlink/remote ancestor、最终双 CLEAN、专项/全测/sanitizer 收据与未触碰用户项，可置 COMPLETE。
-- 产品 commit hash/remote receipt 是否逐项准确：是；Quickshell `4712657a638b15afb3f2acff63de7e6eb36a3f2b`、主仓库 `aea8b30e97035cc767406410b819c90a982f94c3` 均已推送，两个 remote ancestor 验证 exit 0，子模块指针一致。
-- 状态是否可置 COMPLETE：是。
-- docs-only closure commit subject：`docs(execution): T06 close task record`。
-- closure push remote ref：`origin/fix/tray-menu-pinned-surface-height`。
-- closure remote ancestor 验证：由本 commit push 后命令输出给出；本文不记录自身 hash，避免自引用。
+**状态**：IN_PROGRESS
+**开始时间**：2026-08-06
+**roadmap 引用**：`roadmap.md#T09`（第 234-252 行）；对应发现：GLASS-01、GLASS-02 `pending_dirty` 风险
+**执行者上下文**：Workbuddy 会话（主仓库 `fix/tray-menu-pinned-surface-height`；niri 子模块 `tahoe-layer-animations`；Quickshell 子模块 `quickshell-tahoe-desktop`）
+
+### 1. 前提核实
+
+| 报告判断 | 当前证据 | 等级 | 结论 |
+|---|---|---|---|
+| 当前 TahoeGlass v4 只有 request，没有 completion/rejection/capability event 或 request serial | 三份 `tahoe-glass-v1.xml` 均为 manager/surface v4，9 个 request、0 个 event；`niri/src/protocols/tahoe_glass.rs:25` `VERSION=4` | CURRENT-CONFIRMED | 成立；不能把 serial 加到既有 v4 request，必须按 Wayland 兼容规则增加 since=5 request/event |
+| 可恢复 overflow 会保留 `pending_dirty`，等待 surface 后续增长 | `niri/src/protocols/tahoe_glass.rs:462-520,819-858`；现有 grow validation 测试 | CURRENT-CONFIRMED | 成立；新反馈不得把 healable overflow 提前拒绝 |
+| 永久结构性 region rejection 与无几何变化 morph 当前静默丢弃 | `niri/src/protocols/tahoe_glass.rs:783-879,531-560` | CURRENT-CONFIRMED | 成立；v5 必须给相应 serial 确定 terminal 状态且只发一次 |
+| transform/morph last-wins 无 request identity，superseded request 无终态 | `pending_transform: Option` 与 `set_pending_transform_if_owner()`：`niri/src/protocols/tahoe_glass.rs:189-271` | CURRENT-CONFIRMED | 成立；保留单槽 authority，但为 v5 保存 serial/resource 并终结被覆盖请求 |
+| 真正 animation settle 只在 mapped layer animation owner 可见 | `niri/src/layer/mapped.rs:300-375` `advance_animations()` / `consume_transform_directive()` | CURRENT-CONFIRMED | 成立；完成 event 不能在 request commit 时伪造 |
+| Quickshell attached TahoeGlass 是唯一 QML authority，但目前只有 `pendingMorph` 单槽和 bool send result | `quickshell/src/wayland/tahoe_glass/qml.hpp:204-393`、`qml.cpp:540-834` | CURRENT-CONFIRMED | 成立；原地扩展同一 attached type，不创建 v5 平行类型 |
+| shell 通过固定时间猜 compositor morph 完成 | `DynamicIslandOverlay.qml:297-323` + `DynamicIslandMotion.js:164-170` 的 560 ms mask hold | CURRENT-CONFIRMED | 成立；T09 删除该 completion authority，保留 T14 的几何 driver topology |
+
+### 2. 工作树、范围与搜索清单
+
+开始时精确指纹：
+
+```text
+main: b0dcfddad03cac21d400fa5bd66e63beab785c4b / fix/tray-menu-pinned-surface-height
+niri: 79448ad4ef55981c79844119d12c1e273a08f077 / tahoe-layer-animations
+quickshell: b022253359a593e28c7fa14577ab20dbff967427 / quickshell-tahoe-desktop
+main pre-existing: ?? .zcode/ ; ?? Testing/
+niri/quickshell worktrees: clean
+protocol copies: authority == niri copy == quickshell copy (cmp exit 0)
+```
+
+允许修改：三份 TahoeGlass XML；niri 既有 protocol state/dispatch、mapped layer completion producer 与现有专项测试；Quickshell 既有 manager/surface/QML attached authority 与同一 QTest harness；Dock/Dynamic Island 中依赖 compositor terminal feedback 的现有状态；协议 guardrail/contract；本执行记录。
+
+明确禁止：T10 blur texture、T11-T13 render/capture/shader、T14 geometry driver 重写、T15 swipe/OSD 业务重构、legacy/new 用户开关、第二 TahoeGlass API、固定 timeout completion、`.zcode/`、`Testing/`。
+
+G01 搜索结论：
+
+- niri transform directive producer 唯一入口：`on_surface_commit()`；consumer 唯一入口：`MappedLayer::consume_transform_directive()`。
+- Quickshell production attached authority 唯一：`TahoeGlass`；wire adapter 唯一：`TahoeGlassSurface`；generated build output 不修改。
+- shell production transform/morph consumer 仅 `Dock.qml` 与 `DynamicIslandOverlay.qml`，共 7 个调用点。
+- `protocolGeometrySettled` 的 client geometry/floor/ceil/collapse 用途属于 T14 边界，T09 只移除其作为 compositor completion 替代品的职责。
+
+### 3. 改动前专项基线
+
+| 配置 | 命令 | exit | 结果 |
+|---|---:|---|
+| niri TahoeGlass | `cargo test -p niri --lib tahoe_glass -- --nocapture` | 0 | 50 passed；无 feedback/serial/event 测试 |
+| Quickshell TahoeGlass harness | `./build-tahoe/src/wayland/tahoe_glass/test/tahoe-glass-tests` | 0 | 49 个 QTest 项通过；无 completion/rejection lifecycle 测试 |
+| shell 相关专项 | `pytest test_dynamic_island_v2_surface.py test_dynamic_island_expand_morph.py test_r17_dock_layout_motion.py test_tahoe_glass_incremental_regions.py` | 0 | 49 passed + 6 subtests；现有测试仍固化 560 ms completion guess |
+
+### 4. 红测试证明
+
+| 层 | 命令 | exit | 旧实现失败机制 |
+|---|---|---:|---|
+| niri | `cargo test -p niri --lib permanent_overflow_reports_rejected_region_identity -- --nocapture` | 101 | 新行为测试要求 validation 暴露 `complete/committed/rejected_region_ids`；旧 tuple 无永久拒绝 identity，5 个 `E0609` 编译错误 |
+| Quickshell | `cmake --build build-tahoe --target tahoe-glass-tests -j2` | 1 | `TestFeedbackLifecycle` 要求 monotonic serial、supersede、late result filter、matching completion、teardown cancel；旧 TahoeGlass 无这些属性/信号/状态机，编译失败 |
+| shell/protocol | `pytest tahoe-shell/tests/test_t09_tahoe_glass_feedback.py` | 1 | 4/4 failed：XML 仍 v4 且无 event/serial；QML authority 无 feedback state；Dock/Island 未 gate capability；Island 仍用 560 ms Timer 猜完成 |
+
+这些失败分别捕获 A09.1（永久拒绝 identity）、A09.2/A09.3（serial once-only、supersede、late/destroy）和 A09.4/A09.5（v5 capability/terminal event、删除 QML timeout authority），不是仅靠版本字符串宣称修复。
+
+### 5. 实现机制
+
+- **协议兼容（A09.4）**：manager/surface 同协议族 lockstep 升到 v5；既有 v4 request wire signature 不变。v5 新增 `set_transform_serial(serial)`、`capabilities` 与 `transform_feedback(serial,status)`；状态为 `completed/rejected/superseded/cancelled`。server 只向 bound version >=5 的 resource 发 event，v1-v4 继续静默 last-wins。
+- **niri 单一状态机（A09.1-A09.3）**：仍由 `TahoeGlassSurfaceInner` 拥有 pending/committed/directive；新增 feedback tag、pending transform token、active `(epoch, token)`，没有第二套 API。新 transform 覆盖 pending/running token 时终结旧 serial；mapped layer 以 directive epoch 在即时 apply 或动画 settle 后完成匹配 token，旧 epoch late completion 为 no-op。
+- **region rejection**：validation 原地扩展为 `RegionValidationOutcome`，永久结构性拒绝返回 region identity；healable overflow 保持 `pending_dirty` 且不发 terminal，surface geometry catch-up 后同一 morph serial 才进入动画/完成。不存在 region、两侧 rect 不齐或 rect 不变的 morph 发 `rejected`。
+- **lifecycle**：新 controller claim、unmap、output removal 会清理/取消匹配 feedback；协议 destructor 后不能再向已销毁 proxy 发 event，因此 server 丢弃该 resource 的 token，Quickshell 在销毁 wrapper 前本地发一次 `cancelled` 并清 attached 状态。stale controller 的 transform 写不能消费当前 owner 的 feedback tag。
+- **Quickshell 唯一 authority**：同一个 attached `TahoeGlass` 新增 `feedbackAvailable`、`transformInFlight`、`activeTransformSerial`、`transformFinished(serial,status)`；原五个 transform/morph invokable 不改签名，由内部单调分配 serial。surface adapter 缓存 capability，callback 安装晚于首 event 时仍会 replay；late old serial 不得清新 request。
+- **shell completion authority（A09.5）**：Dock/Island compositor 路径改 gate `feedbackAvailable`，旧 v4 compositor 自动走既有 client animation fallback。Dynamic Island 删除 560ms timer/token；mask old/new union 由匹配 serial terminal event 释放，同 tick 多次 width/height/radius retarget 在 supersede 时把 ownership 转给 `activeTransformSerial`。T14 的三 geometry driver 与 `protocolGeometrySettled` 其他用途保持不变。
+
+### 6. 行为测试与验证
+
+新增真实 niri Wayland client event 捕获与显式 v4/v5 bind helper；测试通过 generated proxy、真实 `wl_surface.commit`、mapped-layer animation owner 和 client event dispatch，不是仅测内部 helper：
+
+| 场景 | 结果 |
+|---|---|
+| v4 bind + 既有 transform request | request 可用；0 capability、0 feedback |
+| v5 create | 恰好一个 `TransformFeedback` capability |
+| animated transform serial 42 | commit 时无提前 complete；settle 后一次 completed；后续 commit/tick 不重复 |
+| 同 commit serial 101/102 | 101 superseded，102 completed，顺序与 identity 正确 |
+| 不存在 region 的 morph serial 103 | 一次 rejected |
+| healable overflow morph serial 201 | 小 surface 时保持 pending；grow 后一次 completed；不提前 reject/不重复 |
+| healable overflow morph serial 202 后 unmap/remap | unmap 一次 cancelled；remap/grow 后无 late completed |
+| active serial 42 被复用 | v5 `invalid_serial` protocol error；不会产生同 serial 两个 terminal |
+| controller replacement with active serial 301 | 旧 controller 一次 cancelled；旧 animation epoch 后续不 complete |
+
+最终命令收据：
+
+| 配置 | 命令 | 结果 |
+|---|---|---|
+| niri focused protocol unit | `cargo test -p niri --lib protocols::tahoe_glass::tests -- --nocapture` | PASS，27/27 |
+| niri Tahoe wire integration | `cargo test -p niri --lib tests::tahoe_glass:: -- --nocapture` | PASS，19/19 |
+| niri full lib | `cargo test -p niri --lib` | PASS，623/623 |
+| niri workspace compile | `cargo check --workspace --all-targets` | PASS；仅既有 visual-tests GTK unused-import warning；T09 helper 后续标 `#[cfg(test)]` |
+| niri binary | `cargo build -p niri` | PASS |
+| niri changed-file formatting | `rustfmt --edition 2021 --check src/layer/mapped.rs src/protocols/tahoe_glass.rs src/tests/client.rs src/tests/tahoe_glass.rs` | PASS（随后只还原两处与 T09 无关的 formatter hunk） |
+| Quickshell focused harness | `cmake --build build-tahoe --target tahoe-glass-tests && .../tahoe-glass-tests` | PASS，feedback suite 15/15，全部 Tahoe suite 64 项通过 |
+| Quickshell full | `cmake --build build-tahoe && ctest --test-dir build-tahoe --output-on-failure` | PASS，17/17 |
+| shell T09 + migrated mask contracts | focused pytest 4 文件 | PASS，43 + 47 subtests |
+| shell full | `PYTHONDONTWRITEBYTECODE=1 python3 -m pytest -q -p no:cacheprovider tahoe-shell/tests/` | PASS，1016 + 284 subtests |
+| protocol | `scripts/check-protocol-sync.sh && scripts/check-tahoe-glass-guardrails.sh` | PASS；三份 XML sha256 `10fd415f...`，IN_SYNC |
+| deployed parity | `scripts/arch-update.sh --verify-tahoe-shell` | EXPECTED FAIL：installed shell 仍为旧 Dock/Island，且缺 T09 test；未获 deploy/restart 授权，未写 `~/.config` |
+
+格式门禁说明：`cargo fmt --all -- --check` exit 1，输出只命中 22 个 T09 外既有文件（当前 rustfmt 会机械改写约 300 行）。曾运行 `cargo fmt --all` 后已按明确清单撤掉这些本任务产生的无关改动；最终 niri 产品 diff 仅 6 个 T09 文件。最后新增的 `handlers/layer_shell.rs` 与 `tests/tahoe_glass.rs` 通过精确 `rustfmt --check`。不能为让全仓格式门禁变绿而夹带范围外格式提交。
+
+生产 QML runtime 边界：仓库没有可在 offscreen 下实例化 `Dock.qml` / `DynamicIslandOverlay.qml` 与真实 TahoeGlass attached object 的断言式 harness；现有 qmltestrunner stub 不提供 attached `TahoeGlass`，完整 shell probe 需要 live Wayland/DBus 且可能冲突。未获 live shell 启动/重启授权，因此以 Quickshell attached-object QTest + shell production-source contracts + 全量 pytest 覆盖，并如实保留该运行时边界。
+
+### 7. 验收状态
+
+| 验收编号 | 当前状态 | 证据 |
+|---|---|---|
+| G01 | PASS | §1-2 current evidence、调用点与不修改点清单完整 |
+| G02 | PASS | 三仓 diff 仅既有 TahoeGlass authority/consumer/test；无 V2/New/Fixed、无用户开关、无 T10+ |
+| G03 | PASS | niri 623/623、Quickshell 17/17、shell 1016、协议双门禁通过 |
+| G04 | PASS | §4 三层红证明；§6 wire/QTest/shell 绿证明与 exactly-once 复查 |
+| G05 | PASS | 有界最终双审中 scope/API reviewer CLEAN；correctness finding 修复后由全新单点 verifier CLEAN，见 §8 |
+| G06 | PENDING | 三仓 commit/push/remote ancestor 待执行 |
+| G07 | PENDING | closure reviewer + docs-only closure commit 待执行 |
+| G08 | PASS | 未启动/重启/deploy live shell；`.zcode/`、`Testing/` 未触碰；T10+ 未开始 |
+| A09.1 | PASS | permanent rejection identity + wire rejected；healable overflow 保持 pending 后完成 |
+| A09.2 | PASS | serial tag、commit、mapped settle、exactly-once wire events |
+| A09.3 | PASS | pending/running supersede、epoch late no-op、claim/output teardown cancel、真实 unmap/remap wire cancel、client destroy local cancel |
+| A09.4 | PASS | v4 explicit bind 实测 request 可用且无 v5 event；v5 capability/event ABI 实测 |
+| A09.5 | PASS | shell timeout authority删除；mask 由 matching serial terminal event 释放；旧 mask tests 已迁移 |
+
+### 8. 审查与修正
+
+首轮 correctness reviewer：**NOT CLEAN**。
+
+- HIGH：v5 client 可复用仍在途 serial，server 会对同值先 superseded 后 completed，破坏 terminal identity。→ 修复：`pending_feedback_tag`、`pending_transform_feedback`、`active_transform_feedback` 三个 authority 统一查重；XML 新增 since=5 `error.invalid_serial`，零值/复用直接 protocol error；三份 XML/guardrail/contract 同步；真实 wire `v5_reusing_an_in_flight_serial_is_a_protocol_error` 红绿覆盖。
+- MEDIUM：controller replacement/unmap/output removal cancellation 缺 wire 证据。→ 修复：新增 `v5_controller_replacement_cancels_active_serial_and_blocks_late_completion`，证明旧 controller 一次 cancelled 且旧 epoch late completion no-op；unmap/output removal 仍由既有 output teardown 集成路径 + pure state ownership tests 覆盖。
+
+修正后完整矩阵重跑：niri 621/621 + workspace check + binary build，Quickshell 17/17，shell 首轮 1014/1015（既有 notification swipe runtime race 偶发 `X card retired`），该单测立即重跑 1/1 通过，随后 shell full 重跑 1015 + 284 subtests 全绿；协议双门禁通过。
+
+第二轮冻结 diff 双审：**NOT CLEAN**。
+
+- Reviewer A（correctness）MEDIUM CONFIRMED：healable overflow 的 tagged morph 在 commit 后保留于 pending 槽，unmap 只取消 active token，导致 serial 永久 pending 或 remap/grow 后 stale completed。→ 修复：既有 unmap authority 原地取消 `pending_feedback_tag`、带 feedback 的 pending transform 与 active feedback；未打 tag 的 v1-v4 pending transform 保持原双缓冲语义。新增真实 wire `v5_unmap_cancels_healable_region_morph_without_late_completion`，覆盖 null-buffer unmap、一次 cancelled、同一 `wl_surface` remap/grow 后无 late completed。
+- Reviewer B（scope/acceptance）产品代码 CLEAN；CONFIRMED 文档错误：G03 仍写旧计数 619。→ 修复为当时 621/621，并随新增 unmap wire test 更新最终收据为 18/18、622/622。其余范围/API/A09 结论 CLEAN；production QML live harness 边界维持诚实披露。
+
+第二轮修复后重跑：niri focused unmap 1/1、Tahoe wire 18/18、protocol unit 27/27、niri full 622/622、workspace check、binary build、protocol sync/guardrails、三仓 `git diff --check` 全部通过。下一轮使用两个全新只读上下文重审最终冻结 diff；任何产品 diff 修正都会再次回到验证和双审。
+
+第三轮冻结 diff 双审：**NOT CLEAN**（一名 reviewer CLEAN，另一名 reviewer HIGH CONFIRMED；一次代理 403 未产出结果，不计审查）。
+
+- Reviewer A（correctness）：CLEAN。
+- Reviewer B（scope/API）HIGH CONFIRMED：同一 `TahoeGlassSurface` protocol resource 从旧 attached object 移交到新对象时，旧实现仅本地 `cancelled` 且新对象 allocator 从 1 重启；server 仍在途的旧 serial 1 会与新对象首个 serial 1 冲突并触发致命 `invalid_serial`。→ 修复：既有 `waylandSurfaceCreated()` swap 路径原地迁移 exact serial allocator、已发送 active serial 与 in-flight ownership；不伪造 terminal，新 callback 接收 server 的唯一 terminal。尚未 polish/未发送的 pending morph 在旧对象本地 cancelled，不迁移。allocator 环绕时跳过 zero 和当前 active serial。
+- 同步修复 reviewer 定位出的同一状态机风险：任何更新 feedback request 先移除旧的未发送 pending morph，防止旧 serial 后续在 polish 时反向 supersede 新请求。
+
+第三轮修复新增 QTest：active feedback + allocator 跨对象 transfer；未发送 morph cancel 而不 transfer；更新请求清理未发送 morph；late old terminal 不清 newer active。Quickshell focused feedback 9/9（Tahoe harness 58 项）、full build + CTest 17/17、shell full 通过；相对 HEAD 的 T09 C++ hunks已按 clang-format 收敛，三仓 `git diff --check` 通过。由于产品 diff 改变，下一轮必须由两个全新 reviewer 双 CLEAN。
+
+第四轮冻结 diff 双审：**NOT CLEAN**（scope reviewer CLEAN；correctness reviewer 2 项 CONFIRMED）。
+
+- HIGH：直接 `sendTransform*()` 在 wire request 前由 `beginFeedbackRequest()` 同步发 property/terminal signals；direct handler 可 teardown/remap 使 raw surface 悬垂，或嵌套请求反转 wire/local latest 顺序。→ 修复：五个既有 surface request helper 原地吸收 serial，先完整校验再连续写 tag + transform，消除“tag 已写、transform 未写”中间态；直接路径先完成 wire + commit，最后才原子发布 client state，之后不再解引用 raw surface。所有 property/terminal signal 之前状态已完整提交，并由 `QPointer` + final-value gate 处理同步重入/对象销毁。
+- MEDIUM：server-active A 被 deferred morph B 替换时，旧 scalar state 会在 B 尚未上 wire 前伪造 A `Superseded`；A 的真实 terminal 随后被忽略。→ 修复：`mServerOwnedTransformSerials` 独立保存所有已写 tag+request 的 serial；`activeTransformSerial` 仅表示 latest local intent。旧 server serial 的真实 terminal 总是对外发出但不清 newer intent；未发送 morph 只在本地 supersede/cancel；polish 成功后才把 pending serial 转入 server-owned。teardown 幂等取消 pending + server-owned 全集；handoff 在 callback/surface 稳定后迁移全集与 allocator，并拒绝旧对象重入创建 controller。
+
+第四轮修复 QTest 覆盖：sent A/B 的 terminal authority；server A + deferred B 的真实 terminal；pending→server ownership；teardown 同时取消 server/pending；active signal handler 嵌套新请求与 teardown；terminal handler 嵌套新请求；handoff 的 server+pending 分流。feedback suite 15/15、Tahoe harness 64 项、Quickshell build + CTest 17/17、shell full、protocol sync/guardrails、clang-format changed-hunk check、三仓 `git diff --check` 全部通过。产品 diff 再次改变，下一轮仍需两个全新 reviewer 双 CLEAN。
+
+第五轮冻结 diff 双审：**NOT CLEAN**（两个 reviewer 独立确认同一 LOW finding；其余 correctness/scope 均 CLEAN）。
+
+- `DynamicIslandOverlay.qml` 的 `morphMaskSerial` 使用 signed QML `int`，但 protocol/Quickshell serial 为完整 `quint32`；`0x80000000..0xffffffff` 会丢失 identity，matching terminal 被严格比较拒绝并永久持有 mask。→ 修复：改为 QML `real`（IEEE-754 double 对所有 uint32 精确），保持数值比较/赋值 API 不变；新增边界合同覆盖 `0x7fffffff`、`0x80000000`、`0xffffffff`，并更新既有 mask contracts。
+
+第五轮修复后 focused shell 43 + 47 subtests、shell full 1016 + 284 subtests、三仓 `git diff --check` 通过。产品 diff 改变，必须再次使用两个全新 reviewer 双 CLEAN。
+
+第六轮冻结 diff 双审：**NOT CLEAN**（correctness reviewer CLEAN；scope reviewer 1 项 LOW CONFIRMED）。
+
+- `capabilities` event 描述误写为“等待 transform_feedback 后才依赖 terminal”，会形成 capability 协商循环；真实 client gate 是等待 `capabilities` 并确认 `capability.transform_feedback`。→ 修复权威 XML 描述并同步 niri/Quickshell 三份副本；wire ABI 未变化。
+
+第六轮修复后 protocol sync/guardrails PASS，三份 XML sha256 `474284e00525dd5d91f43ec9637f8fb92640c7133c3491312be4102f88c37ae0`，三仓 `git diff --check` 通过。最终 diff 再次进入全新双审。
+
+第七轮冻结 diff 双审：**NOT CLEAN**（correctness reviewer CLEAN；scope reviewer 1 项 MEDIUM CONFIRMED）。
+
+- `set_transform_serial` 已承诺未消费 tag 在替换/裸 commit 时分别获得 `superseded`/`rejected`，但 `transform_feedback` event 与 `CONTRACT.md` 仍把 exactly-once 范围写成“被 transform request 消费的 serial”，且未说明 protocol object destroy 后无法继续发送 wire event。→ 修复三份 XML 与合同：每个已接受的非零 serial 在 protocol object 存活期间恰有一个 terminal；明确未消费 tag 的两个终态和 destroy 边界；Quickshell wrapper 销毁前的本地 `cancelled` 与 wire event 区分记录。wire ABI 未变化。
+
+第七轮修复后 protocol sync/guardrails PASS，三份 XML sha256 `10fd415fb520e50f6907e411dba2f539ed0c4eaad811e85d01865cf8f41f7a11`，三仓 `git diff --check` 通过。按用户要求，审查流程收敛为最后一次有界双审，不再启动新的循环。
+
+有界最终双审：scope/API reviewer **CLEAN**；correctness reviewer 1 项 HIGH CONFIRMED。
+
+- 已处于 unmapped/never-mapped 状态的 layer 若提交 tagged transform，`on_surface_commit()` 会先发布 active feedback，但旧 layer-shell 清理只在 `mapped_layer_surfaces.remove()` 成功时运行；不存在 `MappedLayer` consumer 时 serial 可永久在途或在后续 map 被 stale 消费。→ 修复：unmapped 分支无条件调用既有 `clear_transform_directive_on_unmap()`，再按是否存在 `MappedLayer` 处理 close snapshot；新增真实 wire `v5_transform_on_never_mapped_layer_is_cancelled_without_late_completion`，证明一次 `cancelled` 且后续 map/animation 无 late `completed`。
+
+修复后专项 1/1、Tahoe wire 19/19、niri full 623/623、workspace check、binary build、精确 rustfmt、protocol sync/guardrails 与三仓 `git diff --check` 全部通过。按用户“不要再无限检查”指令，后续只做一次针对此单点修复的独立闭合核验，不再扩展审查范围或开启循环。
+
+单点闭合 verifier（全新只读上下文）：**CLEAN**。确认无条件 unmap 清理覆盖 never-mapped、already-unmapped 与 mapped→unmapped；`.take()` token lifecycle 保证幂等 exactly-once；close snapshot 时序不变；untagged v1-v4 pending request 保留；新增 wire test 在旧实现会缺少即时 `cancelled`，修复后同时阻止 remap 的 late `completed`。G05 按有界最终审查与修复闭合记录为 PASS。
+
+### 9. 提交与推送
+
+| 仓库 | Commit hash | Commit subject | Branch / remote ref | push / ancestor |
+|---|---|---|---|---|
+| niri | `274b08bb3d6f1943f9024705ea251c41c10ab46a` | `feat(tahoe-glass): add v5 transform feedback lifecycle` | `tahoe-layer-animations` / `origin/tahoe-layer-animations` | push 成功；`merge-base --is-ancestor` exit 0 |
+| Quickshell | `d297889d3b3889a283ae12ba3fe8c0ef2ff0a3a6` | `feat(tahoe-glass): expose terminal feedback lifecycle` | `quickshell-tahoe-desktop` / `origin/quickshell-tahoe-desktop` | push 成功；`merge-base --is-ancestor` exit 0 |
+| main | 待本产品 commit 后补录 | `feat(tahoe-glass): complete v5 feedback integration` | `fix/tray-menu-pinned-surface-height` / `origin/fix/tray-menu-pinned-surface-height` | 待执行 |
+
+下一步固定为：主仓库协议/shell/gitlink 产品 commit/push/ancestor；更新本记录为 COMPLETE；fresh closure reviewer；docs-only closure commit/push/ancestor。
 
 ## T07 FileView 非阻塞写状态机
 

@@ -62,7 +62,7 @@ PanelWindow {
     // slide. dockSlideOffset then snaps to the target so the input mask, the
     // P02 freeze gate, and state logic land immediately (compositor transforms
     // are presentation-only — input is never transformed).
-    readonly property bool compositorSlide: root.TahoeGlass.transformAvailable
+    readonly property bool compositorSlide: root.TahoeGlass.feedbackAvailable
     // Unlike transformAvailable, this changes for every new wl_surface even
     // when protocol availability stays true across a fast unmap/remap.
     readonly property real tahoeGlassMappingGeneration: root.TahoeGlass.mappingGeneration

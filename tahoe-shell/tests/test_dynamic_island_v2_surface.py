@@ -247,36 +247,24 @@ class DynamicIslandV2SurfaceTests(unittest.TestCase):
         self.assertIn("width: root.capsuleShown ? Math.round(root.maskWidth) : 0", self.overlay)
         self.assertIn("height: root.capsuleShown ? Math.round(root.maskHeight) : 0", self.overlay)
         self.assertIn("y: root.capsuleTargetTop", self.overlay)
-        # Union-hold plumbing: fallback is the animated footprint; the hold
-        # is bounded by the motion token (covers spring/eased settle).
+        # Union-hold plumbing: fallback is the animated footprint; matching
+        # compositor terminal feedback ends the hold.
         self.assertIn(
-            "readonly property real maskWidth: morphMaskHoldTimer.running\n"
+            "readonly property real maskWidth: morphMaskHeld\n"
             "        ? Math.max(root.morphMaskHoldWidth, root.islandAnimatedWidth)\n"
             "        : root.islandAnimatedWidth",
             self.overlay,
         )
         self.assertIn(
-            "readonly property real maskHeight: morphMaskHoldTimer.running\n"
+            "readonly property real maskHeight: morphMaskHeld\n"
             "        ? Math.max(root.morphMaskHoldHeight, root.islandAnimatedHeight)\n"
             "        : root.islandAnimatedHeight",
             self.overlay,
         )
-        self.assertIn("var v2CompositorMorphMaskHoldMs = 560", self.motion)
-        # The hold interval belongs to the hold timer specifically.
-        hold_timer = re.search(
-            r"Timer\s*\{\s*\n\s*id: morphMaskHoldTimer([\s\S]*?)\n    \}",
-            self.overlay,
-        )
-        self.assertIsNotNone(hold_timer)
-        self.assertIn(
-            "interval: IslandMotion.v2CompositorMorphMaskHoldMs",
-            hold_timer.group(1),
-        )
-        # One-shot: a repeating hold timer would never release the union,
-        # leaving the oversized mask (and its dead ring) armed forever.
-        self.assertIn("repeat: false", hold_timer.group(1))
-        # holdMorphMask() must capture the pre-snap footprint AND arm the
-        # hold timer — without restart() the union hold silently never runs.
+        self.assertNotIn("v2CompositorMorphMaskHoldMs", self.motion)
+        self.assertNotIn("morphMaskHoldTimer", self.overlay)
+        # holdMorphMask() must capture the pre-snap footprint and the serial
+        # allocated by the successful queue request.
         hold_fn = re.search(
             r"function\s+holdMorphMask\(\)\s*\{([\s\S]*?)\n    \}",
             self.overlay,
@@ -285,7 +273,9 @@ class DynamicIslandV2SurfaceTests(unittest.TestCase):
         hold_body = hold_fn.group(1)
         self.assertIn("root.morphMaskHoldWidth", hold_body)
         self.assertIn("root.morphMaskHoldHeight", hold_body)
-        self.assertIn("morphMaskHoldTimer.restart();", hold_body)
+        self.assertIn("root.morphMaskHeld = true", hold_body)
+        self.assertIn("root.TahoeGlass.activeTransformSerial", hold_body)
+        self.assertIn("function onTransformFinished(serial, status)", self.overlay)
         # S-L4: the mask hold is armed only after a morph request succeeds —
         # arming unconditionally swallowed clicks for the full hold window
         # when the queue failed (no surface / bad region). It still runs

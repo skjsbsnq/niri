@@ -64,21 +64,23 @@ class DynamicIslandExpandMorphTests(unittest.TestCase):
         self.assertNotIn("capsuleTargetLeft", body)
         # Still top-anchored.
         self.assertIn("capsuleTargetTop", body)
-        # Outside the hold window maskWidth/maskHeight collapse to the
+        # Outside the feedback-tracked hold maskWidth/maskHeight collapse to the
         # animated painted footprint (legacy pipeline semantics unchanged);
         # during the hold they union it with the captured pre-snap size.
         self.assertIn(
-            "readonly property real maskWidth: morphMaskHoldTimer.running\n"
+            "readonly property real maskWidth: morphMaskHeld\n"
             "        ? Math.max(root.morphMaskHoldWidth, root.islandAnimatedWidth)\n"
             "        : root.islandAnimatedWidth",
             self.overlay,
         )
         self.assertIn(
-            "readonly property real maskHeight: morphMaskHoldTimer.running\n"
+            "readonly property real maskHeight: morphMaskHeld\n"
             "        ? Math.max(root.morphMaskHoldHeight, root.islandAnimatedHeight)\n"
             "        : root.islandAnimatedHeight",
             self.overlay,
         )
+        self.assertIn("property real morphMaskSerial: 0", self.overlay)
+        self.assertIn("function onTransformFinished(serial, status)", self.overlay)
 
     def test_media_content_uses_continuous_expand_progress(self) -> None:
         # Unified media scene for resting_media + expanded_media on owner.

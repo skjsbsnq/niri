@@ -287,39 +287,63 @@ PanelWindow {
     // capsule footprint (set_region_morph, anchored on the glass region).
     // Swipe drag/settle stays on the legacy driver pipeline: it is
     // pointer-interactive and needs per-frame client geometry either way.
-    readonly property bool compositorMorph: root.TahoeGlass.transformAvailable
+    readonly property bool compositorMorph: root.TahoeGlass.feedbackAvailable
 
     // Compositor transforms are presentation-only — input never follows. For
     // the morph window the mask covers the union of the previous footprint
     // and the target so a collapsing island keeps its still-visible chrome
-    // clickable (the bug the legacy per-frame mask exists to avoid); expiry
-    // snaps the mask to the settled target.
+    // clickable (the bug the legacy per-frame mask exists to avoid); matching
+    // terminal feedback snaps the mask to the settled target.
     property real morphMaskHoldWidth: 0
     property real morphMaskHoldHeight: 0
-    readonly property real maskWidth: morphMaskHoldTimer.running
+    readonly property real maskWidth: morphMaskHeld
         ? Math.max(root.morphMaskHoldWidth, root.islandAnimatedWidth)
         : root.islandAnimatedWidth
-    readonly property real maskHeight: morphMaskHoldTimer.running
+    readonly property real maskHeight: morphMaskHeld
         ? Math.max(root.morphMaskHoldHeight, root.islandAnimatedHeight)
         : root.islandAnimatedHeight
 
-    Timer {
-        id: morphMaskHoldTimer
-        interval: IslandMotion.v2CompositorMorphMaskHoldMs
-        repeat: false
-    }
+    property bool morphMaskHeld: false
+    // QML real is an IEEE-754 double and exactly preserves every quint32
+    // protocol serial, including values above the signed int boundary.
+    property real morphMaskSerial: 0
 
     function holdMorphMask() {
         // First call of a burst captures the pre-snap (old) footprint; later
         // same-tick calls max against the already-snapped target, so the hold
         // is the old∪new union either way. Retargets extend the union.
-        root.morphMaskHoldWidth = morphMaskHoldTimer.running
+        root.morphMaskHoldWidth = morphMaskHeld
             ? Math.max(root.morphMaskHoldWidth, root.islandAnimatedWidth)
             : root.islandAnimatedWidth;
-        root.morphMaskHoldHeight = morphMaskHoldTimer.running
+        root.morphMaskHoldHeight = morphMaskHeld
             ? Math.max(root.morphMaskHoldHeight, root.islandAnimatedHeight)
             : root.islandAnimatedHeight;
-        morphMaskHoldTimer.restart();
+        root.morphMaskHeld = true;
+        root.morphMaskSerial = root.TahoeGlass.activeTransformSerial;
+    }
+
+    function releaseMorphMask() {
+        root.morphMaskHeld = false;
+        root.morphMaskSerial = 0;
+        root.morphMaskHoldWidth = 0;
+        root.morphMaskHoldHeight = 0;
+    }
+
+    function onTransformFinished(serial, status) {
+        if (serial !== root.morphMaskSerial)
+            return;
+        if (root.TahoeGlass.transformInFlight) {
+            root.morphMaskSerial = root.TahoeGlass.activeTransformSerial;
+            return;
+        }
+        root.releaseMorphMask();
+    }
+
+    Connections {
+        target: root.TahoeGlass
+        function onTransformFinished(serial, status) {
+            root.onTransformFinished(serial, status);
+        }
     }
 
     // A swipe drag takes over geometry per-frame on the legacy pipeline;
@@ -328,6 +352,8 @@ PanelWindow {
     onSwipeInteractiveChanged: {
         if (root.swipeInteractive && root.compositorMorph)
             root.TahoeGlass.sendTransform(0, 0, 1, 1);
+        if (root.swipeInteractive)
+            root.releaseMorphMask();
         // T25: a swipe drag takes geometry per-frame on the legacy pipeline;
         // mediaExpandProgress already follows the live height 1:1 via the
         // readonly legacy binding (no independent content clock to release).
@@ -354,10 +380,8 @@ PanelWindow {
                 IslandMotion.v2CompositorGeometrySpring.stiffness,
                 IslandMotion.v2CompositorGeometrySpring.epsilon);
         }
-        // S-L4: arm the input-mask hold only after the morph was actually
-        // queued. Arming unconditionally swallowed clicks for the full 560ms
-        // hold window even when the queue request failed (no surface / bad
-        // region), leaving the island's input region expanded for nothing.
+        // S-L4/T09: arm the input-mask union only after the morph was queued;
+        // TahoeGlass releases it from the matching terminal serial event.
         if (ok)
             root.holdMorphMask();
         return ok;

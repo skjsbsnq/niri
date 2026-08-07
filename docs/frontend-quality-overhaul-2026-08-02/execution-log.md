@@ -1506,6 +1506,43 @@ git submodule status niri → fe8faeea（= 已推送 niri commit hash）
 - closure push remote ref：`origin/fix/tray-menu-pinned-surface-height`
 - closure remote ancestor 验证 exit code：待 push 后以命令输出验证（本 commit 不记录自身 hash，由后续 `git log --format=%H -- execution-log.md` 解析）
 
+### 13. 用户实测回归修复（T10 提交后）
+
+用户实测（2026-08-07，运行 `fe8faeea` 构建）报告：所有玻璃面板（控制中心、剪贴板、下滑面板等）出现「奇怪的边框透明」——静止状态亦存在。
+
+**根因（CONFIRMED，复现定位）**：T10 的 capacity bucket 使 blur 输出纹理可能大于 active 区域（非 64 对齐的捕获尺寸，如 366×480 → 容量 384×512）。smithay `build_texture_mat`（render_texture_from_to）把 `v_coords` 按**容量尺寸**归一化：`v_coords ∈ [0, active/capacity]`。而 postprocess 着色器的 `input_to_geo` 矩阵（`FramebufferEffectElement::compute_uniforms` 与 `XrayElement::compute_uniforms`）仍假设 `v_coords ∈ [0,1]` 覆盖整个纹理（T10 前精确尺寸语义）→ 玻璃 SDF（圆角裁剪、rim、边缘高光、内阴影、clip）在 `active/capacity × geometry` 处求值 → 圆角弧线位置偏移、角部裁剪错位 → 面板边缘出现未上材质/错位的透明区域。几乎所有面板尺寸非 64 对齐 →「大量」出现；静态亦然。
+
+**修复（niri 跟进提交）**：
+- `framebuffer_effect.rs`：`compute_uniforms` 新增 `texture_scale = capacity/active`（每轴），作为 `input_to_clip_geo` 最右因子（先作用于 v_coords）；draw 处从 `BlurOutput` 计算。容量==active 时恒为 1（与 T10 前逐位一致）。
+- `xray.rs`：同模式，`input_to_geo = self.input_to_clip_geo × scale(texture_scale)`，`geo_to_input` 用修正矩阵的逆。
+- 新回归测试 `glass_sdf_reaches_panel_edge_with_capacity_slack`（blur_capacity.rs）：500×600 红背景 + 366×480 圆角 12px 蓝 tint 面板（容量 384×512）经真实 capture_framebuffer+draw 管线渲染并 readback：
+  - 材料必须到达设计的角弧边界（x=358, y=476：修正前 SDF 压缩求值于 x=341 落在裁剪区 → 红；修正后蓝）——红绿证明：无修复 FAIL（角部裁剪断言）、有修复 PASS；
+  - 裁剪区内（x=364）必须透明（红背景）；
+  - 面板外必须红背景、中心必须蓝。
+- 验证：640/640 全量通过（639 旧 + 1 新）；fmt 70 处基线零新增；debug/release 构建通过。
+- 本轮修复 diff 3 文件（framebuffer_effect.rs +16/-2、xray.rs +22/-6、blur_capacity.rs +123），已 commit/push 并远端验证（见 §14）。
+- 现场确认：需用户以新构建重启会话验证视觉回归消除（本执行器未重启用户会话）。
+
+### 14. 回归修复 commit 与 push 收据
+
+| 仓库 | Commit hash | Commit subject | Branch | Remote ref | push 结果 | ancestor 验证 |
+|---|---|---|---|---|---|---|
+| niri | `59639b0b7643e6b46be2f5dcdbcc58b13f412762` | `fix(blur): T10 follow-up — scale postprocess input mapping to the active region (transparent panel border regression)` | `tahoe-layer-animations` | `origin/tahoe-layer-animations` | `fe8faeea..59639b0b` 成功 | `git merge-base --is-ancestor 59639b0b origin/tahoe-layer-animations` exit 0 |
+| main | `dcab0d5fc36211fc7771505043e6c926cec40420` | `fix(submodule): bump niri for T10 glass SDF active-region mapping fix (transparent panel border regression)` | `fix/tray-menu-pinned-surface-height` | `origin/fix/tray-menu-pinned-surface-height` | `1b5a7d7..dcab0d5` 成功 | `git merge-base --is-ancestor dcab0d5 origin/fix/tray-menu-pinned-surface-height` exit 0 |
+
+主仓库子模块指针是否只指向已推送 commit：
+
+```text
+git submodule status niri → 59639b0b（= 已推送 niri commit hash）
+```
+
+### 15. 回归修复完成判定
+
+**状态**：COMPLETE（回归修复已提交推送；待用户新构建现场确认 + 本 docs-only 闭环 commit push 后）
+**理由**：根因 CONFIRMED（v_coords 容量归一化 vs SDF 矩阵 [0,1] 全纹理假设错位）；修复经真实渲染管线像素级红绿证明；640/640 全量通过；fmt 70 处基线零新增；debug/release 构建通过；niri `59639b0b` 与主仓库 `dcab0d5` 均已 push 且远端 ancestor exit 0。
+**现场确认项（需用户操作）**：以新构建（`59639b0b`）重启会话后确认控制中心/剪贴板/下滑面板的透明边框与错位圆角消除。
+**下一任务是否允许开始**：本项为 T10 的回归修复闭环，T10 本体已 COMPLETE；T11 待本 docs-only 闭环 commit push 后由用户决定是否开始。
+
 ### 11. 完成判定（待 commit/push 后填写）
 
 **下一任务是否允许开始**：NO（本任务未闭环）

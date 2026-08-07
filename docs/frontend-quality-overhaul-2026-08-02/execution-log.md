@@ -1,7 +1,7 @@
 # Tahoe Desktop 路线图执行日志
 
 **用途**：T01-T24 的唯一状态锁与证据账本。
-**当前状态**：T09 IN_PROGRESS（TahoeGlass completion/rejection/capability feedback）。
+**当前状态**：T09 COMPLETE（TahoeGlass completion/rejection/capability feedback）。
 **禁止**：预填测试结果、审查结论、commit/push 收据或把计划写成已完成事实。
 
 ---
@@ -18,7 +18,7 @@
 | T06 | COMPLETE | Quickshell `4712657a`（quickshell-tahoe-desktop）/ main `aea8b30e`（fix/tray-menu-pinned-surface-height） | 最终双 CLEAN + closure reviewer PASS | QsPaths sticky failure state machine |
 | T07 | COMPLETE | quickshell `827c8b6`（quickshell-tahoe-desktop）/ main `bf53257`（fix/tray-menu-pinned-surface-height） | 5 轮双审查，最终双 CLEAN | FileView non-blocking write state machine |
 | T08 | COMPLETE | quickshell `b022253`（quickshell-tahoe-desktop）/ main `3cc4d4d`（fix/tray-menu-pinned-surface-height） | 2 轮双审查，最终双 CLEAN | TahoeGlass per-wl_surface mapping generation |
-| T09 | IN_PROGRESS | - | - | TahoeGlass completion/rejection/capability feedback |
+| T09 | COMPLETE | niri `274b08bb` / Quickshell `d297889d` / main `2fcb3028` | 有界最终审查 + 单点闭合 verifier CLEAN | TahoeGlass completion/rejection/capability feedback |
 | T10 | PENDING | - | - | blur reuse |
 | T11 | PENDING | - | - | glass capture semantics |
 | T12 | PENDING | - | - | shared backdrop gate |
@@ -1336,8 +1336,9 @@ git submodule status niri → 79448ad4（= 已推送 niri commit hash）
 
 ## T09 TahoeGlass 完成/拒绝反馈
 
-**状态**：IN_PROGRESS
+**状态**：COMPLETE
 **开始时间**：2026-08-06
+**结束时间**：2026-08-07
 **roadmap 引用**：`roadmap.md#T09`（第 234-252 行）；对应发现：GLASS-01、GLASS-02 `pending_dirty` 风险
 **执行者上下文**：Workbuddy 会话（主仓库 `fix/tray-menu-pinned-surface-height`；niri 子模块 `tahoe-layer-animations`；Quickshell 子模块 `quickshell-tahoe-desktop`）
 
@@ -1450,8 +1451,8 @@ G01 搜索结论：
 | G03 | PASS | niri 623/623、Quickshell 17/17、shell 1016、协议双门禁通过 |
 | G04 | PASS | §4 三层红证明；§6 wire/QTest/shell 绿证明与 exactly-once 复查 |
 | G05 | PASS | 有界最终双审中 scope/API reviewer CLEAN；correctness finding 修复后由全新单点 verifier CLEAN，见 §8 |
-| G06 | PENDING | 三仓 commit/push/remote ancestor 待执行 |
-| G07 | PENDING | closure reviewer + docs-only closure commit 待执行 |
+| G06 | PASS | niri `274b08bb`、Quickshell `d297889d`、main `2fcb3028` 均 push 成功且 remote ancestor exit 0，见 §9 |
+| G07 | PASS | fresh closure reviewer CLEAN；本次仅 stage execution-log 并生成 docs-only closure commit，remote 可达性由 commit 后命令验证 |
 | G08 | PASS | 未启动/重启/deploy live shell；`.zcode/`、`Testing/` 未触碰；T10+ 未开始 |
 | A09.1 | PASS | permanent rejection identity + wire rejected；healable overflow 保持 pending 后完成 |
 | A09.2 | PASS | serial tag、commit、mapped settle、exactly-once wire events |
@@ -1522,9 +1523,22 @@ G01 搜索结论：
 |---|---|---|---|---|
 | niri | `274b08bb3d6f1943f9024705ea251c41c10ab46a` | `feat(tahoe-glass): add v5 transform feedback lifecycle` | `tahoe-layer-animations` / `origin/tahoe-layer-animations` | push 成功；`merge-base --is-ancestor` exit 0 |
 | Quickshell | `d297889d3b3889a283ae12ba3fe8c0ef2ff0a3a6` | `feat(tahoe-glass): expose terminal feedback lifecycle` | `quickshell-tahoe-desktop` / `origin/quickshell-tahoe-desktop` | push 成功；`merge-base --is-ancestor` exit 0 |
-| main | 待本产品 commit 后补录 | `feat(tahoe-glass): complete v5 feedback integration` | `fix/tray-menu-pinned-surface-height` / `origin/fix/tray-menu-pinned-surface-height` | 待执行 |
+| main | `2fcb3028804b318cdba0e5e839f2542c890568b3` | `feat(tahoe-glass): complete v5 feedback integration` | `fix/tray-menu-pinned-surface-height` / `origin/fix/tray-menu-pinned-surface-height` | push 成功；`merge-base --is-ancestor` exit 0 |
 
-下一步固定为：主仓库协议/shell/gitlink 产品 commit/push/ancestor；更新本记录为 COMPLETE；fresh closure reviewer；docs-only closure commit/push/ancestor。
+主仓产品 commit 同时携带了此前始终标为 `IN_PROGRESS` 的累计 T09 证据记录；它没有预写完成状态或伪造收据。稳定产品 hash 仅在三仓 push 与 ancestor 验证完成后的本次 docs-only closure diff 中写入。
+
+### 10. 完成判定与闭环记录
+
+**最终状态**：COMPLETE
+
+**理由**：A09.1-A09.5 与 G01-G06/G08 全部满足；niri 真实 wire feedback 覆盖 completion/rejection/supersede/cancel、duplicate serial、controller/unmap/never-mapped late completion；Quickshell 单一 attached authority 通过 15/15 feedback lifecycle 与 17/17 CTest；shell 删除固定 timeout completion authority并以 capability + matching serial terminal 驱动 mask；协议 v1-v4 兼容、v5 三副本 hash 同步。三仓产品 commit 已 push 且远端 ancestor 验证 exit 0。
+
+- Closure reviewer（全新只读上下文）：**CLEAN**。核对 T09 COMPLETE 状态、验收摘要、三仓 full hash/subject/branch/remote ref、ancestor exit 0、子模块指针与工作树边界，无夸大或缺失收据。
+- 产品 commit hash / subject / branch / remote ref / ancestor 收据：见 §9。
+- 用户现场边界：未 deploy/restart live compositor/shell，未写 `~/.config`；installed parity 因仍是旧 shell 而预期失败。
+- 工作树保护：`.zcode/`、`Testing/` 保持用户原有未跟踪状态，未纳入任何 commit。
+- docs-only closure commit subject：`docs(execution): T09 close task record`。
+- closure push / remote ancestor：本 docs-only commit 后执行并在命令收据中验证；按计划本 commit 不记录自身 hash。
 
 ## T07 FileView 非阻塞写状态机
 

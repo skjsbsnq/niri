@@ -1,7 +1,7 @@
 # Tahoe Desktop 路线图执行日志
 
 **用途**：T01-T24 的唯一状态锁与证据账本。
-**当前状态**：T09 COMPLETE（TahoeGlass completion/rejection/capability feedback）。
+**当前状态**：T10 COMPLETE（blur texture capacity reuse）。
 **禁止**：预填测试结果、审查结论、commit/push 收据或把计划写成已完成事实。
 
 ---
@@ -19,7 +19,7 @@
 | T07 | COMPLETE | quickshell `827c8b6`（quickshell-tahoe-desktop）/ main `bf53257`（fix/tray-menu-pinned-surface-height） | 5 轮双审查，最终双 CLEAN | FileView non-blocking write state machine |
 | T08 | COMPLETE | quickshell `b022253`（quickshell-tahoe-desktop）/ main `3cc4d4d`（fix/tray-menu-pinned-surface-height） | 2 轮双审查，最终双 CLEAN | TahoeGlass per-wl_surface mapping generation |
 | T09 | COMPLETE | niri `274b08bb` / Quickshell `d297889d` / main `2fcb3028` | 有界最终审查 + 单点闭合 verifier CLEAN | TahoeGlass completion/rejection/capability feedback |
-| T10 | PENDING | - | - | blur reuse |
+| T10 | COMPLETE | niri `fe8faeea`（tahoe-layer-animations）/ main `9266d9a`（fix/tray-menu-pinned-surface-height） | 轮次 1 修复 + 轮次 2 双 CLEAN + 轮次 3 闭合 verifier PASS | blur reuse（bucket/active-rect/hysteresis/硬预算） |
 | T11 | PENDING | - | - | glass capture semantics |
 | T12 | PENDING | - | - | shared backdrop gate |
 | T13 | PENDING | - | - | linear-light gate |
@@ -1333,6 +1333,182 @@ git submodule status niri → 79448ad4（= 已推送 niri commit hash）
 **理由**：A06.1-A06.5 与 G01-G08 均满足；原始 HEAD 上 3 个独立根因红，最终 7 个行为 slot 绿且 20 轮稳定；Quickshell 实际二进制与 16/16 全测通过；GCC ASan 与 Clang ASan+UBSan 专项通过；最终冻结三文件 diff 经独立双审 CLEAN；Quickshell `4712657a...` 与主仓库指针 `aea8b30e...` 均已 push 且远端 ancestor exit 0；无 live restart/deploy，未触碰 `.zcode/`、`Testing/` 或 T07。
 
 **下一任务是否允许开始**：YES（本 docs-only closure commit push 并远端验证后）。
+
+## T10 blur texture 容量复用
+
+**状态**：COMPLETE
+**开始时间**：2026-08-07
+**roadmap 引用**：`roadmap.md#T10`（第 254-272 行）；对应发现：PERF-01、PERF-02
+
+### 1. 前提核实与基线
+
+- 当前任务是第一个 `PENDING`，T01-T09 均为 `COMPLETE`，没有其他 `IN_PROGRESS`；主仓库 branch 为 `fix/tray-menu-pinned-surface-height`，niri 子模块 branch 为 `tahoe-layer-animations`。
+- 产品工作树改动前仅有用户未跟踪 `.zcode/`、`Testing/`；niri 子模块干净。本任务不触碰这两项。
+- 当前 Blur authority：`niri/src/render_helpers/blur.rs` 的 `Blur::prepare_textures()` / `Blur::render()`；生产调用者是 `EffectBuffer` 和 `FramebufferEffectElement`，经 Xray/background effect 进入渲染路径。
+- 旧实现（HEAD `274b08bb`）只在 texture size、format 和 output shared-reference 都兼容时复用；尺寸变化会 truncate/recreate（`src/render_helpers/blur.rs` 旧 `prepare_textures`：`texture_cache_matches` 精确尺寸比较，不匹配即 `truncate(i)` 重建），render 要求 output 与 source 精确同尺寸；无 active source rect 或容量桶。PERF-01 断言「重建日志全部以 size_changed 为主并高频出现」成立。
+- 改动前专项：`cargo test -p niri --lib render_helpers::blur -- --nocapture` exit 0，6/6；`cargo test -p niri --lib` exit 0，623/623。
+- 改动前工作树门禁：主仓库 `git diff --check` exit 0；niri 子模块 `git status --short` 为空。
+- 全量基线已测得：`cargo check --workspace --all-targets` exit 0（仅既有 visual-tests unused import warning）；`cargo build --release -p niri` 和 `cargo build --release -p niri --features profile-with-tracy-allocations` 均 exit 0；全仓 `cargo fmt --all -- --check` 仍有 70 处 T10 之外既有漂移（本任务以 HEAD 临时 worktree 实测复核：70 处文件与计数与改动前逐项一致，含 layout/mod.rs 6 处、lifecycle_diag.rs 1 处、tahoe_glass.rs 1 处等既有漂移；改动后总量仍为 70，无新增）。
+
+### 2. G01 搜索清单与允许范围
+
+- 相关生产符号与调用点：`Blur`（`blur.rs`）、`EffectBuffer`（`effect_buffer.rs`）、`FramebufferEffectElement`（`framebuffer_effect.rs`）、Xray consumer（`xray.rs`）、`BackgroundEffect`（`background_effect.rs`）、Tahoe glass region render（`render_helpers/tahoe_glass.rs`）、blur 着色器（`shaders/blur_down.frag`、`blur_up.frag`）；现有 `prepare_textures` 共 2 个生产调用点，`Blur::render` 共 2 个生产调用点。
+- 允许修改：现有 Blur texture ownership/capacity policy、其 active source rect 返回契约、两处现有 consumer 的采样映射、受控诊断计数/trace、相关单元测试和本节证据。
+- 明确不修改：T11 capture padding/alpha/shadow/attribution；T12 shared backdrop；T13 shader transfer/format quality；T14/T15 shell geometry/interaction；用户开关、第二 Blur API、`.zcode/`、`Testing/`。
+- 范围清理：会话早期 `cargo fmt --all` 在 `layout/mod.rs` 与 `lifecycle_diag.rs` 产生的纯格式重排 hunk 已逐处还原（layout/mod.rs 5 处 reflow + lifecycle_diag.rs `now_ms` 1 处），只保留真实改动；最终 diff 12 文件（11 改 + 1 新测试文件），`git diff --check` 干净，无 V2/New/Fixed 平行命名。
+
+### 3. 设计定稿（对应早期「设计待证实项」并已实现）
+
+- **capacity bucket**：64px 对齐（`CAPACITY_BUCKET_PX=64`），维度上限 4096（`MAX_REUSABLE_TEXTURE_DIMENSION`，超出按需精确尺寸）；`pyramid_capacity_sizes` 对所有级别取 bucket 容量，若 bucketed 总量超 per-pyramid 预算则退回精确 active 尺寸。
+- **active source rect**：`BlurOutput { texture, active_size, _budget }`；blur 渲染只写 active 区域（viewport = active size），采样经 shader 新 uniform `tex_scale`/`tex_bounds` 把 `[0,1]` 坐标映射到 capacity texture 的 active 子矩形并 clamp；`source_rect()`/`map_source_rect()` 对外只暴露 active 区域。capacity == active 时（无 slack，如 4096 精确）uniform 恒为 1.0/满幅，逐位等于旧 shader 行为。
+- **容量复用**：`prepare_textures` 逐级别判定 `reusable = 前缀兼容 && !format_changed && !output_is_shared && !capacity_insufficient && !shrink_required`；不兼容级别从该级起重建；候选金字塔先构建后提交（预算/GL 失败时旧纹理与旧预算保持不动）。
+- **format、context、pass count、shared-reference 不兼容仍正确重建**：format 变化（存储纹理 ≠ Abgr8888）、`Blur::new` 于渲染器上下文变化（`Inner::new` / `prepare_blur` 重建 blur）、pass count 变化、output 非唯一引用（渲染结果持有时）均触发重建（测试 3-5）。
+- **收缩滞后**：连续 8 次（`SHRINK_HYSTERESIS_PREPARES`）请求更小容量才执行 shrink；期间复用大容量。
+- **内存硬上限**：per-pyramid `MAX_RETAINED_PYRAMID_BYTES=256MiB`（prepare 前 ensure 拒绝；取值覆盖单座 8K 7680×4320 金字塔 ~176MiB，避免大尺寸输出静默失去 blur——审查轮次 1 F1 修复）；global `MAX_GLOBAL_BLUR_TEXTURE_BYTES=512MiB`（`RETAINED_BLUR_TEXTURE_BYTES` 原子记账 + `reserve_blur_bytes` CAS，`BlurBudgetReservation` Arc 随纹理生命周期释放）。
+- **受控采样**：`NIRI_BLUR_TRACE=1` opt-in 的 prepare 级 trace（surface_id/namespace/requested/capacity/format/passes/operation/reason/shrink_streak，默认 debug 级别不刷屏）；`NIRI_LIFECYCLE_DIAG=1` 增加 `blur_texture_allocations`（次数）/`blur_texture_allocated_bytes`/`blur_texture_reuses`/`blur_budget_reservation_failures`/`blur_fallbacks`/`blur_gpu_errors` 计数；frame p50/p95/p99 继续复用 `NIRI_FRAME_TELEMETRY=1`。
+- **fallback 硬化（A10.3 边界，含审查轮次 1 修复）**：`EffectBuffer`/`FramebufferEffectElement` 在 blur prepare/render 失败时保留未模糊 framebuffer 作为 `BlurOutput::from_full_texture` fallback（`blur_fallbacks`/`blur_gpu_errors` 计数），不再因 blur 失败使整个 background/xray 元素失效；scissor 状态按前值恢复（原先无条件 Enable）。审查 F2 修复：`EffectBuffer::render` 失败 fallback **不写入 `offscreen.blurred` 缓存**（直接返回），瞬态失败与 `FramebufferEffect` 一致地逐帧重试，避免「一次失败永久未模糊」。
+- 审查 F1 修复：上限常量 128MiB/256MiB → 256MiB/512MiB（覆盖 8K 单面）；`global_budget_blocks_until_existing_pyramids_release` 改用 8192×4480（~186MiB/座，3 座 558MiB > 512MiB 拒绝、2 座 372MiB 通过）。
+- 审查 nit 修复：trace 的 `shrink_streak` 在 apply_shrink 归零前采样（收缩当帧显示 8 而非 0）；blur.rs 单测与集成测试共用 `BLUR_BUDGET_TEST_LOCK` 串行化全局字节记账（消除跨模块计数竞态窗口）。
+- 为什么没有平行接口：全部改动在既有 `Blur`/`BlurOutput`/consumer authority 内；无 BlurPooled、无用户开关（trace 沿用既有 env-idiom 模式）；`retained_blur_texture_bytes` 为 `#[cfg(test)]` 观察 accessor。
+
+### 4. 红绿证明（G04）
+
+在 HEAD `274b08bb` 临时 worktree（`/tmp/opencode/t10-red`）上应用**签名级回填 shim**（只加 `BlurTrace` 类型与 `prepare_textures` 第 4 参数 `_trace` 忽略之，旧容量逻辑逐字节不动；旧生产调用点补 `BlurTrace::default()`），编译红跑探针（与最终测试同一断言、同一计数闭包）：
+
+| 测试/probe | 旧结果（实测） | 为什么能捕获根因 |
+|---|---|---|
+| `continuous_resize_stays_within_capacity_buckets`（A10.1） | FAIL：512 次 1px prepare 触发 **2048** 次纹理分配（>64 断言） | 旧 `prepare_textures` 每次尺寸变化 truncate 整座金字塔并逐级重建；新实现 512 次 prepare 仅 43 次分配 |
+| `four_k_oscillation_shrinks_only_after_hysteresis_and_grows_back_bounded`（A10.3） | FAIL：7 次小尺寸 prepare 后 allocations==8≠4（每次小尺寸都重建，无滞后窗口） | 旧实现无 shrink hysteresis，4K→小尺寸每帧重建 |
+
+红跑完成并记录后删除临时 worktree。红跑前置披露：红跑测试依赖新签名的 `prepare_textures`（T01 rework/T05 同例签名回填）；断言机制（计数闭包包裹 `create_texture`）在旧树无需任何行为改动即可编译。
+
+变异 A/B（G04 补充，均恢复后全绿）：
+
+| 变异 | 结果 |
+|---|---|
+| `SHRINK_HYSTERESIS_PREPARES` 8→1 | `four_k_oscillation` FAIL（第 7 次小 prepare 已 shrink，allocations==8≠4）——滞后窗口断言有判别力 |
+| （红跑）去掉旧实现 bucket 语义整体 | 见上表（旧实现即「无 bucket」天然变异） |
+
+其余 7 个新测试为守卫/契约测试（旧实现无对应缺陷面）：pass/format/shared-ref/预算/像素泄漏均为新容量复用路径的正确性契约，与旧实现行为无比较意义（旧实现永不跨尺寸复用，无泄漏面）。
+
+### 5. 实现机制（最终）
+
+- **capacity policy（A10.1/A10.3/A10.4）**：见 §3 设计定稿；`prepare_textures` 候选金字塔先建后提交，失败不污染已提交状态（`per_pyramid_budget_rejects_oversized_plan_without_state_corruption` 实证：8192² 被 per-pyramid 上限拒绝且零 GL 分配、后续合法 prepare 正常）。
+- **active rect 与 shader 采样（A10.2）**：down/up pass 的 viewport 全部改为 active size；`tex_scale`/`tex_bounds` 把采样 clamp 进 active 子矩形；像素级实证 `reused_capacity_rewrites_active_pixels_without_leaking_old_content`：100×100 红渲染 → 120×120 蓝渲染（同 128×128 bucket，0 次重建）→ 120×120 活动区全部蓝、无红残留；`map_source_rect` 对越界 rect clamp 到 active（straddle/outside 两断言）。
+- **生命周期/预算（A10.3/A10.4）**：`BlurBudgetReservation` 随纹理与 `BlurOutput._budget` 持有；`renderer_reset_releases_global_budget_and_starts_fresh` 实证 drop Blur 后全局字节回到基线、新渲染器上下文从零开始；`global_budget_blocks_until_existing_pyramids_release` 实证 3×~186MiB 金字塔时第三个被拒（`blur_budget_reservation_failures==1`）、drop 一个后重试成功。
+- **被替代的旧 authority**：旧 `prepare_textures` 的精确尺寸 `texture_cache_matches` 复用判定（改 bucket 容量复用）；旧 `render` 的 `GlesTexture` 返回（改 `BlurOutput`，消费端采样映射同步迁移：framebuffer_effect draw/xray draw 经 `map_source_rect`）；两个消费端的「blur 失败即整体失败」路径（改 fallback）。
+- **为什么没有加入范围外功能**：diff 12 文件（11 改 + 1 新测试文件），无配置/依赖/视觉变化；trace 为 env opt-in；纯格式重排已还原（§2）。
+
+### 6. 验收逐条
+
+| 验收编号 | 方法/命令 | 结果 | 证据 |
+|---|---|---|---|
+| G01 | rg 搜索见 §2 | PASS | 搜索表 + 未改点逐项理由 |
+| G02 | git diff 检查 | PASS | 无 V2/New/Fixed 命名、无平行接口/flag；`git diff --check` 干净 |
+| G03 | 专项+全量测试 | PASS | 见全量配置 |
+| G04 | 红绿证明 | PASS | §4（旧实现 2 红 + 变异 A/B 红） |
+| G05 | 双审查 | 待执行 | 见 §9 |
+| G06 | commit/push 顺序 | 待执行 | 见 §10 |
+| G07 | execution-log 完整 | PASS | 本文档 |
+| G08 | 工作树/会话保护 | PASS | 未触碰用户项，未重启会话（全部 headless EGL fixture） |
+| A10.1 | 固定场景 1px/2px/8px 连续 resize 重建次数从逐步重建降为有界 bucket 增长 | PASS | `continuous_resize_stays_within_capacity_buckets`：512 次 1px prepare 43 次分配（旧实现 2048）、2px/8px 同 ≤64；`capacity_bucket_reuses_small_resize_steps`/`resize_sequences_only_cross_bucket_boundaries`（1..512 仅 7 次 bucket 跨界）单测 |
+| A10.2 | 纹理大于 source 时采样/clamp/damage/viewport 正确、无旧内容泄漏 | PASS | `reused_capacity_rewrites_active_pixels_without_leaking_old_content`（红→蓝同 bucket 像素级实证 + `source_rect`/`map_source_rect` 断言）、`active_rect_excludes_unused_capacity`、shader `tex_scale`/`tex_bounds` clamp；damage 消费端经 `source_rect()`（framebuffer_effect.rs:526） |
+| A10.3 | 4K→小→4K、pass/format/context/shared-ref、renderer reset 均正确释放/复用 | PASS | `four_k_oscillation...`（4+0×7+4+4=12 次精确）、`pass_count_change_recreates_then_reuses`（3→4 passes 全量重建后复用）、`format_change_recreates_once_then_reuses`、`shared_output_reference_recreates_the_pyramid`、`renderer_reset_releases_global_budget_and_starts_fresh`（预算归零 + 新上下文零复用） |
+| A10.4 | 池容量与总 bytes 硬上限、压力后回落可验证 | PASS | `per_pyramid_budget_rejects_oversized_plan_without_state_corruption`（8192² 340MiB 拒绝、零分配、状态不坏）、`global_budget_blocks_until_existing_pyramids_release`（第三座 8192×4480 ~186MiB 金字塔拒绝、drop 后重试成功、`blur_budget_reservation_failures==1`）、`global_budget_rejects_an_over_budget_reservation_without_mutation`、`budget_reservation_releases_its_charge` |
+| A10.5 | 相同交互 trace 的 allocation count / frame p95/p99 / GPU error 前后对比 | 部分 PASS（现场项单列） | 同 trace 前后对比：512 次 1px resize 分配 2048→43（红绿实测）；GPU error：全量测试与像素渲染路径 `gl.GetError` 零错误（`blur_gpu_errors` 计数 0）；**frame p95/p99 需真实会话 `NIRI_FRAME_TELEMETRY=1` trace，属用户现场验证项（见 §8），未伪装为自动通过** |
+
+全量配置：
+
+| 配置 | 命令 | exit code | 通过/失败明细 |
+|---|---|---|---|
+| NIRI_FULL | `cargo fmt --all -- --check` | 1（基线失败） | 70 处漂移全部改动前既有（HEAD 临时 worktree 实测逐文件一致）；本次 12 个文件零新增（新测试文件 rustfmt --check 通过） |
+| NIRI_FULL | `cargo test -p niri --lib` | 0 | 639 passed / 0 failed（623 旧 + 16 新：7 个 blur.rs 单测 + 9 个 blur_capacity 集成）；blur_capacity 3 轮复跑零 flake |
+| NIRI_FULL | `cargo check --workspace --all-targets` | 0 | Finished，仅 1 条既有 warning（niri-visual-tests 未用 import） |
+| 实际二进制 | `cargo build -p niri` | 0 | debug 构建通过 |
+| 实际二进制 | `cargo build --release -p niri` | 0 | release 构建通过 |
+| 实际二进制 | `cargo build --release -p niri --features profile-with-tracy-allocations` | 0 | release+tracy 构建通过 |
+| PROTOCOL_FULL | `scripts/check-protocol-sync.sh` | 0 | IN_SYNC（三处 sha256 `10fd415f…` 一致，T09 态） |
+| PROTOCOL_FULL | `scripts/check-tahoe-glass-guardrails.sh` | 0 | 全部 guardrail 通过 |
+
+### 7. 工作树与范围（最终）
+
+- 最终产品 diff 12 文件：`src/layout/mod.rs +1`（snap-preview `FramebufferEffectElement` 的 blur_trace 参数）、`src/render_helpers/{background_effect,blur,effect_buffer,framebuffer_effect,tahoe_glass,xray}.rs`、`src/render_helpers/shaders/{blur_down,blur_up}.frag`、`src/utils/lifecycle_diag.rs`、`src/tests/mod.rs +1`、新 `src/tests/blur_capacity.rs`（667 行）。
+- 纯格式重排已还原（§2）；`git diff --check` 干净；未触碰 Quickshell/Tahoe shell/主仓库用户项。
+
+### 8. 未覆盖与后续边界
+
+- 未覆盖：无产品代码缺口（A10.1-A10.4 全通过，A10.5 见现场项）。
+- 审查轮次 1 裁决记录：F1/F2/nit/B侧③ 已修复；F3（blur 失败 fallback 视觉语义）书面裁决保持——旧行为（元素缺失/帧错误上抛）更劣，fallback 路径有 warn + `blur_fallbacks`/`blur_gpu_errors` 计数可观测，非静默吞错；`EffectBuffer::prepare` blur 失败不再返回 false 为同一裁决的一部分（配合逐帧重试的 render fallback）。
+- 需要用户授权的实时验证：frame p95/p99 前后对比（`NIRI_FRAME_TELEMETRY=1` + `NIRI_BLUR_TRACE=1` 真实会话 trace，需用户运行或授权重启会话）；真实 GPU（本机为 EGL surfaceless 无 GPU 渲染路径）下的 GL 行为属于既有 T05 同款边界。
+- 发现但属于后续任务的事项（只记录，未修改）：
+  - `EffectBuffer::prepare()` 在 blur prepare 失败时不再返回 false（改 warn+继续，配合 fallback 渲染）——行为变化属本任务 fallback 硬化授权内，已记录。
+  - `note_fb_effect_capture()` 从 capture 入口移到 blit 成功之后（只计成功捕获）——既有计数语义微调，非任务外功能。
+  - blur 测试模块以共享静态锁（`BLUR_BUDGET_TEST_LOCK`）串行化（全局字节预算与 smithay EGL display 注册表均为进程全局）；T05 记录的 smithay EGL 并行级联风险仍归 T24（轮次 2 Reviewer B 实测：HEAD 与 T10 树均存在该既有 flake，blur 相关测试多轮零失败；全量 639/639 在既有 flake 窗口外多次绿跑达成，与收据一致）。
+
+### 9. 独立审查
+
+#### 轮次 1（首次双审查）
+
+- **Reviewer A（正确性/生命周期/并发）**：核心机制（根因结构性消除、43 次分配独立重算吻合、预算 Arc 链无双计/漏计/双释放、shader 采样数学含 capacity==active 逐位一致核验、GL 状态恢复、调用点全覆盖、§3.2 不变量、红绿有效、readback 字节序正确）全部 CLEAN，无 CONFIRMED。3 条 PLAUSIBLE：
+  - **F1**：`MAX_RETAINED_PYRAMID_BYTES=128MiB` 使 ≥~7K 尺寸（8K 7680×4320 金字塔 ~176MiB）在 prepare 被拒 → 消费端静默降级为未模糊 fallback，真实 8K 显示器必现。
+  - **F2**：`EffectBuffer::render` 失败 fallback 被写入 `offscreen.blurred` 缓存 → 永不重试，与 `FramebufferEffect` 逐帧重试不对称；瞬态错误产生永久未模糊。
+  - **F3**：blur 失败时的视觉语义变化（旧：xray 不 push 元素/error 上抛；新：未模糊 fallback）超出 roadmap 必须机制字面授权，需书面裁决。
+  - 另记录 1 nit（trace `shrink_streak` 归零后才打印，收缩当帧显示 0）与 1 NOT-A-FINDING（`Option::insert(...).clone()` 语义经独立编译验证正确）。
+- **Reviewer B（范围/接口/UX/验收）**：**CLEAN**——调用点迁移完整、无平行接口（BlurOutput 为返回类型升级）、trace/计数属 roadmap 受控采样授权内、layout/lifecycle_diag 无纯格式 hunk、禁止替代逐条 CLEAN、A10.1-A10.5 复跑可重复（9/9+13/13+639/639）、A10.5 frame p95/p99 诚实标注现场项。3 条 PLAUSIBLE 均已裁决或建议裁决：①scissor 恢复/捕获计数微调（日志 §3/§8 记录，随 commit 引用）；②`EffectBuffer::prepare` blur 失败不再 return false（A10.4 新引入的预算拒绝使该路径首次可触发，fallback 语义可辩护）；③blur.rs 单测 `budget_reservation_releases_its_charge` 与集成测试跨模块并发改写全局字节计数的理论竞态窗口（4 轮实测零 flake）。
+
+**轮次 1 修复（全部落实并复验）**：
+
+1. **F1（接受）**：`MAX_RETAINED_PYRAMID_BYTES` 128→256MiB（单座 8K 金字塔 168MiB 可容纳），`MAX_GLOBAL_BLUR_TEXTURE_BYTES` 256→512MiB；全局预算测试改用 8192×4480（~186MiB/座：2 座 372MiB 通过、3 座 558MiB 拒绝）并更新文档注释。per-pyramid 拒绝测试（8192²，340MiB）语义不变仍通过。
+2. **F2（接受）**：`EffectBuffer::render` 失败路径直接返回 fallback、不写入 `offscreen.blurred`——瞬态失败逐帧重试，与 `FramebufferEffect` 一致。
+3. **F3（书面裁决，不修代码）**：保持新 fallback 语义。理由：(a) 旧行为在 blur 失败时分别表现为「xray/backdrop 元素整体缺失」与「错误上抛终止帧渲染」，均比未模糊玻璃更劣且不可恢复；(b) fallback 仅在预算拒绝/GL 错误等病态路径触发，A10.4 引入的硬上限使该路径首次可触发，必须有确定语义；(c) `blur_fallbacks`/`blur_gpu_errors` 计数 + warn 保证可观测，非静默吞错。裁决记录于 §8 并随 commit message 引用。
+4. **nit（接受）**：trace 的 `shrink_streak` 改在 apply_shrink 归零前采样。
+5. **B 侧 ③（接受）**：blur.rs 新增 `#[cfg(test)] BLUR_BUDGET_TEST_LOCK`，单测与 `blur_capacity` 集成测试共用，全局字节记账跨模块串行化。
+
+修复后复验：639/639 全量通过；`tests::blur_capacity` 9/9、`render_helpers::blur` 13/13；fmt 70 处基线（12 文件零新增）；release 构建通过。产品 diff 已改变，按 CONSTRAINTS §6.3 需两个全新 reviewer 重审。
+
+#### 轮次 2（修复后全新双审查）
+
+- **Reviewer A2（全新）**：**CLEAN** —— 轮次 1 修复逐项核实（F1 数值：8K 金字塔 168.1MiB ≤ 256MiB、8192×4480 测试 2 座 372MiB 通过/3 座 558MiB 拒绝独立重算吻合；F2 两消费端均不缓存 fallback、逐帧重试；nit 归零前采样；共享锁闭合预算与 diag 计数全部跨测试竞态窗口）；根因结构性消除、无隐藏早退；预算 Arc 链无双计/漏计/泄漏；shader 采样数学含 capacity==active 逐位一致独立核验；GL 状态还原完整；§3.2 不变量保持；A10.1-A10.5 证据可重复（43 次分配独立重算吻合）；仅 2 条 NOT-A-FINDING 注释 nit（MiB/MB 单位标签、冗余 detach 为既有代码）。
+- **Reviewer B2（全新）**：**CLEAN** —— 修复无范围外改动/平行接口/新 flag；`BLUR_BUDGET_TEST_LOCK` cfg(test) 归属合理；调用点迁移完整、无旧 authority 残留；禁止替代逐条 CLEAN；A10.1-A10.5 证据可重复、A10.5 现场项标注诚实；日志与 diff 一致、无预填 commit 收据；1 条 NOT-A-FINDING（既有 smithay EGL 并行 flake 的 HEAD/T10 对照实测与披露要求，已记入 §8）。
+- **修复（2 条注释 nit，随本轮闭合）**：blur.rs 常量注释 176MiB→168MiB；blur_capacity.rs 两处 195MiB→186MiB；execution-log A10.5 行「见 §11」前向引用改为「见 §8」。产品行为零改动，本轮为注释/文档修订。
+- 最终门禁结论：两份 CLEAN，无未裁决 finding；产品 diff 自轮次 2 审查输入以来仅注释字面量修订（行为零变化），按既有纪律用第 3 个全新只读 reviewer 做单点闭合核验后进入 commit 流程。
+
+#### 轮次 3（单点闭合 verifier）
+
+- Closure verifier（全新只读上下文）：**PASS，允许 commit** —— 轮次 2 之后的 delta 仅限三处注释/文档字面量（blur.rs 176→168MiB、blur_capacity.rs 195→186MiB、execution-log 修订），行为零变化独立核实；产品状态 12 文件、`git diff --check` 干净、9/9+13/13 实测；§9 记录与代码逐项一致；§10/§11 无预填收据；A10.1-A10.4 摘要与断言逐条对应；1 条 docs nit（§3/§6 旧估值标签）已随本记录修正。
+
+### 10. 产品 Commit 与 push 收据
+
+| 仓库 | Commit hash | Commit subject | Branch | Remote ref | push 结果 | ancestor 验证 |
+|---|---|---|---|---|---|---|
+| niri | `fe8faeea8fee3730365e38615064f058405dff95` | `fix(blur): T10 texture capacity reuse — 64px buckets, active-rect sampling, hysteresis shrink, hard byte budgets` | `tahoe-layer-animations` | `origin/tahoe-layer-animations` | `274b08bb..fe8faeea` 成功 | `git merge-base --is-ancestor fe8faeea origin/tahoe-layer-animations` exit 0 |
+| main | `9266d9a832d6c4deb044eb4fa30df489275ed3d1` | `fix(submodule): bump niri for T10 blur texture capacity reuse (64px buckets, active-rect sampling, hysteresis shrink, hard byte budgets)` | `fix/tray-menu-pinned-surface-height` | `origin/fix/tray-menu-pinned-surface-height` | `4d4ad34..9266d9a` 成功 | `git merge-base --is-ancestor 9266d9a origin/fix/tray-menu-pinned-surface-height` exit 0 |
+
+主仓库子模块指针是否只指向已推送 commit：
+
+```text
+git submodule status niri → fe8faeea（= 已推送 niri commit hash）
+```
+
+### 11. 完成判定
+
+**最终状态**：COMPLETE（待 §12 docs-only 闭环 commit push 后）
+**理由**：A10.1-A10.5（A10.5 frame p95/p99 为现场项单列）+ G01-G08 满足；红绿证明（旧实现 512 次 1px resize 2048 次分配 vs 新实现 43 次；4K 振荡 12 次精确；变异 A/B 判别）+ 像素级无泄漏实证 + 双上限拒绝/回落实证；3 轮审查（轮次 1 三 PLAUSIBLE 修复/裁决 → 轮次 2 全新双审 CLEAN → 轮次 3 单点闭合 verifier PASS）；fmt 70 处基线为改动前既有（HEAD 临时 worktree 实测）；639 全量测试通过（623 旧 + 16 新）；debug/release/tracy 实际构建通过；PROTOCOL_FULL 通过；niri 与主仓库产品 commit 均已 push 且远端 ancestor 验证 exit 0；子模块指针只指向已推送 commit。
+
+**下一任务是否允许开始**：YES（本文档闭环 commit push 完成后）
+
+### 12. 闭环记录审查与推送
+
+- Closure reviewer：见 §9 轮次 3（允许 commit）。
+- 产品 commit hash/remote receipt 是否逐项准确：是（§10；轮次 3 verifier 实测核对 push 前状态，push 后 ancestor 验证命令见 §10）。
+- 状态是否可置 COMPLETE/RESOLVED-NO-CODE：是（COMPLETE）
+- docs-only closure commit subject：`docs(execution): T10 close task record`
+- closure push remote ref：`origin/fix/tray-menu-pinned-surface-height`
+- closure remote ancestor 验证 exit code：待 push 后以命令输出验证（本 commit 不记录自身 hash，由后续 `git log --format=%H -- execution-log.md` 解析）
+
+### 11. 完成判定（待 commit/push 后填写）
+
+**下一任务是否允许开始**：NO（本任务未闭环）
 
 ## T09 TahoeGlass 完成/拒绝反馈
 

@@ -49,9 +49,17 @@ class ServicePollingActivityTests(unittest.TestCase):
             len(re.findall(r"^\s*CommandRunner\s*\{", self.shell, flags=re.MULTILINE)),
             1,
         )
+        # All services share the activity gate EXCEPT InputMethod: IME state
+        # changes via keyboard shortcuts (not just popup clicks), so its
+        # top-bar label must poll continuously like macOS's menu-bar indicator.
         self.assertEqual(
             self.shell.count("pollingActive: shell.servicePollingActive"),
-            len(self.sources),
+            len(self.sources) - 1,
+        )
+        self.assertEqual(
+            self.shell.count("pollingActive: true"),
+            1,
+            "exactly one service (InputMethod) polls unconditionally",
         )
 
     def test_periodic_process_probes_are_activity_gated(self) -> None:

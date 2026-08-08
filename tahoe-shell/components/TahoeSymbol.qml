@@ -19,9 +19,6 @@ Item {
     // Optional Apps service — when set, path goes through iconPath("symbols", …).
     property var appsService
     property color color: "#1d1d1f"
-    // Optional text shadow (macOS menu-bar icons use a faint dark shadow on
-    // the transparent bar). Default transparent = no shadow for other callers.
-    property color styleColor: "transparent"
     // Display size (width & height). ≤0 → fill parent when both sides known.
     property real size: 16
     // Optional independent source pixel budget (defaults to full 128px asset).
@@ -86,8 +83,6 @@ Item {
         height: root.displaySize
         text: root.glyph
         color: root.color
-        style: root.styleColor.a > 0 ? Text.Sunken : Text.Normal
-        styleColor: root.styleColor
         font.family: materialIconsFont.name
         font.pixelSize: Math.max(1, Math.round(root.displaySize))
         font.weight: Font.Normal

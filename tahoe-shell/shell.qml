@@ -702,7 +702,9 @@ ShellRoot {
 
     InputMethod {
         id: inputMethod
-        pollingActive: shell.servicePollingActive
+        // Always poll: IME state changes via keyboard shortcuts (not just UI
+        // clicks), so the top-bar label must stay live even with no popup open.
+        pollingActive: true
         commandRunner: commandRunner
     }
 

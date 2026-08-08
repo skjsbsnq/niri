@@ -17,6 +17,9 @@ Item {
     property var commandRunner
     property bool pollingActive: true
     property bool initialProbePending: false
+    // A toggle-triggered refresh must publish even while the shared activity
+    // gate is closed (IME state changes via keyboard too, not only popups).
+    property bool pendingRefresh: false
     readonly property string displayText: !available ? "--" : (active ? languageLabel(currentName) : "EN")
     readonly property string tooltipText: !available
         ? (errorText.length > 0 ? errorText : "输入法不可用")
@@ -95,7 +98,7 @@ Item {
     }
 
     function applyProbe(text) {
-        if (!root.pollingActive && !root.initialProbePending)
+        if (!root.pollingActive && !root.initialProbePending && !root.pendingRefresh)
             return;
 
         var line = String(text || "").trim();
@@ -115,6 +118,7 @@ Item {
         active = code === 2;
         currentName = parts.length > 1 ? parts.slice(1).join("|").trim() : "";
         errorText = available ? "" : (commandRunner && commandRunner.dependencyDetail ? commandRunner.dependencyDetail("fcitx") : "输入法不可用");
+        root.pendingRefresh = false;
     }
 
     Process {
@@ -154,7 +158,12 @@ Item {
         id: refreshDelay
         interval: 180
         repeat: false
-        onTriggered: root.refresh()
+        onTriggered: {
+            // Toggle-triggered refresh must publish even with the activity
+            // gate closed (IME switches via keyboard shortcuts too).
+            root.pendingRefresh = true;
+            root.refresh();
+        }
     }
 
     Timer {

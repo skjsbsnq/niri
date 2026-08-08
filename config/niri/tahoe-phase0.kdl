@@ -113,12 +113,12 @@ tahoe-glass {
     material "pill" {
         xray false
         noise 0.005
-        saturation 1.45
+        saturation 1.0
         tint-color "#f4f8fc"
         tint-amount 0.1
         contrast 1.0
-        edge-highlight 0.25
-        refraction 0.012
+        edge-highlight 0.0
+        refraction 0.0
         inner-shadow 0.07
         chromatic 0.0
         lens-depth 0.010

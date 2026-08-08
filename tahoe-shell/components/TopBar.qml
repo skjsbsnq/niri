@@ -70,7 +70,10 @@ PanelWindow {
     readonly property color glassFillTransparent: darkMode ? "#101d1f24" : "#08ffffff"
     readonly property string accentId: settingsService ? settingsService.accentColor : "blue"
     readonly property color topText: Theme.label(darkMode)
-    readonly property color topTextSecondary: Theme.topTextSecondary(darkMode)
+    // Unified top-bar text color: macOS uses one color for all menu-bar
+    // labels — secondary text must not be a lighter gray (looked mismatched
+    // on the transparent bar).
+    readonly property color topTextSecondary: Theme.label(darkMode)
     readonly property color statusText: topText
     readonly property color statusTextDisabled: darkMode ? "#73f5f7fb" : "#731d1d1f"
     readonly property color statusTextFaint: darkMode ? "#99f5f7fb" : "#991d1d1f"

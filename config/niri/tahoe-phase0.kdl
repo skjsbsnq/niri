@@ -101,11 +101,11 @@ tahoe-glass {
         xray false
         noise 0.005
         saturation 1.10
-        tint-color "#dce4ec"
-        tint-amount 0.18
-        contrast 1.0
-        edge-highlight 0.22
-        refraction 0.008
+        tint-color "#e0e8f0"
+        tint-amount 0.30
+        contrast 1.04
+        edge-highlight 0.14
+        refraction 0.004
         inner-shadow 0.06
         chromatic 0.0
         lens-depth 0.0
@@ -114,11 +114,11 @@ tahoe-glass {
         xray false
         noise 0.005
         saturation 1.12
-        tint-color "#e2e8ef"
-        tint-amount 0.14
-        contrast 1.0
-        edge-highlight 0.40
-        refraction 0.016
+        tint-color "#e8eef6"
+        tint-amount 0.24
+        contrast 1.03
+        edge-highlight 0.32
+        refraction 0.013
         inner-shadow 0.07
         chromatic 0.0
         lens-depth 0.010
@@ -127,11 +127,11 @@ tahoe-glass {
         xray false
         noise 0.005
         saturation 1.08
-        tint-color "#dce4ec"
-        tint-amount 0.18
-        contrast 1.0
-        edge-highlight 0.22
-        refraction 0.008
+        tint-color "#e0e8f0"
+        tint-amount 0.30
+        contrast 1.04
+        edge-highlight 0.15
+        refraction 0.004
         inner-shadow 0.055
         chromatic 0.0
         lens-depth 0.003
@@ -140,11 +140,11 @@ tahoe-glass {
         xray false
         noise 0.005
         saturation 1.10
-        tint-color "#d8e0e8"
-        tint-amount 0.20
-        contrast 1.0
-        edge-highlight 0.28
-        refraction 0.012
+        tint-color "#e4ecf4"
+        tint-amount 0.26
+        contrast 1.03
+        edge-highlight 0.18
+        refraction 0.007
         inner-shadow 0.07
         chromatic 0.0
         lens-depth 0.006
@@ -154,11 +154,11 @@ tahoe-glass {
         xray false
         noise 0.004
         saturation 1.08
-        tint-color "#e0e6ee"
-        tint-amount 0.16
-        contrast 1.0
-        edge-highlight 0.34
-        refraction 0.008
+        tint-color "#e6edf4"
+        tint-amount 0.28
+        contrast 1.03
+        edge-highlight 0.26
+        refraction 0.004
         inner-shadow 0.10
         chromatic 0.0
         lens-depth 0.0
@@ -167,11 +167,11 @@ tahoe-glass {
         xray false
         noise 0.005
         saturation 1.09
-        tint-color "#e2e8ef"
-        tint-amount 0.15
-        contrast 1.0
-        edge-highlight 0.32
-        refraction 0.010
+        tint-color "#e8eef5"
+        tint-amount 0.26
+        contrast 1.03
+        edge-highlight 0.24
+        refraction 0.005
         inner-shadow 0.09
         chromatic 0.0
         lens-depth 0.0
@@ -184,11 +184,11 @@ tahoe-glass {
         xray false
         noise 0.003
         saturation 1.04
-        tint-color "#e0e6ee"
-        tint-amount 0.14
-        contrast 1.0
-        edge-highlight 0.10
-        refraction 0.004
+        tint-color "#e4eaf2"
+        tint-amount 0.22
+        contrast 1.02
+        edge-highlight 0.05
+        refraction 0.002
         inner-shadow 0.0
         chromatic 0.0
         lens-depth 0.0
@@ -395,10 +395,10 @@ layer-rule {
         noise 0.005
         saturation 1.10
         tint-color "#ffffff"
-        tint-amount 0.18
-        contrast 1.0
-        edge-highlight 0.22
-        refraction 0.008
+        tint-amount 0.30
+        contrast 1.04
+        edge-highlight 0.14
+        refraction 0.004
         inner-shadow 0.06
         chromatic 0.0
         lens-depth 0.0
@@ -678,10 +678,10 @@ layer-rule {
         noise 0.005
         saturation 1.10
         tint-color "#ffffff"
-        tint-amount 0.18
-        contrast 1.0
-        edge-highlight 0.22
-        refraction 0.008
+        tint-amount 0.30
+        contrast 1.04
+        edge-highlight 0.14
+        refraction 0.004
         inner-shadow 0.06
         chromatic 0.0
         lens-depth 0.0
@@ -813,10 +813,10 @@ layer-rule {
         noise 0.004
         saturation 1.08
         tint-color "#ffffff"
-        tint-amount 0.16
-        contrast 1.0
-        edge-highlight 0.34
-        refraction 0.008
+        tint-amount 0.28
+        contrast 1.03
+        edge-highlight 0.26
+        refraction 0.004
         inner-shadow 0.10
         chromatic 0.0
         lens-depth 0.0
@@ -843,10 +843,10 @@ layer-rule {
         noise 0.005
         saturation 1.09
         tint-color "#ffffff"
-        tint-amount 0.15
-        contrast 1.0
-        edge-highlight 0.32
-        refraction 0.010
+        tint-amount 0.26
+        contrast 1.03
+        edge-highlight 0.24
+        refraction 0.005
         inner-shadow 0.09
         chromatic 0.0
         lens-depth 0.0

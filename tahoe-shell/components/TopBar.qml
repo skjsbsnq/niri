@@ -65,6 +65,9 @@ PanelWindow {
         : "--"
     readonly property color glassFill: darkMode ? "#d01d1f24" : GlassStyle.FillTopBar
     readonly property color glassStroke: darkMode ? "#38ffffff" : GlassStyle.StrokeTopBar
+    // macOS-style: top bar blends into the wallpaper — fill is near-transparent
+    // white so only the blur + text remain visible.
+    readonly property color glassFillTransparent: darkMode ? "#101d1f24" : "#08ffffff"
     readonly property string accentId: settingsService ? settingsService.accentColor : "blue"
     readonly property color topText: Theme.label(darkMode)
     readonly property color topTextSecondary: Theme.topTextSecondary(darkMode)
@@ -370,7 +373,7 @@ PanelWindow {
         anchors.bottomMargin: 4
         material: GlassStyle.MaterialPanel
         radius: GlassStyle.RadiusTopBar
-        fillColor: root.glassFill
+        fillColor: root.glassFillTransparent
         strokeColor: root.glassStroke
         interaction: 0.0
         materialAlpha: opacity

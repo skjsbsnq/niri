@@ -37,8 +37,8 @@ var FillBackdrop = "#26ffffff";
 
 var StrokePanel = "#24ffffff";
 var StrokePanelBright = "#34ffffff";
-var StrokeDock = "#44ffffff";
-var StrokeTopBar = "#34ffffff";
+var StrokeDock = "#1affffff";
+var StrokeTopBar = "#14ffffff";
 var StrokePill = "#48ffffff";
 var StrokeLauncher = "#32ffffff";
 var StrokeToast = "#34ffffff";

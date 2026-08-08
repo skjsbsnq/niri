@@ -69,11 +69,14 @@ PanelWindow {
     // white so only the blur + text remain visible.
     readonly property color glassFillTransparent: darkMode ? "#101d1f24" : "#08ffffff"
     readonly property string accentId: settingsService ? settingsService.accentColor : "blue"
-    readonly property color topText: Theme.label(darkMode)
+    // macOS menu bar text is white (rgba(255,255,255,0.9)) on any wallpaper —
+    // readability comes from a faint shadow, not from dark text. The bar is
+    // transparent so white text + subtle shadow matches macOS on light/dark.
+    readonly property color topText: darkMode ? "#f5f7fb" : "#ffffff"
     // Unified top-bar text color: macOS uses one color for all menu-bar
     // labels — secondary text must not be a lighter gray (looked mismatched
     // on the transparent bar).
-    readonly property color topTextSecondary: Theme.label(darkMode)
+    readonly property color topTextSecondary: topText
     readonly property color statusText: topText
     readonly property color statusTextDisabled: darkMode ? "#73f5f7fb" : "#731d1d1f"
     readonly property color statusTextFaint: darkMode ? "#99f5f7fb" : "#991d1d1f"
@@ -586,6 +589,10 @@ PanelWindow {
                         font.weight: Font.DemiBold
                         elide: Text.ElideRight
                         maximumLineCount: 1
+                        // macOS: white menu-bar text stays readable on any
+                        // wallpaper via a faint dark shadow.
+                        style: Text.Sunken
+                        styleColor: "#66000000"
                     }
 
                     MouseArea {
@@ -753,6 +760,7 @@ PanelWindow {
                     anchors.centerIn: parent
                     name: root.dndEnabled ? "\ue7f6" : "\ue7f4"
                     color: root.statusText
+                        styleColor: "#66000000"
                     size: root.statusSymbolSize
                     opacity: root.notificationCount > 0 || root.dndEnabled ? 1 : 0.68
                 }
@@ -1082,10 +1090,12 @@ PanelWindow {
             Item {
                 id: inputMethodButton
 
-                Layout.preferredWidth: 0
+                Layout.preferredWidth: visible ? root.statusItemHeight : 0
                 Layout.preferredHeight: root.statusItemHeight
                 Layout.alignment: Qt.AlignVCenter
-                visible: false
+                // Show the input-method label (中/EN/あ) instead of the tray's
+                // gray fcitx icon — macOS uses a text indicator for IME.
+                visible: !!root.inputMethodService && root.inputMethodService.available
                 scale: Motion.pressScaleFor(root.settingsService, inputMethodMouse.pressed)
                 opacity: inputMethodMouse.pressed ? 0.75 : (root.inputMethodService && root.inputMethodService.available ? 1 : 0.55)
 
@@ -1111,6 +1121,8 @@ PanelWindow {
                     color: root.statusText
                     font.pixelSize: 11
                     font.weight: Font.DemiBold
+                    style: Text.Sunken
+                    styleColor: "#66000000"
                 }
 
                 MouseArea {
@@ -1167,6 +1179,7 @@ PanelWindow {
                     anchors.centerIn: parent
                     name: "\ue63e"
                     color: root.statusText
+                        styleColor: "#66000000"
                     size: root.statusSymbolSize
                     opacity: root.controlsService && root.controlsService.wifiEnabled ? 1 : 0.45
                 }
@@ -1227,6 +1240,7 @@ PanelWindow {
                     anchors.centerIn: parent
                     name: "\ue8b6"
                     color: root.statusText
+                        styleColor: "#66000000"
                     size: root.statusSymbolSize
                 }
 
@@ -1381,6 +1395,8 @@ PanelWindow {
                 font.letterSpacing: 0
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
+                style: Text.Sunken
+                styleColor: "#66000000"
                 elide: Text.ElideRight
                 maximumLineCount: 1
                 width: Math.min(islandReserve.width, Math.max(implicitWidth, 1))

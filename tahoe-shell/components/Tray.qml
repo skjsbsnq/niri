@@ -135,16 +135,17 @@ Item {
         var decorated = [];
         for (var i = 0; i < values.length; i++) {
             var item = values[i];
+            // IME items (fcitx/ibus) are excluded — the top bar shows a
+            // themed text label (中/EN/あ) instead of the app's gray icon.
+            if (isKeyboardLike(item))
+                continue;
             decorated.push({
                 "item": item,
-                "priority": isKeyboardLike(item) ? 1 : 0,
                 "index": i
             });
         }
 
         decorated.sort(function(a, b) {
-            if (a.priority !== b.priority)
-                return a.priority - b.priority;
             return a.index - b.index;
         });
 

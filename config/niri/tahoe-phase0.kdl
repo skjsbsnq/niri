@@ -117,8 +117,8 @@ tahoe-glass {
         tint-color "#f4f8fc"
         tint-amount 0.1
         contrast 1.0
-        edge-highlight 0.6
-        refraction 0.02
+        edge-highlight 0.25
+        refraction 0.012
         inner-shadow 0.07
         chromatic 0.0
         lens-depth 0.010

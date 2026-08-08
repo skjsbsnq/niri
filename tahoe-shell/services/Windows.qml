@@ -373,7 +373,14 @@ Item {
      */
     function submitDockRectangle(toplevel, sourceWindow, dockScreen, x, y, width, height, options) {
         var force = !!(options && options.force);
-        var key = DockRectanglePublisher.toplevelObjectId(toplevel);
+        // Key by (toplevel, publisher): WindowButton (running icon, 108x58)
+        // and DockMinimizedWindow (minimized cell, 48x48) publish different
+        // rects for the SAME toplevel — toplevel-only keys let them overwrite
+        // each other every frame (dock rect ping-pong, observed as a ~10/s
+        // set_rectangle storm + blur pyramid rebuilds). Including the publisher
+        // gives each its own dedup slot so both can publish once per flush.
+        var key = DockRectanglePublisher.toplevelObjectId(toplevel)
+            + "|pub:" + DockRectanglePublisher.toplevelObjectId(sourceWindow);
         var existing = key.length > 0 ? root.dockRectanglePending[key] : null;
         var decision = DockRectanglePublisher.evaluateCandidate(existing, {
             "toplevel": toplevel,
@@ -470,12 +477,24 @@ Item {
      * suppressed as "unchanged".
      */
     function invalidateDockRectanglePublish(toplevel) {
-        var key = DockRectanglePublisher.toplevelObjectId(toplevel);
-        if (!key || !Object.prototype.hasOwnProperty.call(root.dockRectangleLastPublished, key))
+        var prefix = DockRectanglePublisher.toplevelObjectId(toplevel);
+        if (!prefix)
             return;
-        var last = Object.assign({}, root.dockRectangleLastPublished);
-        delete last[key];
-        root.dockRectangleLastPublished = last;
+        // Composite keys are "toplevel|pub:publisher"; drop every entry whose
+        // handle prefix matches (both WindowButton and DockMinimizedWindow).
+        var last = root.dockRectangleLastPublished;
+        var pruned = null;
+        for (var k in last) {
+            if (!Object.prototype.hasOwnProperty.call(last, k))
+                continue;
+            if (k === prefix || k.indexOf(prefix + "|pub:") === 0) {
+                if (!pruned)
+                    pruned = Object.assign({}, last);
+                delete pruned[k];
+            }
+        }
+        if (pruned)
+            root.dockRectangleLastPublished = pruned;
     }
 
     /**
@@ -497,7 +516,11 @@ Item {
         for (var k in last) {
             if (!Object.prototype.hasOwnProperty.call(last, k))
                 continue;
-            if (!live[k]) {
+            // Composite keys ("toplevel|pub:publisher") match on their handle
+            // prefix; keep an entry if its handle is still live.
+            var sep = k.indexOf("|pub:");
+            var handleKey = sep >= 0 ? k.slice(0, sep) : k;
+            if (!live[handleKey]) {
                 if (!pruned)
                     pruned = Object.assign({}, last);
                 delete pruned[k];

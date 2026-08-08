@@ -37,7 +37,7 @@ Item {
     property color textSecondary: "#aeb6c2"
     property color accentColor: "#0a84ff"
     property color trackColor: "#30ffffff"
-    property color progressFillColor: "#f7f8fa"
+    property color progressFillColor: "#f7f8faff"
     property color controlFill: "#20ffffff"
     property color artFallbackFill: "#28ffffff"
     readonly property bool reducedMotion: Motion.reducedMotion(root.settingsService)

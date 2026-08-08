@@ -91,7 +91,7 @@ Item {
     property color accentColor: "#0a84ff"
     property color progressTrackColor: "#30ffffff"
     // Monochrome progress fill (SettingsTheme.islandProgressFill); not accent.
-    property color progressFillColor: "#f7f8fa"
+    property color progressFillColor: "#f7f8faff"
     signal mediaPreviousRequested()
     signal mediaPlayPauseRequested()
     signal mediaNextRequested()

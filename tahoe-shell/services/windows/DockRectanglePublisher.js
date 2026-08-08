@@ -167,3 +167,32 @@ function sameWirePublish(a, b) {
         && ra.width === rb.width
         && ra.height === rb.height;
 }
+
+/**
+ * Whether two publish states are identical on the wire, ignoring the
+ * publisher identity. WindowButton / DockMinimizedWindow delegates get
+ * recreated when the window model rebuilds (e.g. a toplevel title change
+ * from an app spinner) — the new delegate wraps a NEW sourceWindow object,
+ * so sameWirePublish would treat an identical rect as "changed" and
+ * re-publish it (storm + blur rebuild). The compositor only cares about the
+ * rect for the handle; if handle + rect + screen are unchanged, re-sending
+ * is pure churn.
+ */
+function sameRectAndHandle(a, b) {
+    if (a === b)
+        return true;
+    if (!a || !b || !a.toplevel || !b.toplevel)
+        return false;
+    if (a.toplevel !== b.toplevel)
+        return false;
+    if (a.dockScreen !== b.dockScreen)
+        return false;
+    var ra = a.rect;
+    var rb = b.rect;
+    if (!ra || !rb)
+        return false;
+    return ra.x === rb.x
+        && ra.y === rb.y
+        && ra.width === rb.width
+        && ra.height === rb.height;
+}

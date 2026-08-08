@@ -160,6 +160,26 @@ record("dedup_null_left", context.sameWirePublish(null, pubA));
 record("dedup_null_both", context.sameWirePublish(null, null));
 record("dedup_same_ref", context.sameWirePublish(pubA, pubA));
 
+// Loose identity (title-flicker immunity): same rect + handle + screen is a
+// duplicate even when the publisher delegate was recreated (new sourceWindow).
+record("loose_same", context.sameRectAndHandle(pubA, {
+  toplevel: handleA, sourceWindow: sourceB, dockScreen: dockA, rect: rect48,
+}));
+record("loose_source_diff_but_same_rect", context.sameRectAndHandle(pubA, {
+  toplevel: handleA, sourceWindow: sourceB, dockScreen: dockA, rect: rect48,
+}));
+record("loose_rect_diff", context.sameRectAndHandle(pubA, {
+  toplevel: handleA, sourceWindow: sourceA, dockScreen: dockA, rect: rect48shifted,
+}));
+record("loose_toplevel_diff", context.sameRectAndHandle(pubA, {
+  toplevel: handleB, sourceWindow: sourceA, dockScreen: dockA, rect: rect48,
+}));
+record("loose_screen_diff", context.sameRectAndHandle(pubA, {
+  toplevel: handleA, sourceWindow: sourceA, dockScreen: dockB, rect: rect48,
+}));
+record("loose_null_left", context.sameRectAndHandle(null, pubA));
+record("loose_same_ref", context.sameRectAndHandle(pubA, pubA));
+
 console.log(JSON.stringify(cases));
 """
 
@@ -221,6 +241,18 @@ class DockRectanglePublisherTests(unittest.TestCase):
         self.assertFalse(self.cases["dedup_toplevel_diff"])
         self.assertFalse(self.cases["dedup_null_left"])
 
+    def test_loose_identity_dedups_recreated_delegate(self) -> None:
+        # sameRectAndHandle: identical rect + handle + screen is a duplicate
+        # even with a NEW sourceWindow (delegate recreated on model rebuild).
+        self.assertTrue(self.cases["loose_same"])
+        self.assertTrue(self.cases["loose_source_diff_but_same_rect"])
+        self.assertTrue(self.cases["loose_same_ref"])
+        # Real changes must still publish.
+        self.assertFalse(self.cases["loose_rect_diff"])
+        self.assertFalse(self.cases["loose_toplevel_diff"])
+        self.assertFalse(self.cases["loose_screen_diff"])
+        self.assertFalse(self.cases["loose_null_left"])
+
     def test_windows_service_owns_publisher_path(self) -> None:
         text = WINDOWS_QML.read_text(encoding="utf-8")
         self.assertIn("DockRectanglePublisher", text)
@@ -240,8 +272,11 @@ class DockRectanglePublisherTests(unittest.TestCase):
         self.assertIn("function invalidateDockRectanglePublish", text)
         # The dedup gate must run inside submitDockRectangle, before the flush
         # is armed, so an unchanged candidate never schedules wire I/O.
+        # Loose identity (sameRectAndHandle): delegates get recreated on model
+        # rebuilds (title flicker) with a NEW sourceWindow for the SAME rect —
+        # strict sourceWindow comparison would re-publish and storm niri.
         submit = text[text.index("function submitDockRectangle") : text.index("function scheduleDockRectangleFlush")]
-        self.assertIn("DockRectanglePublisher.sameWirePublish", submit)
+        self.assertIn("DockRectanglePublisher.sameRectAndHandle", submit)
         self.assertIn("dockRectangleDedupCount", submit)
         # flush must record the exact wire state after the actual publish.
         flush = text[text.index("function flushDockRectanglePending") : text.index("function setRectangle")]

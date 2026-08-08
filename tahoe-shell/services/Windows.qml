@@ -404,11 +404,19 @@ Item {
         // T-21 settle) always publishes. When a different value is already
         // pending for this frame, accept anyway so frame-coalescing still
         // ends on the latest candidate (last-wins within the flush).
+        //
+        // The identity check is intentionally loose (sameRectAndHandle, not
+        // sameWirePublish): WindowButton/DockMinimizedWindow delegates are
+        // recreated when the window model rebuilds (e.g. a toplevel title
+        // change from an app spinner), giving a NEW sourceWindow object for
+        // the SAME rect. Publishing then would re-feed niri's retarget path
+        // and rebuild blur pyramids every title flicker. If the handle, screen
+        // and rect are unchanged, the compositor already holds this rect.
         if (!force && decision.entry
-                && DockRectanglePublisher.sameWirePublish(
+                && DockRectanglePublisher.sameRectAndHandle(
                     root.dockRectangleLastPublished[decision.entry.key],
                     decision.entry)
-                && (!existing || DockRectanglePublisher.sameWirePublish(
+                && (!existing || DockRectanglePublisher.sameRectAndHandle(
                     existing, decision.entry))) {
             root.dockRectangleDedupCount += 1;
             root.dockRectangleLastRejectReason = "unchanged";

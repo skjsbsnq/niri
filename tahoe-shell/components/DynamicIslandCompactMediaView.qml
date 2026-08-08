@@ -20,7 +20,7 @@ Item {
     property color accentColor: "#0a84ff"
     property color trackColor: "#30ffffff"
     // Progress rail fill is monochrome (islandProgressFill); accent reserved for chrome.
-    property color progressFillColor: "#f7f8fa"
+    property color progressFillColor: "#f7f8faff"
     property color artFallbackFill: "#28ffffff"
     property var settingsService
 

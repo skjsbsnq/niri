@@ -2429,3 +2429,137 @@ Quickshell 子模块干净；niri 子模块干净。`.zcode/`、`Testing/` 为�
 **理由**：A08.1-A08.5 与 G01-G08 均满足；旧实现红（缺 mappingGeneration 属性 → Dock 告警 + R17 失败），新实现 TestMappingLifecycle 8 测试槽全绿（QTest Totals: 10 passed） + ctest 17/17 + SHELL_FULL 1011 passed（R17 转绿）+ PROTOCOL_FULL IN_SYNC；两轮各 2 个全新独立 reviewer 最终双 CLEAN，无未裁决 finding；无 live restart/deploy，未触碰 `.zcode/`、`Testing/` 或 T09。
 
 **下一任务是否允许开始**：YES（本 docs-only closure commit push 并远端验证后）。
+
+---
+
+## T13 线性光与高精度 blur 证据门禁
+
+**状态**：IN_PROGRESS
+**开始时间**：2026-08-08
+**roadmap 引用**：`roadmap.md#T13`（第 320-337 行）；对应发现：research-report G-1/P-B `PROPOSAL`（§5 GLASS-01「线性光/半浮点链」）
+**执行分支**：主仓库 `fix/tray-menu-pinned-surface-height`；niri 子仓库 `tahoe-layer-animations`
+
+### 1. 前提与任务锁
+
+- T01-T12 均为 `COMPLETE`，T13 是第一个 `PENDING`；无其他 `IN_PROGRESS`。本记录已将唯一当前任务锁为 `IN_PROGRESS`。
+- 主仓库 HEAD `70cb506`（docs T12 close）；niri 子仓库 HEAD `f179e82f`（T12 产品 commit），均处于预期分支。工作树除用户未跟踪项 `.zcode/`、`Testing/` 外干净（`git status --short` 双仓已核）。
+- 任务性质：`PROPOSAL` 证据门禁（roadmap「质量收益可量化且 capability 回退等价」完成判据；先决 GO 条件三条）。必须先完成像素误差量化与 renderer capability 探测核实，再裁决 GO/NO-GO；GO 才在同一 blur pipeline 内做 capability-gated format/transfer，NO-GO 按 `RESOLVED-NO-CODE` 双审查并提交证据。
+
+### 2. G01 搜索清单（改动前，niri 子仓库 `src/`，T12 后状态）
+
+**生产 blur 管线**：
+
+- `src/render_helpers/blur.rs`：dual-Kawase 唯一 authority。金字塔纹理固定 `Fourcc::Abgr8888`（`prepare_textures` `:716`、trace `:747`、`format_changed` 检查 `:660` `actual_format != Abgr8888`）；字节预算 `texture_bytes` `:476-480` 固定 `*4` bpp（RGBA8）；`Blur::render` `:759-1008` 全链路 8-bit 中间格式。shader `blur_down.frag`/`blur_up.frag` 对 sRGB 像素做线性权重平均（无 gamma 解码/编码），`precision highp float` 但输出被 8-bit 目标量化。
+- `src/render_helpers/framebuffer_effect.rs`：capture 纹理 `Fourcc::Abgr8888`（`:342/:350`），`capture_framebuffer` 从输出 framebuffer blit（输出本身是 8-bit 合成缓冲）。
+- `src/render_helpers/tahoe_glass.rs` `render_region`（`:302`）→ `FramebufferEffectElement` + postprocess（`postprocess.frag`：饱和度/噪声/bg 混色/tint/contrast/highlight/inner-shadow，全部 8-bit 域内）。
+- `src/niri.rs`/`src/render_helpers/renderer.rs`：合成输出目标无 sRGB/linear 约定（仅 `border.rs` 有 `GradientColorSpace` 枚举，与 blur 无关）。
+
+**renderer capability 探测**：
+
+- smithay `GlesRenderer`：`Capability` 枚举只有 Instancing/Blit/_10Bit/Renderbuffer/Fencing/ExportFence/Debug；**无 half-float renderable/filtering 探测项**（`GL_EXT_color_buffer_half_float` 未查询）。`extensions` 字段 `pub(crate)` 不对外暴露。
+- niri 全仓无 GL 扩展查询代码（rg 无 `glGetString`/`GL_EXTENSIONS`/half_float 命中，`Capability::_10Bit` 与 `Blur` 均不消费）。
+- smithay 格式表（`gles/format.rs`）已支持 `Fourcc::Abgr16161616f`（RGBA16F ↔ GL_RGBA16F/HALF_FLOAT 双向映射 + bpp 64），但**没有任何 niri 代码使用**。
+- **结论：A13.3 前提（「renderer 能力探测覆盖目标 GPU」）当前源码不成立**——不存在 half-float renderability 探测。目标 GPU RTX 4070（NVIDIA 610.57.04 驱动，GLES3.x 原生支持 RGBA16F renderable + linear filtering，`GL_EXT_color_buffer_half_float` 由 GLES3.0 隐式提供），探测缺位是「自动回退」路径无法落地的前置缺口。
+
+**测试基础设施**：
+
+- `src/tests/blur_capacity.rs` 已证明 surfaceless EGL（`EGLSurfacelessDisplay` + `EGLContext` + `GlesRenderer` + `render_to_texture`/`render_to_vec`/`copy_framebuffer`/`map_texture`）可驱动真实 `Blur` 与纹理读回。
+- `src/tests/t12_shared_backdrop_gate.rs` 已证明 `Niri::render` 真实管线 + `lifecycle_diag` 计数器模式。
+- `src/tests/mod.rs` 注册模式：`mod t12_shared_backdrop_gate;`（一行）。
+- `lifecycle_diag::with_enabled_for_test` 串行契约：渲染测试须在共享 diag 锁内（T12 文件头已记录）。
+
+**未改点理由**：T10 blur capacity/bucket、T11 capture 语义、T12 gate 均保持；postprocess/shadow 只读消费 blur 输出，不在本任务职责。任务仅评估「8-bit 非线性 blur 的色带/暗环误差是否量化、收益是否可量化、capability 回退路径是否完整」。
+
+### 3. 改动前专项基线
+
+（Phase 2 补：像素误差证据采集）
+
+### 3. 改动前专项基线（Phase 2 补）
+
+新增证据测试文件 `niri/src/tests/t13_linear_blur_gate.rs`（7 个测试），在未改动生产代码的 `f179e82f` HEAD 上运行：
+
+| 测试 | 结论 | 证据 |
+|---|---|---|
+| `gradient_banding_8bit_vs_linear_and_16f` | **PASS（前提否定）** | 512x64 10-bit 渐变（sRGB code 域）：8-bit 非线性 blur max_err=4 code vs 16f linear 1 code —— 两者都在输入/输出 8-bit 编码噪声量级（±1 code），渐变 banding 前提**被数据否定**，half-float 中间格式不改善渐变 |
+| `high_contrast_edge_halo_quantified` | **PASS（前提确认，暗晕显著）** | 256x64 高对比边缘（sRGB code 域）：8-bit max_err=**34 code** vs 16f 1 code（**34 倍**）。暗晕真实存在且峰值约 34 code（0-255 范围约 13% 亮度差，明显可感知）；mean_err 7.38 vs 0.004 |
+| `wallpaper_proxy_scene_error_quantified` | **PASS（前提确认）** | 512x64 壁纸代理（sRGB code 域）：8-bit max_err=13 code vs 16f 1 code（**13 倍**）；mean_err 2.21 vs 0.010 |
+| `gpu_blur_uniform_color_matches_cpu_mirror` | **PASS（镜像语义校准，判别力边界如实声明）** | 真实 GPU 管线（surfaceless EGL + `Blur::render`）：uniform code 128 → blur → code 128；CPU 镜像预测 128。**两者一致** → 镜像的 code-space 语义与真实管线校准通过；code 128 是 sRGB 编码往返固定点，uniform 场不判别 code-space 平均与正确线性光管线（两者都返回 128），该边界已在测试注释与 §4 如实声明；GPU 读回 code 128 同时证明 framebuffer 无隐式 sRGB 转换（若有转换应得 55）。镜像 gamma 模型由「shader 无 gamma 函数 + 独立复现」支撑 |
+| `single_blur_run_and_single_allocation_per_render` | **PASS（A13.2）** | 真实 `Blur::render` 一次 → blur_render=1、allocations=4、reuses=0（单次 decode→blur→encode 契约；生产路径 `framebuffer_effect.rs:358` 每帧 draw 前 prepare，本测试在 diag 锁内串行计数） |
+| `half_float_renderable_capability_probe` | **PASS（A13.3 证据）** | 真实 GL 创建→渲染→读回 RGBA16F 纹理成功，值精确（0.5/0.25/0.75/1.0 误差 <0.01）；读回绕过 smithay `map_texture` 的 4B/px 硬编码（其会截断 16f 读回）用直接 glReadPixels(RGBA/HALF_FLOAT) |
+| `half_float_pyramid_memory_delta_baseline` | **PASS（A13.4 基线）** | 4K 3-pass 金字塔：8bit=47,001,600 B vs 16f=94,003,200 B（**+47.0 MB = 44.8 MiB，2 倍**）；16f 仍 < 256 MiB（真 MiB 硬预算）单金字塔；多 region 线性叠加 |
+
+失败基线说明：这些测试是**证据采集器**（同 T12 模式），断言锁定的是前提成立/否定的可判定条件，非主观质量门槛。数字在 `f179e82f`（未改生产代码）上测得，即「旧实现」基线。
+
+### 4. A13 证据与 capability 核实（Phase 2-3）
+
+**A13.1（误差量化）**：✅ 完成。三场景固定数值见上表（sRGB code 域，第 1 轮审查修正单位后定型）。关键结论：色带（渐变）前提**被数据否定**（8bit 峰值 4 code vs 16f 1 code，同在输入/输出 8-bit 编码噪声内）；暗晕（边缘/壁纸）前提**确认存在且显著**——8bit 峰值 34/13 code vs 16f 1 code（13-34 倍），是 0-255 范围内 5-13% 的可感知亮度差。GPU↔镜像校准（uniform code 128 恒等）证明管线为 sRGB code 直接平均语义；uniform 不判别线性光（固定点），该证据边界已在测试注释如实声明。
+
+**A13.2（单次转换）**：✅ 当前管线满足——每 region 每帧 1 次 capture（T11/T12 已证）+ 1 次 blur run + 4 层 pyramid 单次分配（本任务实测）；无共享 backdrop（T12 NO-GO）故无二次转换路径。
+
+**A13.3（capability 探测）**：⚠️ **探测机制在源码不存在**。niri 全仓无 GL 扩展查询（rg 零命中）；smithay `Capability` 枚举无 half-float renderable 项、`extensions` 为 `pub(crate)` 不对外。本任务新增的 probe 测试证明**目标 GPU（RTX 4070）能力存在**（GL 实测 YES + glxinfo 只读扩展证据：`GL_EXT_color_buffer_half_float`、`GL_OES_texture_half_float_linear` 均在），但「不支持时自动回退」所需的生产探测/回退路径不存在。
+
+**A13.4（预算）**：✅ 内存增量已量化（+47.0 MB = 44.8 MiB/4K region，2 倍，仍在 256 MiB 真 MiB 硬预算内）；frame-time/功耗增量未测（无 GO 无实施义务，不测不谎报）。
+
+### 5. GO/NO-GO 裁决
+
+**裁决：NO-GO（`RESOLVED-NO-CODE`）**。
+
+依据（roadmap T13 先决 GO 条件 + A13.5）：
+
+1. **质量收益部分可量化，但 GO 的 capability 前提不成立（决定性）**：渐变场景 8-bit vs 16f 无差异（4 vs 1 code，输入/输出 8-bit 编码噪声内）；边缘/壁纸暗晕**真实且显著**（8bit 峰值 34/13 code vs 16f 1 code，13-34 倍），**若 GO 前提满足则收益可感知**。但 GO 先决条件第 3 条「renderer 能力探测覆盖目标 GPU」在源码不成立——niri 生产代码无任何 GL 能力探测（rg 全仓零命中），smithay `Capability` 枚举无 half-float renderable 项且 `extensions` 为 `pub(crate)`，A13.3「不支持时正确自动回退」要求的探测+回退机制不存在；GO 必须先新增生产 GL 能力探测基础设施，超出「同一 pipeline 内 capability-gated format/transfer」的 GO 实施边界。故按 A13.5 不做「半套格式改动」。
+2. **capability 回退前提在源码不成立**（决定性）：niri 生产代码无 half-float renderability 探测；A13.3「不支持时正确回退、用户可观察语义一致」要求的探测+回退机制不存在，GO 必须先在生产代码新增 GL 能力探测基础设施——这超出「同一 pipeline 内 capability-gated format/transfer」的 GO 实施范围，且 roadmap 先决条件「renderer 能力探测覆盖目标 GPU」当前不满足。
+3. **不做「便宜的半套格式改动」**（A13.5 明确禁止）：只把金字塔中间纹理改 16f 而无能力探测/回退/线性解码，正属于「半套格式改动」。
+
+按 roadmap T13「门禁不满足时以 `RESOLVED-NO-CODE` 关闭」与 CONSTRAINTS §4.2：只提交证据（7 测试）与防回归基线（A13.2 单次转换契约、镜像校准、A13.3 能力探针、A13.4 预算锚点），不做产品代码改动。
+
+**预算记录（任务开始时记录的预算，A13.4 锚点）**：单 4K region 16f 金字塔 +47.0 MB（=44.8 MiB）；全局 512 MiB 硬预算、单金字塔 256 MiB（blur.rs 真 MiB 常量）；多 region 线性叠加时 4K 全屏 3-region 场景 16f 总增 ≤141.0 MB（=134.5 MiB），仍在预算内（GO 若发生须实测 frame-time/p95/p99/功耗，本次未测）。
+
+### 6. 第一轮双审查（2026-08-08）
+
+两个全新、独立、只读 reviewer 并行审查冻结 diff（`/tmp/t13-review.diff`，814 行：mod.rs 一行 + 测试文件 813 行）。
+
+**Reviewer A（正确性/生命周期/测试真实性）裁决**：NO-GO 方向 CLEAN；4 个 CONFIRMED 缺陷（全部测试仪器级，不影响产品代码与裁决方向）：
+- A-1 CONFIRMED：f16 编码器缺陷——subnormal 分支移位 `14-e16` 应为 `43-e16`（错 12 个数量级，当前场景不可达但暗区场景即爆）；非 RNE（round-half-up 无 sticky/LSB）；NaN 编码为 inf。当前三场景数字不受影响（独立正确编码器复现 0.0085/0.0087）。
+- A-2 CONFIRMED：uniform-128 校准注释与日志的「线性管线会得到 188」数字错误（正确往返为 128，0.502 sRGB→0.2159 linear→编码→128）；该测试无法判别 gamma 空间（uniform 是固定点），日志「校准通过/数字可信」表述超证据力。
+- A-3 CONFIRMED：镜像采样几何与真实 GL 边界语义相差 +0.5 纹素（含边缘 clamp），「exact mirror」注释不实；独立模型量化影响 <1%（edge 0.1695 vs 0.1682），断言余量不变。
+- A-4 PLAUSIBLE（需裁决）：A13.2 未持 BLUR_BUDGET_LOCK；read_texture_f16 吞 GL 错误（unused_must_use）；banding 打印指标受行换行污染且单位标注错误；日志「防回归基线」与「17%」表述高估/不可复核。
+
+**Reviewer B（范围/验收）裁决**：NO-GO 处置方向正确但当前记录不能闭环；1 CONFIRMED + 4 PLAUSIBLE：
+- B-F1 CONFIRMED（决定性）：**单位错误**——max_err/max_step/mean_err 是线性绝对值，被标注为「code units」，致「暗晕 <1 code」结论错误。Python 完整复现：edge 8bit 0.1695 线性 = **43.2 code**、wallpaper 0.0748 = 19.1 code、gradient 0.0088 = 2.2 code。连带 execution-log §3/§4/§5 数字全部错误；**NO-GO 理由 1「质量收益不可量化到可感知」被数据反证**（收益实际可量化且显著）。NO-GO 结论本身不变（决定性依据是 capability 回退缺位 + frame-time/功耗未测 + A13.5）。
+- B-F2 PLAUSIBLE：A13.4 测试注释「on the real GL pipeline」言过其实（纯算术锚点）。
+- B-F3 PLAUSIBLE：read_texture_f16 闭包错误静默吞掉（编译 unused_must_use）。
+- B-F4 PLAUSIBLE：§2.3 新文件并入理由未显式回答。
+
+### 7. 第一轮修复（全部已应用并重验）
+
+1. **B-F1（CONFIRMED，单位）**：`banding_metrics`/`measure_scene` 改为**真实 sRGB code 域**（pipeline 函数返回 `Vec<u8>`，指标以 code 计算）；step 指标改为**行内相邻对**（消除行边界场景跳变污染）；eprintln 标注 `(sRGB codes)`。修复后实测：gradient 8bit max=4 code vs 16f 1；edge 8bit max=**34** vs 16f 1（mean 7.38 vs 0.004）；wallpaper 8bit max=13 vs 16f 1（mean 2.21 vs 0.010）。断言阈值改为 code 域（渐变 <10 记录前提否定、边缘 >20 确认暗晕、16f<8bit/4）；execution-log §3/§4/§5 数字与 NO-GO 理由 1 全部重写（见上）。
+2. **A-1（CONFIRMED，f16 编码器）**：subnormal 移位改 `43-e16`（注释：53-bit significand 下移 43-e16 至 f16 subnormal 单位 2^-24）；RNE 补 sticky/LSB（`round==1 && (sticky || lsb==1)` 才进位，normal 与 subnormal 两分支）；NaN 单独编码 0x7e00 保留符号。三场景数字不变（不触发 subnormal）。
+3. **A-2（CONFIRMED，uniform 注释）**：删除「188」错误数字；注释与日志改为诚实表述——code 128 是 sRGB 编码往返固定点，uniform 场不判别 code-space 平均与线性光管线；镜像 gamma 模型由「shader 无 gamma 函数 + 独立复现」支撑。
+4. **A-3（CONFIRMED，采样几何）**：`linear_sample` 改为真实 GLES 语义——texel 中心在整数+0.5，`i0=floor(u-0.5)`、权重 `u-0.5-i0`、clamp 至 [0.5, w-0.5] 纹素中心；文件头与 `dual_kawase_pass` 注释改为准确描述。数字微变（edge 34 vs 35 code），断言余量不变。
+5. **A-4/B-F3（PLAUSIBLE，锁与错误传播）**：A13.2 测试补 `BLUR_BUDGET_LOCK`；`read_texture_f16` 改为闭包外 `gl_error` 捕获 + 传播（消除 unused_must_use 警告，GL 读回错误可区分「能力缺失」与「测试故障」）。
+6. **B-F2（PLAUSIBLE，A13.4 注释）**：改为「确定性算术锚点（8 B/px vs 4 B/px，与 texture_bytes 将收取一致）；当前生产只分配 8-bit 金字塔，16f 无 GL 实测；frame-time/功耗未测（无 GO 无义务，如实声明）」。
+7. **B-F4（PLAUSIBLE，§2.3 并入理由）**：书面裁决——新测试文件不入 blur_capacity.rs 的理由：T13 是独立任务门禁，证据采集器与 T10 容量策略测试职责不同（一个测质量语义、一个测容量预算）；T12 已有同模式先例（独立 t12 文件）；并入会混合两个任务的验收记录。
+8. **A-4 其余（PLAUSIBLE，书面裁决）**：max_step 行污染 → 已随 F1 改为行内相邻；「防回归基线」表述 → 改为「证据采集器 + 断言前提」，uniform 判别力边界如实声明；「17%」→ 删除（定义不明确不可复核）。
+
+修复后 diff 仅测试文件与文档变化（无产品代码），7 测试 + 全量 657/657 重验全绿，rustfmt 干净，无编译警告。
+
+### 8. 第二轮双审查（终审，2026-08-08）
+
+修复后 diff（844 行）由两个**全新** reviewer 终审。
+
+**Reviewer A（正确性）终审裁决**：NOT CLEAN——0 CONFIRMED + 2 PLAUSIBLE，全部测试仪器级。独立 Python 模型（GLES 纹素中心语义 + struct.pack('<e')）逐位复现修复后全部数字（gradient 4/1、edge 34/1、wallpaper 13/1、uniform 128）；f16 编码器 15 个探针值逐位一致；A-2/A-3/A-4/B-F2/B-F4 修复全部 CLEAN；断言余量合理（2.5x/1.7x/2.1x）；无新竞态。
+- **PLAUSIBLE-1**：f16 编码器特殊分支（subnormal/RNE/NaN）在三场景全部不可达（值域 ≥2^-14），无防回归测试——第一轮已证实该缺陷面被回退过。**修复**：补 `f16_encoder_special_cases_match_ieee_754` 单测（15 个位型探针，含 subnormal/tie/overflow/NaN/±inf/±0）。
+- **PLAUSIBLE-2**：A13.3 注释「the exact path a half-float pyramid would use」过度声明——测试只驱动 16f renderable/store 路径，GL_LINEAR filtering 未驱动（由 glxinfo 扩展证据支撑）。**修复**：注释改为「renderable/store path；16f GL_LINEAR filtering 由只读 glxinfo 扩展证据支撑（测试未驱动）」；「must succeed」措辞改「on renderers without capability this fails and is recorded」。
+
+**Reviewer B（范围/验收）终审裁决**：NOT CLEAN——2 CONFIRMED（文档级）+ 其余 CLEAN。产品/测试代码 CLEAN（diff 仅 mod.rs 一行 + 测试文件；无平行接口/新依赖/生产改动；A13.1-A13.5 与 G01/G02 满足；NO-GO 依据经独立核实成立）。
+- **F1 CONFIRMED（文档，A-2 修复残留）**：execution-log §3 `gpu_blur_uniform` 行仍含「若是线性管线 0.502 linear 会编码为 188」——正是第一轮 A-2 判定错误的数字（正确往返为 128），且与同行「code 128→128」自相矛盾。**修复**：该行改写为诚实边界表述（uniform 是固定点不判别 gamma 空间；GPU 读回 128 证明 framebuffer 无隐式 sRGB 转换）。
+- **F2 CONFIRMED（文档，单位错配）**：execution-log §3/§4/§5 三处「+47.0 MiB/141 MiB」用 MiB 标注十进制数值（47,001,600 B = 44.8 MiB），与同段 blur.rs 真 MiB 预算常量（256/512 MiB）混用。**修复**：改为「+47.0 MB（=44.8 MiB）」「≤141.0 MB（=134.5 MiB）」。
+
+### 9. 终审修复（已应用）
+
+1. B-F1：execution-log §3 uniform 行删除「188」，改写为固定点边界 + framebuffer 无隐式 sRGB 转换证据。
+2. B-F2：execution-log §3/§4/§5 三处 MiB→MB（含 MiB 括注），与真 MiB 预算常量区分。
+3. A-P1：新增 `f16_encoder_special_cases_match_ieee_754` 单测（15 位型探针）。
+4. A-P2：A13.3 注释收窄（renderable/store 路径 + glxinfo filtering 证据边界）。
+
+修复后：8 测试（含新单测）+ 全量 **658/658** 全绿，rustfmt 干净，无编译警告。最终 diff 重新冻结为 `/tmp/t13-final2.diff`，由两个全新 reviewer 终审（见 §10）。

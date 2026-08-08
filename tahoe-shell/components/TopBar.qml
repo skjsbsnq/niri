@@ -352,18 +352,11 @@ PanelWindow {
         Keys.onSpacePressed: root.activateKeyboardCurrent()
     }
 
-    // Floating, rounded glass bar — mirrors the Dock / ControlCenter form
-    // so the top bar reads as "a piece of glass floating off the screen
-    // edge" instead of a full-width strip glued to the top. The
-    // PanelWindow itself stays transparent and keeps exclusiveZone 40 so
-    // window layout doesn't shift; only the inner barSurface floats with
-    // insets. See glass-consistency-fix-plan.md §2.3.
-    //
-    // Keep the surface thick enough to read as glass after the shared panel
-    // material was made more restrained for bright backgrounds.
-    TahoeGlass.regions: [barSurface.region]
-
-    GlassPanel {
+    // macOS-style top bar: fully transparent — no glass, no blur, the bar
+    // is invisible and only the content (text/icons) floats on the wallpaper.
+    // The PanelWindow stays transparent with exclusiveZone 40 so window
+    // layout doesn't shift.
+    Item {
         id: barSurface
 
         anchors.fill: parent
@@ -371,13 +364,6 @@ PanelWindow {
         anchors.rightMargin: 8
         anchors.topMargin: 4
         anchors.bottomMargin: 4
-        material: GlassStyle.MaterialPanel
-        radius: GlassStyle.RadiusTopBar
-        fillColor: root.glassFillTransparent
-        strokeColor: root.glassStroke
-        interaction: 0.0
-        materialAlpha: opacity
-        glassEnabled: opacity > 0.01
         opacity: 1 - root.fullscreenTransition
 
         Item {

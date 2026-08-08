@@ -41,7 +41,6 @@ PRODUCTION_GLASS_SURFACES = {
     "SettingsPanel.qml": "MaterialPanel",
     "Spotlight.qml": "MaterialPanel",
     "TaskSwitcher.qml": "MaterialMenu",
-    "TopBar.qml": "MaterialPanel",
     "TrayMenu.qml": "MaterialMenu",
     "WifiPopup.qml": "MaterialPanel",
     "WindowOverview.qml": "MaterialPanel",
@@ -212,7 +211,7 @@ class TahoeMaterialGovernanceTests(unittest.TestCase):
             if re.search(r"\bGlassPanel\s*\{", path.read_text(encoding="utf-8"))
         }
         self.assertEqual(discovered, set(PRODUCTION_GLASS_SURFACES))
-        self.assertEqual(len(discovered), 22)
+        self.assertEqual(len(discovered), 21)
 
         for filename, material_constant in PRODUCTION_GLASS_SURFACES.items():
             with self.subTest(surface=filename):

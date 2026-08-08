@@ -1,7 +1,7 @@
 # Tahoe Desktop 路线图执行日志
 
 **用途**：T01-T24 的唯一状态锁与证据账本。
-**当前状态**：T11 IN_PROGRESS（glass capture semantics）。
+**当前状态**：T11 COMPLETE（glass capture semantics）；下一任务 T12 PENDING。
 **禁止**：预填测试结果、审查结论、commit/push 收据或把计划写成已完成事实。
 
 ---
@@ -20,7 +20,7 @@
 | T08 | COMPLETE | quickshell `b022253`（quickshell-tahoe-desktop）/ main `3cc4d4d`（fix/tray-menu-pinned-surface-height） | 2 轮双审查，最终双 CLEAN | TahoeGlass per-wl_surface mapping generation |
 | T09 | COMPLETE | niri `274b08bb` / Quickshell `d297889d` / main `2fcb3028` | 有界最终审查 + 单点闭合 verifier CLEAN | TahoeGlass completion/rejection/capability feedback |
 | T10 | COMPLETE | niri `fe8faeea`（tahoe-layer-animations）/ main `9266d9a`（fix/tray-menu-pinned-surface-height） | 轮次 1 修复 + 轮次 2 双 CLEAN + 轮次 3 闭合 verifier PASS | blur reuse（bucket/active-rect/hysteresis/硬预算） |
-| T11 | IN_PROGRESS | - | - | glass capture semantics |
+| T11 | COMPLETE | niri `5d4c0652`（tahoe-layer-animations）/ main `1a9f9e3`（fix/tray-menu-pinned-surface-height） | 双 CLEAN（A 0 CONFIRMED / B 0 CONFIRMED/0 PLAUSIBLE）+ 3 PLAUSIBLE 全部裁决 | glass capture semantics（structural padding 稳定/alpha no-op/shadow 像素/root attribution） |
 | T12 | PENDING | - | - | shared backdrop gate |
 | T13 | PENDING | - | - | linear-light gate |
 | T14 | PENDING | - | - | island geometry |
@@ -61,8 +61,9 @@ runtime warning summary: 未采样（本任务为纯源码/测试任务，不重
 
 ## T11 glass capture 语义收敛
 
-**状态**：IN_PROGRESS
+**状态**：COMPLETE
 **开始时间**：2026-08-07
+**结束时间**：2026-08-08
 **roadmap 引用**：`roadmap.md#T11`（第 274-292 行）；对应发现：GLASS-02、旧报告 G-2/G-3/G-5 与 R-2
 **执行分支**：主仓库 `fix/tray-menu-pinned-surface-height`；niri 子仓库 `tahoe-layer-animations`
 
@@ -133,7 +134,7 @@ runtime warning summary: 未采样（本任务为纯源码/测试任务，不重
 | G04 | PASS | T10 HEAD 上旧 alpha 实现红（exit 101）；当前 alpha、padding、pixel、attribution 测试绿 |
 | G05 | PASS | 两个全新独立只读 reviewer 终审：Reviewer A 整体 CLEAN（0 CONFIRMED）+ Reviewer B 整体 CLEAN（0 CONFIRMED/0 PLAUSIBLE）；3 条 PLAUSIBLE 全部裁决（F1 测试证据反证、F2 机制论证书面记录、F3 代码证据反证），无代码改动 |
 | G06 | 待提交 | niri 产品 commit/push 后再更新主仓库子模块指针 |
-| G07 | IN_PROGRESS | 当前记录已填实现、基线与验证与双审查裁决；commit/push 收据待补 |
+| G07 | PASS | 当前记录已填实现、基线与验证、双审查裁决与完整 commit/push 收据 |
 | G08 | PASS | 未重启会话、未部署、未触碰 `.zcode/`、`Testing/` 或其他任务 |
 | A11.1 | PASS | `material_animation_keeps_structural_padding_and_changes_visual_effect` + 既有 capture-key fade/interaction 稳定测试；alpha/material 只改视觉参数 |
 | A11.2 | PASS | `zero_alpha_skips_capture_and_restore_renders_first_visible_frame`；zero frame elements/capture/fb/blur 为 0，restore 首帧 capture >=1，旧实现红测见上 |
@@ -177,14 +178,23 @@ runtime warning summary: 未采样（本任务为纯源码/测试任务，不重
 | F2（Reviewer A）：A11.2 恢复帧证据经 `render_for_layer` 直接调用绕过 damage tracker，未直接断言真实管线重捕获 | **接受机制论证并书面记录** | 真实管线中 alpha 0→1 使 region 变化 → `changed_region_damage` 计入 material_alpha（tahoe_glass.rs:123-146，既有单测）→ 下次渲染 drain ExtraDamage；元素重入 → tracker 无前帧状态 → 重捕获；FramebufferEffect Id 跨帧稳定（framebuffer_effect.rs:34-107），缓存纹理不会在新实例被错误复用。恢复帧像素正确性已由 zero_alpha 测试直接像素断言覆盖 |
 | F3（Reviewer A）：blur_capacity.rs 内缘像素 equality 断言对 shadow-over-material 顺序 bug 空泛（shadow.frag:95-104 内部 alpha 恒 0） | **代码证据反证** | 顺序检测的真实证据已存在于 zero_alpha 测试的元素索引断言（`order = material_index.zip(shadow_index)`、`bright_order/dark_order == Some(true)`），能检测顺序交换；内缘像素 equality 定位为绝对像素基线（非顺序检测），继续固定 A11.3 亮/暗像素值 |
 
-### 9. 产品 Commit 与 push 收据（待执行）
+### 9. 产品 Commit 与 push 收据
 
-产品代码当前尚未 commit/push；niri 子仓库应先提交并 push，远端 ancestor 验证通过后，主仓库再提交已推送的子模块指针和本任务文档。
+- niri 产品 commit：`5d4c06527d4b4964519ff469b3797f31881f0fb9`，subject `fix(tahoe-glass): T11 capture semantics — structural padding stability, alpha no-op, shadow order pixels, root attribution`，branch/ref `tahoe-layer-animations` / `origin/tahoe-layer-animations`。
+- niri push：成功，`59639b0b..5d4c0652`；push 后 `git fetch origin tahoe-layer-animations`，`git merge-base --is-ancestor 5d4c0652 origin/tahoe-layer-animations` exit 0。
+- 主仓库产品 commit：`1a9f9e3`（subject `fix(submodule): bump niri for T11 glass capture semantics convergence`，更新 niri submodule pointer 到已推送的 `5d4c0652...`，含本 T11 双审查裁决记录；execution-log 保持 IN_PROGRESS，未写完成状态/收据），branch/ref `fix/tray-menu-pinned-surface-height` / `origin/fix/tray-menu-pinned-surface-height`。
+- 主仓库 push：成功，`3002a89..1a9f9e3`；push 后 `git merge-base --is-ancestor 1a9f9e3 origin/fix/tray-menu-pinned-surface-height` exit 0。
+- 本闭环记录不含自引用 hash，由后续 `git log --format=%H -- execution-log.md` 解析。
 
-### 10. 完成判定（待审查/commit/push）
+### 10. 完成判定
 
-**最终状态**：IN_PROGRESS
-**下一任务是否允许开始**：NO
+**最终状态**：COMPLETE。
+
+**理由**：A11.1-A11.5 与 G01-G08 均满足；旧实现红（alpha=0 仍生成 glass elements，exit 101；旧 build 无 alpha 门返回 Some），新实现专项 14/17/14/20/11 全绿 + 完整 lib 645/645（规范并行命令连续 3 次稳定）+ workspace check + release build + 协议双门禁 IN_SYNC；两个全新独立只读 reviewer 终审双 CLEAN（Reviewer A 0 CONFIRMED、Reviewer B 0 CONFIRMED/0 PLAUSIBLE），3 条 PLAUSIBLE 全部裁决（F1 测试证据反证、F2 机制论证书面记录、F3 代码证据反证），无代码改动；产品 commit/push 与远端 ancestor 验证双仓完成；未重启会话、未部署、未触碰 `.zcode/`、`Testing/` 或 T12。
+
+**下一任务是否允许开始**：YES（本 docs-only closure commit push 并远端验证后）。
+
+**现场验证清单（未伪装为自动验收）**：像素证据使用现有 EGL surfaceless renderer，无真实 DRM direct-scanout、物理多显示器或用户会话重启/部署验证；A11.5 的 direct scanout 为 headless scope，生产 authority 未改，待部署后由用户现场确认。
 
 ## T01 output layer teardown 闭环
 

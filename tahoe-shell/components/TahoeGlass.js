@@ -26,13 +26,14 @@ var RadiusPopup = 24;
 // refraction, shadow, and depth belong to the compositor material.
 // Light mode fills are cold gray-blue (matching the compositor tint) so
 // glass stays visible on white content — pure-white fills washed it out.
-var FillPanel = "#dce6f014";
-var FillPanelBright = "#dce6f018";
-var FillDock = "#dce6f02a";
-var FillTopBar = "#dce6f022";
-var FillPill = "#dce6f080";
-var FillLauncher = "#dce6f01c";
-var FillBackdrop = "#dce6f012";
+// QML hex is #AARRGGBB (alpha first).
+var FillPanel = "#14dce6f0";
+var FillPanelBright = "#18dce6f0";
+var FillDock = "#2adce6f0";
+var FillTopBar = "#22dce6f0";
+var FillPill = "#80dce6f0";
+var FillLauncher = "#1cdce6f0";
+var FillBackdrop = "#12dce6f0";
 
 var StrokePanel = "#24ffffff";
 var StrokePanelBright = "#34ffffff";

@@ -1,7 +1,7 @@
 # Tahoe Desktop 路线图执行日志
 
 **用途**：T01-T24 的唯一状态锁与证据账本。
-**当前状态**：T10 COMPLETE（blur texture capacity reuse）。
+**当前状态**：T11 IN_PROGRESS（glass capture semantics）。
 **禁止**：预填测试结果、审查结论、commit/push 收据或把计划写成已完成事实。
 
 ---
@@ -20,7 +20,7 @@
 | T08 | COMPLETE | quickshell `b022253`（quickshell-tahoe-desktop）/ main `3cc4d4d`（fix/tray-menu-pinned-surface-height） | 2 轮双审查，最终双 CLEAN | TahoeGlass per-wl_surface mapping generation |
 | T09 | COMPLETE | niri `274b08bb` / Quickshell `d297889d` / main `2fcb3028` | 有界最终审查 + 单点闭合 verifier CLEAN | TahoeGlass completion/rejection/capability feedback |
 | T10 | COMPLETE | niri `fe8faeea`（tahoe-layer-animations）/ main `9266d9a`（fix/tray-menu-pinned-surface-height） | 轮次 1 修复 + 轮次 2 双 CLEAN + 轮次 3 闭合 verifier PASS | blur reuse（bucket/active-rect/hysteresis/硬预算） |
-| T11 | PENDING | - | - | glass capture semantics |
+| T11 | IN_PROGRESS | - | - | glass capture semantics |
 | T12 | PENDING | - | - | shared backdrop gate |
 | T13 | PENDING | - | - | linear-light gate |
 | T14 | PENDING | - | - | island geometry |
@@ -58,6 +58,133 @@ runtime warning summary: 未采样（本任务为纯源码/测试任务，不重
 ```
 
 ---
+
+## T11 glass capture 语义收敛
+
+**状态**：IN_PROGRESS
+**开始时间**：2026-08-07
+**roadmap 引用**：`roadmap.md#T11`（第 274-292 行）；对应发现：GLASS-02、旧报告 G-2/G-3/G-5 与 R-2
+**执行分支**：主仓库 `fix/tray-menu-pinned-surface-height`；niri 子仓库 `tahoe-layer-animations`
+
+### 1. 前提与任务锁
+
+- T01-T10 均为 `COMPLETE`，T11 是第一个 `PENDING`；本记录已将唯一当前任务锁为 `IN_PROGRESS`。
+- 主仓库 HEAD 为 `3002a8912df37415f7c468cdce71df0a77995fef`；niri 子仓库 HEAD 为 `59639b0b7643e6b46be2f5dcdbcc58b13f412762`，均处于预期分支。
+- 主仓库已有用户未跟踪项 `.zcode/`、`Testing/`；niri 子仓库工作树干净。本任务不触碰它们。
+- 源码复核确认：`render_region()` 在 alpha 归零前记 `tahoe_region_capture`，`glass_sample_padding()` 读取 fade/interaction 后的 refraction/lens，`ResolvedEffectPlan::build()` 未检查 `RenderParams.alpha`。
+- 现有 root/subsurface/unmapped/multi-output attribution authority 为 `TahoeGlassHandler::queue_redraw_for_tahoe_glass_surface()`，复核位置 `niri/src/handlers/mod.rs:1149-1174`；本任务只复用并验证，不新增 glass-only redraw API。
+
+### 2. 允许与禁止范围
+
+允许修改：
+
+- niri `src/render_helpers/tahoe_glass.rs` 的现有 stable padding、alpha no-op 与对应单元/渲染测试；
+- niri `src/render_helpers/resolved_effect_plan.rs` 的现有 alpha 计划语义与对应测试；
+- 现有 niri Tahoe/blur capacity/attribution 测试文件，以及为固定像素证据所必需的既有渲染测试 harness；
+- 本 execution log，以及 niri 子模块指针。
+
+明确不修改：
+
+- Quickshell、协议 XML/生成物、T10 blur bucket/budget/active-region shader、T12 shared backdrop、T13 transfer/format；
+- xray/scanout ownership、`TahoeGlassHandler` 的 redraw API、第二张 damage queue、用户开关/新依赖；
+- `.zcode/`、`Testing/` 与所有无关格式化或重构。
+
+### 3. G01 搜索清单（改动前）
+
+- `glass_sample_padding`：定义 `niri/src/render_helpers/tahoe_glass.rs:449-469`，唯一生产调用 `:357`，现有 geometry/padding 测试在同文件 `:754-808`、`:870-928`。
+- alpha/plan：`render_region` `niri/src/render_helpers/tahoe_glass.rs:317-424`；`ResolvedEffectPlan::build` `niri/src/render_helpers/resolved_effect_plan.rs:206-256`；`BackgroundEffect::render` `niri/src/render_helpers/background_effect.rs:232-300`；计数器 `niri/src/utils/lifecycle_diag.rs:286-345`。
+- capture/capacity：`capture_band` 使用 `params.geometry` 的现有路径 `niri/src/render_helpers/tahoe_glass.rs:388-407`、`niri/src/render_helpers/framebuffer_effect.rs`；T10 active/capacity authority 保持不动。
+- redraw attribution：`niri/src/handlers/mod.rs:1149-1174`、`niri/src/tests/tahoe_glass.rs:891-1115`，覆盖 mapped dual-output、unmapped/destroyed、subsurface/root。
+- shadow/xray/scanout：glass-before-shadow `niri/src/render_helpers/tahoe_glass.rs:426-442`；xray/non-xray `niri/src/render_helpers/background_effect.rs:242-299`；scanout candidate `niri/src/niri.rs:4525`、`:5012`。
+
+未改点理由：T10 的 capacity/UV/预算已经有独立 authority 与像素回归；T03/T09 已闭合 root attribution；xray/scanout 只是 A11.5 的保护矩阵，T11 目标不要求改变其 ownership。
+
+### 4. 改动前专项基线
+
+在 T10 产品 commit `59639b0b` 的 detached 临时 worktree 中运行，未包含本任务测试与实现改动。五组专项均通过：
+
+| 配置 | 命令 | exit | 结果 |
+|---|---:|---:|---|
+| Tahoe helper | `cargo test -p niri --lib render_helpers::tahoe_glass::tests -- --test-threads=1` | 0 | 13 passed / 0 failed |
+| resolved plan | `cargo test -p niri --lib render_helpers::resolved_effect_plan::tests -- --test-threads=1` | 0 | 15 passed / 0 failed |
+| background effect | `cargo test -p niri --lib render_helpers::background_effect::tests -- --test-threads=1` | 0 | 14 passed / 0 failed |
+| Tahoe glass integration | `cargo test -p niri --lib tests::tahoe_glass -- --test-threads=1` | 0 | 19 passed / 0 failed |
+| blur capacity | `cargo test -p niri --lib tests::blur_capacity -- --test-threads=1` | 0 | 10 passed / 0 failed |
+
+改动前基线仍有 T10 引入的 `blur_capacity.rs` 三项 unused-import warning；本任务清理后 changed-file rustfmt/check 与新增代码均无 warning。
+
+### 5. 实现机制与红绿证据
+
+- **稳定 structural padding（A11.1）**：`render_region()` 先计算合成 alpha，再由 `resolve_glass_effect_and_padding()` 用未淡化 material effect 和唯一 blur kernel 解析 `glass_sample_padding()`；fade/interaction 只修改 draw-side effect，不能改变 capture envelope。既有 `ResolvedEffectPlan::capture_key` 继续只依赖结构/blur/capture-band 输入。
+- **alpha no-op（A11.2）**：`render_region()` 在 `note_tahoe_region_capture()`、plan/capture key 和 background-effect render 之前对最终 `material_alpha <= 0` 早退；`ResolvedEffectPlan::build()` 同样在解析 options 前返回 `None`。alpha 从 0 恢复时不改变 controller/region ownership，首个可见帧重新走现有 live/xray 路由。
+- **shadow 顺序（A11.3）**：保留同一 `TahoeGlassElement` authority，material/background effect 先 push，shadow 后 push；新增 EGL 亮/暗背景固定像素基线，确认 panel 内缘无未经设计的自阴影，shadow band 仍落在 panel 外缘。
+- **root attribution（A11.4）**：生产仍只有 `TahoeGlassHandler::queue_redraw_for_tahoe_glass_surface()` 这一 redraw owner，先 `find_root_shell_surface()` 再 `output_for_root()`，最后调用统一 `apply_redraw_attribution()`；未新增 glass-only redraw API。测试 fixture 新增仅测试用 `roundtrip_protocol_only()`，只处理 Wayland request 并 flush server、不执行 refresh/render，使三条双 output protocol 测试能在 handler 与 redraw consumer 之间观察 root `Queued`、other `Idle`；unmapped 与 subsurface/root-cache 场景继续走真实 protocol/production handler。
+- **A11.5 保持项**：alpha 恢复测试显式覆盖 live 与 xray plan routing；既有 scanout/xray/非 xray authority 未修改，完整 niri lib 与 headless EGL 渲染回归通过。没有把 direct DRM scanout 或真实用户会话状态伪装成 headless 证据。
+
+旧实现红测在 detached `59639b0b` worktree 中仅回填最小 `zero_alpha_skips_capture_red_probe` 行为测试；旧实现 exit 101，断言失败于 `elements.is_empty()`，说明 alpha=0 仍生成 glass elements。当前实现同一语义由 `zero_alpha_skips_capture_and_restore_renders_first_visible_frame` 通过，并额外断言 capture/blur 计数为 0、恢复首帧可见。
+
+### 6. 验收记录（实现后，审查/收据待补）
+
+| 验收编号 | 当前状态 | 证据 |
+|---|---|---|
+| G01 | PASS | §1-3 搜索清单、调用点与不修改点；生产 redraw authority 未分叉 |
+| G02 | PASS | changed-file `rustfmt --check` 与 `git diff --check` 通过；无 V2/New/Fixed、无用户开关/新依赖/第二 glass API |
+| G03 | PASS | 专项 14/17/14/20/11 全绿；完整 lib 645/645；workspace check、release build、protocol 双门禁通过 |
+| G04 | PASS | T10 HEAD 上旧 alpha 实现红（exit 101）；当前 alpha、padding、pixel、attribution 测试绿 |
+| G05 | PASS | 两个全新独立只读 reviewer 终审：Reviewer A 整体 CLEAN（0 CONFIRMED）+ Reviewer B 整体 CLEAN（0 CONFIRMED/0 PLAUSIBLE）；3 条 PLAUSIBLE 全部裁决（F1 测试证据反证、F2 机制论证书面记录、F3 代码证据反证），无代码改动 |
+| G06 | 待提交 | niri 产品 commit/push 后再更新主仓库子模块指针 |
+| G07 | IN_PROGRESS | 当前记录已填实现、基线与验证与双审查裁决；commit/push 收据待补 |
+| G08 | PASS | 未重启会话、未部署、未触碰 `.zcode/`、`Testing/` 或其他任务 |
+| A11.1 | PASS | `material_animation_keeps_structural_padding_and_changes_visual_effect` + 既有 capture-key fade/interaction 稳定测试；alpha/material 只改视觉参数 |
+| A11.2 | PASS | `zero_alpha_skips_capture_and_restore_renders_first_visible_frame`；zero frame elements/capture/fb/blur 为 0，restore 首帧 capture >=1，旧实现红测见上 |
+| A11.3 | PASS | `glass_shadow_edge_pixels_are_stable_on_bright_and_dark_backdrops`：bright outside `(229,229,229,255)`、dark outside `(25,25,25,255)`；bright/dark inner `(224,229,234,255)` / `(61,66,71,255)`；shadow band `(216,216,216,255)` / `(24,24,24,255)` |
+| A11.4 | PASS | dual-output commit/destroy/subsurface 三个真实 protocol 测试 root-only queue；unmapped skip 保持零 output queue/fallback |
+| A11.5 | PASS（headless scope） | xray/live restore routing 测试 + full lib 645/645；direct scanout/真实 DRM 未在当前环境执行，生产 authority 未改 |
+
+全量/门禁收据（截至当前实现）：
+
+| 配置 | 命令 | exit | 结果 |
+|---|---:|---:|---|
+| changed-file format | `rustfmt --edition 2021 --check src/render_helpers/tahoe_glass.rs src/render_helpers/resolved_effect_plan.rs src/tests/blur_capacity.rs src/tests/fixture.rs src/tests/server.rs src/tests/tahoe_glass.rs` | 0 | 无本 diff 格式漂移 |
+| NIRI_FULL | `cargo fmt --all -- --check` | 1（基线） | 70 处漂移为 T11 之外既有；本任务 6 个 changed file 单独 check 为 0 |
+| NIRI_FULL | `cargo test -p niri --lib -- --test-threads=1` | 0 | 645 passed / 0 failed |
+| NIRI_FULL | `cargo check --workspace --all-targets` | 0 | Finished；仅既有 `niri-visual-tests` unused import warning |
+| render build | `cargo build --release -p niri` | 0 | release profile build finished |
+| PROTOCOL_FULL | `scripts/check-protocol-sync.sh` | 0 | IN_SYNC，三份 TahoeGlass XML sha256 `10fd415f...` 一致 |
+| PROTOCOL_FULL | `scripts/check-tahoe-glass-guardrails.sh` | 0 | 全部 guardrail 通过 |
+| WORKTREE_GUARD | `git -C niri diff --check` | 0 | clean |
+
+### 7. 未覆盖、实时边界与后续范围
+
+- 像素证据使用现有 EGL surfaceless renderer；没有真实 DRM direct-scanout、物理多显示器、用户会话重启或部署验证。这些需要现场/用户授权的验证没有标为自动通过。
+- `roundtrip_protocol_only()` 与 `dispatch_protocol_only()` 只存在于测试 fixture，职责是保留 Wayland server flush 的 protocol observation window；它们不是生产 redraw API，也没有改变正常 `roundtrip()` 的 refresh 语义。
+- 测试计数器的全局锁只保护本任务 reset/action/assert 窗口；unmapped skip 仍以 lifecycle diag 的既有 test lock 断言，未扩展为第二计数 authority。
+- T10 blur capacity/active-rect/shader ownership、T12 shared backdrop、T13 transfer/format、xray/scanout ownership均未改。
+
+### 8. 独立审查
+
+冻结最终 diff 后，同时创建两个全新、互不可见、只读 reviewer（Reviewer A 正确性/生命周期、Reviewer B 范围/接口/UX/验收），输入为 CONSTRAINTS、roadmap T11、execution-log T11 记录与完整 diff `/tmp/t11-final.diff`（938 行，6 个文件，无新增文件）。
+
+**Reviewer A 裁决**：整体 CLEAN——无 CONFIRMED 生产代码缺陷。根因逐一确认消除：alpha 早退位于 `note_tahoe_region_capture`/plan/shadow 之前（tahoe_glass.rs:326）；structural padding 由未淡化、peak-interaction=1.0 的 structural effect 决定（tahoe_glass.rs:438-440），fade/interaction 只作用于 draw-side；capture_key 字段不含 tint（fade/boost 不动 blur/xray 标志）；chromatic 乘数与 `clipped_surface.frag:46-48` 的 `split = length(offset) * chromatic * 6.0` 数学一致。生产调用点全仓核验无遗漏（`glass_sample_padding` 唯一调用 tahoe_glass.rs:440；`ResolvedEffectPlan::build` 仅 tahoe_glass.rs:390 与 background_effect.rs:565 两处，均在门内）；早退不跳过任何必要清理（damage drain/regions.retain 在循环前）；新增代码全为纯函数无锁/异步/UAF；`roundtrip_protocol_only`/`dispatch_protocol_only` 为严格变窄观察窗口，只跳过 work 不可能让旧代码误通过；§3.2 不变量全部保持；注释与机制一致。
+
+**Reviewer B 裁决**：整体 CLEAN——0 CONFIRMED、0 PLAUSIBLE。生产调用点迁移完整、无旧 authority 残留；无平行接口/旁路/feature flag（无 V2/New/Fixed 命名，fixture 方法严格 cfg(test)）；chromatic 乘数经核实为任务范围内的结构 padding 修正（tahoe-shell 全部出厂 material 默认 chromatic=0.0 → 乘数恒 1.0，不改任何既有 capture 尺寸；仅用户显式调高 chromatic 且同时配置 refraction/lens 时才扩大，且 clamp 64 与 T10 上限一致）；适用矩阵完整；A11.1-A11.5 逐条证据可重复；注释/文档与代码一致。
+
+**PLAUSIBLE 处置（3 条，全部裁决完成，无代码改动）**：
+
+| Finding | 裁决 | 依据 |
+|---|---|---|
+| F1（Reviewer A）：零值断言在进程全局 ENABLED 窗口内可能被并行 blur_capacity 渲染干扰；完整 lib 证据只有 --test-threads=1 | **测试证据反证** | 规范并行命令 `cargo test -p niri --lib` 连续 3 次全部 645/645 exit 0（9.0-9.1s），无 flake；with_enabled_for_test 窗口毫秒级且不与其他 EGL 渲染重叠；该暴露与 r15/r16/r17 既有模式同类，非 T11 新增缺陷类 |
+| F2（Reviewer A）：A11.2 恢复帧证据经 `render_for_layer` 直接调用绕过 damage tracker，未直接断言真实管线重捕获 | **接受机制论证并书面记录** | 真实管线中 alpha 0→1 使 region 变化 → `changed_region_damage` 计入 material_alpha（tahoe_glass.rs:123-146，既有单测）→ 下次渲染 drain ExtraDamage；元素重入 → tracker 无前帧状态 → 重捕获；FramebufferEffect Id 跨帧稳定（framebuffer_effect.rs:34-107），缓存纹理不会在新实例被错误复用。恢复帧像素正确性已由 zero_alpha 测试直接像素断言覆盖 |
+| F3（Reviewer A）：blur_capacity.rs 内缘像素 equality 断言对 shadow-over-material 顺序 bug 空泛（shadow.frag:95-104 内部 alpha 恒 0） | **代码证据反证** | 顺序检测的真实证据已存在于 zero_alpha 测试的元素索引断言（`order = material_index.zip(shadow_index)`、`bright_order/dark_order == Some(true)`），能检测顺序交换；内缘像素 equality 定位为绝对像素基线（非顺序检测），继续固定 A11.3 亮/暗像素值 |
+
+### 9. 产品 Commit 与 push 收据（待执行）
+
+产品代码当前尚未 commit/push；niri 子仓库应先提交并 push，远端 ancestor 验证通过后，主仓库再提交已推送的子模块指针和本任务文档。
+
+### 10. 完成判定（待审查/commit/push）
+
+**最终状态**：IN_PROGRESS
+**下一任务是否允许开始**：NO
 
 ## T01 output layer teardown 闭环
 

@@ -101,9 +101,9 @@ tahoe-glass {
         xray false
         noise 0.005
         saturation 1.10
-        tint-color "#ffffff"
-        tint-amount 0.070
-        contrast 1.10
+        tint-color "#e0e8f0"
+        tint-amount 0.30
+        contrast 1.04
         edge-highlight 0.14
         refraction 0.004
         inner-shadow 0.06
@@ -114,9 +114,9 @@ tahoe-glass {
         xray false
         noise 0.005
         saturation 1.12
-        tint-color "#ffffff"
-        tint-amount 0.040
-        contrast 1.05
+        tint-color "#e8eef6"
+        tint-amount 0.24
+        contrast 1.03
         edge-highlight 0.32
         refraction 0.013
         inner-shadow 0.07
@@ -127,9 +127,9 @@ tahoe-glass {
         xray false
         noise 0.005
         saturation 1.08
-        tint-color "#ffffff"
-        tint-amount 0.060
-        contrast 1.08
+        tint-color "#e0e8f0"
+        tint-amount 0.30
+        contrast 1.04
         edge-highlight 0.15
         refraction 0.004
         inner-shadow 0.055
@@ -140,9 +140,9 @@ tahoe-glass {
         xray false
         noise 0.005
         saturation 1.10
-        tint-color "#ffffff"
-        tint-amount 0.040
-        contrast 1.06
+        tint-color "#e4ecf4"
+        tint-amount 0.26
+        contrast 1.03
         edge-highlight 0.18
         refraction 0.007
         inner-shadow 0.07
@@ -154,9 +154,9 @@ tahoe-glass {
         xray false
         noise 0.004
         saturation 1.08
-        tint-color "#ffffff"
-        tint-amount 0.075
-        contrast 1.11
+        tint-color "#e6edf4"
+        tint-amount 0.28
+        contrast 1.03
         edge-highlight 0.26
         refraction 0.004
         inner-shadow 0.10
@@ -167,9 +167,9 @@ tahoe-glass {
         xray false
         noise 0.005
         saturation 1.09
-        tint-color "#ffffff"
-        tint-amount 0.070
-        contrast 1.10
+        tint-color "#e8eef5"
+        tint-amount 0.26
+        contrast 1.03
         edge-highlight 0.24
         refraction 0.005
         inner-shadow 0.09
@@ -184,9 +184,9 @@ tahoe-glass {
         xray false
         noise 0.003
         saturation 1.04
-        tint-color "#ffffff"
-        tint-amount 0.050
-        contrast 1.03
+        tint-color "#e4eaf2"
+        tint-amount 0.22
+        contrast 1.02
         edge-highlight 0.05
         refraction 0.002
         inner-shadow 0.0
@@ -395,8 +395,8 @@ layer-rule {
         noise 0.005
         saturation 1.10
         tint-color "#ffffff"
-        tint-amount 0.105
-        contrast 1.10
+        tint-amount 0.30
+        contrast 1.04
         edge-highlight 0.14
         refraction 0.004
         inner-shadow 0.06
@@ -678,8 +678,8 @@ layer-rule {
         noise 0.005
         saturation 1.10
         tint-color "#ffffff"
-        tint-amount 0.105
-        contrast 1.10
+        tint-amount 0.30
+        contrast 1.04
         edge-highlight 0.14
         refraction 0.004
         inner-shadow 0.06
@@ -813,8 +813,8 @@ layer-rule {
         noise 0.004
         saturation 1.08
         tint-color "#ffffff"
-        tint-amount 0.110
-        contrast 1.11
+        tint-amount 0.28
+        contrast 1.03
         edge-highlight 0.26
         refraction 0.004
         inner-shadow 0.10
@@ -843,8 +843,8 @@ layer-rule {
         noise 0.005
         saturation 1.09
         tint-color "#ffffff"
-        tint-amount 0.100
-        contrast 1.10
+        tint-amount 0.26
+        contrast 1.03
         edge-highlight 0.24
         refraction 0.005
         inner-shadow 0.09

@@ -24,13 +24,15 @@ var RadiusPopup = 24;
 
 // Phase 3: QML only provides tint/fallback weight. Edge highlight,
 // refraction, shadow, and depth belong to the compositor material.
-var FillPanel = "#14ffffff";
-var FillPanelBright = "#18f7f8fb";
-var FillDock = "#2af7fbff";
-var FillTopBar = "#22f7fbff";
-var FillPill = "#80f7fbff";
-var FillLauncher = "#1cf7f8fb";
-var FillBackdrop = "#12eef2f7";
+// Light mode fills are cold gray-blue (matching the compositor tint) so
+// glass stays visible on white content — pure-white fills washed it out.
+var FillPanel = "#dce6f014";
+var FillPanelBright = "#dce6f018";
+var FillDock = "#dce6f02a";
+var FillTopBar = "#dce6f022";
+var FillPill = "#dce6f080";
+var FillLauncher = "#dce6f01c";
+var FillBackdrop = "#dce6f012";
 
 var StrokePanel = "#24ffffff";
 var StrokePanelBright = "#34ffffff";

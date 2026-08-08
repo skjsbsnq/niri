@@ -21,7 +21,7 @@
 | T09 | COMPLETE | niri `274b08bb` / Quickshell `d297889d` / main `2fcb3028` | 有界最终审查 + 单点闭合 verifier CLEAN | TahoeGlass completion/rejection/capability feedback |
 | T10 | COMPLETE | niri `fe8faeea`（tahoe-layer-animations）/ main `9266d9a`（fix/tray-menu-pinned-surface-height） | 轮次 1 修复 + 轮次 2 双 CLEAN + 轮次 3 闭合 verifier PASS | blur reuse（bucket/active-rect/hysteresis/硬预算） |
 | T11 | COMPLETE | niri `5d4c0652`（tahoe-layer-animations）/ main `1a9f9e3`（fix/tray-menu-pinned-surface-height） | 双 CLEAN（A 0 CONFIRMED / B 0 CONFIRMED/0 PLAUSIBLE）+ 3 PLAUSIBLE 全部裁决 | glass capture semantics（structural padding 稳定/alpha no-op/shadow 像素/root attribution） |
-| T12 | COMPLETE | niri `（待填产品 hash）`（tahoe-layer-animations）/ main `（待填）`（fix/tray-menu-pinned-surface-height） | 四轮双审查，最终 A 实质 CLEAN + B 终审 CLEAN | shared backdrop gate（NO-GO：G3 显存 10.29x 劣于基线；证据 5 测试 + 防回归基线） |
+| T12 | COMPLETE | niri `f179e82f`（tahoe-layer-animations）/ main `20832c2`（fix/tray-menu-pinned-surface-height） | 四轮双审查，最终 A 实质 CLEAN + B 终审 CLEAN | shared backdrop gate（NO-GO：G3 显存 10.29x 劣于基线；证据 5 测试 + 防回归基线） |
 | T13 | PENDING | - | - | linear-light gate |
 | T14 | PENDING | - | - | island geometry |
 | T15 | PENDING | - | - | island interaction |
@@ -237,7 +237,7 @@ runtime warning summary: 未采样（本任务为纯源码/测试任务，不重
 |---|---|---|
 | `g1_two_regions_on_one_surface_capture_twice_per_frame` | **PASS（G1 前提成立）** | 真实管线首帧 `fb_capture=2, blur=2`（eprintln probe 实测），两 region 各自独立 blit+blur pyramid；断言 `fb_c==blur_c` 且**无条件** `fb_c>=2`（捕获计数是可信 region 信号；元素计数无法区分 1/2 region，仅作存在性断言） |
 | `g1_two_surfaces_on_one_output_capture_independently` | **PASS（G1 前提成立）** | Dock+TopBar 双 surface 同样 `fb_capture=2, blur=2`（对完整 output 元素列表无条件 `visible>=2` + `fb_c>=2`）；另断言未变第二帧 `fb_c2=0, blur_c2=0`（静态场景不重捕获；逐 region 脏区粒度未断言） |
-| `g2_glass_capture_samples_backdrop_and_lower_layers` | **PASS（G2 z-order 模型成立）** | `Niri::render` 输出 front-to-back 列表：glass capture 元素之后存在 `SolidColor` backdrop（backdrop 先绘制、被 glass capture 采样）；显式排除 `Texture`（hotkey overlay 在最上层不被采样）。注意：此语义在 §7 第三轮终审经两轮修正后定型（第二轮曾发现第一版断言方向倒置） |
+| `g2_glass_capture_samples_backdrop_and_lower_layers` | **PASS（G2 z-order 模型成立）** | `Niri::render` 输出 front-to-back 列表：glass capture 元素之后存在 `SolidColor` backdrop（backdrop 先绘制、被 glass capture 采样）；显式排除 `Texture`（hotkey overlay 在最上层不被采样）。注意：此语义经第二轮/第三轮终审两轮修正后定型（第二轮曾发现第一版断言方向倒置） |
 | `g3_union_bbox_memory_cap_vs_region_sum` | **FAIL（G3 不满足）** | 真实 2560x1600 布局（TopBar 顶部 + Dock 底部 + Island 顶部居中）分离区域：union bbox = 2560x1600 = 4,096,000 px，单 region 和 = 398,080 px，**共享 capture 显存上限 = 基线的 10.29 倍**；仅区域重叠时 union < sum（Dock+CC 重叠例验证） |
 | `g4_no_second_render_authority` | **PASS（G4 满足）** | 源码断言单一 `render_regions_for_layer` authority，无 `GlassBackdropV2`/`render_shared_backdrop`/`render_regions_v2` |
 
@@ -326,7 +326,40 @@ runtime warning summary: 未采样（本任务为纯源码/测试任务，不重
 
 **第三轮汇总（A+B）**：A 对当前工作树版本无产品/断言 finding；B 的 3 个文档 CONFIRMED（F1/F2/F3）已全部修复（日志措辞、§4 G2 行、test-1 注释），修复被 A 确认为「严格更准确」。B 复核最终 diff 后给出终审结论（见 §8 末）。
 
-**第四轮（最终）**：产品测试文件自 A 审查后未再改动；A（最终版本）+ B（最终版本复核）覆盖最终 diff。待 B 复核 CLEAN 后进入 commit/push。
+**第四轮（最终）**：产品测试文件自 A 审查后未再改动；A（最终版本）+ B（最终版本复核）覆盖最终 diff。
+
+**Reviewer B 最终复核裁决：CLEAN**。三个 round-3 CONFIRMED（F1 G4 非递归措辞、F2 §4 G2 行倒置、F3 test-1 bg_count 注释）全部修复准确（代码与日志双端核验）；最终 diff（581 行）自洽（5 测试无死分支、G2 方向正确、G4 注释诚实、日志 §4/§7/§8 一致）；650/650 自洽；范围仅 mod.rs 一行 + 单测试文件。可以进入 commit/push。
+
+### 9. 验证收据（最终）
+
+| 配置 | 命令 | exit | 结果 |
+|---|---:|---:|---|
+| T12 专项 | `cargo test -p niri --lib tests::t12_shared_backdrop_gate -- --test-threads=1` | 0 | 5 passed / 0 failed |
+| NIRI_FULL | `cargo test -p niri --lib`（默认并行 + 串行） | 0 | 650 passed / 0 failed（多次复跑稳定） |
+| NIRI_FULL | `cargo check --workspace --all-targets` | 0 | Finished（仅既有 niri-visual-tests warning） |
+| changed-file format | `rustfmt --edition 2021 --check src/tests/t12_shared_backdrop_gate.rs src/tests/mod.rs` | 0 | 无漂移 |
+| PROTOCOL_FULL | `scripts/check-protocol-sync.sh` | 0 | IN_SYNC |
+| PROTOCOL_FULL | `scripts/check-tahoe-glass-guardrails.sh` | 0 | 22 files checked, passed |
+| DEPLOY_READONLY | `scripts/arch-update.sh --verify-tahoe-shell` | 0 | parity OK |
+| WORKTREE_GUARD | `git diff --check` / cached | 0 | clean |
+
+### 10. 产品 Commit 与 push 收据
+
+- niri 产品 commit：`f179e82f0a47cc36d9c91a35ca27cb15a581e1c2`，subject `test(tahoe-glass): T12 shared-backdrop evidence gate (NO-GO)`，branch/ref `tahoe-layer-animations` / `origin/tahoe-layer-animations`。
+- niri push：成功，`5d4c0652..f179e82f`；push 后 `git fetch origin tahoe-layer-animations`，`git merge-base --is-ancestor f179e82f origin/tahoe-layer-animations` exit 0。
+- 主仓库产品 commit：`20832c2`（subject `fix(submodule): bump niri for T12 shared-backdrop evidence gate (NO-GO)`，更新 niri submodule 指针到已推送的 `f179e82f...`，含本 T12 审查裁决记录；execution-log 保持 IN_PROGRESS，未写完成状态/收据），branch/ref `fix/tray-menu-pinned-surface-height` / `origin/fix/tray-menu-pinned-surface-height`。
+- 主仓库 push：成功，`06492cb..20832c2`；push 后 `git merge-base --is-ancestor 20832c2 origin/fix/tray-menu-pinned-surface-height` exit 0。
+- 本闭环记录不含自引用 hash，由后续 `git log --format=%H -- execution-log.md` 解析。
+
+### 11. 完成判定
+
+**最终状态**：COMPLETE（`RESOLVED-NO-CODE` 语义）。
+
+**理由**：A12.G1-G4 证据门禁完成——G1 PASS（真实管线每帧 2 次独立 capture+blur，per-surface/cross-surface 实测）、G2 PASS（front-to-back z-order 采样边界）、G3 **FAIL**（共享 union bbox 4,096,000px vs 单 region 和 398,080px = 10.29x，显存上限不优于 T11 后单 region 基线）、G4 PASS（无第二渲染 authority + 防回归基线）→ 按 roadmap「缺一不可」与 CONSTRAINTS §4.2 裁决 NO-GO，只提交证据（5 测试）与防回归基线，无产品代码改动。四轮双审查：第一轮 1 CONFIRMED（跨 surface 死代码）+ 多 PLAUSIBLE 全部修复/裁决；第二轮 2 CONFIRMED（G2 方向倒置 + 双 #[test]）+ 文档失实全部修复；第三轮 B 3 文档 CONFIRMED 全部修复、A 门禁实质 CLEAN；最终 A（最终版本）+ B（最终版本复核）覆盖，B 终审 CLEAN。全量 650/650、workspace check、协议双门禁、deploy parity 全绿。产品 commit/push 与远端 ancestor 验证双仓完成。未重启会话、未部署、未触碰 `.zcode/`、`Testing/` 或 T13。
+
+**下一任务是否允许开始**：YES（本 docs-only closure commit push 并远端验证后）。
+
+**现场验证清单（未伪装为自动验收）**：G1-G4 证据全部来自 headless EGL harness（真实协议/元素装配/capture/blur 管线）；真实 DRM 多显示器热插拔、部署后观感、实际桌面布局下的 region 分布未在真实会话中验证——由用户部署后现场确认。
 
 ---
 

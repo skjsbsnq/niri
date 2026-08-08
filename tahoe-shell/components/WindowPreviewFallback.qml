@@ -21,6 +21,10 @@ Item {
     property color geometryFillColor: minimized ? "#5f8c929a" : "#8af7fbff"
     property color geometryBorderColor: focused ? "#202124" : "#66ffffff"
     property string fallbackIconCode: "\ue8d0"
+    // P02 freeze-gate hook: the enclosing surface (e.g. Dock) may register
+    // async-decode state so a texture frame that lands while the window is
+    // frozen is not dropped. Emitted as status changes; never required.
+    signal asyncLoadChanged(bool loading)
 
     function rectValue(name, fallback) {
         if (!geometryRect || geometryRect[name] === undefined || geometryRect[name] === null)
@@ -69,6 +73,7 @@ Item {
             mipmap: true
             asynchronous: true
             visible: root.iconSource.length > 0 && status !== Image.Error
+            onStatusChanged: root.asyncLoadChanged(status === Image.Loading)
         }
 
         TahoeSymbol {

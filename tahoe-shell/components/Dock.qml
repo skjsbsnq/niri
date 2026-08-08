@@ -55,6 +55,13 @@ PanelWindow {
     readonly property bool dockHidden: dockAutoHide && !dockHovered && !pointerDragActive && !launchpadOpen && !menuOpen
     property bool dockVisualHidden: dockHidden
     property bool dockGlassActive: !dockHidden
+    // P02 freeze-gate escape hatch: while any async icon decode is in flight
+    // the dock must stay hot so the completion frame cannot be dropped by the
+    // frozen window. Images set this while status === Image.Loading and clear
+    // on Ready/Error; the predicate then follows dockImagesLoading, so the
+    // surface cools back down once the last image finishes (the settle pulse
+    // on dockRenderMotion lands the final texture frame).
+    property bool dockImagesLoading: false
     // Writable; animated toward dockSlideTarget via springSmooth / ease dual branch (T08).
     property real dockSlideOffset: 0
     // P05: compositor-side autohide (tahoe_glass v4). The buffer keeps content
@@ -230,7 +237,12 @@ PanelWindow {
         || (dockChrome.opacity > 0.01 && dockChrome.opacity < 0.99)
     property bool paintPulse: true
     // Shown-at-rest stays hot via !dockVisualHidden; hidden-at-rest freezes.
-    readonly property bool dockRenderMotion: surfaceMotionActive || !dockVisualHidden
+    // Async icon decode in flight also keeps it hot: the decode finishes on a
+    // worker thread after the 48ms first-map pulse has lapsed, and the texture
+    // frame would be dropped by the frozen window (Dock freeze gate, P02).
+    readonly property bool dockRenderMotion: surfaceMotionActive
+        || !dockVisualHidden
+        || root.dockImagesLoading
     updatesEnabled: RenderActivity.forResidentSurface(visible, dockRenderMotion, paintPulse)
 
     Timer {
@@ -249,6 +261,27 @@ PanelWindow {
         dockPaintPulseClear.interval = ms;
         root.paintPulse = true;
         dockPaintPulseClear.restart();
+    }
+
+    // Aggregated async-decode flag for the freeze gate. Images register
+    // themselves while status === Image.Loading and deregister on Ready/Error
+    // and on destruction; the dock stays hot (dockRenderMotion) for the whole
+    // span so a texture frame that lands after the first-map pulse cannot be
+    // dropped by the frozen window. Reference-array (no count arithmetic):
+    // duplicate status transitions on the same image are idempotent, and a
+    // clear only removes that image's own reference.
+    property var dockImagesLoadingList: []
+    function setDockImageLoading(image, loading) {
+        if (!image)
+            return;
+        var idx = root.dockImagesLoadingList.indexOf(image);
+        if (loading) {
+            if (idx === -1)
+                root.dockImagesLoadingList.push(image);
+        } else if (idx !== -1) {
+            root.dockImagesLoadingList.splice(idx, 1);
+        }
+        root.dockImagesLoading = root.dockImagesLoadingList.length > 0;
     }
 
     onVisibleChanged: if (visible) root.requestPaintPulse()
@@ -1313,6 +1346,11 @@ PanelWindow {
                                     sourceSize.width: root.dockIconSourceSize
                                     sourceSize.height: root.dockIconSourceSize
                                     asynchronous: true
+                                    // P02 freeze-gate: a decode finishing while the
+                                    // autohide-hidden dock is frozen would drop its
+                                    // texture frame; hold the surface hot while loading.
+                                    onStatusChanged: root.setDockImageLoading(appIcon, appIcon.status === Image.Loading)
+                                    Component.onDestruction: root.setDockImageLoading(appIcon, false)
                                     // macOS dock grows upward from the icon feet (T08-fix3).
                                     transformOrigin: Item.Bottom
                                     // T08-fix7: visual push only — layout slot stays put.
@@ -1966,6 +2004,7 @@ PanelWindow {
         }
 
         Image {
+            id: toolIcon
             anchors.centerIn: parent
             width: 40
             height: 40
@@ -1976,6 +2015,10 @@ PanelWindow {
             sourceSize.width: root.dockToolIconSourceSize
             sourceSize.height: root.dockToolIconSourceSize
             asynchronous: true
+            // P02 freeze-gate: hold the surface hot while async decode is in
+            // flight so the completion frame cannot be dropped (see appIcon).
+            onStatusChanged: root.setDockImageLoading(toolIcon, toolIcon.status === Image.Loading)
+            Component.onDestruction: root.setDockImageLoading(toolIcon, false)
         }
 
         DropArea {

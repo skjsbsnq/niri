@@ -176,6 +176,44 @@ class UpdatesEnabledGateTests(unittest.TestCase):
         )
         self.assertIn("requestPaintPulse", text)
 
+    def test_dock_images_hold_surface_hot_while_loading(self) -> None:
+        # Regression: WeChat's desktop entry uses an absolute path Icon, so
+        # its dock icon decodes asynchronously on the QQuickPixmapReader
+        # worker thread. When the decode finishes while the autohide-hidden
+        # dock is frozen (updatesEnabled false), the texture frame is dropped
+        # — the icon stays invisible until hover thaws the surface. The dock
+        # must stay hot for the whole span that any async image is loading.
+        dock = (COMPONENTS / "Dock.qml").read_text(encoding="utf-8")
+        # Aggregate flag feeds the render-motion predicate (not a one-shot
+        # pulse — it must span the decode with no timer race).
+        self.assertIn("property bool dockImagesLoading: false", dock)
+        self.assertIn("dockRenderMotion: surfaceMotionActive", dock)
+        self.assertIn("|| root.dockImagesLoading", dock)
+        # Reference-array aggregation: images register on Loading, deregister
+        # on Ready/Error/destruction; "true" wins until the last finishes.
+        self.assertIn("property var dockImagesLoadingList: []", dock)
+        self.assertIn("function setDockImageLoading(image, loading)", dock)
+        self.assertIn("dockImagesLoadingList.indexOf(image)", dock)
+        self.assertIn("root.dockImagesLoading = root.dockImagesLoadingList.length > 0", dock)
+        # Pinned app icons and dock tool icons register while loading.
+        self.assertIn(
+            "onStatusChanged: root.setDockImageLoading(appIcon, appIcon.status === Image.Loading)",
+            dock,
+        )
+        self.assertIn(
+            "onStatusChanged: root.setDockImageLoading(toolIcon, toolIcon.status === Image.Loading)",
+            dock,
+        )
+        # Minimized-shelf thumbnails/badges/fallback icons relay into the same
+        # aggregate (they live in the same Dock window).
+        minimized = (COMPONENTS / "DockMinimizedWindow.qml").read_text(encoding="utf-8")
+        self.assertIn("root.dockWindow.setDockImageLoading(thumbnailImage", minimized)
+        self.assertIn("root.dockWindow.setDockImageLoading(badgeIcon", minimized)
+        self.assertIn("root.dockWindow.setDockImageLoading(fallbackIconImage", minimized)
+        fallback = (COMPONENTS / "WindowPreviewFallback.qml").read_text(encoding="utf-8")
+        self.assertIn("signal asyncLoadChanged(bool loading)", fallback)
+        self.assertIn("root.asyncLoadChanged(status === Image.Loading)", fallback)
+
     def test_wallpaper_freezes_when_static_or_fully_yielded(self) -> None:
         text = (COMPONENTS / "Wallpaper.qml").read_text(encoding="utf-8")
         self.assertIn("import \"RenderActivity.js\" as RenderActivity", text)

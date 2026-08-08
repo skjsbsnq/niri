@@ -366,10 +366,17 @@ Item {
             onStatusChanged: {
                 if (status === Image.Error && root.thumbnailReady && root.thumbnailProvider)
                     root.thumbnailProvider.markImageFailed(root.windowModel, "dock thumbnail image failed to load");
+                if (root.dockWindow && root.dockWindow.setDockImageLoading)
+                    root.dockWindow.setDockImageLoading(thumbnailImage, status === Image.Loading);
+            }
+            Component.onDestruction: {
+                if (root.dockWindow && root.dockWindow.setDockImageLoading)
+                    root.dockWindow.setDockImageLoading(thumbnailImage, false);
             }
         }
 
         WindowPreviewFallback {
+            id: fallbackIconImage
             anchors.fill: parent
             visible: root.showFallback
             backgroundColor: "#f2f4f7"
@@ -379,6 +386,16 @@ Item {
             showTitle: true
             titlePixelSize: 10
             titleBottomMargin: 7
+            // P02 freeze-gate: relay the fallback icon's async decode into the
+            // dock-hot aggregate so its completion frame cannot be dropped.
+            onAsyncLoadChanged: function(loading) {
+                if (root.dockWindow && root.dockWindow.setDockImageLoading)
+                    root.dockWindow.setDockImageLoading(fallbackIconImage, loading);
+            }
+            Component.onDestruction: {
+                if (root.dockWindow && root.dockWindow.setDockImageLoading)
+                    root.dockWindow.setDockImageLoading(fallbackIconImage, false);
+            }
         }
 
         Rectangle {
@@ -393,6 +410,7 @@ Item {
             border.width: 1
 
             Image {
+                id: badgeIcon
                 anchors.centerIn: parent
                 width: 18
                 height: 18
@@ -402,6 +420,15 @@ Item {
                 mipmap: true
                 asynchronous: true
                 sourceSize: root.iconSourceSize(width, height)
+                // P02 freeze-gate: same dock-hot hold as thumbnailImage.
+                onStatusChanged: {
+                    if (root.dockWindow && root.dockWindow.setDockImageLoading)
+                        root.dockWindow.setDockImageLoading(badgeIcon, status === Image.Loading);
+                }
+                Component.onDestruction: {
+                    if (root.dockWindow && root.dockWindow.setDockImageLoading)
+                        root.dockWindow.setDockImageLoading(badgeIcon, false);
+                }
             }
         }
     }

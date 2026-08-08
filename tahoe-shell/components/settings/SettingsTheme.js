@@ -396,14 +396,9 @@ function islandSurfaceFill(darkMode, fillRole) {
 }
 
 function islandSurfaceStroke(darkMode, fillRole) {
-    var role = String(fillRole || "compact");
-    // macOS island has no visible border — pure rounded dark glass with only
-    // a faint top highlight. White borders read as a blue ring on wallpaper.
-    if (role === "expanded")
-        return "#14ffffff";
-    if (role === "transient")
-        return "#10ffffff";
-    return "#0cffffff";
+    // macOS island has NO border — pure rounded dark glass. Any stroke
+    // (even faint white) reads as a ring against wallpaper.
+    return "#00ffffff";
 }
 
 function islandProgressTrack(darkMode) {

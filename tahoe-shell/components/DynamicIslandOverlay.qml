@@ -1064,6 +1064,8 @@ PanelWindow {
         fillColor: root.glassFill
         strokeColor: root.glassStroke
         strokeWidth: 1
+        // macOS island has no drop shadow — pure dark capsule on wallpaper.
+        shadow: false
         interaction: islandSurface.opacity
         materialAlpha: islandSurface.opacity
         regionEnabled: root.capsuleShown || islandSurface.opacity > 0.01

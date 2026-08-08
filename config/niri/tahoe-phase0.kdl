@@ -63,8 +63,8 @@ layout {
 // tahoe-managed: begin blur
 blur {
     on
-    passes 4
-    offset 4
+    passes 3
+    offset 3
     noise 0.004
     saturation 1.22
 }
@@ -102,7 +102,7 @@ tahoe-glass {
         noise 0.005
         saturation 1.10
         tint-color "#ffffff"
-        tint-amount 0.105
+        tint-amount 0.070
         contrast 1.10
         edge-highlight 0.14
         refraction 0.004
@@ -115,7 +115,7 @@ tahoe-glass {
         noise 0.005
         saturation 1.12
         tint-color "#ffffff"
-        tint-amount 0.052
+        tint-amount 0.040
         contrast 1.05
         edge-highlight 0.32
         refraction 0.013
@@ -128,7 +128,7 @@ tahoe-glass {
         noise 0.005
         saturation 1.08
         tint-color "#ffffff"
-        tint-amount 0.085
+        tint-amount 0.060
         contrast 1.08
         edge-highlight 0.15
         refraction 0.004
@@ -141,7 +141,7 @@ tahoe-glass {
         noise 0.005
         saturation 1.10
         tint-color "#ffffff"
-        tint-amount 0.060
+        tint-amount 0.040
         contrast 1.06
         edge-highlight 0.18
         refraction 0.007
@@ -155,7 +155,7 @@ tahoe-glass {
         noise 0.004
         saturation 1.08
         tint-color "#ffffff"
-        tint-amount 0.110
+        tint-amount 0.075
         contrast 1.11
         edge-highlight 0.26
         refraction 0.004
@@ -168,7 +168,7 @@ tahoe-glass {
         noise 0.005
         saturation 1.09
         tint-color "#ffffff"
-        tint-amount 0.100
+        tint-amount 0.070
         contrast 1.10
         edge-highlight 0.24
         refraction 0.005
@@ -185,7 +185,7 @@ tahoe-glass {
         noise 0.003
         saturation 1.04
         tint-color "#ffffff"
-        tint-amount 0.070
+        tint-amount 0.050
         contrast 1.03
         edge-highlight 0.05
         refraction 0.002

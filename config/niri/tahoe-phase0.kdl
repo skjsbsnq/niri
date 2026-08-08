@@ -100,7 +100,7 @@ tahoe-glass {
     material "panel" {
         xray false
         noise 0.005
-        saturation 1.10
+        saturation 1.35
         tint-color "#f2f6fa"
         tint-amount 0.12
         contrast 1.0
@@ -113,7 +113,7 @@ tahoe-glass {
     material "pill" {
         xray false
         noise 0.005
-        saturation 1.12
+        saturation 1.45
         tint-color "#f4f8fc"
         tint-amount 0.1
         contrast 1.0
@@ -126,7 +126,7 @@ tahoe-glass {
     material "launcher" {
         xray false
         noise 0.005
-        saturation 1.08
+        saturation 1.35
         tint-color "#f2f6fa"
         tint-amount 0.12
         contrast 1.0
@@ -139,7 +139,7 @@ tahoe-glass {
     material "dock" {
         xray false
         noise 0.005
-        saturation 1.10
+        saturation 1.40
         tint-color "#f0f5fa"
         tint-amount 0.14
         contrast 1.0
@@ -153,7 +153,7 @@ tahoe-glass {
     material "menu" {
         xray false
         noise 0.004
-        saturation 1.08
+        saturation 1.40
         tint-color "#f4f8fc"
         tint-amount 0.1
         contrast 1.0
@@ -166,7 +166,7 @@ tahoe-glass {
     material "toast" {
         xray false
         noise 0.005
-        saturation 1.09
+        saturation 1.40
         tint-color "#f4f8fc"
         tint-amount 0.1
         contrast 1.0
@@ -183,7 +183,7 @@ tahoe-glass {
     material "backdrop" {
         xray false
         noise 0.003
-        saturation 1.04
+        saturation 1.25
         tint-color "#f0f5fa"
         tint-amount 0.1
         contrast 1.0
@@ -393,7 +393,7 @@ layer-rule {
         xray false
         blur true
         noise 0.005
-        saturation 1.10
+        saturation 1.35
         tint-color "#ffffff"
         tint-amount 0.12
         contrast 1.0
@@ -676,7 +676,7 @@ layer-rule {
         xray false
         blur true
         noise 0.005
-        saturation 1.10
+        saturation 1.35
         tint-color "#ffffff"
         tint-amount 0.12
         contrast 1.0
@@ -811,7 +811,7 @@ layer-rule {
         xray false
         blur true
         noise 0.004
-        saturation 1.08
+        saturation 1.40
         tint-color "#ffffff"
         tint-amount 0.10
         contrast 1.0
@@ -841,7 +841,7 @@ layer-rule {
         xray false
         blur true
         noise 0.005
-        saturation 1.09
+        saturation 1.40
         tint-color "#ffffff"
         tint-amount 0.10
         contrast 1.0

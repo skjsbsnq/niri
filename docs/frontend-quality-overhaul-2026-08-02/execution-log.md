@@ -2563,3 +2563,19 @@ Quickshell 子模块干净；niri 子模块干净。`.zcode/`、`Testing/` 为�
 4. A-P2：A13.3 注释收窄（renderable/store 路径 + glxinfo filtering 证据边界）。
 
 修复后：8 测试（含新单测）+ 全量 **658/658** 全绿，rustfmt 干净，无编译警告。最终 diff 重新冻结为 `/tmp/t13-final2.diff`，由两个全新 reviewer 终审（见 §10）。
+
+### 10. 产品 Commit 与 push 收据
+
+- niri 产品 commit：`30e14a7d64739b2dced53cdd1000e751b7d00abf`，subject `test(tahoe-glass): T13 linear-light / high-precision blur evidence gate (NO-GO)`，branch/ref `tahoe-layer-animations` / `origin/tahoe-layer-animations`。
+- niri push：成功，`f179e82f..30e14a7d`；push 后 `git fetch origin tahoe-layer-animations`，`git merge-base --is-ancestor 30e14a7d origin/tahoe-layer-animations` exit 0。
+- 主仓库产品 commit：`692cee4`（subject `fix(submodule): bump niri for T13 linear-light / high-precision blur evidence gate (NO-GO)`，更新 niri submodule pointer 到已推送的 `30e14a7d...`，含本 T13 审查裁决记录；execution-log 保持 IN_PROGRESS，未写完成状态/收据），branch/ref `fix/tray-menu-pinned-surface-height` / `origin/fix/tray-menu-pinned-surface-height`。
+- 主仓库 push：成功，`70cb506..692cee4`；push 后 `git fetch origin fix/tray-menu-pinned-surface-height`，`git merge-base --is-ancestor 692cee4 origin/fix/tray-menu-pinned-surface-height` exit 0。
+- 本闭环记录不含自引用 hash，由后续 `git log --format=%H -- execution-log.md` 解析。
+
+### 11. 完成判定
+
+**最终状态**：RESOLVED-NO-CODE（roadmap T13「门禁不满足时以 `RESOLVED-NO-CODE` 关闭」；CONSTRAINTS §4.2 语义）。
+
+**理由**：A13.1-A13.5 证据门禁完成——A13.1 三固定场景（10-bit 渐变/高对比边缘/壁纸代理）sRGB code 域量化：渐变 8bit max=4 vs 16f 1（前提否定，输入/输出 8-bit 编码主导）、边缘 8bit max=34 vs 16f 1（暗晕显著确认）、壁纸 8bit max=13 vs 16f 1，GPU↔镜像 uniform 校准（code 128 恒等）证明镜像语义可信；A13.2 单次转换契约（真实 `Blur::render` blur_runs=1/allocations=4/reuses=0，capture 单次由 T11/T12 已证）；A13.3 目标 GPU（RTX 4070）RGBA16F renderable 实测 YES（含 glxinfo 扩展证据），但**生产能力探测/回退机制在源码不存在**（niri 无 GL 扩展查询、smithay Capability 无 half-float 项）→ GO 先决条件第 3 条不满足，为 NO-GO 决定性依据；A13.4 内存锚点 +47.0 MB（=44.8 MiB）/4K region 仍在硬预算内，frame-time/功耗未测如实声明。按 A13.5 不做「半套格式改动」。三轮双审查：Round1 A 4 CONFIRMED + B 1 CONFIRMED（单位错误，裁决理由重写）全部修复；Round2 A 2 PLAUSIBLE + B 2 文档 CONFIRMED 全部修复；Round3 全新 reviewer **CLEAN**（独立逐位复现全部数字、f16 探针、几何、范围、处置彻底性）。全量 658/658、rustfmt 干净、无编译警告。产品 commit/push 与远端 ancestor 验证双仓完成。未重启会话、未部署、未触碰 `.zcode/`、`Testing/` 或 T14。
+
+**下一任务是否允许开始**：YES（本 docs-only closure commit push 并远端验证后）。

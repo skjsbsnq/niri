@@ -150,7 +150,11 @@ Item {
     }
 
     function shellCommand(script, args) {
-        var command = ["sh", "-lc", String(script || ""), "sh"];
+        // Non-login shell: `sh -lc` sources /etc/profile + ~/.bash_profile on
+        // every spawn (~60ms), which the IME probe pays every 1.8s. `sh -c`
+        // skips profile loading; niri's environment (PATH, GLX, OZONE) is
+        // process-wide so children inherit it either way.
+        var command = ["sh", "-c", String(script || ""), "sh"];
         var values = Array.isArray(args) ? args : [];
         for (var i = 0; i < values.length; i++)
             command.push(String(values[i] === undefined || values[i] === null ? "" : values[i]));

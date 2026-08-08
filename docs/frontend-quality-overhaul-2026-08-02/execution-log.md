@@ -1,7 +1,7 @@
 # Tahoe Desktop 路线图执行日志
 
 **用途**：T01-T24 的唯一状态锁与证据账本。
-**当前状态**：T11 COMPLETE（glass capture semantics）；下一任务 T12 PENDING。
+**当前状态**：T12 COMPLETE（shared backdrop gate，NO-GO / RESOLVED-NO-CODE）；下一任务 T13 PENDING。
 **禁止**：预填测试结果、审查结论、commit/push 收据或把计划写成已完成事实。
 
 ---
@@ -21,7 +21,7 @@
 | T09 | COMPLETE | niri `274b08bb` / Quickshell `d297889d` / main `2fcb3028` | 有界最终审查 + 单点闭合 verifier CLEAN | TahoeGlass completion/rejection/capability feedback |
 | T10 | COMPLETE | niri `fe8faeea`（tahoe-layer-animations）/ main `9266d9a`（fix/tray-menu-pinned-surface-height） | 轮次 1 修复 + 轮次 2 双 CLEAN + 轮次 3 闭合 verifier PASS | blur reuse（bucket/active-rect/hysteresis/硬预算） |
 | T11 | COMPLETE | niri `5d4c0652`（tahoe-layer-animations）/ main `1a9f9e3`（fix/tray-menu-pinned-surface-height） | 双 CLEAN（A 0 CONFIRMED / B 0 CONFIRMED/0 PLAUSIBLE）+ 3 PLAUSIBLE 全部裁决 | glass capture semantics（structural padding 稳定/alpha no-op/shadow 像素/root attribution） |
-| T12 | PENDING | - | - | shared backdrop gate |
+| T12 | COMPLETE | niri `（待填产品 hash）`（tahoe-layer-animations）/ main `（待填）`（fix/tray-menu-pinned-surface-height） | 四轮双审查，最终 A 实质 CLEAN + B 终审 CLEAN | shared backdrop gate（NO-GO：G3 显存 10.29x 劣于基线；证据 5 测试 + 防回归基线） |
 | T13 | PENDING | - | - | linear-light gate |
 | T14 | PENDING | - | - | island geometry |
 | T15 | PENDING | - | - | island interaction |
@@ -195,6 +195,140 @@ runtime warning summary: 未采样（本任务为纯源码/测试任务，不重
 **下一任务是否允许开始**：YES（本 docs-only closure commit push 并远端验证后）。
 
 **现场验证清单（未伪装为自动验收）**：像素证据使用现有 EGL surfaceless renderer，无真实 DRM direct-scanout、物理多显示器或用户会话重启/部署验证；A11.5 的 direct scanout 为 headless scope，生产 authority 未改，待部署后由用户现场确认。
+
+---
+
+## T12 每输出共享 backdrop 证据门禁
+
+**状态**：IN_PROGRESS
+**开始时间**：2026-08-08
+**roadmap 引用**：`roadmap.md#T12`（第 294-318 行）；对应发现：GLASS-01 共享 backdrop `PROPOSAL`
+**执行分支**：主仓库 `fix/tray-menu-pinned-surface-height`；niri 子仓库 `tahoe-layer-animations`
+
+### 1. 前提与任务锁
+
+- T01-T11 均为 `COMPLETE`，T12 是第一个 `PENDING`；本记录已将唯一当前任务锁为 `IN_PROGRESS`。
+- 主仓库 HEAD 为 `06492cb`（docs T11 close）；niri 子仓库 HEAD 为 `5d4c0652`（T11 产品 commit），均处于预期分支。工作树除用户未跟踪项 `.zcode/`、`Testing/` 外干净。
+- 任务性质：`PROPOSAL` 证据门禁。必须先完成 `A12.G1-G4` 先决条件（缺一不可）再裁决 GO/NO-GO；GO 才实施共享 backdrop 收敛，NO-GO 按 `RESOLVED-NO-CODE` 双审查并提交证据。
+
+### 2. G01 搜索清单（改动前）
+
+**生产渲染路径**（niri 子仓库 `src/`，T11 后状态）：
+
+- `render_regions_for_layer`（`src/render_helpers/tahoe_glass.rs:219-299`）：逐 region 遍历，每个 region 独立 `TahoeGlassRegionRenderer`（`:38-41`，含各自 `BackgroundEffect` + `Shadow`）、独立 `note_tahoe_region_capture`（`:329`）、独立 `ResolvedEffectPlan`/`capture_key`/`FramebufferEffect` element（`:345-405`）。
+- `FramebufferEffectElement::capture_framebuffer`（`src/render_helpers/framebuffer_effect.rs:237-464`）：每元素独立 cache（`RefCell<Inner>` 含 framebuffer + Blur pyramid），`note_fb_effect_capture`（`:435`）+ `Blur::render` 内 `note_blur_render`；capacity 复用在 `blur.rs`（T10，未动）。
+- damage tracker 调度（smithay `src/backend/renderer/damage/mod.rs:689-734`）：下方内容变化 → 每个 framebuffer effect 元素 `needs_capture = true` → `capture_framebuffer` 在 draw 前每帧执行（`:940`）。多个玻璃 region 下方内容同时变化时每帧 N 次独立 blit+blur。
+- 生产调用点：layer 面 `render_for_layer`/`render_frozen_regions_for_layer`（`src/layer/mapped.rs:714/847`），tile/窗口 `render_for_tile`（`src/window/mapped.rs:873/909`，`src/layer/mapped.rs:744/910/1047`）。每 layer surface 的 regions 由其 `wl_surface` 独立提交（协议 surface 级），niri 端无跨 surface region 归并。
+- 计数 authority：`src/utils/lifecycle_diag.rs`（`note_tahoe_region_capture`/`note_fb_effect_capture`/`note_blur_render` + `with_enabled_for_test`）。
+
+**shell 真实 region 配置**（`tahoe-shell/components/`，22 处 `TahoeGlass.regions`）：TopBar/Dock/ControlCenter/Island/Launchpad/Spotlight/TaskSwitcher/WindowOverview/SettingsPanel/LeftSidebar 各 1 region；10 个 popup 各 1；NotificationToast 动态 `cardRegions` 数组（多通知可多 region，同 surface 多 region 场景）。material 集合：panel/pill/dock/launcher/menu/toast/backdrop（`TahoeGlass.js`）；默认 kernel `Blur { passes: 3, offset: 3.0 }`（`niri-config/src/appearance.rs:1018-1028`）。
+
+未改点理由：T10 blur capacity/bucket 是共享 backdrop 的显存预算既有 owner；T03/T09/T11 root attribution、alpha no-op、shadow 顺序、协议版本均保持。任务仅评估"同一 output/render target 每帧重复 capture/blur 是否可语义共享"。
+
+### 3. 改动前专项基线
+
+（Phase 2 补：tahoe_glass 专项基线 + 失败证据）
+
+### 4. A12.G1-G4 证据收集（Phase 2）
+
+新增证据测试文件 `niri/src/tests/t12_shared_backdrop_gate.rs`（5 个测试，含真实协议→`Niri::render` 元素收集→smithay `OutputDamageTracker` + `GlesFrame` 真实 capture/blur 管线，计数器来自 `lifecycle_diag`）：
+
+| 测试 | 结论 | 证据 |
+|---|---|---|
+| `g1_two_regions_on_one_surface_capture_twice_per_frame` | **PASS（G1 前提成立）** | 真实管线首帧 `fb_capture=2, blur=2`（eprintln probe 实测），两 region 各自独立 blit+blur pyramid；断言 `fb_c==blur_c` 且**无条件** `fb_c>=2`（捕获计数是可信 region 信号；元素计数无法区分 1/2 region，仅作存在性断言） |
+| `g1_two_surfaces_on_one_output_capture_independently` | **PASS（G1 前提成立）** | Dock+TopBar 双 surface 同样 `fb_capture=2, blur=2`（对完整 output 元素列表无条件 `visible>=2` + `fb_c>=2`）；另断言未变第二帧 `fb_c2=0, blur_c2=0`（静态场景不重捕获；逐 region 脏区粒度未断言） |
+| `g2_glass_capture_samples_backdrop_and_lower_layers` | **PASS（G2 z-order 模型成立）** | `Niri::render` 输出 front-to-back 列表：glass capture 元素之后存在 `SolidColor` backdrop（backdrop 先绘制、被 glass capture 采样）；显式排除 `Texture`（hotkey overlay 在最上层不被采样）。注意：此语义在 §7 第三轮终审经两轮修正后定型（第二轮曾发现第一版断言方向倒置） |
+| `g3_union_bbox_memory_cap_vs_region_sum` | **FAIL（G3 不满足）** | 真实 2560x1600 布局（TopBar 顶部 + Dock 底部 + Island 顶部居中）分离区域：union bbox = 2560x1600 = 4,096,000 px，单 region 和 = 398,080 px，**共享 capture 显存上限 = 基线的 10.29 倍**；仅区域重叠时 union < sum（Dock+CC 重叠例验证） |
+| `g4_no_second_render_authority` | **PASS（G4 满足）** | 源码断言单一 `render_regions_for_layer` authority，无 `GlassBackdropV2`/`render_shared_backdrop`/`render_regions_v2` |
+
+失败基线：5 个测试在本任务改动前（`5d4c0652` HEAD）已能运行并给出上述数值——测试是**证据采集器**而非行为断言，G3 的数值（10.29x）正是裁决依据。
+
+### 5. GO/NO-GO 裁决
+
+**裁决：NO-GO（`RESOLVED-NO-CODE`）**。
+
+依据（roadmap `A12.G1-G4` 缺一不可）：
+
+- `A12.G1` PASS：同一 output/render target 每帧存在 ≥2 个语义可共享 capture/blur（单 surface 2 region、跨 surface 2 surface 均实测 2 blit + 2 blur）。
+- `A12.G2` PASS：z-order 模型建立，capture 采样边界为 backdrop/下层 layer。
+- `A12.G3` **FAIL**：共享 union/capture 的显存上限（union bbox 4,096,000 px）**劣于** T11 后单 region 基线（398,080 px），比值 10.29x。桌面真实布局区域分离（TopBar/Dock/Island），重叠情形罕见；共享设计仅在重叠时省显存，分离时以 10 倍显存换 2 次捕获收敛，且引入 region union 的脏区更新复杂度。roadmap 要求"显存上限与脏区更新**优于** T11 后单 region 基线"——不满足。
+- `A12.G4` PASS：当前无用户可选双路径；本任务未引入。
+
+按 roadmap T12「不满足时按 `RESOLVED-NO-CODE` 双审查并提交证据」与 CONSTRAINTS §4.2，关闭任务：只提交证据（5 测试）与防回归基线（G4 静态门禁），不做产品代码改动。
+
+### 6. 第一轮双审查（2026-08-08）
+
+两个全新、独立、只读 reviewer 并行审查 `/tmp/t12-final.diff`（518 行，mod.rs 注册 + 测试文件）。
+
+**Reviewer A（正确性/测试真实性）裁决**：证据门禁实质成立——测试驱动真实生产管线（协议→`Niri::render`→smithay tracker→`GlesFrame`→真实 capture/blur，`lifecycle_diag` 计数）；G3 数值 10.29x 与 NO-GO 裁决符合 roadmap「缺一不可」；diff 仅 1 行注册 + 1 测试文件、无产品改动。1 CONFIRMED + 2 PLAUSIBLE + 1 NOT-A-FINDING。
+
+**Reviewer B（范围/验收）裁决**：NO-GO 处置符合 roadmap 与 CONSTRAINTS §4.2；无平行接口/第二 authority/新设置/新依赖；A12.G1（跨 surface）/G2（后四项）/G4（覆盖面）证据有缺口。1 CONFIRMED + 3 PLAUSIBLE + 2 NOT-A-FINDING。
+
+**CONFIRMED（两 reviewer 独立重合）**：`g1_two_surfaces_on_one_output_capture_independently` 的 `visible >= 2` 分支死代码——`region_elements` 由 `render_for_layer_t12(server_surface_a)` 只填充 surface A（1 region → visible 恒 1）→ `fb_c >= 2` 永不执行；跨 surface 的 G1 证据（实测 fb_capture=2）在提交测试中无强制断言，注释与日志高估其强制力。
+
+**修复（全部已应用并重验）**：
+
+1. CONFIRMED：跨 surface 测试的 `visible` 改为对完整 `collect_output_elements` 列表的 `count_output_glass_effects` 计数（=2），并提升为**无条件** `assert!(visible >= 2)` + `assert!(fb_c >= 2)`；新增 helper `count_output_glass_effects`（含 Opening/Cropped 变体）。变异反证：该断言在 `fb_c==1`（未来跨 surface 归并）时必红。
+2. PLAUSIBLE（A：G4 只 grep 单文件）：G4 扩展为扫 `tahoe_glass.rs`/`background_effect.rs`/`framebuffer_effect.rs`/`blur.rs`/`resolved_effect_plan.rs` 五文件，并增 `shared_backdrop` 禁词。
+3. PLAUSIBLE（A：全局计数器潜伏污染契约）：文件头注释记录 `with_enabled_for_test` 串行契约——任何新渲染测试须在同 diag 锁内。
+4. NOT-A-FINDING（A：test 1 注释失实）：注释改为诚实说明 `collect_output_elements` 在窗口内且 `tahoe_region_capture` 被丢弃。
+5. **PLAUSIBLE 书面裁决（第一轮 Reviewer B 未裁决项，§6.3 补记）**：
+   - B「G2（后四项：windows/Bottom/Top/Overlay/glass-over-glass 采样边界无测试）」：**接受为已文档化的证据边界**——G2 测试只断言 backdrop 与 glass capture 的 z-order（本任务 GO 决策所需的最小采样边界）；其余 layer/window/glass-over-glass 边界的完整 trace 属于 GO 后实施阶段（roadmap「GO 后必须机制」的 backdrop key/stack epoch 项）的验证范畴，NO-GO 下无实施义务。已记录为「未取证边界」而非「已满足」。
+   - B「G4（覆盖面）单文件→五文件修复仍留新文件盲区」：**修复为本轮 F2**（见第二轮审查），并记录 tripwire 定位为「软 guardrail」（§5.1 静态合同测试可接受）。
+
+修复后 diff 仅测试文件变化（无产品代码），5 测试 + 全量 650/650 重验全绿，rustfmt 干净。
+
+### 7. 第二轮双审查（终审，2026-08-08）
+
+修复后 diff（578 行）由两个**全新** reviewer 终审。
+
+**Reviewer B（终审）裁决**：NOT CLEAN——1 CONFIRMED + 3 PLAUSIBLE。
+
+**F1（CONFIRMED，G2 测试断言方向倒置）**：`Niri::render` 元素列表是 **front-to-back**（smithay 文档 + 绘制 `iter().rev()`），真正 backdrop 在列表中位于 glass **之后**；测试原断言 `backdrop_index < glass_index` 方向相反，且 `SolidColor | Texture` 通配匹配到 fixture 必然开启的 hotkey overlay（`skip_at_startup` 默认 false，`niri.rs:2957`）→ 断言恒真假绿，测试对采样时序零检测力。
+
+**F1 修复**：G2 改为断言 front-to-back 列表中 glass capture 元素**之后**存在 `SolidColor` backdrop（`elements[glass_index..].any(SolidColor)`），排除 Texture 通配；注释改写为说明 front-to-back 语义（backdrop 先绘制、被 glass capture 采样）。已重验：6 测试全绿，全量 650/650。
+
+**F2（PLAUSIBLE，G4 新文件盲区）**：五文件 grep 读既有文件，新模块文件（§2.1 禁止形态典型落点）漏检。**修复**：G4 改为 `read_dir` 扫 `src/render_helpers/` 顶层 `.rs` 文件（非递归；`shaders/` 子目录不在覆盖内，第三轮终审已记录该边界，作为软 guardrail 接受）。
+
+**F3（PLAUSIBLE，第一轮 Reviewer B 的两条 PLAUSIBLE 未书面裁决）**：已在 §6 修复清单补记书面裁决（见上）。
+
+**F4（PLAUSIBLE，G3 脏区更新子标准未取证）**：**接受并记录**——roadmap G3 为「显存上限**与**脏区更新」两项；本任务只量化显存项（10.29x 已独立否决 GO），脏区更新子标准未取证（日志 §5 已注明「引入 region union 的脏区更新复杂度」为定性）；布局矩形为硬编码常量（TopBar/Dock/Island 尺寸），非 shell 配置 trace，边界已在本段记录。NO-GO 结论不受影响（显存项决定性）。
+
+**Reviewer A（终审）裁决**：NOT CLEAN——2 CONFIRMED + 2 PLAUSIBLE。内容性修复（G2 方向、G4 全目录扫描、test 2 无条件断言、G3 数值、NO-GO 裁决）经验证全部正确；剩余为机械缺陷与文档失实。
+
+**CONFIRMED-A（双 `#[test]`）**：G2 重写时旧 doc 注释块 + `#[test]`（388-394 行）未删除，与新增块形成双 `#[test]` → 编译 warning + g2 双注册双执行（实测 6 次执行）+ 全量计数 651 与日志 650 矛盾。**修复**：删除旧块，重跑后为干净 5 测试（`running 5 tests`），全量 650/650 与日志一致。
+
+**CONFIRMED-B（流程，审查对象漂移）**：`/tmp/t12-final.diff` 在审查期间被工作树修改超越。**处置**：本轮修复后冻结文件，重新生成最终 diff，由两个全新 reviewer 终审（见 §8）。
+
+**PLAUSIBLE-1**：test 1 的 `if visible >= 2` 守卫（合并场景下证据静默）+ `bg_count >= 2` 元素计数语义弱（1 region 实产 2 元素）。**修复**：`fb_c >= 2` 提升为无条件断言；`bg_count` 断言改 `>= 1` 并注释说明元素计数无法区分 region 数、捕获计数才是可信信号。
+
+**PLAUSIBLE-2（文档失实，全部修复）**：
+- 文件头「T12 是唯一驱动 damage_output 的文件」→ 更正为「blur_capacity/tahoe_glass 同样驱动真实渲染，因持同一锁才安全」。
+- test 2 第二帧注释夸大逐元素脏区语义 → 更正为「smithay 无损伤时整帧跳过，fb_c2==0 证明静态场景不重捕获；逐 region 脏区粒度未断言」。
+- 日志 §4 G2 行（旧断言语义）与 §7 F1 判定矛盾 → 本轮 §7 已按最终 G2 语义记录。
+
+### 8. 第三轮双审查（2026-08-08）
+
+冻结后 diff（579 行）由两个全新 reviewer 终审。
+
+**Reviewer B（终审）裁决**：NOT CLEAN——3 CONFIRMED，全部**文档/注释级**（不影响 NO-GO 裁决、测试正确性、证据强制力；10.29x 独立复核成立，5 测试全绿，650/650 自洽）。
+
+- **F1（G4 覆盖面描述高估）**：日志声称「递归扫全目录」，实际 `read_dir` 非递归（`shaders/` 子目录不覆盖）。**修复**：日志 F2 措辞改「顶层 `.rs` 文件（非递归，软 guardrail）」；测试注释同步更正。
+- **F2（日志 §4 G2 行仍倒置）**：§4 证据表 G2 行仍写旧「backdrop 索引 < glass」语义，与最终测试相反。**修复**：§4 行改写为 front-to-back 语义并注明经两轮修正定型。
+- **F3（测试注释不实）**：`bg_count` 注释称「元素计数无法区分 1/2 region」——实际每 region 实产 2 元素（可区分），断言 `>=1` 是欠断言非假绿。**修复**：注释改为「每 region 元素倍率是实现细节（xray/可见性/动画包装可改变），仅断言存在性，捕获计数器才是可信信号」。
+
+**Reviewer A（终审）裁决**：NOT CLEAN——1 CONFIRMED（process）+ 1 PLAUSIBLE，门禁实质全部 CLEAN。
+
+- **门禁实质 CLEAN**：五测试驱动真实生产管线（协议→`Niri::render`→smithay tracker 逆序绘制→`GlesFrame`→`capture_framebuffer`/`Blur::render`，`lifecycle_diag` 计数，逐调用点核验）；双 `#[test]` 已消除（恰好 5 测试，650=645+5）；G2 front-to-back 方向正确可红可绿（SolidColor 唯一权威、hotkey overlay 排除属实）；G3 数值独立复核成立；锁无嵌套无泄漏（`with_enabled_for_test` 恒 disable_and_reset）；并发安全（所有渲染测试持同一 `with_test_lock`）。
+- **CONFIRMED（process，审查对象漂移复发）**：`/tmp/t12-final.diff` 生成后工作树注释又被修改（第三轮 B 的 F1/F3 修复）。**处置**：commit 前从当前工作树重新生成冻结 diff 并核对一致（已执行，581 行）；漂移内容仅为注释且严格更准确（A 确认）。
+- **PLAUSIBLE（G4 非递归扫描缺口）**：`render_helpers/shaders/mod.rs` 嵌套文件不在 `read_dir` 单层扫描内。**书面裁决**：接受为已披露软 guardrail（§5.1 合同测试定位），日志 F2 措辞已更正为「顶层 `.rs` 文件（非递归）」。
+- NOT-A-FINDING ×4：test-1 注释事实（新版已准确）、`region_c` 丢弃注释、G3「separated」措辞（island 与 topbar 带实际重叠，union 结论不变）、文件头锁名单非穷举。
+
+**第三轮汇总（A+B）**：A 对当前工作树版本无产品/断言 finding；B 的 3 个文档 CONFIRMED（F1/F2/F3）已全部修复（日志措辞、§4 G2 行、test-1 注释），修复被 A 确认为「严格更准确」。B 复核最终 diff 后给出终审结论（见 §8 末）。
+
+**第四轮（最终）**：产品测试文件自 A 审查后未再改动；A（最终版本）+ B（最终版本复核）覆盖最终 diff。待 B 复核 CLEAN 后进入 commit/push。
+
+---
 
 ## T01 output layer teardown 闭环
 

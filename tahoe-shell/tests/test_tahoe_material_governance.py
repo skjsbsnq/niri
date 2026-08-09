@@ -15,6 +15,9 @@ NIRI_SETTINGS_QML = SHELL_ROOT / "services" / "NiriSettings.qml"
 NIRI_SETTINGS_TOOL = SHELL_ROOT / "services" / "niri_settings_tool.py"
 NIRI_CONFIG = REPO_ROOT / "config" / "niri" / "tahoe-phase0.kdl"
 NIRI_CONFIG_TAHOE_GLASS = REPO_ROOT / "niri" / "niri-config" / "src" / "tahoe_glass.rs"
+NIRI_POSTPROCESS_SHADER = (
+    REPO_ROOT / "niri" / "src" / "render_helpers" / "shaders" / "postprocess.frag"
+)
 GLASS_SCHEMA_ARTIFACT = (
     REPO_ROOT / "niri" / "niri-config" / "generated" / "glass_schema_defaults.json"
 )
@@ -57,6 +60,50 @@ PROFILE_FIELDS = [
     "lens-depth",
 ]
 SETTINGS_FIELDS = ["edge-highlight", "refraction", "inner-shadow", "chromatic", "lens-depth"]
+LIGHT_SURFACE_FILLS = {
+    "panel": "FillPanel",
+    "menu": "FillPanelBright",
+}
+# Every (material, QML fill) pairing that a production surface actually uses.
+# Material and fill are chosen independently per surface, so the same material
+# ships with more than one fill: `panel` appears with both FillPanel
+# (ControlCenter) and FillPanelBright (the popups), and `toast` uses
+# FillPanelBright even though fillForMaterial() would hand it FillPanel. Any
+# reasoning that assumes one fill per material is wrong; this table is the
+# ground truth, verified by test_material_fill_pairings_are_exhaustive below.
+PRODUCTION_MATERIAL_FILLS = {
+    ("panel", "FillPanel"): ["ControlCenter"],
+    ("panel", "FillPanelBright"): [
+        "Spotlight",
+        "WindowOverview",
+        "NotificationCenter",
+        "ClipboardPopup",
+        "FanPopup",
+        "WifiPopup",
+        "BatteryPopup",
+    ],
+    ("menu", "FillPanelBright"): [
+        "MenuPopup",
+        "TrayMenu",
+        "ProcessMenu",
+        "DockAppMenu",
+        "DockWindowMenu",
+        "AppMenuPopup",
+        "TaskSwitcher",
+    ],
+    ("toast", "FillPanelBright"): ["NotificationToast"],
+    ("dock", "FillDock"): ["Dock"],
+    ("backdrop", "FillBackdrop"): ["Launchpad"],
+}
+# Surfaces that deliberately paint their own near-opaque plate instead of a
+# governed GlassStyle fill. They are exempt from the white-content visibility
+# bar because the plate itself, plus a dark hairline stroke, already separates
+# them from any backdrop — but they are listed rather than skipped, so a new
+# surface cannot quietly opt out of governance by hardcoding a color.
+OPAQUE_PLATE_SURFACES = {
+    "panel": ["LeftSidebar", "SettingsPanel"],
+    "pill": ["DynamicIslandOverlay"],
+}
 SURFACE_RECIPES = [
     "TopBar",
     "Dock",
@@ -98,6 +145,43 @@ def parse_kdl_numeric_fields(block: str) -> dict[str, float]:
         if match:
             values[field] = float(match.group(1))
     return values
+
+
+def parse_qml_argb(value: str) -> tuple[float, float, float, float]:
+    match = re.fullmatch(r"#([0-9a-fA-F]{8})", value)
+    if not match:
+        raise AssertionError(f"expected #AARRGGBB color, got {value!r}")
+    encoded = match.group(1)
+    return tuple(int(encoded[index:index + 2], 16) / 255 for index in (2, 4, 6, 0))
+
+
+def parse_shader_light_darken() -> float:
+    """Read GLASS_LIGHT_DARKEN out of the real shader source.
+
+    Kept as a parse rather than a literal so this guardrail cannot silently
+    drift from the compositor term it is modelling.
+    """
+    text = NIRI_POSTPROCESS_SHADER.read_text(encoding="utf-8")
+    match = re.search(r"(?m)^#define\s+GLASS_LIGHT_DARKEN\s+([0-9.]+)\s*$", text)
+    if not match:
+        raise AssertionError("postprocess.frag must define GLASS_LIGHT_DARKEN")
+    return float(match.group(1))
+
+
+def parse_kdl_rgb(block: str, field: str) -> tuple[float, float, float]:
+    match = re.search(rf'(?m)^\s*{re.escape(field)}\s+"#([0-9a-fA-F]{{6}})"\s*$', block)
+    if not match:
+        raise AssertionError(f"missing {field} color")
+    encoded = match.group(1)
+    return tuple(int(encoded[index:index + 2], 16) / 255 for index in (0, 2, 4))
+
+
+def source_over(
+    background: tuple[float, float, float],
+    foreground: tuple[float, float, float],
+    alpha: float,
+) -> tuple[float, float, float]:
+    return tuple(foreground[index] * alpha + background[index] * (1 - alpha) for index in range(3))
 
 
 def parse_kdl_materials() -> dict[str, dict[str, float]]:
@@ -152,6 +236,188 @@ def load_niri_settings_tool():
 
 
 class TahoeMaterialGovernanceTests(unittest.TestCase):
+    def test_material_fill_pairings_are_exhaustive(self) -> None:
+        """PRODUCTION_MATERIAL_FILLS must list every real (material, fill) pair.
+
+        Material and fill are set independently on each GlassPanel, so a change
+        that reasons per material (for example "raise this material's
+        tint-amount to compensate for its fill") is only correct if every
+        surface using that material really does use that fill. This test is what
+        makes that assumption checkable instead of assumed.
+        """
+        declared = {
+            (material, fill): set(surfaces)
+            for (material, fill), surfaces in PRODUCTION_MATERIAL_FILLS.items()
+        }
+        found: dict[tuple[str, str], set[str]] = {}
+        opaque_found: dict[str, set[str]] = {}
+
+        for path in sorted((SHELL_ROOT / "components").glob("*.qml")):
+            text = path.read_text(encoding="utf-8")
+            # Surfaces that switch on dark mode bind a local property instead of
+            # a GlassStyle constant; resolve that one level of indirection so
+            # they are not silently skipped.
+            indirect = {
+                name: fill
+                for name, fill in re.findall(
+                    r"(?m)^\s*readonly\s+property\s+color\s+(\w+):"
+                    r"[^\n]*GlassStyle\.(Fill\w+)",
+                    text,
+                )
+            }
+            for match in re.finditer(
+                r"material:\s*GlassStyle\.Material(?P<material>\w+)"
+                r"(?P<between>(?:.|\n){0,600}?)"
+                r"fillColor:\s*(?P<expr>[^\n]+)",
+                text,
+            ):
+                # Do not run past the end of this GlassPanel into the next one.
+                if "material: GlassStyle.Material" in match.group("between"):
+                    continue
+                material = match.group("material")
+                material = material[0].lower() + material[1:]
+                expr = match.group("expr").strip()
+
+                constant = re.search(r"GlassStyle\.(Fill\w+)", expr)
+                if constant is None:
+                    prop = re.fullmatch(r"root\.(\w+)", expr)
+                    fill = indirect.get(prop.group(1)) if prop else None
+                else:
+                    fill = constant.group(1)
+
+                if fill is not None:
+                    found.setdefault((material, fill), set()).add(path.stem)
+                    continue
+
+                # An unresolvable fill is never skipped: it means the surface
+                # paints its own plate instead of a governed token, which is
+                # exactly the case a per-material assumption would miss.
+                opaque_found.setdefault(material, set()).add(path.stem)
+
+        self.assertEqual(
+            {key: sorted(value) for key, value in sorted(found.items())},
+            {key: sorted(value) for key, value in sorted(declared.items())},
+            "production (material, fill) pairings drifted from the table",
+        )
+        self.assertEqual(
+            {key: sorted(value) for key, value in sorted(opaque_found.items())},
+            {key: sorted(value) for key, value in sorted(OPAQUE_PLATE_SURFACES.items())},
+            "surfaces painting their own plate instead of a governed fill drifted",
+        )
+
+    def test_every_production_pairing_stays_visible_over_white(self) -> None:
+        """No production surface may vanish over white content.
+
+        The compositor darkening is the mechanism (postprocess.frag), but each
+        surface layers its own fill on top, and a fill that is too white cancels
+        the darkening. This walks every real pairing rather than a
+        representative one, because the same material ships with different
+        fills.
+        """
+        js_text = TAHOE_GLASS_JS.read_text(encoding="utf-8")
+        kdl_text = NIRI_CONFIG.read_text(encoding="utf-8")
+        glass = extract_block(kdl_text, r"(?m)^\s*tahoe-glass\s*\{")
+        light_darken = parse_shader_light_darken()
+
+        for (material, fill_name), surfaces in sorted(PRODUCTION_MATERIAL_FILLS.items()):
+            with self.subTest(material=material, fill=fill_name):
+                material_block = extract_block(
+                    glass,
+                    rf'(?m)^\s*material\s+"{re.escape(material)}"\s*\{{',
+                )
+                tint = parse_kdl_rgb(material_block, "tint-color")
+                tint_amount = parse_kdl_numeric_fields(material_block)["tint-amount"]
+
+                fill_match = re.search(
+                    rf'(?m)^\s*var\s+{re.escape(fill_name)}\s*=\s*"(#[0-9a-fA-F]{{8}})";',
+                    js_text,
+                )
+                self.assertIsNotNone(fill_match, fill_name)
+                fill_r, fill_g, fill_b, fill_alpha = parse_qml_argb(fill_match.group(1))
+
+                compositor_pixel = tuple(
+                    channel * (1.0 - light_darken)
+                    for channel in source_over((1.0, 1.0, 1.0), tint, tint_amount)
+                )
+                final_pixel = source_over(
+                    compositor_pixel,
+                    (fill_r, fill_g, fill_b),
+                    fill_alpha,
+                )
+                luma_code = 255 * (
+                    final_pixel[0] * 0.2126
+                    + final_pixel[1] * 0.7152
+                    + final_pixel[2] * 0.0722
+                )
+
+                self.assertLessEqual(
+                    luma_code,
+                    232,
+                    f"{material}+{fill_name} ({', '.join(sorted(surfaces))}) "
+                    f"vanishes over white content",
+                )
+
+    def test_light_glass_stays_visible_on_white_without_becoming_an_opaque_plate(self) -> None:
+        """Regression for 684a3ed: white tint + white fill vanished on white content.
+
+        The compositor is the authority that fixes this (postprocess.frag applies
+        GLASS_LIGHT_DARKEN over a light backdrop), and niri's
+        glass_backdrop_adaptive_tint.rs proves it on the real GPU. This test is
+        the shell-side guardrail on the *stack*: it checks that the QML fill on
+        top does not cancel that darkening and turn the surface back into an
+        invisible white plate. Modelling the fill without the compositor term
+        would make it pass even with the shader reverted, so the term is
+        included here and kept in sync with the shader by name.
+        """
+        js_text = TAHOE_GLASS_JS.read_text(encoding="utf-8")
+        kdl_text = NIRI_CONFIG.read_text(encoding="utf-8")
+        glass = extract_block(kdl_text, r"(?m)^\s*tahoe-glass\s*\{")
+        light_darken = parse_shader_light_darken()
+
+        for material, fill_name in LIGHT_SURFACE_FILLS.items():
+            with self.subTest(material=material):
+                material_block = extract_block(
+                    glass,
+                    rf'(?m)^\s*material\s+"{re.escape(material)}"\s*\{{',
+                )
+                tint = parse_kdl_rgb(material_block, "tint-color")
+                tint_amount = parse_kdl_numeric_fields(material_block)["tint-amount"]
+
+                fill_match = re.search(
+                    rf'(?m)^\s*var\s+{re.escape(fill_name)}\s*=\s*"(#[0-9a-fA-F]{{8}})";',
+                    js_text,
+                )
+                self.assertIsNotNone(fill_match, fill_name)
+                fill_r, fill_g, fill_b, fill_alpha = parse_qml_argb(fill_match.group(1))
+
+                # Over pure white the adaptive window is fully open, so the
+                # compositor applies the darkening at full strength.
+                compositor_pixel = tuple(
+                    channel * (1.0 - light_darken)
+                    for channel in source_over((1.0, 1.0, 1.0), tint, tint_amount)
+                )
+                final_pixel = source_over(
+                    compositor_pixel,
+                    (fill_r, fill_g, fill_b),
+                    fill_alpha,
+                )
+                luma_code = 255 * (
+                    final_pixel[0] * 0.2126
+                    + final_pixel[1] * 0.7152
+                    + final_pixel[2] * 0.0722
+                )
+
+                self.assertLessEqual(
+                    luma_code,
+                    225,
+                    f"{material} must remain distinguishable over white content",
+                )
+                self.assertGreaterEqual(
+                    luma_code,
+                    150,
+                    f"{material} must remain translucent rather than an opaque plate",
+                )
+
     def test_shell_kdl_rust_and_schema_artifact_do_not_drift(self) -> None:
         js_text = TAHOE_GLASS_JS.read_text(encoding="utf-8")
         js_materials = re.findall(r'(?m)^\s*var\s+Material[A-Za-z0-9]+\s*=\s*"([^"]+)";', js_text)
@@ -225,6 +491,7 @@ class TahoeMaterialGovernanceTests(unittest.TestCase):
     def test_kdl_fallback_background_effects_match_material_profiles(self) -> None:
         text = NIRI_CONFIG.read_text(encoding="utf-8")
         kdl = parse_kdl_materials()
+        glass = extract_block(text, r"(?m)^\s*tahoe-glass\s*\{")
         fallback_counts = {"panel": 0, "menu": 0, "toast": 0}
 
         marker_re = re.compile(
@@ -236,11 +503,18 @@ class TahoeMaterialGovernanceTests(unittest.TestCase):
             block = extract_block(text[marker.end():], r"(?m)^\s*background-effect\s*\{")
             values = parse_kdl_numeric_fields(block)
             fallback_counts[material] += 1
+            material_block = extract_block(
+                glass,
+                rf'(?m)^\s*material\s+"{re.escape(material)}"\s*\{{',
+            )
 
             with self.subTest(material=material, fallback=fallback_counts[material]):
                 self.assertIn(LIVE_SAMPLING, block)
                 self.assertIn("blur true", block)
-                self.assertIn('tint-color "#ffffff"', block)
+                self.assertEqual(
+                    parse_kdl_rgb(block, "tint-color"),
+                    parse_kdl_rgb(material_block, "tint-color"),
+                )
                 self.assertEqual(values, kdl[material])
 
         self.assertEqual(fallback_counts, {"panel": 2, "menu": 1, "toast": 1})

@@ -390,7 +390,7 @@ layer-rule {
         blur true
         noise 0.005
         saturation 1.35
-        tint-color "#ffffff"
+        tint-color "#f2f6fa"
         tint-amount 0.12
         contrast 1.0
         edge-highlight 0.45
@@ -673,7 +673,7 @@ layer-rule {
         blur true
         noise 0.005
         saturation 1.35
-        tint-color "#ffffff"
+        tint-color "#f2f6fa"
         tint-amount 0.12
         contrast 1.0
         edge-highlight 0.45
@@ -808,7 +808,7 @@ layer-rule {
         blur true
         noise 0.004
         saturation 1.40
-        tint-color "#ffffff"
+        tint-color "#f4f8fc"
         tint-amount 0.10
         contrast 1.0
         edge-highlight 0.55
@@ -838,7 +838,7 @@ layer-rule {
         blur true
         noise 0.005
         saturation 1.40
-        tint-color "#ffffff"
+        tint-color "#f4f8fc"
         tint-amount 0.10
         contrast 1.0
         edge-highlight 0.50

@@ -147,8 +147,31 @@ T-31 把 prestart record 读取从同步改为异步两跳链(record JSON → /p
   `16696344` 的 cursor_position_hint hunk 属过度修复(该回调不持锁)。
 - supervisor 被单独 SIGKILL 而引擎孤儿存活 → FileNotFound 判死删 record 后冷启动
   会叠第二实例(可达性极低,审查权衡接受;根治=按 token/cmdline 扫孤儿)。
-- `prestartedWallpaperReadyTimer` 死代码;record generation 守护恒假(722 行)。
-- 预存失败:`test_r17_dock_layout_motion.py:259`(quickshell tahoe_glass
-  `mappingGeneration`,与本批无关)。
 - 四条理论级 PLAUSIBLE(Exclusive 层 defer 差异/VT-switch 残留标志/chord 拖移/
   press 驱动换代误清)详见审查记录,现实触发≈0。
+
+### 已修复项(2026-08-09 核实)
+
+- ~~`prestartedWallpaperReadyTimer` 死代码~~ — **已修**:
+  该 Timer 引入于 a242d32 时曾由 adopt 启动以延迟 1.6s 释放 restart cover;
+  后续 51a275e 起 adopt 直接 `restartCoverVisible = false` + `dynamicActive = true`,
+  其 `onTriggered` 的两个动作已被 adopt 完全取代,仅剩定义与 `tryAdoptPrestartedWallpaper`
+  里一处 `stop()` 悬空引用。判定为「已被其他机制取代」→ 连同调用一并删除。
+  (核实日期:2026-08-09;任务:desktop-widgets roadmap C1)
+- ~~record generation 守护恒假(722 行)~~ — **已修**:
+  旧实现每次 reload 把两个 generation 赋为同值,使 `finishPrestartedRecordLoad`
+  的守护恒假。修复=发起 reload 时推进当前代次(在飞旧读作废)、仅在实际 kick
+  异步读时把期望代次同步为当前(该读的完成可通过守护)、空路径内联完成不重同步
+  (在飞旧读的完成被守护丢弃)。
+  **对抗审查补充(2026-08-09)**:经独立审查核实,quickshell FileView 的取消/舍弃
+  语义(setPath 时 `cancelAsync`+disconnect、`operationFinished` 的 sender 检查、
+  同路径在飞 reload 为 no-op)已保证被取代的读完成回调不会到达 QML —— 守护当前
+  属于防御性第二道防线(P-7 双门的门二),其行为已用 node VM 验证
+  (被取代的完成被丢弃、当前完成被应用,固化于
+  `test_wallpaper_idle_budget.py::test_prestart_reload_generation_guard_drops_superseded_completion`)。
+  (核实日期:2026-08-09;任务:desktop-widgets roadmap C2)
+- ~~预存失败:`test_r17_dock_layout_motion.py:259`(quickshell tahoe_glass
+  `mappingGeneration`,与本批无关)~~ — **已修复**:
+  2026-08-09 实测该测试文件 11 passed 全绿,该项已在此后的改动中修复
+  (推测为 quickshell fork 的 `b022253 fix(tahoe-glass): T08 per-wl_surface
+  mapping generation lifecycle`)。(核实日期:2026-08-09;任务:desktop-widgets roadmap C3)

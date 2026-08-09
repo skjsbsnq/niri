@@ -707,24 +707,40 @@ PanelWindow {
     function reloadPrestartedWallpaperState() {
         prestartReloadWasAdopted = prestartedWallpaperAdopted;
         prestartReloadWasStopPending = prestartedWallpaperStopPending;
-        // Bump the generation: a completion signal from a previous read is stale.
-        prestartReloadGeneration = ++prestartRecordGeneration;
+        // Advance the generation on every reload intent: any in-flight read
+        // for an earlier generation is now stale, and a completion of a
+        // superseded read must be dropped. The expected generation is only
+        // synced (below) when an async read is actually kicked, so a stale
+        // completion fails the guard while the current read's completion
+        // passes it.
+        prestartRecordGeneration += 1;
         prestartedWallpaperRecord = null;
         // Empty record path (nested session) never emits a FileView
         // completion: resolve inline, or the in-flight gate would hold off
-        // cold start forever.
+        // cold start forever. The generation was already advanced above, so a
+        // completion of an in-flight read for an older path (the record path
+        // is per-output) is dropped by the guard and cannot roll the resolved
+        // state back to stale content.
         if (prestartedWallpaperRecordPath.length === 0) {
             prestartReloadInFlight = false;
             finishPrestartReload();
             return;
         }
+        // This read is now the expected one: its completion must apply.
+        prestartReloadGeneration = prestartRecordGeneration;
         prestartReloadInFlight = true;
         prestartedWallpaperFile.reload();
     }
 
     // Completion of the async record read (prestartedWallpaperFile.onLoaded/onLoadFailed).
     function finishPrestartedRecordLoad() {
-        // A completion from a superseded reload must not mutate state.
+        // A completion from a superseded reload must not mutate state. The
+        // guard fires when the completion's generation no longer matches the
+        // current one: the record path changed while the read was in flight
+        // (per-output path swap), or the state was already resolved inline
+        // for an empty path while the old read was still running. The guard
+        // previously never fired — both generations were set to the same value
+        // on every reload intent (and neither changed between reloads).
         if (prestartReloadGeneration !== prestartRecordGeneration)
             return;
         var parsed = null;
@@ -839,10 +855,11 @@ PanelWindow {
         // The serialized launcher already owns a mapped background surface. Do not
         // raise restartCover over it — that is the post-boot "flash" after the live
         // wallpaper was already visible (gray/capture plate for ~1.6s then drop).
+        // (The 1600ms adopt-ready delay timer that preceded this direct release
+        // is dead code and has been removed together with its stop() call.)
         dynamicActive = true;
         restartCoverVisible = false;
         prestartedHealthMisses = 0;
-        prestartedWallpaperReadyTimer.stop();
         return true;
     }
 
@@ -1408,18 +1425,6 @@ PanelWindow {
         repeat: false
         onTriggered: {
             if (dynamicProcess.running || externalProcess.running) {
-                root.dynamicActive = true;
-                root.restartCoverVisible = false;
-            }
-        }
-    }
-
-    Timer {
-        id: prestartedWallpaperReadyTimer
-        interval: 1600
-        repeat: false
-        onTriggered: {
-            if (root.prestartedWallpaperAdopted) {
                 root.dynamicActive = true;
                 root.restartCoverVisible = false;
             }

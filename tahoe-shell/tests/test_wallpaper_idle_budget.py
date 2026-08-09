@@ -114,6 +114,7 @@ class WallpaperIdleBudgetTests(unittest.TestCase):
         self.assertIn("wallpaperPauseWhenIdle", text)
         self.assertIn("wallpaperPauseWhenFullscreen", text)
         self.assertIn("liveWallpaperReadyTimer", text)
+        self.assertNotIn("prestartedWallpaperReadyTimer", text)
         self.assertNotIn("prestartedWallpaperTakeoverTimer", text)
         self.assertNotIn("function takeOverPrestartedWallpaper(", text)
         self.assertNotIn("prestartedWallpaperCleanupTimer", text)
@@ -438,6 +439,22 @@ process.stdout.write(JSON.stringify(result));
             self.assertIn("return", body[gate : gate + 80], f"{name}: gate must early-return")
 
         reload_body = body_of("reloadPrestartedWallpaperState")
+        # C-2: the generation advance must be separated from the reload intent.
+        # Every intent advances the current generation (invalidating in-flight
+        # reads), but the expected generation is synced exactly once — when an
+        # async read is actually kicked.
+        self.assertIn("prestartRecordGeneration += 1", reload_body)
+        self.assertEqual(
+            reload_body.count("prestartReloadGeneration = prestartRecordGeneration"),
+            1,
+            "the expected generation must be synced exactly once, at the kicked-read path",
+        )
+        # The inline (empty-path) resolution must NOT re-sync the expected
+        # generation: it stays stale so a completion of the still-in-flight
+        # read for the older path fails the guard and is dropped.
+        inline = reload_body[reload_body.find("prestartedWallpaperRecordPath.length === 0"):]
+        inline_branch = inline[:inline.find("\n        }")]
+        self.assertNotIn("prestartReloadGeneration =", inline_branch)
         raise_at = reload_body.find("prestartReloadInFlight = true")
         kick_at = reload_body.find("prestartedWallpaperFile.reload()")
         self.assertGreaterEqual(raise_at, 0, "reload must raise the in-flight flag")
@@ -453,6 +470,22 @@ process.stdout.write(JSON.stringify(result));
             "shouldResync || !prestartedWallpaperStopPending",
             finish_body,
             "every non-stop resolution must resync or adopt never runs",
+        )
+
+        # C-2: the stale-completion guard must be able to fire. Its two
+        # generation properties must be separated — the reload may not assign
+        # both to the same value on intent (the old "guard always false" bug),
+        # and only the kicked-read path may sync them (no third generation
+        # source, and the inline resolution must not re-sync).
+        finish_load = body_of("finishPrestartedRecordLoad")
+        self.assertIn("prestartReloadGeneration !== prestartRecordGeneration", finish_load)
+        self.assertNotIn("prestartReloadGeneration =", finish_load)
+        self.assertNotIn("prestartRecordGeneration +=", finish_load)
+        self.assertEqual(
+            text.count("prestartReloadGeneration = prestartRecordGeneration"),
+            1,
+            "only the kicked-read path may sync the expected generation — "
+            "neither the reload intent nor the inline resolution may",
         )
 
         # Convergence contract: every record-load branch must reach
@@ -547,6 +580,165 @@ process.stdout.write(JSON.stringify(result));
             2,
             "waitForJob is a boot-only device — later reloads must stay async",
         )
+
+    def test_prestart_reload_generation_guard_drops_superseded_completion(self) -> None:
+        """C-2 behavioral lock (not just text shape): the stale-completion guard
+        in finishPrestartedRecordLoad must be able to fire and early-return.
+
+        The Wallpaper functions are executed inside a node VM with a stubbed
+        state, mirroring the production calls: a reload kick for a valid record
+        path, then an inline (empty-path) resolution, then the completion of
+        the superseded in-flight read arriving. The guard must drop that stale
+        completion (no finishPrestartReload, no record adoption, no record
+        removal), while a completion of the current read must apply.
+        """
+        import json
+        import shutil
+        import subprocess
+
+        if shutil.which("node") is None:
+            self.skipTest("node not available")
+
+        text = WALLPAPER.read_text(encoding="utf-8")
+
+        def body_of(name: str) -> str:
+            match = re.search(
+                r"function " + re.escape(name) + r"\(\) \{(.*?)\n    \}", text, re.S
+            )
+            self.assertIsNotNone(match, name)
+            return "function " + name + "() {" + match.group(1) + "\n}"
+
+        source = (
+            body_of("reloadPrestartedWallpaperState")
+            + "\n"
+            + body_of("finishPrestartedRecordLoad")
+        )
+
+        helper = r"""
+const vm = require("vm");
+const source = process.argv[1];
+const scenario = process.argv[2];
+const state = {
+  prestartReloadWasAdopted: false, prestartReloadWasStopPending: false,
+  prestartRecordGeneration: 0, prestartReloadGeneration: 0,
+  prestartedWallpaperRecord: null, prestartedWallpaperRecordPath: "",
+  prestartReloadInFlight: false, prestartedWallpaperAdopted: false,
+  prestartedWallpaperMode: "", prestartedWallpaperStopPending: false,
+  prestartStateLoaded: false, prestartedWallpaperReleased: false,
+  dynamicActive: false, adoptedWallpaperCommand: "", completed: true,
+  screen: "eDP-2", removed: false, reloaded: false, finishCalls: 0, fileText: "",
+};
+const context = {
+  String, Number, isFinite, RegExp, JSON, Array, Math, console, setTimeout,
+  Object, Boolean, Error,
+  requestPrestartedProcessCheck: (record, cb) => cb(true),
+  removePrestartedRecord: () => { state.removed = true; },
+  prestartedWallpaperFile: {
+    text: () => state.fileText,
+    reload: () => { state.reloaded = true; },
+  },
+  screenName: () => state.screen,
+  Quickshell: { execDetached: () => {}, stateDir: "/tmp" },
+  Qt: { callLater: (fn) => fn() },
+  prestartStopTimer: { stop: () => {}, restart: () => {} },
+  syncDynamicProcess: () => {}, syncExternalProcess: () => {},
+  finishPrestartReload: () => { state.finishCalls += 1; },
+};
+context.state = state;
+const props = ["prestartReloadWasAdopted","prestartReloadWasStopPending","prestartRecordGeneration",
+  "prestartReloadGeneration","prestartedWallpaperRecord","prestartedWallpaperRecordPath",
+  "prestartReloadInFlight","prestartedWallpaperAdopted","prestartedWallpaperMode",
+  "prestartedWallpaperStopPending","prestartStateLoaded","prestartedWallpaperReleased",
+  "dynamicActive","adoptedWallpaperCommand","completed","screen"];
+props.forEach(p => {
+  Object.defineProperty(context, p, {
+    get: () => state[p], set: (v) => { state[p] = v; }, configurable: true,
+  });
+});
+context.root = context;
+vm.createContext(context);
+vm.runInContext(source, context, { filename: "Wallpaper.qml" });
+
+const VALID = JSON.stringify({pid: 42, output: "eDP-2", mode: "external",
+  command: "linux-wallpaperengine demo", token: "t", startTime: "1"});
+let out;
+if (scenario === "stale-dropped") {
+  // Kick read A for a valid path, then resolve inline for an empty path,
+  // then the superseded in-flight read A completes: the guard must drop it.
+  state.prestartedWallpaperRecordPath = "/tmp/wallpaper-prestart/eDP-2.json";
+  context.reloadPrestartedWallpaperState();
+  const gA = state.prestartRecordGeneration, rA = state.prestartReloadGeneration;
+  state.prestartedWallpaperRecordPath = "";
+  context.reloadPrestartedWallpaperState();
+  const gInline = state.prestartRecordGeneration, rInline = state.prestartReloadGeneration;
+  const finishAfterInline = state.finishCalls;
+  state.fileText = VALID;
+  context.finishPrestartedRecordLoad();
+  out = {
+    kickSynced: gA === 1 && rA === 1,
+    inlineAdvancedNotSynced: gInline === 2 && rInline === 1,
+    inlineResolved: finishAfterInline === 1,
+    staleCompletionDropped: state.finishCalls === finishAfterInline,
+    recordNotPolluted: state.prestartedWallpaperRecord === null,
+    removedNotCalled: state.removed === false,
+  };
+} else if (scenario === "current-applies") {
+  // Kick read B; its completion with the matching generation must apply.
+  state.prestartedWallpaperRecordPath = "/tmp/wallpaper-prestart/eDP-2.json";
+  context.reloadPrestartedWallpaperState();
+  const gB = state.prestartRecordGeneration, rB = state.prestartReloadGeneration;
+  state.fileText = VALID;
+  context.finishPrestartedRecordLoad();
+  out = {
+    kickedSynced: gB === rB,
+    currentCompletionApplied: state.finishCalls === 1,
+    recordAdopted: state.prestartedWallpaperRecord !== null,
+    releasedReset: state.prestartedWallpaperReleased === false,
+  };
+}
+process.stdout.write(JSON.stringify(out));
+"""
+        def run(scenario: str) -> dict[str, object]:
+            result = subprocess.run(
+                ["node", "-e", helper, source, scenario],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            return json.loads(result.stdout)
+
+        stale = run("stale-dropped")
+        self.assertTrue(stale["kickSynced"], "kick must sync the expected generation")
+        self.assertTrue(
+            stale["inlineAdvancedNotSynced"],
+            "inline resolution must advance the current generation but not re-sync the expected",
+        )
+        self.assertTrue(stale["inlineResolved"], "inline path must converge")
+        self.assertTrue(
+            stale["staleCompletionDropped"],
+            "superseded read completion was NOT dropped — the guard never fired",
+        )
+        self.assertTrue(
+            stale["recordNotPolluted"],
+            "stale completion mutated prestartedWallpaperRecord",
+        )
+        self.assertTrue(
+            stale["removedNotCalled"],
+            "stale completion triggered removePrestartedRecord",
+        )
+
+        current = run("current-applies")
+        self.assertTrue(current["kickedSynced"], "kick must sync expected to current")
+        self.assertTrue(
+            current["currentCompletionApplied"],
+            "matching-generation completion did not reach finishPrestartReload",
+        )
+        self.assertTrue(current["recordAdopted"], "matching completion did not adopt the record")
+        self.assertTrue(
+            current["releasedReset"],
+            "validated record must reset prestartedWallpaperReleased",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

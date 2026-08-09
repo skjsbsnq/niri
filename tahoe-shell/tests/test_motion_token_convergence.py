@@ -433,9 +433,16 @@ class MotionTokenConvergenceTests(unittest.TestCase):
         self.assertIn("id: pinnedRow", dock)
         self.assertIn("Item {\n                        id: pinnedRow", dock)
 
-        # Icon base 48 (T08-fix from T07's 56) + exclusiveZone/surface recompute.
+        # Icon base 48 (T08-fix from T07's 56). Fixed-mode work area ends at
+        # the visible shelf, while the taller layer remains paint headroom only.
         self.assertIn("readonly property int dockIconSize: 48", dock)
-        self.assertIn("exclusiveZone: 100", dock)
+        self.assertIn("exclusiveZone: dockSurfaceHeight", dock)
+        self.assertNotIn("exclusiveZone: 100", dock)
+        self.assertIn("implicitHeight: dockSurfaceHeight + dockMagHeadroom", dock)
+        self.assertIn(
+            "exclusionMode: dockAutoHide ? ExclusionMode.Ignore : ExclusionMode.Normal",
+            dock,
+        )
         self.assertIn("glassClip: true", dock)
         self.assertNotIn("glassClip: false", dock)
         self.assertIn("dockMagHeadroom", dock)

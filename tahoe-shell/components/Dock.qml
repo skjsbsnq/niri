@@ -1024,7 +1024,10 @@ PanelWindow {
         bottom: true
     }
 
-    exclusiveZone: 100
+    // Reserve only the visible shelf. The layer is taller for magnification
+    // headroom, but reserving any of that transparent band leaves a gap above
+    // the Dock when a window is maximized.
+    exclusiveZone: dockSurfaceHeight
     exclusionMode: dockAutoHide ? ExclusionMode.Ignore : ExclusionMode.Normal
     // Tall layer: glass sits at the bottom; headroom above is empty (no fill)
     // so peak-mag icons can paint without a second "floating" bar.

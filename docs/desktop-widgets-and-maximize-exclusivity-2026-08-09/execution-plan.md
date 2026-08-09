@@ -139,7 +139,7 @@ cargo test 2>&1 | tail -30
 cd /home/wwt/niri/tahoe-shell && python -m pytest tests/ -x -q 2>&1 | tail -20
 ```
 
-### 2.3 内存实测（A1 / A3 / A7 需要）
+### 2.3 内存实测（A1 / A3 / A5 需要）
 
 ```sh
 # 找到 live quickshell 的精确 PID（禁止 pkill 宽匹配，见 P-11）
@@ -159,7 +159,7 @@ timeout 5 $QS -p $CFG ipc call tahoe closeWindowOverview >/dev/null 2>&1; sleep 
 echo "开=+$(( (O-B)/1024 ))MB  关后残留=+$(( (C-B)/1024 ))MB"
 ```
 
-### 2.4 唤醒源实测（A3 / A7 需要）
+### 2.4 唤醒源实测（A3 / A5 需要）
 
 ```sh
 QS_PID=$(pgrep -x quickshell | head -1)
@@ -175,7 +175,7 @@ done | sort -u | awk '{print $2}' | sort | uniq -c
 # 判据：新增小部件后仍为 4 个，无瞬时 spawn
 ```
 
-### 2.5 禁弹簧断言（A4 / A5 需要）
+### 2.5 禁弹簧断言（A6 / A7 需要）
 
 ```sh
 # 小部件相关文件中不得出现 SpringAnimation（见 constraints.md P-1）
@@ -207,7 +207,7 @@ QS_PID=$(pgrep -x quickshell | head -1) && kill $QS_PID
 
 ### 3.1 硬性要求
 
-- **数量**：每个任务至少 **2 个**独立子代理，B2/B3/A4 至少 **3 个**
+- **数量**：每个任务至少 **2 个**独立子代理，B2/B3/A6 至少 **3 个**
   （时序与状态机改动风险最高）
 - **独立**：各子代理不得知晓彼此结论；不得由实现者自审
 - **必须读代码**：审查者必须实际读取改动后的源文件，
@@ -344,15 +344,18 @@ QS_PID=$(pgrep -x quickshell | head -1) && kill $QS_PID
 - 各 service（Weather / Battery / SystemStats）在控制中心内的既有显示不变
 - 侧栏「系统」「天气」两 tab 显示不变
 
-### A4 / A5
-- A2、A3 的全部回归项
-- Dock 图标拖动重排的既有功能不变（本次复用其模式，不得改其代码）
-- 非编辑模式下小部件点击行为正常
-
-### A6 / A7
+### A4 / A5（侧栏库 tab 与预览）
 - 侧栏「系统」「天气」两 tab 的行为、布局、thumb 动画与改动前一致
   （`constraints.md` A-C7）
 - 侧栏打开/关闭动画不变
+- A2、A3 的全部回归项（桌面小部件显示与输入策略不受影响）
+- `pytest` 全绿
+
+### A6 / A7（编辑模式与 resize）
+- A2、A3 的全部回归项
+- A4 / A5 的全部回归项（库 tab 添加链路仍正常）
+- Dock 图标拖动重排的既有功能不变（本次复用其模式，不得改其代码）
+- 非编辑模式下小部件点击行为正常
 - `pytest` 全绿
 
 ---
@@ -370,10 +373,10 @@ QS_PID=$(pgrep -x quickshell | head -1) && kill $QS_PID
 | 5 | A1 面板按需加载 | QML | 2 | 是 | 未开始 |
 | 6 | A2 小部件基类与宿主层 | QML | 2 | 是 | 未开始 |
 | 7 | A3 首批小部件 | QML | 2 | 是 | 未开始 |
-| 8 | A4 长按编辑 + 拖动移位 | QML | 3 | 是 | 未开始 |
-| 9 | A5 边缘 resize 三档切换 | QML | 2 | 是 | 未开始 |
-| 10 | A6 侧栏第三 tab | QML | 2 | 是 | 未开始 |
-| 11 | A7 库实时预览 | QML | 2 | 是 | 未开始 |
+| 8 | A4 侧栏第三 tab（小部件库） | QML | 2 | 是 | 未开始 |
+| 9 | A5 库实时预览 | QML | 2 | 是 | 未开始 |
+| 10 | A6 长按编辑 + 拖动移位 | QML | 3 | 是 | 未开始 |
+| 11 | A7 边缘 resize 三档切换 | QML | 2 | 是 | 未开始 |
 
 **每完成一个任务，把该行「状态」改为「完成（<commit sha>）」并提交本文件。**
 

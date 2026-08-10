@@ -82,6 +82,20 @@ class WidgetHostLayerContractTests(unittest.TestCase):
         # whole document fails to load (WidgetHost not a type).
         self.assertIn("import \"components/widgets\"", shell)
 
+    def test_shell_import_header_no_brace_in_comments(self) -> None:
+        # quickshell QmlScanner scans the import header line-by-line and
+        # stops at ANY line containing '{' — even a comment. A literal
+        # "WidgetHost {" in the A2 comment silently truncates the header,
+        # so `import "components/widgets"` and `import "services"` are never
+        # scanned, their qmldirs are never synthesized, and the shell fails
+        # with random "X is not a type" (live incident 2026-08-10).
+        shell = (COMPONENTS.parent / "shell.qml").read_text(encoding="utf-8")
+        header = shell.split("\nimport \"components\"")[0]
+        self.assertNotIn("{", header)
+        # The two imports must follow the comment lines directly.
+        self.assertIn("import \"components/widgets\"", shell)
+        self.assertIn("import \"services\"", shell)
+
 
 class WidgetBaseContractTests(unittest.TestCase):
     def test_widget_base_single_glass_region(self) -> None:

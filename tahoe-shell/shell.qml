@@ -9,8 +9,10 @@ import Quickshell.Io
 import Quickshell.Wayland
 import "components"
 // A2: 小部件宿主在 components/widgets/ 子目录 —— QML 目录导入不递归
-// 子目录，必须显式导入（否则 `WidgetHost {` 解析为 not-a-type，
-// 整个 shell 文档加载失败）。
+// 子目录，必须显式导入（否则 WidgetHost 类型解析不到，
+// 整个 shell 文档加载失败）。注意：本注释不得含 '{' —— quickshell
+// QmlScanner 逐行扫描 import 头，行内出现 '{' 会提前截断头部，
+// 使其后的 import 不被扫描（qmldir 不合成 → 类型 not-a-type）。
 import "components/widgets"
 import "services"
 

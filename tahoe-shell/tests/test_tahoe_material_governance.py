@@ -516,7 +516,7 @@ class TahoeMaterialGovernanceTests(unittest.TestCase):
                 )
                 self.assertEqual(values, kdl[material])
 
-        self.assertEqual(fallback_counts, {"panel": 2, "menu": 1, "toast": 1})
+        self.assertEqual(fallback_counts, {"panel": 1, "menu": 3, "toast": 1})
 
     def test_read_glass_marks_absent_fields_inherited(self) -> None:
         settings_tool = load_niri_settings_tool()

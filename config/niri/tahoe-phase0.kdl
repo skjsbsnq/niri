@@ -84,7 +84,15 @@ tahoe-glass {
     // token with 1.0 as no-op, applied after tint. Phase 4 adds:
     //   inner-shadow — SDF-normal inner edge darkening (clamped 0.5);
     //   chromatic    — RGB-split on the refraction sample (clamped 0.1);
-    //   lens-depth   — center radial lens bulge (clamped 0.3).
+    //   lens-depth   — center radial lens bulge (clamped 0.3);
+    //   detail       — floor for the shader's size-driven detail factor [0,1].
+    //                  postprocess.frag fades surface detail out on large
+    //                  surfaces because the height-field normals, turbulence
+    //                  and caustics it drives cost per pixel. Shell materials
+    //                  pin it at 1.0 so the Dock and the fullscreen backdrop
+    //                  keep the same material as a small menu instead of
+    //                  falling to the cheap path. Window blur leaves it unset
+    //                  and keeps the fade.
     // Together these move the glass from "frosted white card" to a controlled
     // scene material with edge light, inner shadow and optional lens depth.
     // Built-in defaults mirror this scene vocabulary, while this file is the
@@ -109,6 +117,7 @@ tahoe-glass {
         inner-shadow 0.06
         chromatic 0.0
         lens-depth 0.0
+        detail 1.0
     }
     material "pill" {
         xray false
@@ -122,6 +131,7 @@ tahoe-glass {
         inner-shadow 0.07
         chromatic 0.0
         lens-depth 0.010
+        detail 1.0
     }
     material "launcher" {
         xray false
@@ -135,6 +145,7 @@ tahoe-glass {
         inner-shadow 0.055
         chromatic 0.0
         lens-depth 0.003
+        detail 1.0
     }
     material "dock" {
         xray false
@@ -148,6 +159,7 @@ tahoe-glass {
         inner-shadow 0.07
         chromatic 0.0
         lens-depth 0.006
+        detail 1.0
     }
     // menu/toast read clearer: controlled edge light, gentler lens distortion.
     material "menu" {
@@ -162,6 +174,7 @@ tahoe-glass {
         inner-shadow 0.10
         chromatic 0.0
         lens-depth 0.0
+        detail 1.0
     }
     material "toast" {
         xray false
@@ -175,11 +188,13 @@ tahoe-glass {
         inner-shadow 0.09
         chromatic 0.0
         lens-depth 0.0
+        detail 1.0
     }
     // backdrop is for fullscreen scrims/backdrops; keep refraction/lens low
     // so the whole screen does not visibly warp, and keep shadow off (set in
-    // code default). glass_surface_detail() also fades these out on big
-    // surfaces.
+    // code default). `detail 1.0` pins the material at full quality: the size
+    // fade in glass_surface_detail() would otherwise drop a fullscreen region
+    // to the cheap directional path, which reads as flat translucency.
     material "backdrop" {
         xray false
         noise 0.003
@@ -192,6 +207,7 @@ tahoe-glass {
         inner-shadow 0.0
         chromatic 0.0
         lens-depth 0.0
+        detail 1.0
         shadow {
             off
         }
@@ -371,6 +387,39 @@ window-rule {
 layer-rule {
     match namespace="^tahoe-control-center$"
     match namespace="^tahoe-notification-center$"
+
+    geometry-corner-radius 18
+
+    shadow {
+        on
+        softness 28
+        spread 2
+        offset x=0 y=8
+        color "#0004"
+    }
+
+    // Fallback path (BackgroundEffect.blurRegion). Keep in sync with the
+    // tahoe-glass "menu" material so the protocol and fallback look alike.
+    background-effect {
+        xray false
+        blur true
+        noise 0.004
+        saturation 1.40
+        tint-color "#f4f8fc"
+        tint-amount 0.1
+        contrast 1.0
+        edge-highlight 0.55
+        refraction 0.014
+        inner-shadow 0.10
+        chromatic 0.0
+        lens-depth 0.0
+    }
+}
+
+// The left sidebar paints its own near-opaque plate and keeps the `panel`
+// material; it is split out of the rule above, which followed its neighbours
+// onto the unified `menu` recipe.
+layer-rule {
     match namespace="^tahoe-left-sidebar$"
 
     geometry-corner-radius 28
@@ -657,7 +706,7 @@ layer-rule {
     match namespace="^tahoe-fan-popup$"
     match namespace="^tahoe-clipboard-popup$"
 
-    geometry-corner-radius 24
+    geometry-corner-radius 18
 
     shadow {
         on
@@ -667,18 +716,18 @@ layer-rule {
         color "#0004"
     }
 
-    // Fallback path. Keep in sync with the tahoe-glass "panel" material.
+    // Fallback path. Keep in sync with the tahoe-glass "menu" material.
     background-effect {
         xray false
         blur true
-        noise 0.005
-        saturation 1.35
-        tint-color "#f2f6fa"
-        tint-amount 0.12
+        noise 0.004
+        saturation 1.40
+        tint-color "#f4f8fc"
+        tint-amount 0.1
         contrast 1.0
-        edge-highlight 0.45
-        refraction 0.012
-        inner-shadow 0.06
+        edge-highlight 0.55
+        refraction 0.014
+        inner-shadow 0.10
         chromatic 0.0
         lens-depth 0.0
     }

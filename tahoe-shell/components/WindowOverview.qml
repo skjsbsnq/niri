@@ -691,8 +691,8 @@ PanelWindow {
             id: overviewSurface
 
             anchors.fill: parent
-            material: GlassStyle.MaterialPanel
-            radius: GlassStyle.RadiusPanel
+            material: GlassStyle.MaterialMenu
+            radius: GlassStyle.RadiusMenu
             fillColor: GlassStyle.FillPanelBright
             strokeColor: GlassStyle.StrokePanelBright
             useItemRegion: false

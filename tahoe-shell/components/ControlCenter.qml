@@ -33,8 +33,8 @@ PanelWindow {
     readonly property int popupLeftMargin: PopupGeometry.popupLeft(anchorRect, root.implicitWidth, screenWidth, edgePadding, fallbackRight)
     readonly property int popupTopMargin: PopupGeometry.popupTop(anchorRect, fallbackTop, popupGap)
     readonly property real popupOriginX: PopupGeometry.originX(anchorRect, popupLeftMargin, root.implicitWidth, screenWidth, fallbackRight)
-    readonly property color glassFill: darkMode ? "#d01d1f24" : GlassStyle.FillPanel
-    readonly property color glassStroke: darkMode ? "#38ffffff" : GlassStyle.StrokePanel
+    readonly property color glassFill: darkMode ? "#d01d1f24" : GlassStyle.FillPanelBright
+    readonly property color glassStroke: darkMode ? "#38ffffff" : GlassStyle.StrokePanelBright
     readonly property color glassInnerFill: Theme.controlInnerFill(darkMode)
     readonly property string accentId: settingsService ? settingsService.accentColor : "blue"
     readonly property color tileFill: Theme.controlTileFill(darkMode)
@@ -238,8 +238,8 @@ PanelWindow {
         width: parent.width
         implicitHeight: content.implicitHeight + 28
         height: implicitHeight
-        material: GlassStyle.MaterialPanel
-        radius: GlassStyle.RadiusPanel
+        material: GlassStyle.MaterialMenu
+        radius: GlassStyle.RadiusMenu
         fillColor: root.glassFill
         strokeColor: root.glassStroke
         interaction: 0.0

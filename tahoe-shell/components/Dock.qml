@@ -188,8 +188,8 @@ PanelWindow {
         - (minimizedShelf ? minimizedShelf.viewportContentY : 0)
     // Wave section: "pinned" | "window" | "" — cursor is rest-local to that section.
     property string dockWaveSection: ""
-    readonly property color glassFill: darkMode ? "#d01d1f24" : GlassStyle.FillDock
-    readonly property color glassStroke: darkMode ? "#38ffffff" : GlassStyle.StrokeDock
+    readonly property color glassFill: darkMode ? "#d01d1f24" : GlassStyle.FillPanelBright
+    readonly property color glassStroke: darkMode ? "#38ffffff" : GlassStyle.StrokePanelBright
     readonly property color dockText: darkMode ? "#f5f7fb" : "#202124"
 
     signal toggleLaunchpad()
@@ -1113,8 +1113,8 @@ PanelWindow {
             height: root.dockSurfaceHeight
             // Clip QML fill/stroke to rounded rect (no child icons here anyway).
             clip: true
-            material: GlassStyle.MaterialDock
-            radius: GlassStyle.RadiusDock
+            material: GlassStyle.MaterialMenu
+            radius: GlassStyle.RadiusMenu
             fillColor: root.glassFill
             strokeColor: root.glassStroke
             // MUST stay true — false draws unclipped rectangular blur sample.

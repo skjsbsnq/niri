@@ -257,8 +257,8 @@ PanelWindow {
             width: root.width
             implicitHeight: content.implicitHeight + 24
             height: implicitHeight
-            material: GlassStyle.MaterialPanel
-            radius: GlassStyle.RadiusPanel
+            material: GlassStyle.MaterialMenu
+            radius: GlassStyle.RadiusMenu
             fillColor: GlassStyle.FillPanelBright
             strokeColor: GlassStyle.StrokePanelBright
             interaction: 0.0

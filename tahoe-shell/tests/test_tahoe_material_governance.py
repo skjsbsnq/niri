@@ -27,26 +27,26 @@ MATERIALS = ["panel", "pill", "launcher", "dock", "menu", "toast", "backdrop"]
 LIVE_SAMPLING = "xray false"
 PRODUCTION_GLASS_SURFACES = {
     "AppMenuPopup.qml": "MaterialMenu",
-    "BatteryPopup.qml": "MaterialPanel",
-    "ClipboardPopup.qml": "MaterialPanel",
-    "ControlCenter.qml": "MaterialPanel",
-    "Dock.qml": "MaterialDock",
+    "BatteryPopup.qml": "MaterialMenu",
+    "ClipboardPopup.qml": "MaterialMenu",
+    "ControlCenter.qml": "MaterialMenu",
+    "Dock.qml": "MaterialMenu",
     "DockAppMenu.qml": "MaterialMenu",
     "DockWindowMenu.qml": "MaterialMenu",
     "DynamicIslandOverlay.qml": "MaterialPill",
-    "FanPopup.qml": "MaterialPanel",
-    "Launchpad.qml": "MaterialBackdrop",
+    "FanPopup.qml": "MaterialMenu",
+    "Launchpad.qml": "MaterialMenu",
     "LeftSidebar.qml": "MaterialPanel",
     "MenuPopup.qml": "MaterialMenu",
-    "NotificationCenter.qml": "MaterialPanel",
+    "NotificationCenter.qml": "MaterialMenu",
     "NotificationToast.qml": "MaterialToast",
     "ProcessMenu.qml": "MaterialMenu",
     "SettingsPanel.qml": "MaterialPanel",
-    "Spotlight.qml": "MaterialPanel",
+    "Spotlight.qml": "MaterialMenu",
     "TaskSwitcher.qml": "MaterialMenu",
     "TrayMenu.qml": "MaterialMenu",
-    "WifiPopup.qml": "MaterialPanel",
-    "WindowOverview.qml": "MaterialPanel",
+    "WifiPopup.qml": "MaterialMenu",
+    "WindowOverview.qml": "MaterialMenu",
 }
 PROFILE_FIELDS = [
     "noise",
@@ -66,34 +66,33 @@ LIGHT_SURFACE_FILLS = {
 }
 # Every (material, QML fill) pairing that a production surface actually uses.
 # Material and fill are chosen independently per surface, so the same material
-# ships with more than one fill: `panel` appears with both FillPanel
-# (ControlCenter) and FillPanelBright (the popups), and `toast` uses
-# FillPanelBright even though fillForMaterial() would hand it FillPanel. Any
-# reasoning that assumes one fill per material is wrong; this table is the
-# ground truth, verified by test_material_fill_pairings_are_exhaustive below.
+# can ship with more than one fill. Every glass popup, menu, the Dock and the
+# Launchpad backdrop share the `menu` recipe (the one recipe judged best
+# looking); `panel` now survives only on the two self-drawn opaque plates,
+# which appear in OPAQUE_PLATE_SURFACES rather than here. Any reasoning that
+# assumes one fill per material is wrong; this table is the ground truth,
+# verified by test_material_fill_pairings_are_exhaustive below.
 PRODUCTION_MATERIAL_FILLS = {
-    ("panel", "FillPanel"): ["ControlCenter"],
-    ("panel", "FillPanelBright"): [
-        "Spotlight",
-        "WindowOverview",
-        "NotificationCenter",
-        "ClipboardPopup",
-        "FanPopup",
-        "WifiPopup",
-        "BatteryPopup",
-    ],
     ("menu", "FillPanelBright"): [
-        "MenuPopup",
-        "TrayMenu",
-        "ProcessMenu",
+        "AppMenuPopup",
+        "BatteryPopup",
+        "ClipboardPopup",
+        "ControlCenter",
+        "Dock",
         "DockAppMenu",
         "DockWindowMenu",
-        "AppMenuPopup",
+        "FanPopup",
+        "Launchpad",
+        "MenuPopup",
+        "NotificationCenter",
+        "ProcessMenu",
+        "Spotlight",
         "TaskSwitcher",
+        "TrayMenu",
+        "WifiPopup",
+        "WindowOverview",
     ],
     ("toast", "FillPanelBright"): ["NotificationToast"],
-    ("dock", "FillDock"): ["Dock"],
-    ("backdrop", "FillBackdrop"): ["Launchpad"],
 }
 # Surfaces that deliberately paint their own near-opaque plate instead of a
 # governed GlassStyle fill. They are exempt from the white-content visibility

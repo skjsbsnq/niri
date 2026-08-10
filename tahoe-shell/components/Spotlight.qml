@@ -486,8 +486,8 @@ PanelWindow {
             anchors.top: parent.top
             // Animated height: eased only — never Spring (glass region geometry).
             height: root.open ? root.targetPanelHeight : Motion.spotlightMinPanelHeight
-            material: GlassStyle.MaterialPanel
-            radius: GlassStyle.RadiusPanelCompact
+            material: GlassStyle.MaterialMenu
+            radius: GlassStyle.RadiusMenu
             fillColor: GlassStyle.FillPanelBright
             strokeColor: GlassStyle.StrokePanelBright
             useItemRegion: false

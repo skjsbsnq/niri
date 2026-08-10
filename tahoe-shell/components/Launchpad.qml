@@ -332,9 +332,13 @@ PanelWindow {
         GlassPanel {
             id: backdropSurface
             anchors.fill: parent
-            material: GlassStyle.MaterialBackdrop
+            material: GlassStyle.MaterialMenu
             radius: GlassStyle.RadiusBackdrop
-            fillColor: GlassStyle.FillBackdrop
+            fillColor: GlassStyle.FillPanelBright
+            // Fullscreen surface: a drop shadow would have nothing to cast
+            // onto. The backdrop material used to carry `shadow off`; the menu
+            // material does not, so the surface states it directly.
+            shadow: false
             strokeColor: "transparent"
             useItemRegion: false
             regionX: 0

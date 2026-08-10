@@ -61,8 +61,12 @@ class LaunchpadRefactorTests(unittest.TestCase):
         self.assertNotIn("categoryStrip", text)
         self.assertNotIn("categories:", text)
         self.assertNotIn('category: "all"', text)
-        # Full-screen backdrop material.
-        self.assertIn("MaterialBackdrop", text)
+        # Full-screen backdrop: shares the unified `menu` glass recipe, and
+        # states `shadow: false` itself because that no longer arrives from the
+        # retired backdrop material.
+        self.assertIn("MaterialMenu", text)
+        self.assertIn("RadiusBackdrop", text)
+        self.assertIn("shadow: false", text)
         # P04: outer open/close is compositor-owned (no QML dual-path flag).
         self.assertNotIn("compositorLayerAnimations", text)
         # Paging + dots + keyboard.

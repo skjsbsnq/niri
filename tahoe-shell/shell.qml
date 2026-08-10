@@ -8,6 +8,10 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
 import "components"
+// A2: 小部件宿主在 components/widgets/ 子目录 —— QML 目录导入不递归
+// 子目录，必须显式导入（否则 `WidgetHost {` 解析为 not-a-type，
+// 整个 shell 文档加载失败）。
+import "components/widgets"
 import "services"
 
 ShellRoot {
@@ -846,6 +850,38 @@ ShellRoot {
                 popupWidth: activeTopBarPopup ? activeTopBarPopup.implicitWidth : 1
                 popupHeight: activeTopBarPopup ? activeTopBarPopup.implicitHeight : 1
                 onCloseRequested: shell.closeTopBarPopups("")
+            }
+
+            // A2: 桌面小部件宿主层。WlrLayer.Bottom、namespace
+            // tahoe-widgets、KeyboardInteractivity.None（P-6）。
+            // popupActive：本屏任一弹层打开 → mask 置空，点击直达
+            // PopupDismissLayer 收回弹层（A-0 第 5 条）。逐项用每屏
+            // 谓词（topBarPopupOpenFor / dockAppMenuOpenFor /
+            // navigationOpenFor / processMenuOpenFor），与既有弹层
+            // 屏判定一致：异屏弹层不得让本屏小部件失交互；launchpad /
+            // spotlight 为全屏 Overlay 打开（任何屏打开即全屏覆盖），
+            // 故用全局布尔。
+            WidgetHost {
+                id: widgetHost
+
+                screen: modelData
+                popupActive: shell.topBarPopupOpenFor(shell.appMenuOpen, modelData)
+                    || shell.topBarPopupOpenFor(shell.applicationMenuOpen, modelData)
+                    || shell.topBarPopupOpenFor(shell.controlCenterOpen, modelData)
+                    || shell.topBarPopupOpenFor(shell.notificationCenterOpen, modelData)
+                    || shell.topBarPopupOpenFor(shell.batteryPopupOpen, modelData)
+                    || shell.topBarPopupOpenFor(shell.wifiPopupOpen, modelData)
+                    || shell.topBarPopupOpenFor(shell.fanPopupOpen, modelData)
+                    || shell.topBarPopupOpenFor(shell.clipboardPopupOpen, modelData)
+                    || shell.topBarPopupOpenFor(shell.trayMenuOpen, modelData)
+                    || shell.navigationOpenFor(shell.settingsPanelOpen, shell.settingsPanelScreenName, modelData)
+                    || shell.launchpadOpen
+                    || shell.spotlightOpen
+                    || shell.navigationOpenFor(shell.leftSidebarOpen, shell.leftSidebarScreenName, modelData)
+                    || shell.dockAppMenuOpenFor(modelData)
+                    || shell.dockWindowMenuOpenFor(modelData)
+                    || shell.processMenuOpenFor(modelData)
+                batteryService: battery
             }
 
             TopBar {

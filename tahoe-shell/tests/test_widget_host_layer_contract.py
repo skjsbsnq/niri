@@ -88,13 +88,22 @@ class WidgetHostLayerContractTests(unittest.TestCase):
         # "WidgetHost {" in the A2 comment silently truncates the header,
         # so `import "components/widgets"` and `import "services"` are never
         # scanned, their qmldirs are never synthesized, and the shell fails
-        # with random "X is not a type" (live incident 2026-08-10).
+        # with random "X is not a type" (live incident 2026-08-10, twice).
         shell = (COMPONENTS.parent / "shell.qml").read_text(encoding="utf-8")
-        header = shell.split("\nimport \"components\"")[0]
+        # The header is everything up to AND INCLUDING the LAST import line.
+        # (Earlier guard split at the FIRST import, missing the A2 comment
+        # that sits AFTER "import \"components\"" — a false guard.)
+        import_lines = [i for i, l in enumerate(shell.split("\n")) if l.startswith("import ")]
+        self.assertTrue(import_lines, "shell.qml must have imports")
+        last_import = import_lines[-1]
+        header = "\n".join(shell.split("\n")[: last_import + 1])
+        # No brace anywhere in the import region — not even inside comments
+        # or quoted like '{'. QmlScanner uses line.contains('{').
         self.assertNotIn("{", header)
-        # The two imports must follow the comment lines directly.
-        self.assertIn("import \"components/widgets\"", shell)
-        self.assertIn("import \"services\"", shell)
+        self.assertNotIn("}", header)
+        # The three directory imports must all be present.
+        for imp in ("import \"components\"", "import \"components/widgets\"", "import \"services\""):
+            self.assertIn(imp, shell)
 
 
 class WidgetBaseContractTests(unittest.TestCase):

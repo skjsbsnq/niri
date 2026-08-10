@@ -1188,7 +1188,7 @@ PanelWindow {
             // corners round/unround in step with the width Behavior rather than
             // a frame ahead of it (a rounded full-width bar would notch the
             // screen's bottom corners; a square narrow one looks broken).
-            radius: dockChrome.width >= root.width - 0.5 ? 0 : GlassStyle.RadiusMenu
+            radius: dockChrome.width >= root.width - 0.5 ? GlassStyle.RadiusBackdrop : GlassStyle.RadiusMenu
             fillColor: root.glassFill
             strokeColor: root.glassStroke
             // MUST stay true — false draws unclipped rectangular blur sample.

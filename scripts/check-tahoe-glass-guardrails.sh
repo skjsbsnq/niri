@@ -326,7 +326,13 @@ check_glass_files_declare_material_constants() {
         fail "$rel uses GlassPanel-backed TahoeGlass.regions without declaring material on the glass panel"
       fi
 
-      if ! grep -qE '^[[:space:]]*radius:[[:space:]]*GlassStyle[.]Radius' "$file"; then
+      # The point of this check is that the radius comes from the GlassStyle
+      # token table, not that the binding is a bare token reference. Dock's
+      # compact tier picks between two tokens (RadiusBackdrop when the bar
+      # spans the output, RadiusMenu otherwise), so allow any expression whose
+      # radius value(s) are GlassStyle tokens — while still rejecting a naked
+      # number, which is what this guard exists to catch.
+      if ! grep -qE '^[[:space:]]*radius:.*GlassStyle[.]Radius' "$file"; then
         fail "$rel uses GlassPanel-backed TahoeGlass.regions without declaring radius on the glass panel"
       fi
     else

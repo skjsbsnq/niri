@@ -339,8 +339,12 @@ class CompactWidthAndRadiusTests(unittest.TestCase):
     def test_glass_is_flush_in_compact_and_rounded_in_standard(self) -> None:
         # Radius follows the LIVE width, not the tier flag, so corners change
         # in step with the width Behavior instead of a frame ahead of it.
+        # Both arms must be GlassStyle tokens: scripts/check-tahoe-glass-guardrails.sh
+        # requires glass-panel radii to come from the token table, and a naked
+        # 0 here previously broke that guard.
         m = re.search(
-            r"radius:\s*dockChrome\.width\s*>=\s*root\.width\s*-\s*0\.5\s*\?\s*0\s*:\s*GlassStyle\.RadiusMenu",
+            r"radius:\s*dockChrome\.width\s*>=\s*root\.width\s*-\s*0\.5\s*"
+            r"\?\s*GlassStyle\.RadiusBackdrop\s*:\s*GlassStyle\.RadiusMenu",
             self.code,
         )
         self.assertIsNotNone(m, "compact glass must go flush only once it spans the output")

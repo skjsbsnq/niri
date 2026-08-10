@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import ".."
 import "../TahoeGlass.js" as GlassStyle
 import "WidgetGrid.js" as Grid
 

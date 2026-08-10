@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import ".."
 
 // 电池小部件（small 2×2）—— A2 基类验证载体。
 // 数据源：services/Battery.qml（UPower 事件驱动，零轮询，见 A-5）。

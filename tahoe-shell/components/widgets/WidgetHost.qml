@@ -4,6 +4,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
+import ".."
 import "../TahoeGlass.js" as GlassStyle
 import "WidgetGrid.js" as Grid
 
@@ -165,7 +166,7 @@ PanelWindow {
 
         root.maskWidgetItems = widgetList;
 
-        var regionText = "import Quickshell.Wayland; ";
+        var regionText = "import Quickshell; ";
         regionText += "Region { x: 0; y: 0; width: " + root.screenWidth
             + "; height: " + root.screenHeight + "; intersection: Intersection.Intersect; ";
         for (var j = 0; j < widgetList.length; j++) {

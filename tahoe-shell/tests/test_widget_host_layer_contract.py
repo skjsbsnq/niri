@@ -142,6 +142,25 @@ class WidgetBaseContractTests(unittest.TestCase):
         self.assertIn("import \"../TahoeGlass.js\" as GlassStyle", host)
         self.assertIn("import \"WidgetGrid.js\" as Grid", host)
 
+    def test_widget_files_import_parent_types(self) -> None:
+        # Subdirectory QML files need `import ".."` to resolve parent-dir
+        # QML types (TahoeSymbol/GlassPanel/Widget). Without it the widget
+        # fails to instantiate with "TahoeSymbol is not a type".
+        for path in all_widget_sources():
+            text = path.read_text(encoding="utf-8")
+            self.assertIn("import \"..\"", text, msg=path.name)
+
+    def test_mask_region_imports_quickshell_module(self) -> None:
+        # buildUnionRegion's Qt.createQmlObject string imports the Region
+        # type — which lives in the Quickshell module (region.hpp QML_ELEMENT),
+        # NOT Quickshell.Wayland. Importing the wrong module yields
+        # "Region is not a type" at runtime.
+        text = HOST.read_text(encoding="utf-8")
+        self.assertIn("import Quickshell; ", text)
+        self.assertIn("Intersection.Intersect", text)
+        # The old wrong module must not be referenced in the mask string.
+        self.assertNotIn("import Quickshell.Wayland; ", text)
+
     def test_widget_base_host_visible_gate(self) -> None:
         text = WIDGET_BASE.read_text(encoding="utf-8")
         self.assertIn("hostVisible", text)

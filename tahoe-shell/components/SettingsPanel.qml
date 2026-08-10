@@ -128,18 +128,30 @@ PanelWindow {
             pageHost.navigateTo(resolved);
     }
 
+    // A1: 进入动作（刷新系统状态 + 对齐当前页 + 聚焦）。打开时执行；
+    // LazyLoader 化后重开是重建对象树、open=true 为初始值（onOpenChanged
+    // 不触发），故 onCompleted 也驱动一次（重开后 health 页刷新与键盘
+    // 焦点必须在，否则 Escape 关闭等需先点击）。
+    function enter() {
+        if (systemStatusService)
+            systemStatusService.refresh();
+        // Snap to current page with no transition when opening the panel.
+        if (pageHost)
+            pageHost.snapTo(SettingsModel.resolveId(selectedPage));
+        Qt.callLater(function() {
+            if (root.open)
+                focusCatcher.forceActiveFocus();
+        });
+    }
+
     onOpenChanged: {
-        if (open) {
-            if (systemStatusService)
-                systemStatusService.refresh();
-            // Snap to current page with no transition when opening the panel.
-            if (pageHost)
-                pageHost.snapTo(SettingsModel.resolveId(selectedPage));
-            Qt.callLater(function() {
-                if (root.open)
-                    focusCatcher.forceActiveFocus();
-            });
-        }
+        if (open)
+            enter();
+    }
+
+    Component.onCompleted: {
+        if (root.open)
+            enter();
     }
 
     function numberOr(value, fallback) {

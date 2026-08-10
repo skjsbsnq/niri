@@ -220,7 +220,12 @@ class LeftSidebarWidgetTests(unittest.TestCase):
         # Full-screen dismiss layer paired with LeftSidebar (not only ProcessMenu).
         self.assertIn("Click-outside dismiss for left sidebar", text)
         self.assertIn("onCloseRequested: shell.closeLeftSidebar()", text)
-        self.assertIn("popupWidth: leftSidebar.panelWidth", text)
+        # A1: panelWidth 提升为 shell 级单一来源；cutout 读 shell.panelWidth
+        # （LeftSidebar 实例由 LazyLoader 按屏实例化，不再自算宽度）。
+        self.assertIn("popupWidth: shell.panelWidth", text)
+        # LeftSidebar 内部不再自算面板宽度（readonly 改可注入，公式保留在
+        # shell 级属性与本地回退）。锁定 cutout 与实例共用同一来源。
+        self.assertIn("panelWidth: shell.panelWidth", text)
 
     def test_motion_sidebar_stagger_tokens(self) -> None:
         text = MOTION.read_text(encoding="utf-8")

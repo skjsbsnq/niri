@@ -44,6 +44,9 @@ ShellRoot {
     property string taskSwitcherScreenName: ""
     property bool windowOverviewOpen: false
     property string windowOverviewScreenName: ""
+    // A1: 侧栏当前 tab 持久化（LeftSidebar 关闭即销毁，tab 状态提到 shell 级
+    // 跨开关保留；由 LeftSidebar 的 currentTabChangeRequested 更新）。
+    property string leftSidebarCurrentTab: "system"
     property bool settingsPanelOpen: false
     property string settingsPanelScreenName: ""
     property string settingsPanelPage: "settings"
@@ -75,6 +78,25 @@ ShellRoot {
     readonly property real idleLockTimeoutSeconds: Math.max(0, envNumber("TAHOE_IDLE_LOCK_SECONDS", 600))
     readonly property bool idleLockEnabled: idleLockTimeoutSeconds > 0
     property string lastLockSource: ""
+    // A1: 侧栏面板宽度单一来源。每屏 LeftSidebar 与其点击外部关闭层的
+    // cutout 共用此值（原来 LeftSidebar.qml 自算，shell.qml:949 读实例）。
+    // 公式与改动前一致（Math.max(340, Math.min(420, screenWidth - 24))）；
+    // 屏宽取当前导航屏，不可用时回退首屏。
+    readonly property real panelWidth: {
+        var screens = [...Quickshell.screens];
+        var w = 0;
+        var nav = shellNavigation ? String(shellNavigation.navigationScreenName() || "") : "";
+        for (var i = 0; i < screens.length; i++) {
+            if (nav.length === 0 || String(screens[i].name || "") === nav) {
+                w = Math.max(1, Number(screens[i].width) || 0);
+                if (nav.length > 0)
+                    break;
+            }
+        }
+        if (w <= 0 && screens.length > 0)
+            w = Math.max(1, Number(screens[0].width) || 0);
+        return Math.max(340, Math.min(420, w - 24));
+    }
 
     // Real hardware default: spring gives the dock and panel animations their
     // bouncy settle. If Image textures vanish on a VM/software renderer, flip
@@ -794,10 +816,12 @@ ShellRoot {
             // card is open. Card heights are content-sized and animate, so any
             // fixed size table drifts and leaves invisible dead zones where
             // clicks neither reach the card nor dismiss it.
+            // A1: controlCenter / notificationCenter 已 LazyLoader 化，经
+            // loader.item 读实例（open 期间 item 必已实例化）。
             readonly property var activeTopBarPopup: shell.appMenuOpen ? menuPopup
                 : shell.applicationMenuOpen ? appMenuPopup
-                : shell.controlCenterOpen ? controlCenter
-                : shell.notificationCenterOpen ? notificationCenter
+                : shell.controlCenterOpen ? (controlCenterLoader.item || null)
+                : shell.notificationCenterOpen ? (notificationCenterLoader.item || null)
                 : shell.batteryPopupOpen ? batteryPopup
                 : shell.wifiPopupOpen ? wifiPopup
                 : shell.fanPopupOpen ? fanPopup
@@ -908,30 +932,41 @@ ShellRoot {
                 darkMode: shell.darkMode
             }
 
-            LeftSidebar {
-                id: leftSidebar
+            // A1: 左侧栏 LazyLoader 化（关闭即销毁对象树）。panelWidth 由
+            // shell 级属性注入（唯一外部引用 popupWidth 改读 shell.panelWidth）。
+            LazyLoader {
+                id: leftSidebarLoader
+                active: shell.navigationOpenFor(shell.leftSidebarOpen, shell.leftSidebarScreenName, modelData)
+                LeftSidebar {
+                    id: leftSidebar
 
-                screen: modelData
-                open: shell.navigationOpenFor(shell.leftSidebarOpen, shell.leftSidebarScreenName, modelData)
-                systemStatsService: systemStats
-                weatherService: weather
-                settingsService: desktopSettings
-                batteryService: battery
-                darkMode: shell.darkMode
-                monoFontFamily: shell.monoFontFamily
-                useSpring: shell.useSpring
-                processMenuOpen: shell.processMenuOpenFor(modelData)
-                backgroundEffectsAllowed: !niri.anyFullscreen && !battery.onBattery
-                onCloseRequested: shell.closeLeftSidebar()
-                onOpenProcessMenuRequested: function(proc, anchorRect) {
-                    // 系统页右键进程行 → 实例化 ProcessMenu。先登记屏幕/proc/锚点，
-                    // 再关其它弹层、开菜单（开菜单会回灌 processMenuOpen 暂停刷新）。
-                    // ProcessMenu 链路（shell.qml 本段）T19 不改。
-                    shell.prepareProcessMenu(modelData, proc, anchorRect);
-                    shell.closeTopBarPopups("processMenu");
-                    shell.processMenuOpen = true;
+                    screen: modelData
+                    open: shell.navigationOpenFor(shell.leftSidebarOpen, shell.leftSidebarScreenName, modelData)
+                    currentTab: shell.leftSidebarCurrentTab
+                    panelWidth: shell.panelWidth
+                    systemStatsService: systemStats
+                    weatherService: weather
+                    settingsService: desktopSettings
+                    batteryService: battery
+                    darkMode: shell.darkMode
+                    monoFontFamily: shell.monoFontFamily
+                    useSpring: shell.useSpring
+                    processMenuOpen: shell.processMenuOpenFor(modelData)
+                    backgroundEffectsAllowed: !niri.anyFullscreen && !battery.onBattery
+                    onCloseRequested: shell.closeLeftSidebar()
+                    onCurrentTabChangeRequested: function(tab) {
+                        shell.leftSidebarCurrentTab = String(tab || "system");
+                    }
+                    onOpenProcessMenuRequested: function(proc, anchorRect) {
+                        // 系统页右键进程行 → 实例化 ProcessMenu。先登记屏幕/proc/锚点，
+                        // 再关其它弹层、开菜单（开菜单会回灌 processMenuOpen 暂停刷新）。
+                        // ProcessMenu 链路（shell.qml 本段）T19 不改。
+                        shell.prepareProcessMenu(modelData, proc, anchorRect);
+                        shell.closeTopBarPopups("processMenu");
+                        shell.processMenuOpen = true;
+                    }
+                    onOpenWeatherSettingsRequested: shell.openSettingsPanel("weather")
                 }
-                onOpenWeatherSettingsRequested: shell.openSettingsPanel("weather")
             }
 
             // Click-outside dismiss for left sidebar. The sidebar PanelWindow is
@@ -946,7 +981,7 @@ ShellRoot {
                 useTopBarCutout: true
                 popupLeft: 0
                 popupTop: 0
-                popupWidth: leftSidebar.panelWidth
+                popupWidth: shell.panelWidth
                 popupHeight: Math.max(1, Number(modelData && modelData.height) || 1)
                 onCloseRequested: shell.closeLeftSidebar()
             }
@@ -1101,17 +1136,107 @@ ShellRoot {
                 onCloseRequested: shell.closeDockMenus()
             }
 
-            ControlCenter {
-                id: controlCenter
+            // A1: ControlCenter / NotificationCenter LazyLoader 化。
+            // 关闭时延迟一帧销毁（retainTimer 16ms）：让面板自身的
+            // onOpenChanged(false) 清理先执行（ControlCenter 停蓝牙扫描、
+            // NotificationCenter 结束 clear 状态机），再销毁对象树。
+            // retain 只对本屏生效：Connections 广播所有屏，非本屏的弹层关闭
+            // 不得在本屏实例化隐藏面板（多屏下每次关闭白建 N-1 份面板）。
+            // 本屏判定：弹层屏 = 最近一次打开时的 target 屏（shell 状态在
+            // 关闭时保留），与 topBarPopupOpenFor 的判定一致。
+            property bool controlCenterRetain: false
+            property bool notificationCenterRetain: false
+            // A1: WindowOverview 退场飞行（最多 ~600ms）期间保留对象树。
+            // 动画完成后（或 700ms 兜底）置 false，触发 LazyLoader 销毁。
+            // 同样仅本屏生效（本屏 = windowOverviewScreenName）。
+            property bool windowOverviewRetain: false
+            Timer {
+                id: panelRetainTimer
+                interval: 16
+                repeat: false
+                onTriggered: {
+                    controlCenterRetain = false;
+                    notificationCenterRetain = false;
+                }
+            }
+            Timer {
+                id: overviewRetainTimer
+                interval: 700
+                repeat: false
+                onTriggered: windowOverviewRetain = false
+            }
+            Connections {
+                target: shell
+                function onControlCenterOpenChanged() {
+                    var onThisScreen = String(shell.topBarPopupScreenName || "") === String(modelData.name || "");
+                    if (shell.controlCenterOpen) {
+                        if (onThisScreen)
+                            controlCenterRetain = false;
+                    } else {
+                        controlCenterRetain = onThisScreen;
+                        panelRetainTimer.restart();
+                    }
+                }
+                function onNotificationCenterOpenChanged() {
+                    var onThisScreen = String(shell.topBarPopupScreenName || "") === String(modelData.name || "");
+                    if (shell.notificationCenterOpen) {
+                        if (onThisScreen)
+                            notificationCenterRetain = false;
+                    } else {
+                        notificationCenterRetain = onThisScreen;
+                        panelRetainTimer.restart();
+                    }
+                }
+                function onWindowOverviewOpenChanged() {
+                    // 与 navigationOpenFor 语义一致：目标屏空串时任意屏都承担
+                    // overview（既有行为），retain 判定须同样放宽，否则空串
+                    // 场景退场动画被砍。
+                    var target = String(shell.windowOverviewScreenName || "");
+                    var onThisScreen = target.length === 0 || target === String(modelData.name || "");
+                    if (shell.windowOverviewOpen) {
+                        if (onThisScreen) {
+                            windowOverviewRetain = false;
+                            overviewRetainTimer.stop();
+                        }
+                        // 非本屏打开：不碰本屏 retain/Timer（否则本屏关闭中的
+                        // 700ms 保留会被误停，retain 永久滞留 → 隐藏僵尸实例）。
+                    } else {
+                        windowOverviewRetain = onThisScreen;
+                        overviewRetainTimer.restart();
+                    }
+                }
+            }
 
-                screen: modelData
-                niriService: niri
-                controlsService: controls
-                appearanceService: appearance
-                settingsService: desktopSettings
-                anchorRect: shell.topBarPopupAnchorRect
-                open: shell.topBarPopupOpenFor(shell.controlCenterOpen, modelData)
-                onCloseRequested: shell.controlCenterOpen = false
+            LazyLoader {
+                id: controlCenterLoader
+                active: shell.topBarPopupOpenFor(shell.controlCenterOpen, modelData) || controlCenterRetain
+                ControlCenter {
+                    id: controlCenter
+
+                    screen: modelData
+                    niriService: niri
+                    controlsService: controls
+                    appearanceService: appearance
+                    settingsService: desktopSettings
+                    anchorRect: shell.topBarPopupAnchorRect
+                    open: shell.topBarPopupOpenFor(shell.controlCenterOpen, modelData)
+                    onCloseRequested: shell.controlCenterOpen = false
+                }
+            }
+
+            LazyLoader {
+                id: notificationCenterLoader
+                active: shell.topBarPopupOpenFor(shell.notificationCenterOpen, modelData) || notificationCenterRetain
+                NotificationCenter {
+                    id: notificationCenter
+
+                    screen: modelData
+                    notificationsService: notifications
+                    settingsService: desktopSettings
+                    anchorRect: shell.topBarPopupAnchorRect
+                    open: shell.topBarPopupOpenFor(shell.notificationCenterOpen, modelData)
+                    onCloseRequested: shell.notificationCenterOpen = false
+                }
             }
 
             Launchpad {
@@ -1124,15 +1249,18 @@ ShellRoot {
                 onCloseRequested: shell.launchpadOpen = false
             }
 
-            Spotlight {
-                screen: modelData
-                appsService: apps
-                searchService: search
-                settingsService: desktopSettings
-                useSpring: shell.useSpring
-                darkMode: shell.darkMode
-                open: shell.spotlightOpen
-                onCloseRequested: shell.spotlightOpen = false
+            LazyLoader {
+                active: shell.spotlightOpen
+                Spotlight {
+                    screen: modelData
+                    appsService: apps
+                    searchService: search
+                    settingsService: desktopSettings
+                    useSpring: shell.useSpring
+                    darkMode: shell.darkMode
+                    open: shell.spotlightOpen
+                    onCloseRequested: shell.spotlightOpen = false
+                }
             }
 
             TaskSwitcher {
@@ -1162,51 +1290,47 @@ ShellRoot {
                 }
             }
 
-            WindowOverview {
-                screen: modelData
-                windowsService: niri
-                thumbnailProvider: thumbnailProvider
-                appsService: apps
-                settingsService: desktopSettings
-                useSpring: shell.useSpring
-                open: shell.navigationOpenFor(shell.windowOverviewOpen, shell.windowOverviewScreenName, modelData)
-                onCloseRequested: shell.closeWindowOverview()
+            LazyLoader {
+                active: shell.navigationOpenFor(shell.windowOverviewOpen, shell.windowOverviewScreenName, modelData)
+                    || windowOverviewRetain
+                WindowOverview {
+                    screen: modelData
+                    windowsService: niri
+                    thumbnailProvider: thumbnailProvider
+                    appsService: apps
+                    settingsService: desktopSettings
+                    useSpring: shell.useSpring
+                    open: shell.navigationOpenFor(shell.windowOverviewOpen, shell.windowOverviewScreenName, modelData)
+                    onCloseRequested: shell.closeWindowOverview()
+                }
             }
 
-            SettingsPanel {
-                screen: modelData
-                page: shell.settingsPanelPage
-                settingsService: desktopSettings
-                systemStatusService: systemStatus
-                appearanceService: appearance
-                notificationsService: notifications
-                inputMethodService: inputMethod
-                controlsService: controls
-                soundService: sound
-                batteryService: battery
-                powerProfileService: powerProfiles
-                powerService: power
-                idleLockEnabled: shell.idleLockEnabled
-                idleLockTimeoutSeconds: shell.idleLockTimeoutSeconds
-                networkSettingsService: networkSettings
-                appsSettingsService: appsSettings
-                appsService: apps
-                systemFeaturesService: systemFeatures
-                niriSettingsService: niriSettings
-                weatherService: weather
-                open: shell.navigationOpenFor(shell.settingsPanelOpen, shell.settingsPanelScreenName, modelData)
-                onCloseRequested: shell.closeSettingsPanel()
-            }
-
-            NotificationCenter {
-                id: notificationCenter
-
-                screen: modelData
-                notificationsService: notifications
-                settingsService: desktopSettings
-                anchorRect: shell.topBarPopupAnchorRect
-                open: shell.topBarPopupOpenFor(shell.notificationCenterOpen, modelData)
-                onCloseRequested: shell.notificationCenterOpen = false
+            LazyLoader {
+                active: shell.navigationOpenFor(shell.settingsPanelOpen, shell.settingsPanelScreenName, modelData)
+                SettingsPanel {
+                    screen: modelData
+                    page: shell.settingsPanelPage
+                    settingsService: desktopSettings
+                    systemStatusService: systemStatus
+                    appearanceService: appearance
+                    notificationsService: notifications
+                    inputMethodService: inputMethod
+                    controlsService: controls
+                    soundService: sound
+                    batteryService: battery
+                    powerProfileService: powerProfiles
+                    powerService: power
+                    idleLockEnabled: shell.idleLockEnabled
+                    idleLockTimeoutSeconds: shell.idleLockTimeoutSeconds
+                    networkSettingsService: networkSettings
+                    appsSettingsService: appsSettings
+                    appsService: apps
+                    systemFeaturesService: systemFeatures
+                    niriSettingsService: niriSettings
+                    weatherService: weather
+                    open: shell.navigationOpenFor(shell.settingsPanelOpen, shell.settingsPanelScreenName, modelData)
+                    onCloseRequested: shell.closeSettingsPanel()
+                }
             }
 
             BatteryPopup {

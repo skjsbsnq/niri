@@ -224,7 +224,7 @@ class RoundedClipMisconceptionTests(unittest.TestCase):
         "DynamicIslandCompactMediaView.qml:87": "art plate; view is not hosted",
         "DynamicIslandMediaView.qml:347": "art plate, notch shows the pill",
         "TaskSwitcher.qml:603": "window thumbnail, notch shows the card",
-        "WindowOverview.qml:1106": "window thumbnail, notch shows the card",
+        "WindowOverview.qml:1118": "window thumbnail, notch shows the card",
     }
 
     def test_rounded_clipping_cards_do_not_rely_on_clip_to_round_children(self) -> None:

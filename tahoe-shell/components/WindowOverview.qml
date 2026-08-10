@@ -96,23 +96,30 @@ PanelWindow {
         bottom: true
     }
 
+    // A1: 进入动作（进入飞行编排）。打开时执行；LazyLoader 化后重开是重建
+    // 对象树、open=true 为初始值（onOpenChanged 不触发），故 onCompleted 也
+    // 驱动一次——否则 flightPhase 停在 idle、veil 0，内容不可见（白屏）。
+    function enter() {
+        flightEpoch += 1;
+        flightPhase = "entering";
+        pendingFlights = 0;
+        playVeilEnter();
+        selectFocusedOrFirst();
+        Qt.callLater(function() {
+            if (!root.open)
+                return;
+            focusCatcher.forceActiveFocus();
+            // Second tick: Flow/Repeater layout must settle before mapToItem.
+            Qt.callLater(function() {
+                if (root.open)
+                    beginEnterFlights();
+            });
+        });
+    }
+
     onOpenChanged: {
         if (open) {
-            flightEpoch += 1;
-            flightPhase = "entering";
-            pendingFlights = 0;
-            playVeilEnter();
-            selectFocusedOrFirst();
-            Qt.callLater(function() {
-                if (!root.open)
-                    return;
-                focusCatcher.forceActiveFocus();
-                // Second tick: Flow/Repeater layout must settle before mapToItem.
-                Qt.callLater(function() {
-                    if (root.open)
-                        beginEnterFlights();
-                });
-            });
+            enter();
         } else if (flightPhase === "entering" || flightPhase === "open") {
             if (root.thumbnailProvider)
                 root.thumbnailProvider.cancelRequests("window-overview");
@@ -129,6 +136,11 @@ PanelWindow {
             flightPhase = "idle";
             pendingFlights = 0;
         }
+    }
+
+    Component.onCompleted: {
+        if (root.open)
+            enter();
     }
 
     onWindowChoicesChanged: if (open) {

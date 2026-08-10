@@ -78,17 +78,24 @@ PanelWindow {
     // otherwise showed a too-high first frame). Cleared one frame after open.
     property bool snappingOpen: false
 
+    // A1: 进入动作（重置搜索状态 + 聚焦输入框）。打开时执行；LazyLoader 化后
+    // 重开是重建对象树、open=true 为初始值（onOpenChanged 不触发），故
+    // onCompleted 也驱动一次（焦点必须拿到，否则快捷键打开后打字落空）。
+    function enter() {
+        root.snappingOpen = true;
+        Qt.callLater(function() { root.snappingOpen = false; });
+        query = "";
+        selectedIndex = 0;
+        previewEpoch = 0;
+        Qt.callLater(function() {
+            if (root.open)
+                searchInput.forceActiveFocus();
+        });
+    }
+
     onOpenChanged: {
         if (open) {
-            root.snappingOpen = true;
-            Qt.callLater(function() { root.snappingOpen = false; });
-            query = "";
-            selectedIndex = 0;
-            previewEpoch = 0;
-            Qt.callLater(function() {
-                if (root.open)
-                    searchInput.forceActiveFocus();
-            });
+            enter();
         } else {
             // S-L7: a same-frame open→close (before the callLettered reset
             // fires) would leave snappingOpen true and snap the close shrink.
@@ -96,6 +103,11 @@ PanelWindow {
             // snapshot regardless.
             root.snappingOpen = false;
         }
+    }
+
+    Component.onCompleted: {
+        if (root.open)
+            enter();
     }
 
     onQueryChanged: {

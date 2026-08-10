@@ -15,6 +15,8 @@ PanelWindow {
     id: root
 
     property bool open: false
+    // A1: currentTab 由 shell 级注入并在变更时回灌（面板关闭即销毁，
+    // tab 状态跨开关保留）。保留本地默认以便独立预览/测试。
     property string currentTab: "system"
     property var systemStatsService
     property var weatherService
@@ -27,7 +29,9 @@ PanelWindow {
 
     readonly property int screenWidth: Math.max(1, Number(root.screen && root.screen.width) || root.width)
     readonly property int screenHeight: Math.max(1, Number(root.screen && root.screen.height) || root.height)
-    readonly property int panelWidth: Math.max(340, Math.min(420, screenWidth - 24))
+    // A1: 面板宽度由 shell 级注入（唯一外部引用 shell.qml 的 cutout 已改读
+    // shell.panelWidth）。保留本地回退公式以便独立预览/测试使用。
+    property real panelWidth: Math.max(340, Math.min(420, screenWidth - 24))
     readonly property color glassFill: darkMode ? "#e01c1c1e" : "#e8f5f5f7"
     readonly property color glassStroke: darkMode ? "#28ffffff" : "#2a000000"
     readonly property string accentId: settingsService ? settingsService.accentColor : "blue"
@@ -42,6 +46,9 @@ PanelWindow {
 
     signal closeRequested()
     signal openWeatherSettingsRequested()
+    // A1: 用户切换 tab 时回灌 shell（面板可能因 LazyLoader 销毁，状态须
+    // 提升到 shell 级跨开关保留）。
+    signal currentTabChangeRequested(string tab)
     // LS07：透传系统页右键请求给 shell（shell 实例化 ProcessMenu + PopupDismissLayer）。
     // processMenuOpen 由 shell 驱动，回灌到系统页暂停进程刷新。
     signal openProcessMenuRequested(var proc, var anchorRect)
@@ -79,20 +86,33 @@ PanelWindow {
 
     TahoeGlass.regions: [panel.region]
 
+    // A1: 进入动作（卡片入场调度）。打开面板时执行；LazyLoader 化后重开是
+    // 重建对象树、open=true 为初始值（onOpenChanged 不触发），故 onCompleted
+    // 也驱动一次。关闭动作（停 timer、清 cardsEnter）仅关闭路径需要，
+    // 重建时对象树销毁已隐含清理。
+    function enter() {
+        cardsEnter = false;
+        Qt.callLater(function() {
+            if (root.open) {
+                focusCatcher.forceActiveFocus();
+                // Let the panel settle, then stagger cards.
+                cardsEnterTimer.restart();
+            }
+        });
+    }
+
     onOpenChanged: {
         if (open) {
-            cardsEnter = false;
-            Qt.callLater(function() {
-                if (root.open) {
-                    focusCatcher.forceActiveFocus();
-                    // Let the panel settle, then stagger cards.
-                    cardsEnterTimer.restart();
-                }
-            });
+            enter();
         } else {
             cardsEnterTimer.stop();
             cardsEnter = false;
         }
+    }
+
+    Component.onCompleted: {
+        if (root.open)
+            enter();
     }
 
     Timer {
@@ -221,7 +241,11 @@ PanelWindow {
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
                     onClicked: function(mouse) {
-                        root.currentTab = mouse.x < width / 2 ? "system" : "weather";
+                        var tab = mouse.x < width / 2 ? "system" : "weather";
+                        if (tab !== root.currentTab) {
+                            root.currentTab = tab;
+                            root.currentTabChangeRequested(tab);
+                        }
                     }
                 }
             }

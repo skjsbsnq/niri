@@ -13,6 +13,9 @@ Item {
     property var settingsService
     property bool showTitle: true
     property int iconSize: 38
+    // D1: rest row height, driven by Dock's geometry tier. Default matches the
+    // pre-D1 literal so a standalone instance is unchanged.
+    property int rowHeight: 60
     // See Dock.qml useSpring. Spring on icon geometry corrupts the Image
     // texture on VMware/software GPUs. Dock forwards its own useSpring here.
     property bool useSpring: false
@@ -69,7 +72,9 @@ Item {
     // remains a separate visual-only pushX/scale transform.
     x: slotXTarget
     width: slotWidthTarget
-    height: 60
+    // D1: Dock owns the row height (it changes with the geometry tier); the
+    // literal is the standalone default for the test harness.
+    height: rowHeight
 
     Behavior on x {
         NumberAnimation {

@@ -83,26 +83,37 @@ PanelWindow {
     readonly property real dockVisibleAmount: 1 - Math.min(1, Math.max(0, dockSlideOffset / Math.max(1, dockSlideDistance)))
     readonly property real dockGlassInteraction: dockHovered ? dockVisibleAmount : 0.0
     readonly property real dockVisibleHeight: Math.max(0, Math.min(dockSurface.height, dockSurface.height - dockContentSlideOffset))
-    // Icon base 48 (T08-fix). Peak mag paints ABOVE the glass shelf (macOS).
-    // Layer is taller than the glass; glassClip stays TRUE so compositor blur
-    // is rounded. QML children are not clipped by glassClip (T08-fix11).
-    readonly property int dockIconSize: 48
-    readonly property int dockOuterMargin: 28
-    readonly property int dockSurfacePadding: 32
-    readonly property int dockItemSpacing: 8
-    readonly property int dockPinnedButtonWidth: 64
-    readonly property int dockWindowTitleWidth: 132
-    readonly property int dockWindowIconWidth: 60
-    readonly property int dockMinimizedThumbnailWidth: 112
-    readonly property int dockMinimizedMinimumWidth: 76
-    readonly property int dockToolButtonWidth: 56
+    // Peak mag paints ABOVE the glass shelf (macOS). Layer is taller than the
+    // glass; glassClip stays TRUE so compositor blur is rounded. QML children
+    // are not clipped by glassClip (T08-fix11).
+    // D1: geometry tier — standard (macOS-like floating shelf) vs compact
+    // (Windows-11-style full-width flush bar). Single tier switch below; every
+    // derived token feeds off these. Standard column keeps the T08-fix values.
+    readonly property bool dockCompact: !!(settingsService && settingsService.dockCompact)
+    readonly property int dockIconSize: root.dockCompact ? 36 : 48
+    readonly property int dockOuterMargin: root.dockCompact ? 0 : 28
+    readonly property int dockSurfacePadding: root.dockCompact ? 12 : 32
+    readonly property int dockItemSpacing: root.dockCompact ? 6 : 8
+    readonly property int dockPinnedButtonWidth: root.dockCompact ? 48 : 64
+    readonly property int dockWindowTitleWidth: root.dockCompact ? 120 : 132
+    readonly property int dockWindowIconWidth: root.dockCompact ? 46 : 60
+    readonly property int dockMinimizedThumbnailWidth: root.dockCompact ? 84 : 112
+    readonly property int dockMinimizedMinimumWidth: root.dockCompact ? 60 : 76
+    readonly property int dockToolButtonWidth: root.dockCompact ? 44 : 56
     readonly property int dockSeparatorWidth: 1
     readonly property int dockIconSourceSize: 128
     readonly property int dockToolIconSourceSize: 96
     // Glass shelf only — icons grow above it (macOS). Keep short.
-    readonly property int dockSurfaceHeight: 84
-    readonly property int dockPinnedRowHeight: 70
-    readonly property int dockWindowRowHeight: 60
+    readonly property int dockSurfaceHeight: root.dockCompact ? 56 : 84
+    readonly property int dockPinnedRowHeight: root.dockCompact ? 52 : 70
+    readonly property int dockWindowRowHeight: root.dockCompact ? 48 : 60
+    // Titled window buttons use a smaller glyph than icon-only ones (the title
+    // takes the width); the minimized shelf thumbnail and the right-hand tool
+    // glyphs likewise track the tier. Declared here so every tier value lives
+    // in one table — the consumers below just reference them.
+    readonly property int dockTitledIconSize: root.dockCompact ? 30 : 40
+    readonly property int dockMinimizedThumbnailHeight: root.dockCompact ? 44 : 62
+    readonly property int dockToolIconSize: root.dockCompact ? 32 : 40
     // Layer headroom ABOVE the glass for peak-mag paint / hit-testing.
     // Must NOT be added to section host heights (that lifted tools via Row
     // top-alignment and drew a floating transparent bar — T08-fix10).
@@ -155,7 +166,22 @@ PanelWindow {
         + minimizedViewportWidth
         + dockRightToolsWidth
         + dockRowSpacingWidth
-    readonly property real dockChromeTargetWidth: Math.min(dockSurfaceMaxWidth, dockRowTargetWidth + dockSurfacePadding)
+    // D1: compact spans the whole output (flush, edge to edge); standard stays
+    // content-driven with the outer-margin clamp. Content stays centred in both
+    // tiers — only the glass/chrome extent differs.
+    readonly property real dockChromeTargetWidth: root.dockCompact
+        ? root.width
+        : Math.min(dockSurfaceMaxWidth, dockRowTargetWidth + dockSurfacePadding)
+    // Extent of the actual content inside the chrome, tracked off the LIVE
+    // chrome width so it stays exact mid-Behavior. Standard tier the chrome is
+    // already content-sized, so this is the chrome itself (mask unchanged);
+    // compact tier the chrome is wider, so the input mask needs the content box
+    // separately to keep the empty headroom band click-through.
+    readonly property real dockContentBoxWidth: root.dockCompact
+        ? Math.min(dockChrome.width, dockRowTargetWidth + dockSurfacePadding)
+        : dockChrome.width
+    readonly property real dockContentBoxX: dockChrome.x
+        + Math.round((dockChrome.width - dockContentBoxWidth) / 2)
     // WindowButton computes its exact target with mapToItem(), but that call
     // does not observe changes in ancestor geometry. Keep the parent-chain
     // scene offset explicit so first-layout and later Dock motion republish the
@@ -1036,13 +1062,34 @@ PanelWindow {
     WlrLayershell.namespace: "tahoe-dock"
 
     mask: Region {
-        // Full chrome hit target (glass + headroom for mag/label). Transparent.
+        // Content hit target (icons + headroom for mag/label). Transparent.
+        // Standard tier dockContentBoxX/Width ARE the chrome, so this is the
+        // pre-D1 region verbatim. Compact tier it narrows to the content so the
+        // empty headroom above the bar stays click-through.
         Region {
-            x: Math.round(dockChrome.x)
+            x: Math.round(root.dockContentBoxX)
             y: Math.round(root.height - dockChrome.height + root.dockSlideOffset)
-            width: dockChrome.width
+            width: root.dockContentBoxWidth
             height: (!root.dockHidden || root.dockVisibleAmount > 0.001)
                 ? Math.round(Math.min(dockChrome.height, root.dockVisibleHeight + root.dockMagHeadroom))
+                : 0
+        }
+
+        // The glass bar's own hit area. Tracks the LIVE chrome, never the tier
+        // flag: the flag flips a frame before the width Behavior has moved the
+        // glass, and a flag-driven strip would claim the full output while the
+        // bar was still narrow (clicks on bare wallpaper swallowed) — and the
+        // mirror of that on the way back. Standard tier the chrome IS the
+        // content box, so this is a subset of the region above and the union is
+        // unchanged; compact tier it is what makes the bar's empty stretches
+        // clickable (Windows-11 taskbar). Glass height only — never the
+        // transparent headroom above it.
+        Region {
+            x: Math.round(dockChrome.x)
+            y: Math.round(root.height - root.dockVisibleHeight)
+            width: dockChrome.width
+            height: (!root.dockHidden || root.dockVisibleAmount > 0.001)
+                ? Math.round(root.dockVisibleHeight)
                 : 0
         }
 
@@ -1114,7 +1161,11 @@ PanelWindow {
             // Clip QML fill/stroke to rounded rect (no child icons here anyway).
             clip: true
             material: GlassStyle.MaterialMenu
-            radius: GlassStyle.RadiusMenu
+            // D1: flush once the bar actually reaches the output edges, so the
+            // corners round/unround in step with the width Behavior rather than
+            // a frame ahead of it (a rounded full-width bar would notch the
+            // screen's bottom corners; a square narrow one looks broken).
+            radius: dockChrome.width >= root.width - 0.5 ? 0 : GlassStyle.RadiusMenu
             fillColor: root.glassFill
             strokeColor: root.glassStroke
             // MUST stay true — false draws unclipped rectangular blur sample.
@@ -1752,7 +1803,10 @@ PanelWindow {
                                 appsService: root.appsService
                                 settingsService: root.settingsService
                                 useSpring: root.useSpring
-                                iconSize: root.dockWindowButtonsShowTitle ? 40 : root.dockIconSize
+                                iconSize: root.dockWindowButtonsShowTitle
+                                    ? root.dockTitledIconSize
+                                    : root.dockIconSize
+                                rowHeight: root.dockWindowRowHeight
                                 showTitle: root.dockWindowButtonsShowTitle
                                 // T08-fix7: rest slot geometry is fixed; wave is pushX + scale.
                                 slotWidthTarget: root.dockWindowButtonsShowTitle
@@ -1852,6 +1906,7 @@ PanelWindow {
                     dockFullscreenOffset: root.fullscreenTransition * root.dockSurfaceHeight
                     dockFullscreenActive: root.fullscreenActive
                     thumbnailWidth: root.dockMinimizedThumbnailWidth
+                    thumbnailHeight: root.dockMinimizedThumbnailHeight
                     onDockPointerMoved: function(x, buttons) {
                         // Minimized shelf is outside the mag wave; keep dock revealed only.
                         if (buttons !== undefined && buttons !== Qt.NoButton)
@@ -2009,8 +2064,9 @@ PanelWindow {
         Image {
             id: toolIcon
             anchors.centerIn: parent
-            width: 40
-            height: 40
+            // D1: tool glyph tracks the tier so compact stays compact.
+            width: root.dockToolIconSize
+            height: root.dockToolIconSize
             source: tool.iconSource
             fillMode: Image.PreserveAspectFit
             smooth: true

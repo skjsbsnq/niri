@@ -29,6 +29,22 @@ Flickable {
 
             Controls.TahoeListRow {
                 theme: page.theme
+                label: "紧凑模式"
+                detail: page.panel && page.panel.settingsService && page.panel.settingsService.dockCompact
+                    ? "通栏铺满屏幕，条更矮、图标更小、四角齐平"
+                    : "居中悬浮，圆角玻璃搁板"
+                iconCode: ""
+                checkable: true
+                checked: page.panel && page.panel.settingsService && page.panel.settingsService.dockCompact
+                enabled: !!(page.panel && page.panel.settingsService)
+                onToggled: function(checked) {
+                    if (page.panel.settingsService)
+                        page.panel.settingsService.setDockCompact(checked);
+                }
+            }
+
+            Controls.TahoeListRow {
+                theme: page.theme
                 label: "自动隐藏"
                 detail: page.panel && page.panel.settingsService && page.panel.settingsService.dockAutoHide
                     ? "鼠标移到底部热区时显示"

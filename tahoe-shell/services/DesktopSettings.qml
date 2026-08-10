@@ -21,6 +21,9 @@ Item {
     readonly property int dockAutoHideDelayMs: settingsAdapter.dockAutoHideDelayMs
     readonly property int dockRevealZoneHeight: settingsAdapter.dockRevealZoneHeight
     readonly property bool dockMinimizedShelfEnabled: settingsAdapter.dockMinimizedShelfEnabled
+    // D1: geometry tier. false = standard (macOS-like floating shelf),
+    // true = compact (full-width flush bar, shorter, smaller icons).
+    readonly property bool dockCompact: settingsAdapter.dockCompact
     readonly property string wallpaperMode: settingsAdapter.wallpaperMode
     readonly property string staticWallpaperPath: settingsAdapter.staticWallpaperPath
     readonly property string effectiveStaticWallpaper: normalizedPath(staticWallpaperPath)
@@ -318,6 +321,15 @@ Item {
             return;
 
         settingsAdapter.dockMinimizedShelfEnabled = next;
+        settingsFile.writeAdapter();
+    }
+
+    function setDockCompact(enabled) {
+        var next = !!enabled;
+        if (settingsAdapter.dockCompact === next)
+            return;
+
+        settingsAdapter.dockCompact = next;
         settingsFile.writeAdapter();
     }
 
@@ -890,6 +902,7 @@ Item {
             property int dockAutoHideDelayMs: 260
             property int dockRevealZoneHeight: 8
             property bool dockMinimizedShelfEnabled: false
+            property bool dockCompact: false
             property string wallpaperMode: "static"
             property string staticWallpaperPath: ""
             property string dynamicWallpaperCommand: ""

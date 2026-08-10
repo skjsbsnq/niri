@@ -31,8 +31,8 @@ Flickable {
                 theme: page.theme
                 label: "紧凑模式"
                 detail: page.panel && page.panel.settingsService && page.panel.settingsService.dockCompact
-                    ? "通栏铺满屏幕，条更矮、图标更小、四角齐平"
-                    : "居中悬浮，圆角玻璃搁板"
+                    ? "通栏铺满屏幕、四角齐平（切换会套用紧凑尺寸预设）"
+                    : "居中悬浮、圆角玻璃搁板（切换会套用标准尺寸预设）"
                 iconCode: ""
                 checkable: true
                 checked: page.panel && page.panel.settingsService && page.panel.settingsService.dockCompact
@@ -40,6 +40,50 @@ Flickable {
                 onToggled: function(checked) {
                     if (page.panel.settingsService)
                         page.panel.settingsService.setDockCompact(checked);
+                }
+            }
+
+            Controls.TahoeSlider {
+                theme: page.theme
+                iconCode: ""
+                label: "Dock 高度"
+                valueText: page.panel && page.panel.settingsService
+                    ? page.panel.settingsService.dockSurfaceHeightPx + " px"
+                    : "—"
+                value: page.panel && page.panel.settingsService
+                    ? Math.max(0, Math.min(1,
+                        (page.panel.settingsService.dockSurfaceHeightPx - page.panel.settingsService.dockSurfaceHeightMin)
+                        / (page.panel.settingsService.dockSurfaceHeightMax - page.panel.settingsService.dockSurfaceHeightMin)))
+                    : 0
+                enabled: !!(page.panel && page.panel.settingsService)
+                onUserPreview: function(v) {
+                    if (!page.panel.settingsService)
+                        return;
+                    var s = page.panel.settingsService;
+                    var span = s.dockSurfaceHeightMax - s.dockSurfaceHeightMin;
+                    s.setDockSurfaceHeightPx(s.dockSurfaceHeightMin + Math.round(v * span));
+                }
+            }
+
+            Controls.TahoeSlider {
+                theme: page.theme
+                iconCode: ""
+                label: "图标大小"
+                valueText: page.panel && page.panel.settingsService
+                    ? page.panel.settingsService.dockIconSizePx + " px"
+                    : "—"
+                value: page.panel && page.panel.settingsService
+                    ? Math.max(0, Math.min(1,
+                        (page.panel.settingsService.dockIconSizePx - page.panel.settingsService.dockIconSizeMin)
+                        / (page.panel.settingsService.dockIconSizeMax - page.panel.settingsService.dockIconSizeMin)))
+                    : 0
+                enabled: !!(page.panel && page.panel.settingsService)
+                onUserPreview: function(v) {
+                    if (!page.panel.settingsService)
+                        return;
+                    var s = page.panel.settingsService;
+                    var span = s.dockIconSizeMax - s.dockIconSizeMin;
+                    s.setDockIconSizePx(s.dockIconSizeMin + Math.round(v * span));
                 }
             }
 

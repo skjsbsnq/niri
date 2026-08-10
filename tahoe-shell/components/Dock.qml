@@ -86,34 +86,57 @@ PanelWindow {
     // Peak mag paints ABOVE the glass shelf (macOS). Layer is taller than the
     // glass; glassClip stays TRUE so compositor blur is rounded. QML children
     // are not clipped by glassClip (T08-fix11).
-    // D1: geometry tier — standard (macOS-like floating shelf) vs compact
-    // (Windows-11-style full-width flush bar). Single tier switch below; every
-    // derived token feeds off these. Standard column keeps the T08-fix values.
+    // D1/D2: the Dock has one shape tier and two user-tunable sizes.
+    //   dockCompact  — SHAPE only: full-width flush bar vs centred rounded
+    //                  shelf, and the denser padding/spacing that goes with it.
+    //   dockSurfaceHeight / dockIconSize — SIZE, straight from the settings
+    //                  sliders. The tier writes them as a preset when toggled
+    //                  (DesktopSettings.setDockCompact) but never overrides
+    //                  them here, so there is exactly one source per value.
+    // Everything below derives from those three. The formulas are anchored so
+    // the shipped defaults (shelf 84, icon 48) reproduce the historical
+    // T08-fix literals exactly.
     readonly property bool dockCompact: !!(settingsService && settingsService.dockCompact)
-    readonly property int dockIconSize: root.dockCompact ? 36 : 48
+    readonly property int dockSurfaceHeight: settingsService
+        ? settingsService.dockSurfaceHeightPx
+        : 84
+    // Icon can never outgrow the shelf that holds it: a tall-icon / short-bar
+    // slider combination degrades to the largest icon the bar can seat rather
+    // than painting outside it.
+    readonly property int dockIconSizePref: settingsService
+        ? settingsService.dockIconSizePx
+        : 48
+    readonly property int dockIconSize: Math.max(16, Math.min(dockIconSizePref, dockSurfaceHeight - 12))
+    // Shape, not size: compact is flush to the output edges and denser.
     readonly property int dockOuterMargin: root.dockCompact ? 0 : 28
     readonly property int dockSurfacePadding: root.dockCompact ? 12 : 32
     readonly property int dockItemSpacing: root.dockCompact ? 6 : 8
-    readonly property int dockPinnedButtonWidth: root.dockCompact ? 48 : 64
-    readonly property int dockWindowTitleWidth: root.dockCompact ? 120 : 132
-    readonly property int dockWindowIconWidth: root.dockCompact ? 46 : 60
-    readonly property int dockMinimizedThumbnailWidth: root.dockCompact ? 84 : 112
-    readonly property int dockMinimizedMinimumWidth: root.dockCompact ? 60 : 76
-    readonly property int dockToolButtonWidth: root.dockCompact ? 44 : 56
+    // Slot widths: constant gaps around the icon (padding should not scale
+    // linearly with the glyph, or big icons get comically wide slots).
+    readonly property int dockPinnedButtonWidth: dockIconSize + 16
+    readonly property int dockWindowTitleWidth: dockIconSize + 84
+    readonly property int dockWindowIconWidth: dockIconSize + 12
+    readonly property int dockMinimizedThumbnailWidth: Math.round(dockIconSize * 7 / 3)
+    readonly property int dockMinimizedMinimumWidth: dockIconSize + 28
+    readonly property int dockToolButtonWidth: dockIconSize + 8
     readonly property int dockSeparatorWidth: 1
     readonly property int dockIconSourceSize: 128
     readonly property int dockToolIconSourceSize: 96
-    // Glass shelf only — icons grow above it (macOS). Keep short.
-    readonly property int dockSurfaceHeight: root.dockCompact ? 56 : 84
-    readonly property int dockPinnedRowHeight: root.dockCompact ? 52 : 70
-    readonly property int dockWindowRowHeight: root.dockCompact ? 48 : 60
-    // Titled window buttons use a smaller glyph than icon-only ones (the title
-    // takes the width); the minimized shelf thumbnail and the right-hand tool
-    // glyphs likewise track the tier. Declared here so every tier value lives
-    // in one table — the consumers below just reference them.
-    readonly property int dockTitledIconSize: root.dockCompact ? 30 : 40
-    readonly property int dockMinimizedThumbnailHeight: root.dockCompact ? 44 : 62
-    readonly property int dockToolIconSize: root.dockCompact ? 32 : 40
+    // Rows are bounded by BOTH the shelf that contains them and the icon they
+    // must seat, so neither a short bar nor a large icon can overflow the glass
+    // (the dockRow centring below clamps at 0 and would silently spill).
+    readonly property int dockPinnedRowHeight: Math.min(dockSurfaceHeight - 4, dockIconSize + 22)
+    // WindowButton seats its glyph at y = rowHeight - iconSize - 6, so the row
+    // must clear the icon by at least 6px or the icon paints past its button.
+    readonly property int dockWindowRowHeight: Math.max(
+        dockIconSize + 6,
+        Math.min(dockSurfaceHeight - 8, dockIconSize + 12))
+    // Titled window buttons and the right-hand tools use a smaller glyph than
+    // icon-only buttons (the title takes the width). The minimized thumbnail
+    // keeps its historical 2px overhang past the window row.
+    readonly property int dockTitledIconSize: Math.max(12, dockIconSize - 8)
+    readonly property int dockMinimizedThumbnailHeight: dockWindowRowHeight + 2
+    readonly property int dockToolIconSize: Math.max(12, dockIconSize - 8)
     // Layer headroom ABOVE the glass for peak-mag paint / hit-testing.
     // Must NOT be added to section host heights (that lifted tools via Row
     // top-alignment and drew a floating transparent bar — T08-fix10).

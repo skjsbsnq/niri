@@ -243,11 +243,11 @@ class DockShelfOffsetAndPredictionTests(unittest.TestCase):
 
     def test_constants_aligned_with_existing_width(self) -> None:
         # Guard against silent drift of the thumbnail width used by the shelf.
-        # D1 made this a compact/standard tier switch; the standard arm must
-        # still be the historical 112. Tier values are pinned in
+        # D2 derives it from the icon-size slider (standard preset still yields
+        # the historical 112). Formula and presets are pinned in
         # test_dock_compact_tier.py.
         self.assertIn(
-            "readonly property int dockMinimizedThumbnailWidth: root.dockCompact ? 84 : 112",
+            "readonly property int dockMinimizedThumbnailWidth: Math.round(dockIconSize * 7 / 3)",
             self.dock,
         )
 

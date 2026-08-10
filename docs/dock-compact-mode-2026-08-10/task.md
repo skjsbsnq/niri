@@ -204,3 +204,55 @@
 核验存在于 `assets/fonts/MaterialIconsRound.ttf`，Read 显示为空是私用区渲染问题）；
 `sanitizeState` 不含 `dockCompact` 与既有 bool 键（`dockAutoHide`、
 `dockMinimizedShelfEnabled`）同风格，JsonAdapter 对 bool 有强转。
+
+## 9. D2 追加需求：尺寸滑块（2026-08-10 同日）
+
+用户：「在设置里面再加入 dock 条高度以及图标大小的设置，也就是拖动条来调整大小、高度」。
+
+用户选定：**开关做预设**（切换时把预设尺寸写入滑块）、
+范围**高度 40–120（默认 84）/ 图标 24–72（默认 48）**。
+
+### 语义变更（相对 D1）
+
+| | D1 | D2 |
+|---|---|---|
+| 尺寸来源 | `dockCompact` 布尔切两套固定值 | **两个滑块唯一决定** |
+| `dockCompact` 职责 | 形态 + 尺寸 | **仅形态**（通栏 / 齐平 / 密度） |
+| 切换开关 | 直接改几何 | 把预设值**写入滑块** |
+
+D1 第 7 节的档位表因此作废：紧凑档的尺寸不再由 `Dock.qml` 的三元决定，
+而是 `setDockCompact` 写入的 56/36 预设。形态三项（`dockOuterMargin`
+0/28、`dockSurfacePadding` 12/32、`dockItemSpacing` 6/8）仍是三元。
+
+### 派生公式（以出厂默认 84/48 为锚点，精确复现历史字面量）
+
+```
+dockIconSize                 = max(16, min(滑块图标, 条高 - 12))
+dockPinnedButtonWidth        = icon + 16      dockWindowTitleWidth = icon + 84
+dockWindowIconWidth          = icon + 12      dockMinimizedMinimumWidth = icon + 28
+dockToolButtonWidth          = icon + 8       dockMinimizedThumbnailWidth = round(icon*7/3)
+dockPinnedRowHeight          = min(条高 - 4, icon + 22)
+dockWindowRowHeight          = max(icon + 6, min(条高 - 8, icon + 12))
+dockTitledIconSize/ToolIcon  = max(12, icon - 8)
+dockMinimizedThumbnailHeight = dockWindowRowHeight + 2
+```
+
+### 不变量（守护测试全范围扫描，81×49=3969 组）
+
+1. 行高 ≤ 条高（`dockRow` 居中式 `Math.max(0, ...)` 会无声吞掉溢出）
+2. **窗口行 ≤ pinned 行** —— 窗口区宿主高 = `dockPinnedRowHeight`（`Dock.qml:1778`）
+3. `WindowButton` 的 `icon.y = rowHeight - iconSize - 6` ≥ 0（图标/标题两种字形）
+4. slot 宽 > 其内字形；图标 ≤ 条高
+
+### 升级路径
+
+D1 用户若处于紧凑档，其配置里**没有**两个尺寸键。若不处理，
+JsonAdapter 默认值会把他变成「通栏但标准尺寸」。故 `sanitizeState` 有一次性 seed：
+`dockCompact && 两个键都不存在` → 写入 56/36。用 `storedKey()`（读原始 JSON）
+区分「键缺失」与「用户选了默认值」，解析失败时 fail closed 返回 true。
+
+### 启动安全（事故留档）
+
+给 QML 加**大写开头**属性名会让整个 shell 拒绝加载，且 `qmllint --bare` 不报。
+已补两层守护：全树静态扫描 + 真实引擎加载探针
+（`tests/tst_dock_settings_load_probe.qml`），两者均经变异验证。

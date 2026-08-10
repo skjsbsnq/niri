@@ -11,6 +11,17 @@ Item {
     readonly property string settingsPath: Quickshell.stateDir + "/desktop-settings.json"
     readonly property string autostartManagerPath: Quickshell.shellPath("services/autostart_manager.py")
     readonly property string homeDir: envString("HOME")
+    // D2: slider bounds and defaults — single source, also consumed by the
+    // settings page and the compact-preset write in setDockCompact.
+    readonly property int dockSurfaceHeightMin: 40
+    readonly property int dockSurfaceHeightMax: 120
+    readonly property int dockSurfaceHeightDefault: 84
+    readonly property int dockIconSizeMin: 24
+    readonly property int dockIconSizeMax: 72
+    readonly property int dockIconSizeDefault: 48
+    // D1 compact preset (written into the sliders when the tier toggles).
+    readonly property int dockCompactSurfaceHeight: 56
+    readonly property int dockCompactIconSize: 36
     readonly property string defaultScreenshotDirectory: homeDir.length > 0
         ? homeDir + "/Pictures/Screenshots"
         : "Pictures/Screenshots"
@@ -21,9 +32,14 @@ Item {
     readonly property int dockAutoHideDelayMs: settingsAdapter.dockAutoHideDelayMs
     readonly property int dockRevealZoneHeight: settingsAdapter.dockRevealZoneHeight
     readonly property bool dockMinimizedShelfEnabled: settingsAdapter.dockMinimizedShelfEnabled
-    // D1: geometry tier. false = standard (macOS-like floating shelf),
-    // true = compact (full-width flush bar, shorter, smaller icons).
+    // D1: shape tier. false = standard (centred floating shelf, rounded),
+    // true = compact (full-width flush bar). D2: this no longer carries the
+    // sizes — dockSurfaceHeightPx / dockIconSizePx are the single source for
+    // those. Toggling the tier writes both as a preset (see setDockCompact).
     readonly property bool dockCompact: settingsAdapter.dockCompact
+    // D2: user-tunable geometry. Sliders in settings write these directly.
+    readonly property int dockSurfaceHeightPx: settingsAdapter.dockSurfaceHeightPx
+    readonly property int dockIconSizePx: settingsAdapter.dockIconSizePx
     readonly property string wallpaperMode: settingsAdapter.wallpaperMode
     readonly property string staticWallpaperPath: settingsAdapter.staticWallpaperPath
     readonly property string effectiveStaticWallpaper: normalizedPath(staticWallpaperPath)
@@ -106,6 +122,23 @@ Item {
 
     function validDockWindowTitleMode(value) {
         return value === "auto" || value === "icons" || value === "titles";
+    }
+
+    // True when the on-disk settings file actually carries this key. Used to
+    // tell "user has no opinion yet" (key absent, JsonAdapter supplied its
+    // default) apart from "user chose the default value" — the D2 upgrade seed
+    // must only fire in the former case.
+    function storedKey(name) {
+        try {
+            var raw = settingsFile.text();
+            if (!raw || raw.length === 0)
+                return false;
+            return JSON.parse(raw)[name] !== undefined;
+        } catch (e) {
+            // Unreadable/invalid JSON: treat as "present" so the seed cannot
+            // fire repeatedly and stomp a config we simply failed to parse.
+            return true;
+        }
     }
 
     function validWallpaperMode(value) {
@@ -330,6 +363,34 @@ Item {
             return;
 
         settingsAdapter.dockCompact = next;
+        // D2: the tier is a preset, not a parallel sizing path — toggling it
+        // writes the canonical sizes so the sliders reflect the new tier.
+        settingsAdapter.dockSurfaceHeightPx = next
+            ? root.dockCompactSurfaceHeight
+            : root.dockSurfaceHeightDefault;
+        settingsAdapter.dockIconSizePx = next
+            ? root.dockCompactIconSize
+            : root.dockIconSizeDefault;
+        settingsFile.writeAdapter();
+    }
+
+    function setDockSurfaceHeightPx(value) {
+        var next = clampInt(value, root.dockSurfaceHeightMin, root.dockSurfaceHeightMax,
+                            root.dockSurfaceHeightDefault);
+        if (settingsAdapter.dockSurfaceHeightPx === next)
+            return;
+
+        settingsAdapter.dockSurfaceHeightPx = next;
+        settingsFile.writeAdapter();
+    }
+
+    function setDockIconSizePx(value) {
+        var next = clampInt(value, root.dockIconSizeMin, root.dockIconSizeMax,
+                            root.dockIconSizeDefault);
+        if (settingsAdapter.dockIconSizePx === next)
+            return;
+
+        settingsAdapter.dockIconSizePx = next;
         settingsFile.writeAdapter();
     }
 
@@ -727,6 +788,38 @@ Item {
             changed = true;
         }
 
+        // D2: sliders can hit arbitrary state-file values; clamp to the same
+        // bounds the setters enforce so the UI and geometry never go wild.
+        //
+        // Upgrade path first: a config written before the sliders existed has
+        // no size keys at all. If such a config was in compact mode, the
+        // JsonAdapter defaults (standard 84/48) would silently turn it into a
+        // full-width bar at STANDARD size — the tier's own sizes lost. Seed the
+        // compact preset once, so the user keeps what D1 gave them.
+        if (settingsAdapter.dockCompact
+                && !storedKey("dockSurfaceHeightPx")
+                && !storedKey("dockIconSizePx")) {
+            settingsAdapter.dockSurfaceHeightPx = root.dockCompactSurfaceHeight;
+            settingsAdapter.dockIconSizePx = root.dockCompactIconSize;
+            changed = true;
+        }
+
+        var dockHeight = clampInt(settingsAdapter.dockSurfaceHeightPx,
+                                  root.dockSurfaceHeightMin, root.dockSurfaceHeightMax,
+                                  root.dockSurfaceHeightDefault);
+        if (settingsAdapter.dockSurfaceHeightPx !== dockHeight) {
+            settingsAdapter.dockSurfaceHeightPx = dockHeight;
+            changed = true;
+        }
+
+        var dockIcon = clampInt(settingsAdapter.dockIconSizePx,
+                                root.dockIconSizeMin, root.dockIconSizeMax,
+                                root.dockIconSizeDefault);
+        if (settingsAdapter.dockIconSizePx !== dockIcon) {
+            settingsAdapter.dockIconSizePx = dockIcon;
+            changed = true;
+        }
+
         if (!validWallpaperMode(settingsAdapter.wallpaperMode)) {
             settingsAdapter.wallpaperMode = "static";
             changed = true;
@@ -903,6 +996,8 @@ Item {
             property int dockRevealZoneHeight: 8
             property bool dockMinimizedShelfEnabled: false
             property bool dockCompact: false
+            property int dockSurfaceHeightPx: 84
+            property int dockIconSizePx: 48
             property string wallpaperMode: "static"
             property string staticWallpaperPath: ""
             property string dynamicWallpaperCommand: ""

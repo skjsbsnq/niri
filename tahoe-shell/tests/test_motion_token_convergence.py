@@ -435,9 +435,10 @@ class MotionTokenConvergenceTests(unittest.TestCase):
 
         # Icon base 48 (T08-fix from T07's 56). Fixed-mode work area ends at
         # the visible shelf, while the taller layer remains paint headroom only.
-        # D1 tier-switched this; the standard arm keeps 48 (tier values pinned
-        # in test_dock_compact_tier.py).
-        self.assertIn("readonly property int dockIconSize: root.dockCompact ? 36 : 48", dock)
+        # D2: the size now comes from the settings slider (default 48, clamped
+        # so it always fits the shelf); presets pinned in test_dock_compact_tier.py.
+        self.assertIn("settingsService.dockIconSizePx", dock)
+        self.assertIn("dockSurfaceHeight - 12", dock)
         self.assertIn("exclusiveZone: dockSurfaceHeight", dock)
         self.assertNotIn("exclusiveZone: 100", dock)
         self.assertIn("implicitHeight: dockSurfaceHeight + dockMagHeadroom", dock)

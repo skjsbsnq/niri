@@ -670,8 +670,31 @@ ShellRoot {
 
     SystemStats {
         id: systemStats
-        // Live metrics only while the left sidebar is open (sole consumer).
-        active: shell.leftSidebarOpen
+        // A3: 桌面系统监控小部件按屏聚合需求（setWidgetDemand 由各屏
+        // WidgetHost 在 systemStatsDemand 变化时调用）。`active` 仍是
+        // 唯一开关：侧栏打开 或 任一屏有可见系统监控小部件时运行。
+        // 小部件宿主隐藏 → 该屏需求撤下 → 进程停止（A-C3 门控宿主可见性）。
+        property var widgetDemandScreens: ({})
+        property bool widgetDemand: false
+        function setWidgetDemand(screenKey, demanded) {
+            var key = String(screenKey || "default");
+            // 注意：此处必须用实例 id（systemStats.*）。shell.qml 文档根是
+            // `shell`，不存在 `root` id；组件文件内部的 `root` 对外部实例
+            // 体不可见（实证：绑定解析失败 → active 恒 false）。
+            var prev = systemStats.widgetDemandScreens[key] === true;
+            if (prev === demanded)
+                return;
+            systemStats.widgetDemandScreens[key] = demanded;
+            var n = 0;
+            for (var k in systemStats.widgetDemandScreens) {
+                if (systemStats.widgetDemandScreens[k])
+                    n += 1;
+            }
+            systemStats.widgetDemand = n > 0;
+        }
+        // Live metrics only while a consumer needs them: the left sidebar
+        // (pre-A3 sole consumer) or a visible desktop system-monitor widget.
+        active: shell.leftSidebarOpen || systemStats.widgetDemand
     }
 
     Weather {
@@ -883,6 +906,20 @@ ShellRoot {
                     || shell.dockWindowMenuOpenFor(modelData)
                     || shell.processMenuOpenFor(modelData)
                 batteryService: battery
+                weatherService: weather
+                systemStatsService: systemStats
+                // A3: 系统监控小部件在场且宿主可见 → 聚合激活既有
+                // SystemStats（同一服务同一进程，非新唤醒源）；宿主
+                // 隐藏或小部件移除 → 撤下需求，进程停止。
+                onSystemStatsDemandChanged: systemStats.setWidgetDemand(widgetHost.screenKey, widgetHost.systemStatsDemand)
+                Component.onCompleted: systemStats.setWidgetDemand(widgetHost.screenKey, widgetHost.systemStatsDemand)
+                // 关闭/拔屏时序不保证 systemStats 一定先于 WidgetHost 存活，
+                // 防御性捕获（正常运行时无影响）。
+                Component.onDestruction: {
+                    try {
+                        systemStats.setWidgetDemand(widgetHost.screenKey, false);
+                    } catch (e) { }
+                }
             }
 
             TopBar {

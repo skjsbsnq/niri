@@ -40,10 +40,12 @@ Item {
     property bool glassShadow: true
 
     // ---- 宿主契约 ----
-    // hostVisible：宿主可见性门控。小部件数据源/定时器/动画必须挂在
-    // dataRefreshActive 上（A-C3），不得自建常驻轮询。
-    readonly property bool hostVisible: !root.previewMode
-    readonly property bool dataRefreshActive: root.hostVisible
+    // hostVisible：宿主可见性门控，由宿主在创建时注入（root.visible，
+    // 见 WidgetHost.createWidgetInstance 的 Qt.binding）。A3 起为真实
+    // 接线：宿主隐藏 → 数据刷新/动画停止。小部件数据源/定时器/动画
+    // 必须挂在 dataRefreshActive 上（A-C3），不得自建常驻轮询。
+    property bool hostVisible: true
+    readonly property bool dataRefreshActive: root.hostVisible && !root.previewMode
     // previewMode（A5 库预览）：禁用交互与数据刷新。
     property bool previewMode: false
     // 小部件本身体积内的指针事件由宿主 mask 覆盖（点击直达小部件）。

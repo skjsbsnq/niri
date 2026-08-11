@@ -63,10 +63,10 @@ class WidgetGridTests(unittest.TestCase):
         self.assertEqual(out["b"], {"col": 2, "row": 0})
 
     def test_find_slot_respects_capacity_and_bounds(self) -> None:
-        # A 4×4 grid fits at most 4 small (2×2) widgets. When full, no slot.
+        # A 4×6 grid fits at most 6 small (2×2) widgets. When full, no slot.
         full = [
             {"id": f"w{i}", "size": "small", "col": (i % 2) * 2, "row": (i // 2) * 2}
-            for i in range(4)
+            for i in range(6)
         ]
         out = self.run_grid(
             "const st = gridStateFromConfig(" + json.dumps(full) + "); "
@@ -74,7 +74,7 @@ class WidgetGridTests(unittest.TestCase):
             "JSON.stringify({slot, len: st.grid.length})"
         )
         self.assertIsNone(out["slot"])
-        self.assertEqual(out["len"], 4)
+        self.assertEqual(out["len"], 6)
 
     def test_find_slot_capacity_guard(self) -> None:
         # Defensive capacity path: with ≥ LIMIT_ITEMS entries the function
@@ -83,7 +83,7 @@ class WidgetGridTests(unittest.TestCase):
         # exist and be first). Construct the state directly to bypass
         # overlap cleaning.
         out = self.run_grid(
-            "const fake = { grid: Array(16).fill({gridX: 0, gridY: 0, cols: 2, rows: 2}) }; "
+            "const fake = { grid: Array(24).fill({gridX: 0, gridY: 0, cols: 2, rows: 2}) }; "
             "const slot = findSlot(fake, 2, 2); "
             "JSON.stringify({slot})"
         )
@@ -126,7 +126,7 @@ class WidgetGridTests(unittest.TestCase):
         out = self.run_grid(
             "JSON.stringify([api.GRID_COLS, api.GRID_ROWS, api.LIMIT_ITEMS])"
         )
-        self.assertEqual(out, [4, 4, 16])
+        self.assertEqual(out, [4, 6, 24])
 
 
 if __name__ == "__main__":

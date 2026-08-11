@@ -15,12 +15,12 @@
 // 渲染 z 顺序：后添加的盖在前面的上面）。
 
 var GRID_COLS = 4;   // 屏宽 4 列（A-6：medium/large 占满一行）
-var GRID_ROWS = 4;   // 屏高方向最多 4 行（每屏最多 16 个单元格）
+var GRID_ROWS = 6;   // 屏高方向最多 6 行（A3：首批四件 = 2 中 + 2 小 须同屏显示，4 行放不下）
 
 // region 上限（niri tahoe_glass MAX_REGIONS_PER_SURFACE=32）不是本文件的
 // 常量：每小部件 1 个 region、每屏网格 ≤16，单屏不可能超 32；跨屏总量
 // 由宿主在加载时按每屏上限截断并给出可见反馈（P-5）。
-var LIMIT_ITEMS = 16;   // 单元格总数上限（4×4）
+var LIMIT_ITEMS = 24;   // 单元格总数上限（4×6）
 
 // 规格 → 网格占用（A-6）。
 function colsForSize(size) {

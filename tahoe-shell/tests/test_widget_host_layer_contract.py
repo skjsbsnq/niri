@@ -226,10 +226,147 @@ class WidgetGridContractTests(unittest.TestCase):
     def test_grid_limits_aligned_with_region_cap(self) -> None:
         # P-5: region cap 32; one region per widget, per-screen grid ≤ 16.
         text = GRID.read_text(encoding="utf-8")
-        self.assertIn("LIMIT_ITEMS = 16", text)
+        self.assertIn("LIMIT_ITEMS = 24", text)
         self.assertIn("GRID_COLS = 4", text)
-        self.assertIn("GRID_ROWS = 4", text)
+        self.assertIn("GRID_ROWS = 6", text)
         # The grid must not define its own region-limit constant (the single
         # cap source lives in niri tahoe_glass; a parallel constant would
         # drift). A comment mention is fine — it documents the shared cap.
         self.assertNotIn("var LIMIT_REGIONS", text)
+
+
+class WidgetA3ContractTests(unittest.TestCase):
+    """A3 contract guards: first widget batch (weather/calendar/system-monitor),
+    real host-visible gate, and SystemStats gated on host visibility."""
+
+    def test_catalog_ships_first_batch(self) -> None:
+        text = HOST.read_text(encoding="utf-8")
+        for key, source in (
+            ("battery", "BatteryWidget.qml"),
+            ("weather", "WeatherWidget.qml"),
+            ("calendar", "CalendarWidget.qml"),
+            ("system-monitor", "SystemMonitorWidget.qml"),
+        ):
+            self.assertIn(f'"{key}": {{ "source": "{source}"', text, msg=key)
+            self.assertTrue((WIDGETS / source).is_file(), msg=source)
+
+    def test_host_visible_gate_is_real(self) -> None:
+        # A3 判据「宿主隐藏时所有小部件刷新停止」：基类门控 =
+        # hostVisible && !previewMode；宿主以绑定（非一次性初值）注入
+        # root.visible，隐藏后门控实时跟随。
+        base = WIDGET_BASE.read_text(encoding="utf-8")
+        self.assertIn("dataRefreshActive: root.hostVisible && !root.previewMode", base)
+        host = HOST.read_text(encoding="utf-8")
+        self.assertIn("readonly property bool hostVisible: root.visible", host)
+        self.assertIn(
+            "obj.hostVisible = Qt.binding(function() { return root.hostVisible; });",
+            host,
+        )
+
+    def test_system_stats_gated_on_host_visibility(self) -> None:
+        # A3 前置：SystemStats 门控于宿主可见性（roadmap 明示），`active`
+        # 仍是唯一开关，无平行路径。
+        # 门控开关的单一属主是 shell.qml（active 绑定所在处）；服务本身
+        # 只暴露 active 属性，不新增第二套开关（G-6）。
+        shell = (ROOT / "shell.qml").read_text(encoding="utf-8")
+        self.assertIn("active: shell.leftSidebarOpen || systemStats.widgetDemand", shell)
+        self.assertIn("function setWidgetDemand(", shell)
+        self.assertIn("systemStats.widgetDemandScreens", shell)
+        stats = (ROOT / "services" / "SystemStats.qml").read_text(encoding="utf-8")
+        self.assertIn("property bool active", stats)
+        self.assertEqual(stats.count("property bool active"), 1)
+        host = HOST.read_text(encoding="utf-8")
+        self.assertIn("property bool systemStatsDemand", host)
+        self.assertIn('widgetInstances["system-monitor"]', host)
+        self.assertIn("onSystemStatsDemandChanged: systemStats.setWidgetDemand(", shell)
+        self.assertIn("Component.onDestruction: {", shell)
+        self.assertIn("systemStats.setWidgetDemand(widgetHost.screenKey, false);", shell)
+
+    def test_services_injected_into_widgets(self) -> None:
+        shell = (ROOT / "shell.qml").read_text(encoding="utf-8")
+        self.assertIn("weatherService: weather", shell)
+        self.assertIn("systemStatsService: systemStats", shell)
+        host = HOST.read_text(encoding="utf-8")
+        self.assertIn("props.weatherService = root.weatherService", host)
+        self.assertIn("props.systemStatsService = root.systemStatsService", host)
+        for source, prop in (
+            ("WeatherWidget.qml", "weatherService"),
+            ("SystemMonitorWidget.qml", "systemStatsService"),
+        ):
+            text = (WIDGETS / source).read_text(encoding="utf-8")
+            self.assertIn(f"property var {prop}", text, msg=source)
+
+    def test_weather_and_system_monitor_no_self_built_polling(self) -> None:
+        # A-C3: 天气/系统监控无 Timer（数据源只读注入）。
+        for name in ("WeatherWidget.qml", "SystemMonitorWidget.qml"):
+            text = (WIDGETS / name).read_text(encoding="utf-8")
+            self.assertNotIn("Timer {", text, msg=name)
+            self.assertNotIn("repeat: true", text, msg=name)
+
+    def test_calendar_single_minute_aligned_gated_timer(self) -> None:
+        # A-C3 / roadmap A3：日历唯一 Timer 为分钟对齐刷新（借鉴
+        # DynamicIsland msecsToNextMinute），门控于 dataRefreshActive。
+        text = (WIDGETS / "CalendarWidget.qml").read_text(encoding="utf-8")
+        self.assertEqual(text.count("Timer {"), 1)
+        self.assertEqual(text.count("repeat: true"), 1)
+        self.assertIn("running: root.dataRefreshActive", text)
+        self.assertIn("msecsToNextMinute", text)
+
+    def test_live_snapshot_gate_in_new_widgets(self) -> None:
+        # 宿主隐藏 → 锁存快照（与 BatteryWidget 同模式），不直接追服务事件。
+        for name in ("WeatherWidget.qml", "SystemMonitorWidget.qml"):
+            text = (WIDGETS / name).read_text(encoding="utf-8")
+            self.assertIn("readonly property bool live: root.dataRefreshActive", text, msg=name)
+            self.assertIn("onLiveChanged", text, msg=name)
+            self.assertIn("function latchSnapshot()", text, msg=name)
+
+    def test_calendar_uses_pure_js_logic(self) -> None:
+        text = (WIDGETS / "CalendarWidget.qml").read_text(encoding="utf-8")
+        self.assertIn('import "CalendarLogic.js" as CalendarLogic', text)
+        self.assertIn("CalendarLogic.monthGrid", text)
+        self.assertIn("CalendarLogic.todayDayLabel", text)
+
+    def test_host_visible_follows_widget_count(self) -> None:
+        # A3 判据「宿主隐藏时刷新停止」的真实触发路径：宿主 visible 跟随
+        # 实例数（无小部件 → 隐藏 → hostVisible=false → 门控生效）。
+        text = HOST.read_text(encoding="utf-8")
+        self.assertIn("visible: root.widgetInstancesCount > 0", text)
+        self.assertIn("property int widgetInstancesCount: 0", text)
+        self.assertIn("root.widgetInstancesCount = Object.keys(root.widgetInstances).length;", text)
+        self.assertIn("onHostVisibleChanged: root.refreshSystemStatsDemand()", text)
+
+    def test_overflow_count_is_per_screen_removed(self) -> None:
+        # P-5 横幅数学：未显示数 = 本屏清洗剔除（越界/重叠/重复）。
+        # 禁止把全文件条目数与每屏 LIMIT 混算（单屏双计 + 多屏假阳性）。
+        text = HOST.read_text(encoding="utf-8")
+        self.assertIn("root.overflowCount = state.removed.length;", text)
+        self.assertNotIn("totalEntryCount", text)
+        self.assertIn("小部件配置超限", text)
+
+    def test_catalog_default_size(self) -> None:
+        # addWidget / A4 库 tab 的默认规格：天气/日历为 medium（按 small
+        # 创建会挤压布局），电池/系统监控 small。
+        text = HOST.read_text(encoding="utf-8")
+        for key, size in (
+            ("battery", "small"),
+            ("weather", "medium"),
+            ("calendar", "medium"),
+            ("system-monitor", "small"),
+        ):
+            self.assertIn(f'"{key}": {{ "source": ', text, msg=key)
+            self.assertIn(f'"defaultSize": "{size}"', text, msg=key)
+        self.assertIn('var size = String(catalog.defaultSize || "small");', text)
+
+    def test_widget_size_derived_from_span(self) -> None:
+        # G-6 / 正确性：实例的 widgetSize 必须从跨度经 WidgetGrid.js 唯一
+        # 来源推导；gridState 条目不带 size 字段，直接读 entry.size 会恒为
+        # small（实测 medium 小部件被报成 small）。
+        text = HOST.read_text(encoding="utf-8")
+        self.assertIn('"widgetSize": Grid.sizeForSpan(entry.cols, entry.rows)', text)
+        self.assertNotIn('"widgetSize": String(entry.size', text)
+
+    def test_weather_reuses_weather_codes(self) -> None:
+        text = (WIDGETS / "WeatherWidget.qml").read_text(encoding="utf-8")
+        self.assertIn('import "../WeatherCodes.js" as WeatherCodes', text)
+        self.assertIn("WeatherCodes.materialIcon", text)
+        self.assertIn("MeteoIcon", text)

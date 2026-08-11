@@ -146,14 +146,32 @@ Widget {
     }
 
     // ---- 视觉（照 macOS 天气小部件：左当前天气 + 右大图标 + 底部逐时条）----
+    // 部署反馈：44px 大字 + 52px 逐时条在小部件 2 行高度里放不下，顶部
+    // Column 溢出并把「今日 x° ~ y°」压进/贴上逐时条。修复：收窄外边距、
+    // 逐时条降到 50px、当前温度字号降到 34 并给各文本显式高度，使内容
+    // 总高（≈85px）稳定小于 topArea 可用高；topArea 再设 clip 兜底，极端
+    // 矮屏只裁切不重叠。
     readonly property color textPrimary: "#ffffff"
     readonly property color textSecondary: "#c7ffffff"
     readonly property color textSoft: "#8affffff"
-    readonly property real hourlyH: 52
+    readonly property real hourlyH: 50
+    // 外边距（内容区四周留白；与 Calendar/SystemMonitor 的 12 相比略窄，
+    // 因为本组件还有逐时条要容纳）。单处定义供布局与测试使用。
+    readonly property real contentMargin: 10
+    // 顶部可用高：实例高 - 上下边距 - 逐时条 - 与逐时条的固定间隙。
+    readonly property real topAreaH: Math.max(0, root.height - 2 * root.contentMargin - root.hourlyH - 4)
+    // 固定行（位置 14 + 描述 14 + 今日 13 + spacing 2×3 = 47）之外的
+    // 余量给当前温度行：矮屏收缩（最小 26）、高屏封顶 38。这样逻辑高
+    // 720–1600 全范围 Column 总高 = fixedRowsH + tempRowH ≤ topAreaH
+    // （审查 C1/C2：1366×768 与 761/762 边界不再把「今日」行裁掉）。
+    readonly property real fixedRowsH: 14 + 14 + 13 + 2 * 3
+    readonly property real tempRowMinH: 26
+    readonly property real tempRowMaxH: 38
+    readonly property real tempRowH: Math.max(root.tempRowMinH, Math.min(root.tempRowMaxH, root.topAreaH - root.fixedRowsH))
 
     Item {
         anchors.fill: parent
-        anchors.margins: 14
+        anchors.margins: root.contentMargin
 
         // 顶部：当前天气。
         Item {
@@ -162,7 +180,8 @@ Widget {
             anchors.top: parent.top
             anchors.left: parent.left
             anchors.right: parent.right
-            height: parent.height - root.hourlyH - 6
+            height: root.topAreaH
+            clip: true
 
             MeteoIcon {
                 id: weatherIcon
@@ -187,42 +206,51 @@ Widget {
 
                 Text {
                     width: parent.width
+                    height: 14
+                    verticalAlignment: Text.AlignVCenter
                     text: root.hasData && root.locationName.length > 0 ? root.locationName : "--"
                     color: root.textSecondary
-                    font.pixelSize: 12
+                    font.pixelSize: 11
                     elide: Text.ElideRight
                 }
 
                 Row {
+                    height: root.tempRowH
                     spacing: 4
                     Text {
+                        anchors.verticalCenter: parent.verticalCenter
                         text: root.fmtTemp(root.currentTempC, false)
                         color: root.textPrimary
-                        font.pixelSize: 44
+                        // 字号跟随温度行高度（行高 - 4 的下界），矮屏自动缩小。
+                        font.pixelSize: Math.min(34, Math.max(24, root.tempRowH - 4))
                         font.weight: Font.Light
-                        lineHeight: 0.95
+                        lineHeight: 0.9
                     }
                     Text {
                         text: root.tempUnit() === "f" ? "°F" : "°C"
                         color: root.textSecondary
-                        font.pixelSize: 15
+                        font.pixelSize: 13
                         font.weight: Font.Medium
                         anchors.bottom: parent.bottom
-                        anchors.bottomMargin: 7
+                        anchors.bottomMargin: 5
                     }
                 }
 
                 Text {
                     width: parent.width
+                    height: 14
+                    verticalAlignment: Text.AlignVCenter
                     text: root.hasData ? root.currentText : (root.weatherService && root.weatherService.updating ? "正在获取天气" : "暂无天气")
                     color: root.textPrimary
-                    font.pixelSize: 12
+                    font.pixelSize: 11
                     font.weight: Font.DemiBold
                     elide: Text.ElideRight
                 }
 
                 Text {
                     width: parent.width
+                    height: 13
+                    verticalAlignment: Text.AlignVCenter
                     text: {
                         if (!root.hasData)
                             return "";
@@ -258,7 +286,7 @@ Widget {
 
                     width: hourlyRow.width / Math.max(1, hourlyRepeater.count)
                     height: parent.height
-                    spacing: 4
+                    spacing: 3
 
                     Text {
                         anchors.horizontalCenter: parent.horizontalCenter

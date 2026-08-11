@@ -158,3 +158,17 @@
   Hilbert（第 3 轮 APPROVE；残差 ≤0.78px 亚像素级，非回弹）。
 - 验收：gap round-trip 纯函数测试 + 结构测试更新；全量 pytest 全绿
   （1150 passed / 1204 subtests）。
+
+**本记录：天气小部件顶部布局（「今日 x° ~ y°」不再贴/叠逐时条）**
+- 根因：44px 当前温度 + 52px 逐时条在 medium（2 行）高度内放不下，顶部
+  Column 溢出把「今日 x° ~ y°」行压进/贴上逐时条（2048×1280 下溢出约
+  9-13px）。
+- 修复：内容自适应 —— contentMargin=10、hourlyH=50、topAreaH 随实例高
+  计算、tempRowH=clamp(topAreaH-47,26,38)，温度字号跟随行高
+  （min(34,max(24,tempRowH-4))）；各行显式高度；topArea clip 兜底。
+- 审查：Fermat（REJECT：768p 下「今日」行被 clip 裁没 + 测试不锁承重值）
+  → Sagan（REJECT：761/762 边界 1px + 测试未取整/只枚举 5 屏）→ Lagrange
+  （APPROVE；两条 PLAUSIBLE 需真机目检：温度字形行高溢出、今日字形墨迹
+  ~1px 裁切，均非本轮引入且不阻断）。
+- 验收：几何测试按宿主同款公式扫描逻辑高 720–1600 全绿（886 subtests）；
+  全量 pytest 全绿。

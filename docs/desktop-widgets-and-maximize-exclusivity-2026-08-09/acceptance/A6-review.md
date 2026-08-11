@@ -92,3 +92,21 @@
 第 2 轮 2 个子代理（1 APPROVE，1 超时无结果）复核确认两条 CONFIRMED 已闭合，
 并把 3 个 PLAUSIBLE 修复。全部 CONFIRMED 已修、测试全绿 → 允许 commit。
 剩余 PLAUSIBLE 均为运行时人工验证项或仓库测试风格固有盲区，已逐条记录处置。
+
+## 部署修复记录（2026-08-11）
+
+**运行时缺陷（部署后实测复现）**：拖动不生效，小部件位置固定。
+- 现象：长按进入编辑模式正常（抖动/完成按钮/编辑 mask 均出现），但拖动时
+  小部件不跟随指针，release 后位置不变。
+- 根因：`WidgetHost.qml` 的 `beginWidgetDrag` / `updateWidgetDrag` 调用
+  `inst.mapToItem(root, ...)`，其中 `root` 是 `PanelWindow`。quickshell 的
+  `PanelWindowInterface` 继承自 `WindowInterface`（QObject），**不是 QQuickItem**，
+  运行时抛 `TypeError: Could not convert argument 0 from WidgetHost_QMLTYPE_102
+  to const QQuickItem*`（qslog 实测）。异常发生在 `dragStart`/`dragActive`
+  赋值之前 → 后续 update/commit 全部被宿主守卫早退 → 位置固定。
+- 修复：mapToItem 目标改为 `widgetLayer`（普通 QQuickItem，`anchors.fill`
+  宿主，坐标等价）。结构测试同步把断言改为 `inst.mapToItem(widgetLayer, ...)`
+  并加注释锁定该坑。
+- 教训：qmllint 对 quickshell PanelWindow 类型不报（它把 PanelWindow 标为
+  uncreatable 后不再深查），此类「把窗口类型当 Item」的调用必须经部署实测
+  才能暴露 —— 与 A2/A5 部署修复同属「结构测试 + 静态 lint 覆盖不到的层」。

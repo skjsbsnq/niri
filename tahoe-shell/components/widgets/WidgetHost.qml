@@ -415,8 +415,11 @@ PanelWindow {
     }
 
     // ---- A6 拖动 API（Dock 四状态模式的宿主侧）----
-    // 坐标一律经实例 mapToItem(root) 转到宿主坐标系（A-C2，参照
-    // Dock.qml:948）；网格落点/冲突判定唯一来源 WidgetGrid.js。
+    // 坐标一律经实例 mapToItem(widgetLayer) 转到宿主坐标系（A-C2，参照
+    // Dock.qml:948）。目标必须是 QQuickItem：PanelWindow 不是 QQuickItem
+    // （部署实测 TypeError：Could not convert ... to const QQuickItem*），
+    // widgetLayer anchors.fill 宿主，坐标等价。网格落点/冲突判定唯一来源
+    // WidgetGrid.js。
     function configEntryFor(id) {
         var sid = String(id || "");
         for (var i = 0; i < root.widgetConfigs.length; i++) {
@@ -456,7 +459,7 @@ PanelWindow {
         var entry = root.configEntryFor(id);
         if (!entry)
             return;
-        var p = inst.mapToItem(root, localX, localY);
+        var p = inst.mapToItem(widgetLayer, localX, localY);
         var startX = Math.max(0, Grid.xPxForCell(entry.col, root.cellSize));
         var startY = Math.max(0, Grid.yPxForCell(entry.row, Grid.rowsForSize(entry.size),
             root.cellSize, root.screenHeight));
@@ -480,7 +483,7 @@ PanelWindow {
     function updateWidgetDrag(inst, localX, localY) {
         if (!root.dragActive || String(inst && inst.widgetId || "") !== root.dragWidgetId)
             return;
-        var p = inst.mapToItem(root, localX, localY);
+        var p = inst.mapToItem(widgetLayer, localX, localY);
         var maxX = Math.max(0, root.screenWidth - inst.width);
         var maxY = Math.max(0, root.screenHeight - inst.height);
         inst.x = Math.max(0, Math.min(maxX, p.x - root.dragStart.grabX));

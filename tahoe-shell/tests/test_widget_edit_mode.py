@@ -83,7 +83,7 @@ class WidgetGestureContractTests(unittest.TestCase):
         self.assertIn("root.widgetHost.cancelWidgetDrag(root)", base)
         self.assertIn("function cancelWidgetDrag(inst)", host)
         # Coordinates are mapped into host space (A-C2, Dock.qml:948).
-        self.assertIn("inst.mapToItem(root, localX, localY)", host)
+        self.assertIn("inst.mapToItem(widgetLayer, localX, localY)", host)
 
 
 class WidgetEditModeContractTests(unittest.TestCase):

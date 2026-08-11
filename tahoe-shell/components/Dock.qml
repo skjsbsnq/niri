@@ -81,7 +81,6 @@ PanelWindow {
     readonly property real dockSlideDistance: Math.max(Motion.dockAutohideSlidePx, dockSurfaceHeight)
     readonly property real dockSlideTarget: dockVisualHidden ? dockSlideDistance : 0
     readonly property real dockVisibleAmount: 1 - Math.min(1, Math.max(0, dockSlideOffset / Math.max(1, dockSlideDistance)))
-    readonly property real dockGlassInteraction: dockHovered ? dockVisibleAmount : 0.0
     readonly property real dockVisibleHeight: Math.max(0, Math.min(dockSurface.height, dockSurface.height - dockContentSlideOffset))
     // Peak mag paints ABOVE the glass shelf (macOS). Layer is taller than the
     // glass; glassClip stays TRUE so compositor blur is rounded. QML children
@@ -1202,7 +1201,10 @@ PanelWindow {
             regionWidth: Math.round(dockChrome.width)
             regionHeight: Math.round(root.dockVisibleHeight)
             // R14: raw value; C++ TahoeGlassRegion::setInteraction is the sole 1/50 quantize.
-            interaction: root.dockGlassInteraction
+            // Keep the shelf material at its rest state. Pointer hover still
+            // drives reveal, labels, magnification and reorder, but must not
+            // boost refraction/edge light across the entire Dock.
+            interaction: 0.0
             materialAlpha: 1.0 - root.fullscreenTransition
             glassEnabled: root.dockGlassActive && root.dockVisibleHeight > 0.5 && root.fullscreenTransition < 0.99
         }

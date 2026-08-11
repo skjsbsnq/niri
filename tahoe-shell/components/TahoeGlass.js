@@ -34,6 +34,10 @@ var FillTopBar = "#33ffffff";
 var FillPill = "#59ffffff";
 var FillLauncher = "#3dffffff";
 var FillBackdrop = "#26ffffff";
+// Desktop widgets use the macOS dark widget plate: the wallpaper remains
+// softly visible through blur, while white content keeps stable contrast even
+// over bright artwork. This is intentionally denser than menu liquid glass.
+var FillWidget = "#b82c2c2e";
 
 var StrokePanel = "#24ffffff";
 var StrokePanelBright = "#34ffffff";
@@ -42,6 +46,7 @@ var StrokeTopBar = "#14ffffff";
 var StrokePill = "#48ffffff";
 var StrokeLauncher = "#32ffffff";
 var StrokeToast = "#34ffffff";
+var StrokeWidget = "#2effffff";
 
 function radiusForMaterial(material) {
     switch (material) {

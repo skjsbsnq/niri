@@ -36,7 +36,10 @@ Item {
     property real cellSize: 100
 
     // ---- 玻璃（每小部件 1 个 region，见 P-5 计数）----
-    property string material: GlassStyle.MaterialMenu
+    // macOS desktop widgets read as calm, dense plates rather than interactive
+    // menu glass. Keep the compositor blur/shadow, but use the lower-refraction
+    // panel profile and a dedicated dark backplate for reliable contrast.
+    property string material: GlassStyle.MaterialPanel
     property real materialAlpha: 1
     property bool glassBlur: true
     property bool glassShadow: true
@@ -97,6 +100,8 @@ Item {
         materialAlpha: root.materialAlpha
         blur: root.glassBlur
         shadow: root.glassShadow
+        fillColor: GlassStyle.FillWidget
+        strokeColor: GlassStyle.StrokeWidget
         regionRadius: GlassStyle.RadiusPanelCompact
         regionItem: root
         useItemRegion: true

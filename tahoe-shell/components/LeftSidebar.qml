@@ -26,6 +26,15 @@ PanelWindow {
     property string monoFontFamily: "Noto Sans Mono CJK SC"
     property bool useSpring: false
     property bool backgroundEffectsAllowed: true
+    // A4：小部件库 tab。widgetCatalog / widgetInstances 由 shell 注入
+    // （单一来源 WidgetHost.qml，G-6）；addWidgetRequested 在点击库条目
+    // 时发出；widgetAddFailed 由 shell 回灌（桌面无空位 → 库 tab 显示
+    // 可见反馈）。widgetInstances 用于把「已在桌面」的条目标记为已添加
+    // （宿主配置唯一 id，重复添加会被拒绝；不标记会误报「桌面已满」）。
+    property var widgetCatalog: ({})
+    property var widgetInstances: ({})
+    signal addWidgetRequested(string id)
+    property bool widgetAddFailed: false
 
     readonly property int screenWidth: Math.max(1, Number(root.screen && root.screen.width) || root.width)
     readonly property int screenHeight: Math.max(1, Number(root.screen && root.screen.height) || root.height)
@@ -165,7 +174,7 @@ PanelWindow {
 
                 Rectangle {
                     id: segmentThumb
-                    width: (parent.width - 4) / 2
+                    width: (parent.width - 4) / 3
                     height: parent.height - 4
                     radius: 15
                     // Driven by moveSegmentThumb — avoids dual interceptors.
@@ -193,7 +202,7 @@ PanelWindow {
                     }
 
                     function targetXFor(tab) {
-                        return 2 + (tab === "weather" ? width : 0);
+                        return 2 + (tab === "widgets" ? width * 2 : (tab === "weather" ? width : 0));
                     }
 
                     function moveTo(tab, animate) {
@@ -223,17 +232,24 @@ PanelWindow {
                     spacing: 0
 
                     SegmentLabel {
-                        width: parent.width / 2
+                        width: parent.width / 3
                         height: parent.height
                         label: "系统"
                         active: root.currentTab === "system"
                     }
 
                     SegmentLabel {
-                        width: parent.width / 2
+                        width: parent.width / 3
                         height: parent.height
                         label: "天气"
                         active: root.currentTab === "weather"
+                    }
+
+                    SegmentLabel {
+                        width: parent.width / 3
+                        height: parent.height
+                        label: "小部件"
+                        active: root.currentTab === "widgets"
                     }
                 }
 
@@ -241,7 +257,8 @@ PanelWindow {
                     anchors.fill: parent
                     cursorShape: Qt.PointingHandCursor
                     onClicked: function(mouse) {
-                        var tab = mouse.x < width / 2 ? "system" : "weather";
+                        var tab = mouse.x < width / 3 ? "system"
+                            : (mouse.x < width * 2 / 3 ? "weather" : "widgets");
                         if (tab !== root.currentTab) {
                             root.currentTab = tab;
                             root.currentTabChangeRequested(tab);
@@ -292,6 +309,32 @@ PanelWindow {
                     useSpring: root.useSpring
                     backgroundEffectsAllowed: root.backgroundEffectsAllowed
                     onOpenWeatherSettingsRequested: root.openWeatherSettingsRequested()
+
+                    Behavior on opacity {
+                        NumberAnimation { duration: Motion.fadeFast(root.settingsService); easing.type: Motion.standardDecel }
+                    }
+                }
+
+                // A4：第三个 tab —— 小部件库（文字条目；实时预览属 A5）。
+                // 点击条目 → addRequested → root 转发 addWidgetRequested，
+                // shell 负责添加 + 关闭侧栏；失败时 shell 回灌
+                // widgetAddFailed → 库内横幅反馈（不静默失败）。
+                // 发出前先复位失败标志：连续两次失败都能重新触发横幅。
+                LeftSidebarWidgetLibrary {
+                    anchors.fill: parent
+                    opacity: root.currentTab === "widgets" ? 1 : 0
+                    visible: root.currentTab === "widgets" || opacity > 0.01
+                    widgetCatalog: root.widgetCatalog
+                    presentWidgets: root.widgetInstances
+                    settingsService: root.settingsService
+                    darkMode: root.darkMode
+                    cardsEnter: root.cardsEnter && root.currentTab === "widgets"
+                    useSpring: root.useSpring
+                    addFailed: root.widgetAddFailed
+                    onAddRequested: function(id) {
+                        root.widgetAddFailed = false;
+                        root.addWidgetRequested(id);
+                    }
 
                     Behavior on opacity {
                         NumberAnimation { duration: Motion.fadeFast(root.settingsService); easing.type: Motion.standardDecel }

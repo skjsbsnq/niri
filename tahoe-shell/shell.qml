@@ -634,6 +634,36 @@ ShellRoot {
         }
     }
 
+    // A4: widgets.json 单一读写所有者（对抗审查 C2：多屏共用同一文件，
+    // 各屏各自持有 FileView 会以陈旧缓存互相覆盖丢配置）。单一 FileView +
+    // 内存镜像 widgetConfigText（始终反映磁盘内容 + 已排队未落盘写；
+    // FileView.setText 异步，text() 在写完成前返回旧值）。各屏 WidgetHost
+    // 只读注入的 FileView 切片自己的屏段；写经 persistConfigRequested
+    // 集中到此处合并后落盘（G-6 单一路径）。
+    FileView {
+        id: widgetConfigFile
+        path: Quickshell.stateDir + "/widgets.json"
+        blockLoading: false
+        blockAllReads: false
+        blockWrites: false
+        printErrors: false
+    }
+    property string widgetConfigText: ""
+    // 首次加载完成标志（含失败）：各屏 WidgetHost 依此在自身创建时切片
+    // （FileView 先于宿主创建，加载可能已完成，onLoaded 信号会错过）。
+    property bool widgetConfigLoaded: false
+    Connections {
+        target: widgetConfigFile
+        function onLoaded() {
+            shell.widgetConfigText = widgetConfigFile.text();
+            shell.widgetConfigLoaded = true;
+        }
+        function onLoadFailed() {
+            shell.widgetConfigText = widgetConfigFile.text();
+            shell.widgetConfigLoaded = true;
+        }
+    }
+
     AppMenu {
         id: appMenu
         windowsService: niri
@@ -908,6 +938,27 @@ ShellRoot {
                 batteryService: battery
                 weatherService: weather
                 systemStatsService: systemStats
+                configFile: widgetConfigFile
+                configLoaded: shell.widgetConfigLoaded
+                onPersistConfigRequested: function(screenKey, configs) {
+                    // 以共享镜像为基底合并本屏段（镜像含未落盘 pending 写，
+                    // 多屏顺序添加互不覆盖）→ 更新镜像 → 单次异步落盘。
+                    var parsed = {};
+                    var raw = String(shell.widgetConfigText || "");
+                    if (raw && raw.trim().length > 0) {
+                        try {
+                            var p = JSON.parse(raw);
+                            if (p && typeof p === "object")
+                                parsed = p;
+                        } catch (e) {
+                            console.warn("[widgets] config parse failed (persist): " + e);
+                        }
+                    }
+                    parsed[String(screenKey || "default")] = configs;
+                    var next = JSON.stringify(parsed, null, 2);
+                    shell.widgetConfigText = next;
+                    widgetConfigFile.setText(next);
+                }
                 // A3: 系统监控小部件在场且宿主可见 → 聚合激活既有
                 // SystemStats（同一服务同一进程，非新唤醒源）；宿主
                 // 隐藏或小部件移除 → 撤下需求，进程停止。
@@ -1018,6 +1069,8 @@ ShellRoot {
                     open: shell.navigationOpenFor(shell.leftSidebarOpen, shell.leftSidebarScreenName, modelData)
                     currentTab: shell.leftSidebarCurrentTab
                     panelWidth: shell.panelWidth
+                    widgetCatalog: widgetHost.widgetCatalog
+                    widgetInstances: widgetHost.widgetInstances
                     systemStatsService: systemStats
                     weatherService: weather
                     settingsService: desktopSettings
@@ -1030,6 +1083,16 @@ ShellRoot {
                     onCloseRequested: shell.closeLeftSidebar()
                     onCurrentTabChangeRequested: function(tab) {
                         shell.leftSidebarCurrentTab = String(tab || "system");
+                    }
+                    // A4 库 tab：点击条目 → 本屏 WidgetHost 找空位添加；
+                    // 成功 → 关闭侧栏；桌面无空位 → 回灌 widgetAddFailed
+                    // 让库 tab 显示可见反馈（不静默失败，侧栏保持打开）。
+                    onAddWidgetRequested: function(id) {
+                        if (widgetHost.addWidget(id)) {
+                            shell.closeLeftSidebar();
+                        } else {
+                            leftSidebar.widgetAddFailed = true;
+                        }
                     }
                     onOpenProcessMenuRequested: function(proc, anchorRect) {
                         // 系统页右键进程行 → 实例化 ProcessMenu。先登记屏幕/proc/锚点，

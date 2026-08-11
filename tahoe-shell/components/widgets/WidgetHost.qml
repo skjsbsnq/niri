@@ -2,7 +2,6 @@ pragma ComponentBehavior: Bound
 
 import QtQuick
 import Quickshell
-import Quickshell.Io
 import Quickshell.Wayland
 import ".."
 import "../TahoeGlass.js" as GlassStyle
@@ -81,7 +80,7 @@ PanelWindow {
     readonly property int widgetMaxHeight: Math.max(1, Math.round(screenHeight))
 
     // ---- 配置 ----
-    readonly property string configPath: Quickshell.stateDir + "/widgets.json"
+    // configPath 已提升到 shell 级共享 FileView（A4 单一所有者，见下）。
     readonly property string screenKey: String(root.screen && root.screen.name || "default")
 
     // ---- 状态 ----
@@ -89,16 +88,31 @@ PanelWindow {
     property int overflowCount: 0       // 未显示条数（本屏清洗剔除）
     property bool loadingComplete: false
 
-    // 小部件注册表：id → {source, name}。A4 库 tab 复用同一注册表。
+    // 小部件注册表：id → {source, name, sizes, defaultSize}。
+    // 全仓库唯一注册表（A4 库 tab 复用；禁止另建第二份，G-6）。
     // source 相对本文件所在目录（components/widgets/）。
+    // sizes：该小部件支持的可选尺寸（A4 库 tab 展示、A7 换档契约）；
     // defaultSize：A4 库 tab / addWidget 的默认规格（天气/日历为 medium，
-    // 按 small 创建会挤压布局）。
+    // 按 small 创建会挤压布局）。defaultSize 必须在 sizes 内。
     readonly property var widgetCatalog: ({
-        "battery": { "source": "BatteryWidget.qml", "name": "电池", "defaultSize": "small" },
-        "weather": { "source": "WeatherWidget.qml", "name": "天气", "defaultSize": "medium" },
-        "calendar": { "source": "CalendarWidget.qml", "name": "日历", "defaultSize": "medium" },
-        "system-monitor": { "source": "SystemMonitorWidget.qml", "name": "系统监控", "defaultSize": "small" }
+        "battery": { "source": "BatteryWidget.qml", "name": "电池", "sizes": ["small"], "defaultSize": "small" },
+        "weather": { "source": "WeatherWidget.qml", "name": "天气", "sizes": ["medium"], "defaultSize": "medium" },
+        "calendar": { "source": "CalendarWidget.qml", "name": "日历", "sizes": ["medium"], "defaultSize": "medium" },
+        "system-monitor": { "source": "SystemMonitorWidget.qml", "name": "系统监控", "sizes": ["small"], "defaultSize": "small" }
     })
+
+    // ---- 配置读写（A4 起单一所有者）----
+    // widgets.json 由 shell 级共享 FileView + 内存镜像统一读写
+    // （多屏共用同一文件：各屏各自持有 FileView 会以陈旧缓存互相覆盖
+    // 丢配置，对抗审查 C2）。本宿主只读注入的 FileView 切片自己的屏段；
+    // 写经 persistConfigRequested 提交给 shell 合并后落盘（G-6 单一路径）。
+    property var configFile: null
+    // 共享 FileView 是否已完成首次加载（含失败，如文件不存在）。shell 在
+    // onLoaded/onLoadFailed 时置真；宿主可能在加载完成后才被创建（单文件
+    // 单一所有者，FileView 先于 Variants 创建），故用标志 + onCompleted
+    // 兜底，而不是只依赖 onLoaded 信号（对抗审查 C2 修复的时序面）。
+    property bool configLoaded: false
+    signal persistConfigRequested(string screenKey, var configs)
 
     // mask 并集引用的小部件对象（buildUnionRegion 填充）。必须挂在
     // root 属性上：Qt.createQmlObject 的字符串只在该 QML 文档的 context
@@ -224,20 +238,16 @@ PanelWindow {
     }
 
     // ---- 配置读写（FileView；T07 非阻塞写状态机）----
-    FileView {
-        id: configFile
-        path: root.configPath
-        blockLoading: false
-        blockAllReads: false
-        blockWrites: false
-        printErrors: false
-        onLoaded: root.loadConfig()
-        onLoadFailed: root.loadConfig()
+    // 共享 FileView 由 shell 注入（单一所有者，见上）。初次加载完成
+    // → 切片 + 建实例；写完成只发 saved 不发 loaded，不会触发重载重建。
+    onConfigLoadedChanged: {
+        if (root.configLoaded)
+            root.loadConfig();
     }
 
     // 启动时异步读；完成后按屏切片 + 清洗 + 建实例。
     function loadConfig() {
-        var raw = configFile.text();
+        var raw = root.configFile ? String(root.configFile.text() || "") : "";
         var parsed = null;
         if (raw && raw.trim().length > 0) {
             try {
@@ -270,24 +280,22 @@ PanelWindow {
     function persistConfig() {
         if (!root.loadingComplete)
             return;
-        var raw = configFile.text();
-        var parsed = {};
-        if (raw && raw.trim().length > 0) {
-            try {
-                var p = JSON.parse(raw);
-                if (p && typeof p === "object")
-                    parsed = p;
-            } catch (e) {
-                console.warn("[widgets] config parse failed (persist): " + e);
-            }
-        }
-        parsed[root.screenKey] = root.widgetConfigs;
-        configFile.setText(JSON.stringify(parsed, null, 2));
+        // 提交给 shell 单一所有者合并写盘（读共享镜像而非本地陈旧缓存，
+        // 多屏顺序添加不互相覆盖，对抗审查 C2）。
+        root.persistConfigRequested(String(root.screenKey || "default"), root.widgetConfigs);
     }
 
     // ---- 对外 API（A4 库 tab / A6 编辑模式接入点）----
     // 添加小部件：找空位 → 建实例 → 写盘。
     function addWidget(id) {
+        // P-7 早退门（对抗审查 C1）：初次加载完成前不得添加。否则会在空
+        // 配置上建实例，随后 loadConfig 用磁盘内容覆盖重建销毁它——
+        // 「假成功 + 未持久化 + 无反馈」的启动竞态。返回 false 让库页
+        // 显示可见失败反馈。
+        if (!root.loadingComplete) {
+            console.warn("[widgets] addWidget before config load complete");
+            return false;
+        }
         var catalog = root.widgetCatalog[String(id || "")];
         if (!catalog)
             return false;
@@ -334,6 +342,10 @@ PanelWindow {
     onPopupActiveChanged: root.updateMask()
 
     Component.onCompleted: {
+        // 共享 FileView 可能已在宿主创建前完成加载：已加载则直接切片
+        // （onConfigLoadedChanged 只覆盖创建后到达的置真）。
+        if (root.configLoaded)
+            root.loadConfig();
         root.updateMask();
     }
 

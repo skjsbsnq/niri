@@ -18,12 +18,12 @@ import "WidgetGrid.js" as Grid
 // - mask：顶栏弹层打开 → 置空（点击直达 PopupDismissLayer 收回弹层）；
 //   否则 → 各小部件 Item 并集（小部件接收点击，空白穿透到桌面）
 //
-// 网格：4×6 单元格（屏宽 4 列、屏高方向最多 6 行），每屏一份宿主，
-// 配置按屏持久化（widgets.json 以屏幕名为根，数组格式 [{id,size,col,row}]）。
+// 网格：按屏铺满（gridCols×gridRows = floor(屏宽/高 ÷ cellSize)，cellSize
+// 固定 ≤90px），小部件可摆放到桌面任意位置；配置按屏持久化
+// （widgets.json 以屏幕名为根，数组格式 [{id,size,col,row}]）。
 //
-// region 计数保护（P-5）：每个小部件 1 个 region；每屏网格容量 ≤24，
-// 单屏不可能超 32，但配置文件跨屏总条目可能超限（最多 24×N），故
-// 加载时对【每屏条目上限 24】截断，并把被截断的条目数计入超限横幅
+// region 计数保护（P-5）：每个小部件 1 个 region；每屏条目上限
+// widgetLimit = min(32, 网格容量)，加载时超限截断并计入超限横幅
 // （可见反馈，不静默失效）。
 PanelWindow {
     id: root
@@ -76,6 +76,15 @@ PanelWindow {
     readonly property int screenWidth: Math.max(1, Math.round(Number(root.screen && root.screen.width) || 1))
     readonly property int screenHeight: Math.max(1, Math.round(Number(root.screen && root.screen.height) || 1))
     readonly property real cellSize: Math.min(Math.max(1, screenWidth / Grid.GRID_COLS), 90)
+    // ---- 全屏网格（A6 部署反馈修复）----
+    // cellSize 固定（≤90px，小部件尺寸语义不变）；列/行数按屏铺满：
+    // floor(屏宽/高 ÷ cellSize)，小部件可摆放到桌面任意位置（不再只限
+    // 左下角 4×6）。取 floor 保证网格矩形不超出屏幕。
+    readonly property int gridCols: Math.max(Grid.GRID_COLS, Math.floor(root.screenWidth / root.cellSize))
+    readonly property int gridRows: Math.max(Grid.GRID_ROWS, Math.floor(root.screenHeight / root.cellSize))
+    // 每屏条目上限 = min(32, 网格容量)：P-5 region 上限（每小部件 1 个
+    // region），超限在加载/添加时截断并计入超限横幅（可见反馈）。
+    readonly property int widgetLimit: Math.min(32, root.gridCols * root.gridRows)
     // 小部件矩形上限（整列整行占满时需 clamp 到屏内）。
     readonly property int widgetMaxWidth: Math.max(1, Math.round(screenWidth))
     readonly property int widgetMaxHeight: Math.max(1, Math.round(screenHeight))
@@ -123,7 +132,7 @@ PanelWindow {
     property var maskWidgetItems: []
 
     // ---- 网格状态（单一来源：WidgetGrid.js 的 GridState）----
-    readonly property var gridState: Grid.gridStateFromConfig(root.widgetConfigs)
+    readonly property var gridState: Grid.gridStateFromConfig(root.widgetConfigs, root.gridCols, root.gridRows)
 
     // ---- 子项生成 ----
     // 实例表：id → 实例（QObject）。动态创建（配置异步到达，无法静态 Loader）。
@@ -336,11 +345,13 @@ PanelWindow {
             list = Array.isArray(parsed[root.screenKey]) ? parsed[root.screenKey] : [];
 
         // 清洗（越界/重叠/重复剔除）→ 得出实际可显示条目与未显示数。
-        var state = Grid.gridStateFromConfig(list);
-        root.widgetConfigs = Grid.serializeEntries(state);
-        // 未显示数 = 本屏剔除条目（每屏独立 surface，region 上限按 surface
-        // 计，跨屏条目不参与本屏超限；多屏混算会产生假阳性）。
-        root.overflowCount = state.removed.length;
+        var state = Grid.gridStateFromConfig(list, root.gridCols, root.gridRows);
+        // 每屏条目上限截断（P-5 region 上限 32）：超出部分计入未显示数。
+        var kept = state.grid.slice(0, root.widgetLimit);
+        root.widgetConfigs = Grid.serializeEntries({ "grid": kept, "removed": [] });
+        // 未显示数 = 本屏剔除条目 + 超上限截断条数（每屏独立 surface，
+        // region 上限按 surface 计，跨屏条目不参与本屏超限）。
+        root.overflowCount = state.removed.length + (state.grid.length - kept.length);
         root.rebuildWidgets();
         root.loadingComplete = true;
     }
@@ -376,7 +387,8 @@ PanelWindow {
         var sizes = Array.isArray(catalog.sizes) ? catalog.sizes : [];
         var resolved = String(sizes.indexOf(String(size || "")) >= 0
             ? String(size) : String(catalog.defaultSize || "small"));
-        var slot = Grid.findSlot(root.gridState, Grid.colsForSize(resolved), Grid.rowsForSize(resolved));
+        var slot = Grid.findSlot(root.gridState, Grid.colsForSize(resolved), Grid.rowsForSize(resolved),
+            root.gridCols, root.gridRows, root.widgetLimit);
         if (!slot)
             return false;
 
@@ -386,7 +398,7 @@ PanelWindow {
             "col": slot.col,
             "row": slot.row
         }]);
-        var nextState = Grid.gridStateFromConfig(nextConfig);
+        var nextState = Grid.gridStateFromConfig(nextConfig, root.gridCols, root.gridRows);
         if (nextState.removed.length > 0)
             return false;
 
@@ -496,8 +508,10 @@ PanelWindow {
         if (!root.dragActive || String(inst && inst.widgetId || "") !== root.dragWidgetId)
             return;
         var start = root.dragStart;
-        var target = Grid.snapPosition(start.cols, start.rows, inst.x, inst.y, root.cellSize, root.screenHeight);
-        var movable = Grid.canPlace(root.gridState.grid, start.id, target.col, target.row, start.cols, start.rows);
+        var target = Grid.snapPosition(start.cols, start.rows, inst.x, inst.y, root.cellSize,
+            root.screenHeight, root.gridCols, root.gridRows);
+        var movable = Grid.canPlace(root.gridState.grid, start.id, target.col, target.row,
+            start.cols, start.rows, root.gridCols, root.gridRows);
         if (movable && (target.col !== start.col || target.row !== start.row)) {
             root.updateConfigPosition(start.id, target.col, target.row);
             root.animateWidgetTo(inst, Grid.xPxForCell(target.col, root.cellSize),

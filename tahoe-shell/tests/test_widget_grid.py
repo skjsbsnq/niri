@@ -128,6 +128,52 @@ class WidgetGridTests(unittest.TestCase):
         )
         self.assertEqual(out, [4, 6, 24])
 
+    def test_full_screen_grid_dims_parameterized(self) -> None:
+        # A6 部署反馈修复：宿主按屏传入 gridCols/gridRows（全屏网格）。
+        # 默认参数保持 4×6（库预览/单测/窄屏）；传入更大维度时函数必须
+        # 在整个网格上工作。
+        out = self.run_grid(
+            "const cfg = [{id:'a', size:'small', col:20, row:10}]; "
+            "const st = gridStateFromConfig(cfg, 24, 14); "
+            "const slot = findSlot(st, 2, 2, 24, 14, 32); "
+            "JSON.stringify({n: st.grid.length, slot})"
+        )
+        # col 20 row 10 在全屏网格（24×14）里是合法位置（默认 4×6 会剔除）；
+        # findSlot 在整个网格上找第一个可容纳空位。
+        self.assertEqual(out["n"], 1)
+        self.assertIsNotNone(out["slot"])
+        self.assertLessEqual(out["slot"]["col"] + 2, 24)
+        self.assertLessEqual(out["slot"]["row"] + 2, 14)
+
+    def test_full_screen_snap_and_can_place_dims(self) -> None:
+        out = self.run_grid(
+            "const t1 = snapPosition(2, 2, 1900, 200, 90, 1280, 22, 14); "
+            "const t2 = snapPosition(2, 2, 1900, 200, 90, 1280); "
+            "const g = [{id:'a', gridX: 20, gridY: 10, cols: 2, rows: 2}]; "
+            "const ok1 = canPlace(g, 'b', 20, 10, 2, 2, 22, 14); "
+            "const ok2 = canPlace(g, 'b', 18, 10, 2, 2, 22, 14); "
+            "JSON.stringify({t1, t2, ok1, ok2})"
+        )
+        # 全屏网格（22×14）下 1900,200 → 右上角合法格 col=21→钳到 20；
+        # 默认 4×6 则被钳到 2,4。
+        self.assertEqual(out["t1"], {"col": 20, "row": 10})
+        self.assertEqual(out["t2"], {"col": 2, "row": 4})
+        self.assertFalse(out["ok1"])
+        self.assertTrue(out["ok2"])
+
+    def test_find_slot_respects_custom_limit(self) -> None:
+        out = self.run_grid(
+            "const st = gridStateFromConfig(["
+            "{id:'a', size:'small', col:0, row:0},"
+            "{id:'b', size:'small', col:2, row:0},"
+            "{id:'c', size:'small', col:0, row:2}"
+            "], 24, 14); "
+            "const slot = findSlot(st, 2, 2, 24, 14, 3); "
+            "JSON.stringify({slot, n: st.grid.length})"
+        )
+        # limit=3 已满 → null（即使网格还有空间）。
+        self.assertIsNone(out["slot"])
+
 class WidgetGridA6DragTests(unittest.TestCase):
     """A6 drag placement pure functions: snapPosition / canPlace / px helpers.
 

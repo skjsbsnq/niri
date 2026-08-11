@@ -110,3 +110,19 @@
 - 教训：qmllint 对 quickshell PanelWindow 类型不报（它把 PanelWindow 标为
   uncreatable 后不再深查），此类「把窗口类型当 Item」的调用必须经部署实测
   才能暴露 —— 与 A2/A5 部署修复同属「结构测试 + 静态 lint 覆盖不到的层」。
+
+## 部署反馈修复记录（2026-08-11，第二次）
+
+**运行时问题（用户反馈）**：所有小部件只能集中在左下角一小块区域，无法自由
+拖动到桌面其他位置。
+- 根因：网格固定 4×6 单元格且 cellSize 封顶 90px → 2048×1280 屏上只覆盖
+  360×540 左下角；拖动落点 snapPosition 一律钳回该块（设计缺陷，A2 网格
+  语义在 A6 拖动暴露）。
+- 修复：网格按屏铺满 —— gridCols/gridRows = floor(屏宽/高 ÷ cellSize)
+  （cellSize 固定 ≤90px，小部件尺寸语义不变）；WidgetGrid.js 各边界函数
+  参数化 gridCols/gridRows（默认 4×6 保留给库预览/单测/窄屏）；每屏条目
+  上限 widgetLimit = min(32, 网格容量) 守住 P-5 region 上限，加载/添加时
+  截断并计入超限横幅。
+- 验证：全量 pytest 1140 passed；node 实测全屏网格的
+  gridStateFromConfig/findSlot/snapPosition/canPlace；部署后运行探针确认
+  拖到右上角可落位到 (20,10) 附近而非钳回左下角。

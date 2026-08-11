@@ -236,7 +236,9 @@ class WidgetBaseContractTests(unittest.TestCase):
 
 class WidgetGridContractTests(unittest.TestCase):
     def test_grid_limits_aligned_with_region_cap(self) -> None:
-        # P-5: region cap 32; one region per widget, per-screen grid ≤ 16.
+        # P-5: region cap 32; one region per widget. Grid constants are the
+        # DEFAULTS (library/tests/small screens); the host computes a
+        # per-screen full-desktop grid and passes dims into every Grid call.
         text = GRID.read_text(encoding="utf-8")
         self.assertIn("LIMIT_ITEMS = 24", text)
         self.assertIn("GRID_COLS = 4", text)
@@ -245,6 +247,27 @@ class WidgetGridContractTests(unittest.TestCase):
         # cap source lives in niri tahoe_glass; a parallel constant would
         # drift). A comment mention is fine — it documents the shared cap.
         self.assertNotIn("var LIMIT_REGIONS", text)
+
+    def test_host_grid_covers_full_screen_with_region_cap(self) -> None:
+        # A6 部署反馈修复：固定 4×6 只覆盖左下角 360×540；网格必须按屏
+        # 铺满（列/行数 = floor(屏宽/高 ÷ cellSize)），且每屏条目上限
+        # widgetLimit = min(32, 网格容量) 守住 P-5 region 上限。
+        host = HOST.read_text(encoding="utf-8")
+        self.assertIn("readonly property int gridCols:", host)
+        self.assertIn("Math.max(Grid.GRID_COLS, Math.floor(root.screenWidth / root.cellSize))", host)
+        self.assertIn("readonly property int gridRows:", host)
+        self.assertIn("Math.max(Grid.GRID_ROWS, Math.floor(root.screenHeight / root.cellSize))", host)
+        self.assertIn("readonly property int widgetLimit: Math.min(32, root.gridCols * root.gridRows)", host)
+        # Every Grid call that depends on bounds receives the per-screen dims.
+        self.assertIn("Grid.gridStateFromConfig(root.widgetConfigs, root.gridCols, root.gridRows)", host)
+        self.assertIn("Grid.gridStateFromConfig(list, root.gridCols, root.gridRows)", host)
+        self.assertIn("Grid.findSlot(root.gridState, Grid.colsForSize(resolved), Grid.rowsForSize(resolved),", host)
+        self.assertIn("root.gridCols, root.gridRows, root.widgetLimit);", host)
+        self.assertIn("Grid.snapPosition(start.cols, start.rows, inst.x, inst.y, root.cellSize,", host)
+        self.assertIn("root.screenHeight, root.gridCols, root.gridRows);", host)
+        self.assertIn("Grid.canPlace(root.gridState.grid, start.id, target.col, target.row,", host)
+        # Load truncates at widgetLimit and counts the dropped entries.
+        self.assertIn("var kept = state.grid.slice(0, root.widgetLimit);", host)
 
 
 class WidgetA5SizeSelectionContractTests(unittest.TestCase):
@@ -381,10 +404,11 @@ class WidgetA3ContractTests(unittest.TestCase):
         self.assertIn("onHostVisibleChanged: root.refreshSystemStatsDemand()", text)
 
     def test_overflow_count_is_per_screen_removed(self) -> None:
-        # P-5 横幅数学：未显示数 = 本屏清洗剔除（越界/重叠/重复）。
+        # P-5 横幅数学：未显示数 = 本屏清洗剔除（越界/重叠/重复）
+        # + 每屏条目上限截断（widgetLimit = min(32, 网格容量)）。
         # 禁止把全文件条目数与每屏 LIMIT 混算（单屏双计 + 多屏假阳性）。
         text = HOST.read_text(encoding="utf-8")
-        self.assertIn("root.overflowCount = state.removed.length;", text)
+        self.assertIn("root.overflowCount = state.removed.length + (state.grid.length - kept.length);", text)
         self.assertNotIn("totalEntryCount", text)
         self.assertIn("小部件配置超限", text)
 

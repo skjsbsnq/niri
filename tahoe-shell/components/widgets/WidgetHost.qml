@@ -75,13 +75,24 @@ PanelWindow {
     // ---- 屏与网格 ----
     readonly property int screenWidth: Math.max(1, Math.round(Number(root.screen && root.screen.width) || 1))
     readonly property int screenHeight: Math.max(1, Math.round(Number(root.screen && root.screen.height) || 1))
-    readonly property real cellSize: Math.min(Math.max(1, screenWidth / Grid.GRID_COLS), 90)
+    // 顶栏保留区（TopBar.qml implicitHeight/exclusiveZone = 40）：小部件
+    // 最高只能贴着顶栏下沿，不得进入顶栏区域（A6 部署反馈）。
+    readonly property int topReserved: 40
     // ---- 全屏网格（A6 部署反馈修复）----
-    // cellSize 固定（≤90px，小部件尺寸语义不变）；列/行数按屏铺满：
-    // floor(屏宽/高 ÷ cellSize)，小部件可摆放到桌面任意位置（不再只限
-    // 左下角 4×6）。取 floor 保证网格矩形不超出屏幕。
+    // cellSize 宽度方向 ≤90px（小部件尺寸语义不变）；垂直方向自适应使
+    // 网格恰好铺满 [topReserved, screenHeight] —— 最高行的像素上缘恒等于
+    // topReserved（贴着顶栏，不会顶进顶栏；旧实现固定 90px 时 1240px
+    // 无法整除，最顶行要么进顶栏要么留 70px 空隙）。
+    readonly property real cellSize: {
+        var desired = Math.min(Math.max(1, root.screenWidth / Grid.GRID_COLS), 90);
+        var usable = Math.max(1, root.screenHeight - root.topReserved);
+        var rows = Math.max(Grid.GRID_ROWS, Math.ceil(usable / desired));
+        return Math.min(desired, usable / rows);
+    }
+    // 列数 floor 保证不超屏宽；行数按顶栏以下可用高度铺满（ceil 与
+    // cellSize 的 usable/rows 定义一致，网格矩形 = [topReserved, 屏底]）。
     readonly property int gridCols: Math.max(Grid.GRID_COLS, Math.floor(root.screenWidth / root.cellSize))
-    readonly property int gridRows: Math.max(Grid.GRID_ROWS, Math.floor(root.screenHeight / root.cellSize))
+    readonly property int gridRows: Math.max(Grid.GRID_ROWS, Math.ceil((root.screenHeight - root.topReserved) / root.cellSize))
     // 每屏条目上限 = min(32, 网格容量)：P-5 region 上限（每小部件 1 个
     // region），超限在加载/添加时截断并计入超限横幅（可见反馈）。
     readonly property int widgetLimit: Math.min(32, root.gridCols * root.gridRows)
@@ -349,6 +360,15 @@ PanelWindow {
         // 每屏条目上限截断（P-5 region 上限 32）：超出部分计入未显示数。
         var kept = state.grid.slice(0, root.widgetLimit);
         root.widgetConfigs = Grid.serializeEntries({ "grid": kept, "removed": [] });
+        // 顶栏保留区清洗：进入顶栏区的旧条目（修复前可能已写入）钳到
+        // 贴着顶栏的最高行 —— 网格与保留区对齐后该行的像素上缘恰为
+        // topReserved。只重定位、不剔除，不计入超限横幅。
+        for (var i = 0; i < root.widgetConfigs.length; i++) {
+            var entryRows = Grid.rowsForSize(root.widgetConfigs[i].size);
+            var maxRow = Math.max(0, root.gridRows - entryRows);
+            if (root.widgetConfigs[i].row > maxRow)
+                root.widgetConfigs[i].row = maxRow;
+        }
         // 未显示数 = 本屏剔除条目 + 超上限截断条数（每屏独立 surface，
         // region 上限按 surface 计，跨屏条目不参与本屏超限）。
         root.overflowCount = state.removed.length + (state.grid.length - kept.length);
@@ -497,9 +517,11 @@ PanelWindow {
             return;
         var p = inst.mapToItem(widgetLayer, localX, localY);
         var maxX = Math.max(0, root.screenWidth - inst.width);
-        var maxY = Math.max(0, root.screenHeight - inst.height);
+        // 垂直方向钳在顶栏以下（minY = topReserved）：拖动中也不会顶进顶栏。
+        var minY = Math.max(0, root.topReserved);
+        var maxY = Math.max(minY, root.screenHeight - inst.height);
         inst.x = Math.max(0, Math.min(maxX, p.x - root.dragStart.grabX));
-        inst.y = Math.max(0, Math.min(maxY, p.y - root.dragStart.grabY));
+        inst.y = Math.max(minY, Math.min(maxY, p.y - root.dragStart.grabY));
     }
 
     // onReleased 侧：网格吸附 → 合法则更新配置 + 落位动画 + 写盘一次

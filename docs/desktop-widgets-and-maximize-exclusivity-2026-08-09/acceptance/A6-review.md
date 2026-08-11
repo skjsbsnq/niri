@@ -126,3 +126,17 @@
 - 验证：全量 pytest 1140 passed；node 实测全屏网格的
   gridStateFromConfig/findSlot/snapPosition/canPlace；部署后运行探针确认
   拖到右上角可落位到 (20,10) 附近而非钳回左下角。
+
+## 部署反馈修复记录（2026-08-11，第三次）
+
+**运行时问题（用户反馈）**：往左上角放小部件很容易超过顶栏，没法刚好贴着顶栏。
+- 根因：网格垂直方向固定 cellSize=90px 从屏底铺满到屏顶，最顶行像素上缘
+  会进入顶栏（TopBar 高 40px，exclusiveZone 40）；且 1240px 可用高度无法
+  被 90px 整除，最顶行要么进顶栏、要么留 ~70px 空隙。
+- 修复：新增 topReserved=40；cellSize 垂直方向自适应为
+  (screenHeight-topReserved)/rows，使网格恰好铺满 [topReserved, 屏底] ——
+  最高行像素上缘恒等于 40（贴着顶栏）；拖动时 y 钳制在
+  [topReserved, screenHeight-height]；加载时把进入顶栏区的旧条目钳到
+  最高行（只重定位、不计超限）。
+- 验证：全量 pytest 1140 passed；部署后运行探针确认拖到最顶时
+  y = topReserved（40）且不进入顶栏。

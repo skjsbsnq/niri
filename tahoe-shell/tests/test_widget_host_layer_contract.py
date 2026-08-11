@@ -256,8 +256,20 @@ class WidgetGridContractTests(unittest.TestCase):
         self.assertIn("readonly property int gridCols:", host)
         self.assertIn("Math.max(Grid.GRID_COLS, Math.floor(root.screenWidth / root.cellSize))", host)
         self.assertIn("readonly property int gridRows:", host)
-        self.assertIn("Math.max(Grid.GRID_ROWS, Math.floor(root.screenHeight / root.cellSize))", host)
+        self.assertIn("Math.max(Grid.GRID_ROWS, Math.ceil((root.screenHeight - root.topReserved) / root.cellSize))", host)
         self.assertIn("readonly property int widgetLimit: Math.min(32, root.gridCols * root.gridRows)", host)
+        # Top-bar reservation: widgets must never enter the 40px top bar; the
+        # cell size adapts vertically so the topmost row sits flush at
+        # topReserved (no gap, no overlap).
+        self.assertIn("readonly property int topReserved: 40", host)
+        self.assertIn("Math.min(desired, usable / rows);", host)
+        self.assertIn("root.screenHeight - root.topReserved", host)
+        # Drag clamps the widget below the top bar; load clamps old entries
+        # that would enter the reserved zone to the topmost row.
+        self.assertIn("var minY = Math.max(0, root.topReserved);", host)
+        self.assertIn("inst.y = Math.max(minY, Math.min(maxY, p.y - root.dragStart.grabY));", host)
+        self.assertIn("Grid.rowsForSize(root.widgetConfigs[i].size);", host)
+        self.assertIn("root.widgetConfigs[i].row = maxRow;", host)
         # Every Grid call that depends on bounds receives the per-screen dims.
         self.assertIn("Grid.gridStateFromConfig(root.widgetConfigs, root.gridCols, root.gridRows)", host)
         self.assertIn("Grid.gridStateFromConfig(list, root.gridCols, root.gridRows)", host)

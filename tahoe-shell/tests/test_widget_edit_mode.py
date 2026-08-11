@@ -158,10 +158,10 @@ class WidgetEditModeContractTests(unittest.TestCase):
         # negative pixels (short-screen top rows), same as createWidgetInstance.
         settle = host.split("function settleWidgets() {", 1)[1]
         settle = settle.split("function beginWidgetDrag(", 1)[0]
-        self.assertIn("Math.max(0, Grid.xPxForCell(entry.col, root.cellSize));", settle)
-        self.assertIn("Math.max(0, Grid.yPxForCell(entry.row, Grid.rowsForSize(entry.size),", settle)
-        self.assertIn("Math.max(0, Grid.xPxForCell(entry.col, root.cellSize));", begin)
-        self.assertIn("Math.max(0, Grid.yPxForCell(entry.row, Grid.rowsForSize(entry.size),", begin)
+        self.assertIn("Math.max(0, Grid.xPxForCell(entry.col, root.cellSize, root.widgetGap));", settle)
+        self.assertIn("Math.max(0, Grid.yPxForCell(entry.row, Grid.rowsForSize(entry.size),\n                root.cellSize, root.screenHeight, root.widgetGap));", settle)
+        self.assertIn("Math.max(0, Grid.xPxForCell(entry.col, root.cellSize, root.widgetGap));", begin)
+        self.assertIn("Math.max(0, Grid.yPxForCell(entry.row, Grid.rowsForSize(entry.size),\n            root.cellSize, root.screenHeight, root.widgetGap));", begin)
         self.assertIn("tx = Math.max(0, Number(tx) || 0);", host)
         self.assertIn("ty = Math.max(0, Number(ty) || 0);", host)
         update = host.split("function updateWidgetDrag(", 1)[1]

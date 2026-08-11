@@ -26,7 +26,7 @@ const fs = require("fs");
 let src = fs.readFileSync(process.argv[1], "utf8");
 // Strip the QML .pragma library directive (not valid JS for new Function).
 src = src.replace(/^\.pragma[^\n]*\n/, "");
-const fn = new Function(src + "; return { findEmptyCell, findSlot, gridStateFromConfig, serializeEntries, sizeForSpan, validSize, snapPosition, canPlace, xPxForCell, yPxForCell, GRID_COLS, GRID_ROWS, LIMIT_ITEMS };");
+const fn = new Function(src + "; return { findEmptyCell, findSlot, gridStateFromConfig, serializeEntries, sizeForSpan, validSize, snapPosition, canPlace, xPxForCell, yPxForCell, GRID_COLS, GRID_ROWS, LIMIT_ITEMS, GAP_PX };");
 globalThis.api = fn();
 const result = eval("with (api) { " + process.argv[2] + " }");
 process.stdout.write(JSON.stringify(result));
@@ -235,6 +235,34 @@ class WidgetGridA6DragTests(unittest.TestCase):
             "JSON.stringify(snapPosition(2, 2, x, y, 90, 900))"
         )
         self.assertEqual(out, {"col": 1, "row": 1})
+
+    def test_gap_insets_px_helpers_and_snap_round_trip(self) -> None:
+        # A6 部署反馈：相邻小部件贴死。gap 使像素矩形四周内缩 gap/2
+        # （相邻之间留完整 gap），且 snapPosition 反算时抵消内缩量，
+        # 拖动吸附不会整体偏移 gap/2。
+        out = self.run_grid(
+            "const x = xPxForCell(1, 90, 12); "
+            "const y = yPxForCell(1, 2, 90, 900, 12); "
+            "const x0 = xPxForCell(0, 90, 12); "
+            "const y0 = yPxForCell(0, 2, 90, 900, 12); "
+            "JSON.stringify({x, y, x0, y0, "
+            "snap: snapPosition(2, 2, x, y, 90, 900, 4, 6, 12), "
+            "noGap: xPxForCell(1, 90)})"
+        )
+        # 单元格 1 左缘 90 + gap/2=6 → 96；行 1 顶部 900-270+6=636；
+        # 底行 (0,2) 顶部 900-180+6=726。
+        self.assertEqual(out["x"], 96)
+        self.assertEqual(out["y"], 636)
+        self.assertEqual(out["x0"], 6)
+        self.assertEqual(out["y0"], 726)
+        # 带 gap 的像素矩形反算回自身网格位（round-trip 不被内缩量带偏）。
+        self.assertEqual(out["snap"], {"col": 1, "row": 1})
+        # 不传 gap 时保持旧纯网格语义（默认 0）。
+        self.assertEqual(out["noGap"], 90)
+
+    def test_gap_constant_is_exported_and_positive(self) -> None:
+        out = self.run_grid("JSON.stringify(GAP_PX)")
+        self.assertGreater(out, 0)
 
     def test_can_place_bounds_and_overlap(self) -> None:
         grid = [{"id": "a", "gridX": 0, "gridY": 0, "cols": 2, "rows": 2}]

@@ -140,3 +140,21 @@
   最高行（只重定位、不计超限）。
 - 验证：全量 pytest 1140 passed；部署后运行探针确认拖到最顶时
   y = topReserved（40）且不进入顶栏。
+
+## 部署反馈修复记录（2026-08-11，第四次）
+
+**运行时问题（用户反馈，三项）**：① 多个小部件排在一起时完全贴死、无视觉
+缝隙；② 天气小部件「今日 x° ~ y°」行容易与逐时条/其他内容贴在一起；
+③ 设置里已把天气位置设为「肇庆市 · 广东 · 中国」，仍经常按 IP 查询天气。
+
+**本记录：小部件视觉缝隙（gap）**
+- 根因：实例按整格铺放（x=col*cell、width=cols*cell），相邻小部件像素级贴死。
+- 修复：WidgetGrid.js 新增 GAP_PX=12，xPxForCell/yPxForCell/snapPosition
+  增加可选 gap 参数（默认 0 保持纯网格语义）；WidgetHost 以 widgetGap 注入，
+  实例矩形四周内缩 gap/2（相邻留 12px、屏边留 6px）；拖动钳制与静止位同一
+  内缩并锚网格右边界（gridCols*cellSize），消除拖到边缘松手回弹。
+- 审查：Socrates（第 1 轮 APPROVE；PLAUSIBLE：拖动边缘 6px 回弹 → 已修）→
+  Hooke（第 2 轮 REJECT：右缘整格回弹 ≤1 cell → maxX 锚网格右边界已修）→
+  Hilbert（第 3 轮 APPROVE；残差 ≤0.78px 亚像素级，非回弹）。
+- 验收：gap round-trip 纯函数测试 + 结构测试更新；全量 pytest 全绿
+  （1150 passed / 1204 subtests）。

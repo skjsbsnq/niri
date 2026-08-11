@@ -93,6 +93,10 @@ PanelWindow {
     // cellSize 的 usable/rows 定义一致，网格矩形 = [topReserved, 屏底]）。
     readonly property int gridCols: Math.max(Grid.GRID_COLS, Math.floor(root.screenWidth / root.cellSize))
     readonly property int gridRows: Math.max(Grid.GRID_ROWS, Math.ceil((root.screenHeight - root.topReserved) / root.cellSize))
+    // 小部件视觉缝隙（px，单一来源 WidgetGrid.GAP_PX）：网格占用仍按整格，
+    // 实例像素矩形四周内缩 gap/2 —— 相邻小部件之间留完整 gap，屏幕边缘
+    // 留半 gap（部署反馈：之前整格铺放，相邻小部件贴死无缝隙）。
+    readonly property real widgetGap: Grid.GAP_PX
     // 每屏条目上限 = min(32, 网格容量)：P-5 region 上限（每小部件 1 个
     // region），超限在加载/添加时截断并计入超限横幅（可见反馈）。
     readonly property int widgetLimit: Math.min(32, root.gridCols * root.gridRows)
@@ -222,10 +226,10 @@ PanelWindow {
             "widgetId": String(entry.id || ""),
             "widgetHost": root,
             "cellSize": root.cellSize,
-            "x": Math.max(0, Grid.xPxForCell(entry.gridX, root.cellSize)),
-            "y": Math.max(0, Grid.yPxForCell(entry.gridY, entry.rows, root.cellSize, root.screenHeight)),
-            "width": Math.min(root.widgetMaxWidth, Math.max(1, Math.round(entry.cols * root.cellSize))),
-            "height": Math.min(root.widgetMaxHeight, Math.max(1, Math.round(entry.rows * root.cellSize))),
+            "x": Math.max(0, Grid.xPxForCell(entry.gridX, root.cellSize, root.widgetGap)),
+            "y": Math.max(0, Grid.yPxForCell(entry.gridY, entry.rows, root.cellSize, root.screenHeight, root.widgetGap)),
+            "width": Math.min(root.widgetMaxWidth, Math.max(1, Math.round(entry.cols * root.cellSize - root.widgetGap))),
+            "height": Math.min(root.widgetMaxHeight, Math.max(1, Math.round(entry.rows * root.cellSize - root.widgetGap))),
             "previewMode": false
         };
         var sid = String(entry.id || "");
@@ -473,10 +477,11 @@ PanelWindow {
             var entry = root.configEntryFor(keys[i]);
             if (!inst || !entry)
                 continue;
-            // 与 createWidgetInstance 同一钳制（短屏顶部行像素可为负）。
-            inst.x = Math.max(0, Grid.xPxForCell(entry.col, root.cellSize));
+            // 与 createWidgetInstance 同一钳制（短屏顶部行像素可为负）与
+            // 同一缝隙内缩（gap 参数一致，避免回滚后位置偏移）。
+            inst.x = Math.max(0, Grid.xPxForCell(entry.col, root.cellSize, root.widgetGap));
             inst.y = Math.max(0, Grid.yPxForCell(entry.row, Grid.rowsForSize(entry.size),
-                root.cellSize, root.screenHeight));
+                root.cellSize, root.screenHeight, root.widgetGap));
         }
     }
 
@@ -492,9 +497,9 @@ PanelWindow {
         if (!entry)
             return;
         var p = inst.mapToItem(widgetLayer, localX, localY);
-        var startX = Math.max(0, Grid.xPxForCell(entry.col, root.cellSize));
+        var startX = Math.max(0, Grid.xPxForCell(entry.col, root.cellSize, root.widgetGap));
         var startY = Math.max(0, Grid.yPxForCell(entry.row, Grid.rowsForSize(entry.size),
-            root.cellSize, root.screenHeight));
+            root.cellSize, root.screenHeight, root.widgetGap));
         root.dragStart = {
             "id": id,
             "size": String(entry.size || "small"),
@@ -516,11 +521,18 @@ PanelWindow {
         if (!root.dragActive || String(inst && inst.widgetId || "") !== root.dragWidgetId)
             return;
         var p = inst.mapToItem(widgetLayer, localX, localY);
-        var maxX = Math.max(0, root.screenWidth - inst.width);
-        // 垂直方向钳在顶栏以下（minY = topReserved）：拖动中也不会顶进顶栏。
-        var minY = Math.max(0, root.topReserved);
-        var maxY = Math.max(minY, root.screenHeight - inst.height);
-        inst.x = Math.max(0, Math.min(maxX, p.x - root.dragStart.grabX));
+        // 拖动钳制与静止位同一缝隙内缩（gap/2）：静止位四周距屏边
+        // gap/2（见 createWidgetInstance），若按原始屏边钳制，拖到边缘
+        // 松手会回弹 gap/2（审查观察）。右缘还要锚到网格右边界
+        // gridCols*cellSize（屏宽不整除 cellSize 时留白区无合法落点，
+        // 按屏边钳制会回弹最多一个 cell 宽，审查 C-1）。垂直下沿仍钳在
+        // 顶栏保留区以下。
+        var halfGap = root.widgetGap / 2;
+        var minX = Math.max(0, halfGap);
+        var maxX = Math.max(minX, root.gridCols * root.cellSize - inst.width - halfGap);
+        var minY = Math.max(0, root.topReserved + halfGap);
+        var maxY = Math.max(minY, root.screenHeight - inst.height - halfGap);
+        inst.x = Math.max(minX, Math.min(maxX, p.x - root.dragStart.grabX));
         inst.y = Math.max(minY, Math.min(maxY, p.y - root.dragStart.grabY));
     }
 
@@ -531,13 +543,13 @@ PanelWindow {
             return;
         var start = root.dragStart;
         var target = Grid.snapPosition(start.cols, start.rows, inst.x, inst.y, root.cellSize,
-            root.screenHeight, root.gridCols, root.gridRows);
+            root.screenHeight, root.gridCols, root.gridRows, root.widgetGap);
         var movable = Grid.canPlace(root.gridState.grid, start.id, target.col, target.row,
             start.cols, start.rows, root.gridCols, root.gridRows);
         if (movable && (target.col !== start.col || target.row !== start.row)) {
             root.updateConfigPosition(start.id, target.col, target.row);
-            root.animateWidgetTo(inst, Grid.xPxForCell(target.col, root.cellSize),
-                Grid.yPxForCell(target.row, start.rows, root.cellSize, root.screenHeight));
+            root.animateWidgetTo(inst, Grid.xPxForCell(target.col, root.cellSize, root.widgetGap),
+                Grid.yPxForCell(target.row, start.rows, root.cellSize, root.screenHeight, root.widgetGap));
             root.persistConfig();
         } else {
             root.animateWidgetTo(inst, start.x, start.y);

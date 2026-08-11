@@ -266,7 +266,8 @@ class WidgetGridContractTests(unittest.TestCase):
         self.assertIn("root.screenHeight - root.topReserved", host)
         # Drag clamps the widget below the top bar; load clamps old entries
         # that would enter the reserved zone to the topmost row.
-        self.assertIn("var minY = Math.max(0, root.topReserved);", host)
+        self.assertIn("var maxX = Math.max(minX, root.gridCols * root.cellSize - inst.width - halfGap);", host)
+        self.assertIn("var minY = Math.max(0, root.topReserved + halfGap);", host)
         self.assertIn("inst.y = Math.max(minY, Math.min(maxY, p.y - root.dragStart.grabY));", host)
         self.assertIn("Grid.rowsForSize(root.widgetConfigs[i].size);", host)
         self.assertIn("root.widgetConfigs[i].row = maxRow;", host)
@@ -276,7 +277,11 @@ class WidgetGridContractTests(unittest.TestCase):
         self.assertIn("Grid.findSlot(root.gridState, Grid.colsForSize(resolved), Grid.rowsForSize(resolved),", host)
         self.assertIn("root.gridCols, root.gridRows, root.widgetLimit);", host)
         self.assertIn("Grid.snapPosition(start.cols, start.rows, inst.x, inst.y, root.cellSize,", host)
-        self.assertIn("root.screenHeight, root.gridCols, root.gridRows);", host)
+        self.assertIn("root.screenHeight, root.gridCols, root.gridRows, root.widgetGap);", host)
+        # Gap: visual inset between adjacent widgets (single source GAP_PX).
+        self.assertIn("readonly property real widgetGap: Grid.GAP_PX", host)
+        self.assertIn("entry.cols * root.cellSize - root.widgetGap", host)
+        self.assertIn("entry.rows * root.cellSize - root.widgetGap", host)
         self.assertIn("Grid.canPlace(root.gridState.grid, start.id, target.col, target.row,", host)
         # Load truncates at widgetLimit and counts the dropped entries.
         self.assertIn("var kept = state.grid.slice(0, root.widgetLimit);", host)

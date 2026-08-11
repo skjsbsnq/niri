@@ -25,6 +25,12 @@ var GRID_ROWS = 6;
 // 本默认值仅供不传参数的调用方/单测使用）。
 var LIMIT_ITEMS = 24;
 
+// 小部件视觉缝隙（px）：网格占用仍按整格计算；实例像素矩形四周内缩
+// gap/2，相邻小部件之间形成完整 gap，屏幕边缘留半 gap（部署反馈：
+// 之前小部件按整格铺放，相邻即贴死）。宿主经 root.widgetGap 读取本值，
+// 网格换算函数以可选参数 gap 消费（默认 0，保持纯网格语义）。
+var GAP_PX = 12;
+
 // 规格 → 网格占用（A-6）。
 function colsForSize(size) {
     switch (size) {
@@ -176,24 +182,33 @@ function sizeForSpan(cols, rows) {
 
 // ---- A6 拖动落点（纯函数；宿主拖动提交只读本文件结果）----
 // 像素 → 网格坐标换算（与宿主实例布局公式同一来源，G-6）：
-// - x 左起：col = xPx / cellSize
+// - x 左起：col = (xPx - gap/2) / cellSize
 // - y 为屏幕坐标（上起），网格行号从底部数起（A2 语义）：
-//   row = (screenHeight - yPx) / cellSize - rows
-function xPxForCell(col, cellSize) {
-    return Math.round(Number(col) * Number(cellSize));
+//   row = (screenHeight - (yPx - gap/2)) / cellSize - rows
+// gap 为视觉缝隙（见 GAP_PX）：像素矩形四周内缩 gap/2，反算回网格时
+// 须先抵消内缩量，否则拖动吸附会整体偏移 gap/2。默认 0 保持纯网格语义。
+function numberGap(gap) {
+    var g = Number(gap);
+    return isFinite(g) && g > 0 ? g : 0;
 }
-function yPxForCell(row, rows, cellSize, screenHeight) {
-    return Math.round(Number(screenHeight) - (Number(row) + Number(rows)) * Number(cellSize));
+function xPxForCell(col, cellSize, gap) {
+    var g = numberGap(gap);
+    return Math.round(Number(col) * Number(cellSize) + g / 2);
+}
+function yPxForCell(row, rows, cellSize, screenHeight, gap) {
+    var g = numberGap(gap);
+    return Math.round(Number(screenHeight) - (Number(row) + Number(rows)) * Number(cellSize) + g / 2);
 }
 
 // 小部件左上角像素 → 最近合法网格位（clamp 到网格边界）。
-// cols/rows 为该小部件跨度；返回 {col, row}。
-function snapPosition(cols, rows, xPx, yPx, cellSize, screenHeight, gridCols, gridRows) {
+// cols/rows 为该小部件跨度；返回 {col, row}。gap 语义同上。
+function snapPosition(cols, rows, xPx, yPx, cellSize, screenHeight, gridCols, gridRows, gap) {
     var dims = gridDims(gridCols, gridRows);
     var cell = Math.max(1, Number(cellSize) || 1);
     var h = Math.max(1, Number(screenHeight) || 1);
-    var col = Math.round(Number(xPx) / cell);
-    var row = Math.round((h - Number(yPx)) / cell - Number(rows));
+    var g = numberGap(gap);
+    var col = Math.round((Number(xPx) - g / 2) / cell);
+    var row = Math.round((h - (Number(yPx) - g / 2)) / cell - Number(rows));
     var maxCol = Math.max(0, dims.cols - Number(cols));
     var maxRow = Math.max(0, dims.rows - Number(rows));
     return {

@@ -210,6 +210,125 @@ Item {
         }
     }
 
+    // ---- A7 边缘 resize（三档切换）----
+    // 8 个 8px 命中区（四边 + 四角），只在编辑模式启用（previewMode 恒
+    // 不启用）；按住边缘拖动 → 宿主按方向切换 small/medium/large
+    // （外扩升档、内收降档，拖过阈值即换档）。四状态回调与 A6 拖动同构
+    // （A-C2）：onPressed / onPositionChanged / onReleased / onCanceled
+    // （完整回滚）。锚点 = 对侧屏幕边缘固定（像窗口一样：拖底缘 → 上缘
+    // 固定向下长；拖顶缘 → 下缘固定向上长；四角 → 对角固定）。坐标/
+    // 档位/落点/持久化归宿主，本组件只发手势（G-6）。
+    component ResizeHandle: MouseArea {
+        id: handle
+        required property string handleId
+        required property string anchor
+        required property int resizeCursor
+
+        enabled: root.editMode && root.interactive
+        visible: enabled
+        z: 15
+        acceptedButtons: Qt.LeftButton
+        cursorShape: handle.resizeCursor
+
+        // 手柄自身局部原点偏离小部件原点（锚在边缘），必须先把鼠标点
+        // 换算到小部件局部坐标再交给宿主（宿主按小部件局部坐标
+        // mapToItem 到宿主坐标系；直接传手柄局部坐标会在换档几何变化后
+        // 方向反噬，对抗审查 C1）。
+        onPressed: function(mouse) {
+            if (root.widgetHost) {
+                var lp = root.mapFromItem(handle, mouse.x, mouse.y);
+                root.widgetHost.beginWidgetResize(root, handle.handleId, handle.anchor, lp.x, lp.y);
+            }
+        }
+        onPositionChanged: function(mouse) {
+            if (root.widgetHost) {
+                var lp = root.mapFromItem(handle, mouse.x, mouse.y);
+                root.widgetHost.updateWidgetResize(root, handle.handleId, lp.x, lp.y);
+            }
+        }
+        onReleased: function(mouse) {
+            if (root.widgetHost)
+                root.widgetHost.commitWidgetResize(root);
+        }
+        onCanceled: {
+            if (root.widgetHost)
+                root.widgetHost.cancelWidgetResize(root);
+        }
+    }
+
+    ResizeHandle {
+        handleId: "right"; anchor: "top-left"
+        resizeCursor: Qt.SizeHorCursor
+        anchors.right: parent.right
+        anchors.top: parent.top
+        anchors.topMargin: 8
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: 8
+        width: 8
+    }
+    ResizeHandle {
+        handleId: "left"; anchor: "top-right"
+        resizeCursor: Qt.SizeHorCursor
+        anchors.left: parent.left
+        anchors.top: parent.top
+        anchors.topMargin: 8
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: 8
+        width: 8
+    }
+    ResizeHandle {
+        handleId: "bottom"; anchor: "top-left"
+        resizeCursor: Qt.SizeVerCursor
+        anchors.bottom: parent.bottom
+        anchors.left: parent.left
+        anchors.leftMargin: 8
+        anchors.right: parent.right
+        anchors.rightMargin: 8
+        height: 8
+    }
+    ResizeHandle {
+        handleId: "top"; anchor: "bottom-left"
+        resizeCursor: Qt.SizeVerCursor
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.leftMargin: 8
+        anchors.right: parent.right
+        anchors.rightMargin: 8
+        height: 8
+    }
+    ResizeHandle {
+        handleId: "br"; anchor: "top-left"
+        resizeCursor: Qt.SizeFDiagCursor
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        width: 8
+        height: 8
+    }
+    ResizeHandle {
+        handleId: "bl"; anchor: "top-right"
+        resizeCursor: Qt.SizeBDiagCursor
+        anchors.left: parent.left
+        anchors.bottom: parent.bottom
+        width: 8
+        height: 8
+    }
+    ResizeHandle {
+        handleId: "tr"; anchor: "bottom-left"
+        resizeCursor: Qt.SizeBDiagCursor
+        anchors.right: parent.right
+        anchors.top: parent.top
+        width: 8
+        height: 8
+    }
+    ResizeHandle {
+        handleId: "tl"; anchor: "bottom-right"
+        resizeCursor: Qt.SizeFDiagCursor
+        anchors.left: parent.left
+        anchors.top: parent.top
+        width: 8
+        height: 8
+    }
+
     // 删除按钮（A6）：编辑模式显示；点击经宿主真正销毁实例 + 写盘一次。
     Rectangle {
         id: deleteButton

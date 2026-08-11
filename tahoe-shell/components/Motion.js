@@ -80,6 +80,10 @@ var dockAutohideSlidePx = 88;
 var widgetLongPressMs = 500;
 var widgetSuppressClickMs = 180;
 var widgetWobbleDurationMs = 90;
+// Widget edge resize (A7): outward drag distance per tier (px).
+// Tier switching is stepped, not free-form (roadmap A7); the resize
+// geometry animation uses the elementResize token — never Spring (P-1).
+var widgetResizeThresholdPx = 24;
 
 function dockLaunchBounceHeight(iconSizePx) {
     var size = iconSizePx > 0 ? iconSizePx : 48;

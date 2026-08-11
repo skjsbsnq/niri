@@ -201,14 +201,20 @@ class WidgetBaseContractTests(unittest.TestCase):
 
     def test_host_overflow_banner_timers_are_one_shot_gated(self) -> None:
         text = HOST.read_text(encoding="utf-8")
-        # The only timers in the host are the overflow banner pair.
-        self.assertEqual(text.count("Timer {"), 2)
+        # The only timers in the host are the overflow banner pair plus the
+        # A7 resize-reject feedback timer — all one-shot (no resident
+        # polling, A-C3).
+        self.assertEqual(text.count("Timer {"), 3)
         self.assertIn("repeat: false", text)
         self.assertIn("overflowBannerTimer", text)
         self.assertIn("overflowBannerHide", text)
-        # Banner is the visible P-5 feedback (not silent).
+        self.assertIn("resizeRejectHide", text)
+        # Banners are the visible feedback (not silent): P-5 overflow and
+        # A7 resize conflict.
         self.assertIn("overflowBannerVisible", text)
         self.assertIn("小部件配置超限", text)
+        self.assertIn("resizeRejectedVisible", text)
+        self.assertIn("无法调整大小：空间不足", text)
 
     def test_mask_replaces_old_region_tree(self) -> None:
         text = HOST.read_text(encoding="utf-8")

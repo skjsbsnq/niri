@@ -243,3 +243,54 @@ function canPlace(grid, id, col, row, cols, rows, gridCols, gridRows) {
     }
     return true;
 }
+
+// ---- A7 三档切换（resize）----
+// 档位顺序与换算唯一来源（G-6）：宿主/库 tab/手柄一律读本文件，不另建
+// 第二份档位表。resize 为三档切换（非自由缩放）：沿外扩方向每拖过
+// resizeThresholdPx 升一档，反向每过一个阈值降一档。
+var TIER_SIZES = ["small", "medium", "large"];
+
+function tierIndex(size) {
+    var i = TIER_SIZES.indexOf(String(size || ""));
+    return i >= 0 ? i : 0;
+}
+
+function sizeForTier(index) {
+    var i = Math.max(0, Math.min(TIER_SIZES.length - 1, Math.round(Number(index) || 0)));
+    return TIER_SIZES[i];
+}
+
+// 拖动距离（沿外扩方向，px）→ 目标档位序号。
+// deltaPx 由手柄轴向归一化（右/下为正外扩，左/上为负外扩）；
+// 每个阈值一档，越界 clamp 到 small/large。
+function resizeTargetTier(startIndex, deltaPx, thresholdPx) {
+    var start = Math.max(0, Math.min(TIER_SIZES.length - 1, Math.round(Number(startIndex) || 0)));
+    var delta = Number(deltaPx) || 0;
+    var th = Number(thresholdPx) > 0 ? Number(thresholdPx) : 24;
+    var steps = Math.floor(Math.abs(delta) / th);
+    if (delta < 0)
+        steps = -steps;
+    return Math.max(0, Math.min(TIER_SIZES.length - 1, start + steps));
+}
+
+// 换档后保持对侧锚点不动：entry 为当前跨度 {col,row,cols,rows}，
+// 返回新档位的 {col,row}（可能越界/负值，由 canPlace 判定拒绝）。
+// 锚点名称为【屏幕空间】角（与用户直觉一致）：top-left = 屏幕左上角
+// 固定，bottom-right = 屏幕右下角固定。注意网格 row 从屏幕底部数起
+// （row 增大 = 向上），因此「固定上缘」= row + curRows 不变 →
+// newRow = row + curRows - rows；「固定下缘」= row 不变。
+function resizePlacement(entry, size, anchor) {
+    var cols = colsForSize(size);
+    var rows = rowsForSize(size);
+    var col = Math.round(Number(entry && entry.col) || 0);
+    var row = Math.round(Number(entry && entry.row) || 0);
+    var curCols = Math.max(1, Math.round(Number(entry && entry.cols) || 1));
+    var curRows = Math.max(1, Math.round(Number(entry && entry.rows) || 1));
+    if (anchor === "top-right" || anchor === "bottom-right")
+        col = col + curCols - cols;
+    // 屏幕上方角（top-*）固定 → 下缘随档位移动（row 增大），即
+    // newRow = 固定上缘 - rows = row + curRows - rows。
+    if (anchor === "top-left" || anchor === "top-right")
+        row = row + curRows - rows;
+    return { "col": col, "row": row };
+}

@@ -105,8 +105,9 @@ class LeftSidebarLibraryTabTests(unittest.TestCase):
         self.assertIsNotNone(catalog)
         assert catalog
         body = catalog.group("body")
-        self.assertIn('"sizes": ["small"]', body)
-        self.assertIn('"sizes": ["medium"]', body)
+        # A7: 每个条目都声明三档（small/medium/large），库 tab 标注的
+        # 可选尺寸与实际可切换档位一致（roadmap A7 完成判据）。
+        self.assertEqual(body.count('"sizes": ["small", "medium", "large"]'), 4)
         # Every entry has sizes and defaultSize is inside sizes.
         for entry in re.finditer(
             r'"([a-z-]+)":\s*\{\s*"source":\s*"[^"]+",\s*"name":\s*"[^"]+",\s*"sizes":\s*\[(?P<sizes>[^\]]+)\],\s*"defaultSize":\s*"(?P<default>[a-z]+)"\s*\}',

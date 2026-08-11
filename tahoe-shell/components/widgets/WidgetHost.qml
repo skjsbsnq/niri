@@ -120,10 +120,10 @@ PanelWindow {
     // defaultSize：A4 库 tab / addWidget 的默认规格（天气/日历为 medium，
     // 按 small 创建会挤压布局）。defaultSize 必须在 sizes 内。
     readonly property var widgetCatalog: ({
-        "battery": { "source": "BatteryWidget.qml", "name": "电池", "sizes": ["small"], "defaultSize": "small" },
-        "weather": { "source": "WeatherWidget.qml", "name": "天气", "sizes": ["medium"], "defaultSize": "medium" },
-        "calendar": { "source": "CalendarWidget.qml", "name": "日历", "sizes": ["medium"], "defaultSize": "medium" },
-        "system-monitor": { "source": "SystemMonitorWidget.qml", "name": "系统监控", "sizes": ["small"], "defaultSize": "small" }
+        "battery": { "source": "BatteryWidget.qml", "name": "电池", "sizes": ["small", "medium", "large"], "defaultSize": "small" },
+        "weather": { "source": "WeatherWidget.qml", "name": "天气", "sizes": ["small", "medium", "large"], "defaultSize": "medium" },
+        "calendar": { "source": "CalendarWidget.qml", "name": "日历", "sizes": ["small", "medium", "large"], "defaultSize": "medium" },
+        "system-monitor": { "source": "SystemMonitorWidget.qml", "name": "系统监控", "sizes": ["small", "medium", "large"], "defaultSize": "small" }
     })
 
     // ---- 配置读写（A4 起单一所有者）----
@@ -163,6 +163,15 @@ PanelWindow {
         root.editMode = true;
     }
     function exitEditMode() {
+        if (root.resizeActive) {
+            // resize 中退出（完成按钮/空白点击/宿主隐藏）：完整回滚——
+            // 恢复起点几何与档位 + 清宿主 resize 状态，不写盘（A-C5）。
+            var rinst = root.widgetInstances[root.resizeWidgetId];
+            if (rinst)
+                root.cancelWidgetResize(rinst);
+            else
+                root.clearResize();
+        }
         if (root.dragActive) {
             // 拖动中退出（完成按钮/空白点击/宿主隐藏）：完整回滚——恢复
             // 实例网格位 + 清宿主拖动状态 + 实例手势由 editMode 绑定归零，
@@ -181,6 +190,10 @@ PanelWindow {
             // （实例位置恒等于 config，见 settleWidgets）。
             root.settleWidgets();
         }
+        // 退出编辑模式：清掉可能仍在显示的 resize 冲突横幅（避免编辑态
+        // 外残留临时反馈，对抗审查 P2）。
+        root.resizeRejectedVisible = false;
+        resizeRejectHide.stop();
         root.editMode = false;
     }
     // 宿主隐藏（移除最后一个小部件等）→ 自动退出编辑模式。
@@ -263,8 +276,13 @@ PanelWindow {
         // 重建的极边缘时序，避免宿主 dragActive 残留卡死或动画指向已销毁
         // 实例；正常路径无影响）。
         root.clearDrag();
+        root.clearResize();
         dragXAnim.stop();
         dragYAnim.stop();
+        resizeXAnim.stop();
+        resizeYAnim.stop();
+        resizeWAnim.stop();
+        resizeHAnim.stop();
         var old = root.widgetInstances;
         var next = {};
         var keys = Object.keys(old);
@@ -488,7 +506,7 @@ PanelWindow {
     // onPressed 侧：记录起点与抓取偏移（不激活、不写盘）。
     function beginWidgetDrag(inst, localX, localY) {
         var id = String(inst && inst.widgetId || "");
-        if (!id || root.dragActive || !root.editMode)
+        if (!id || root.dragActive || root.resizeActive || !root.editMode)
             return;
         // 先把上一提交/回滚动画补送到终点，再从 config 网格位快照
         // （实例此刻的 x/y 才是真实起点；避免动画中间帧污染快照）。
@@ -547,7 +565,7 @@ PanelWindow {
         var movable = Grid.canPlace(root.gridState.grid, start.id, target.col, target.row,
             start.cols, start.rows, root.gridCols, root.gridRows);
         if (movable && (target.col !== start.col || target.row !== start.row)) {
-            root.updateConfigPosition(start.id, target.col, target.row);
+            root.updateConfigEntry(start.id, target.col, target.row);
             root.animateWidgetTo(inst, Grid.xPxForCell(target.col, root.cellSize, root.widgetGap),
                 Grid.yPxForCell(target.row, start.rows, root.cellSize, root.screenHeight, root.widgetGap));
             root.persistConfig();
@@ -574,15 +592,187 @@ PanelWindow {
         root.dragStart = null;
     }
 
-    // 更新配置中某条目的网格位置（实例位置由 commit 的落位动画负责，
-    // 不重建对象树）。
-    function updateConfigPosition(id, col, row) {
+    // ---- A7 边缘 resize（三档切换）----
+    // 手柄在 Widget.qml（8 个 8px 命中区，编辑模式才启用）；本文件是
+    // 档位/落点/持久化的唯一属主（G-6：WidgetGrid.js 的纯函数是档位与
+    // 落点唯一来源）。拖动中不重建、不写盘（A-C5）；换档即时生效
+    // （几何动画用 Motion.elementResize 令牌，禁弹簧 P-1），冲突
+    // （canPlace 失败）拒绝换档并显示可见反馈（不静默失败）。
+    property bool resizeActive: false
+    property string resizeWidgetId: ""
+    // {id, handleId, anchor, tier, size, col, row, cols, rows, x, y, width,
+    //  height, pressX, pressY, currentTier, rejectedTier, switched} ——
+    // 起点快照 + 当前显示档位。currentTier 只在「成功换档」时更新；
+    // rejectedTier 记录最近一次被拒的目标档位（抑制同方向重复反馈，
+    // 换档成功后清除）；switched 只在成功换档时置真。commit 仅在
+    // switched 且净档位变化时写盘：被拒绝的操作与「放大又缩回起点」
+    // 都不产生写盘（A-C5）。
+    property var resizeStart: null
+
+    function beginWidgetResize(inst, handleId, anchor, localX, localY) {
+        var id = String(inst && inst.widgetId || "");
+        if (!id || root.resizeActive || root.dragActive || !root.editMode)
+            return;
+        // 先在几何跳变前把指针映射到宿主坐标系（mapToItem 之后才
+        // settle/停动画：若上一轮换档动画仍在飞，settle 落位会改变
+        // 实例 x/y，先映射可保证 pressX/Y 不被落位跳变污染，对抗审查
+        // P2）。
+        var p = inst.mapToItem(widgetLayer, localX, localY);
+        // 停掉上一轮可能仍在飞的换档动画，再补送落位动画到终点
+        // （begin 快照必须取自稳定几何；与 rebuild 同款清理）。
+        resizeXAnim.stop();
+        resizeYAnim.stop();
+        resizeWAnim.stop();
+        resizeHAnim.stop();
+        root.settleWidgets();
+        var entry = root.configEntryFor(id);
+        if (!entry)
+            return;
+        var cols = Grid.colsForSize(entry.size);
+        var rows = Grid.rowsForSize(entry.size);
+        root.resizeStart = {
+            "id": id,
+            "handleId": String(handleId || "right"),
+            "anchor": String(anchor || "top-left"),
+            "tier": Grid.tierIndex(entry.size),
+            "size": String(entry.size || "small"),
+            "col": Math.round(Number(entry.col) || 0),
+            "row": Math.round(Number(entry.row) || 0),
+            "cols": cols,
+            "rows": rows,
+            "x": Math.max(0, Grid.xPxForCell(entry.col, root.cellSize, root.widgetGap)),
+            "y": Math.max(0, Grid.yPxForCell(entry.row, rows, root.cellSize, root.screenHeight, root.widgetGap)),
+            "width": Math.max(1, Math.round(cols * root.cellSize - root.widgetGap)),
+            "height": Math.max(1, Math.round(rows * root.cellSize - root.widgetGap)),
+            "pressX": Number(p.x),
+            "pressY": Number(p.y),
+            "currentTier": Grid.tierIndex(entry.size),
+            "rejectedTier": -1,
+            "switched": false
+        };
+        root.resizeWidgetId = id;
+        root.resizeActive = true;
+    }
+
+    // onPositionChanged 侧：按手柄轴向归一化外扩距离 → 目标档位 →
+    // 锚点落点 → canPlace 校验。合法则换档（实例几何即时更新 +
+    // elementResize 动画）；冲突则拒绝并给可见反馈。不重建、不写盘。
+    function updateWidgetResize(inst, handleId, localX, localY) {
+        if (!root.resizeActive || String(inst && inst.widgetId || "") !== root.resizeWidgetId)
+            return;
+        var start = root.resizeStart;
+        var p = inst.mapToItem(widgetLayer, localX, localY);
+        var dx = Number(p.x) - start.pressX;
+        var dy = Number(p.y) - start.pressY;
+        var delta = 0;
+        switch (start.handleId) {
+        case "left": delta = -dx; break;
+        case "top": delta = -dy; break;
+        case "bl": delta = dy - dx; break;
+        case "tr": delta = dx - dy; break;
+        case "tl": delta = -(dx + dy); break;
+        case "br": delta = dx + dy; break;
+        case "bottom": delta = dy; break;
+        default: delta = dx; // right
+        }
+        var targetTier = Grid.resizeTargetTier(start.tier, delta, Motion.widgetResizeThresholdPx);
+        // 当前已显示档位 / 已被拒档位都不再尝试（避免无操作重试与
+        // 同方向重复反馈；指针越过阈值进入新档位后自然可再试）。
+        if (targetTier === start.currentTier || targetTier === start.rejectedTier)
+            return;
+        var size = Grid.sizeForTier(targetTier);
+        var cols = Grid.colsForSize(size);
+        var rows = Grid.rowsForSize(size);
+        var placement = Grid.resizePlacement(
+            { "col": start.col, "row": start.row, "cols": start.cols, "rows": start.rows },
+            size, start.anchor);
+        if (!Grid.canPlace(root.gridState.grid, start.id, placement.col, placement.row,
+                cols, rows, root.gridCols, root.gridRows)) {
+            // 冲突（空间不足/越界）：拒绝换档 + 可见反馈；记下该档位避免
+            // 同方向重复提示，指针反向回落后可再试。
+            start.rejectedTier = targetTier;
+            root.showResizeRejected();
+            return;
+        }
+        // 合法：换档（几何动画禁弹簧，P-1；令牌 Motion.elementResize，P-3）。
+        start.currentTier = targetTier;
+        start.rejectedTier = -1;
+        start.switched = true;
+        start.size = size;
+        start.col = placement.col;
+        start.row = placement.row;
+        start.cols = cols;
+        start.rows = rows;
+        if (inst.widgetSize !== size)
+            inst.widgetSize = size;
+        root.animateWidgetResizeTo(inst,
+            Math.max(0, Grid.xPxForCell(placement.col, root.cellSize, root.widgetGap)),
+            Math.max(0, Grid.yPxForCell(placement.row, rows, root.cellSize, root.screenHeight, root.widgetGap)),
+            Math.max(1, Math.round(cols * root.cellSize - root.widgetGap)),
+            Math.max(1, Math.round(rows * root.cellSize - root.widgetGap)));
+    }
+
+    // onReleased 侧：换过档 → 配置（档位+落点）+ 写盘一次（A-C5）；
+    // 未换档 → 回滚起点，不写盘。
+    function commitWidgetResize(inst) {
+        if (!root.resizeActive || String(inst && inst.widgetId || "") !== root.resizeWidgetId)
+            return;
+        var start = root.resizeStart;
+        // 只在实际发生净档位变化时写盘：被拒绝的操作不写；放大后又缩回
+        // 起点档位（currentTier === tier）也不写（A-C5 对抗审查 C2）。
+        if (start.switched && start.currentTier !== start.tier) {
+            root.updateConfigEntry(start.id, start.col, start.row, start.size);
+            root.persistConfig();
+            // 把最后一次换档动画补送到终点（与拖动提交同一语义）。
+            root.animateWidgetResizeTo(inst,
+                Math.max(0, Grid.xPxForCell(start.col, root.cellSize, root.widgetGap)),
+                Math.max(0, Grid.yPxForCell(start.row, start.rows, root.cellSize, root.screenHeight, root.widgetGap)),
+                Math.max(1, Math.round(start.cols * root.cellSize - root.widgetGap)),
+                Math.max(1, Math.round(start.rows * root.cellSize - root.widgetGap)));
+        } else {
+            root.animateWidgetResizeTo(inst, start.x, start.y, start.width, start.height);
+        }
+        root.clearResize();
+    }
+
+    // onCanceled 侧：完整回滚（恢复起点几何与档位 + 清状态，不写盘）。
+    function cancelWidgetResize(inst) {
+        if (!root.resizeActive || String(inst && inst.widgetId || "") !== root.resizeWidgetId)
+            return;
+        var start = root.resizeStart;
+        resizeXAnim.stop();
+        resizeYAnim.stop();
+        resizeWAnim.stop();
+        resizeHAnim.stop();
+        inst.x = start.x;
+        inst.y = start.y;
+        inst.width = start.width;
+        inst.height = start.height;
+        inst.widgetSize = start.size;
+        root.clearResize();
+    }
+
+    function clearResize() {
+        root.resizeActive = false;
+        root.resizeWidgetId = "";
+        root.resizeStart = null;
+    }
+
+    // 更新配置中某条目的网格位置/档位（拖动与 resize 共用的单一路径，
+    // G-6：不得再有第二份配置改写函数）。size 为空 → 保持既有档位。
+    // 实例几何由 commit 的落位/换档动画负责，不重建对象树。
+    function updateConfigEntry(id, col, row, size) {
         var sid = String(id || "");
         var next = [];
         for (var i = 0; i < root.widgetConfigs.length; i++) {
             var e = root.widgetConfigs[i];
             if (String(e.id || "") === sid) {
-                next.push({ "id": e.id, "size": e.size, "col": Math.round(col), "row": Math.round(row) });
+                next.push({
+                    "id": e.id,
+                    "size": size && String(size).length > 0 ? String(size) : String(e.size || "small"),
+                    "col": Math.round(col),
+                    "row": Math.round(row)
+                });
             } else {
                 next.push(e);
             }
@@ -603,6 +793,29 @@ PanelWindow {
         dragYAnim.to = ty;
         dragXAnim.start();
         dragYAnim.start();
+    }
+
+    // 换档/回滚动画（A7：P-1 禁弹簧；时长/缓动取自 Motion.js，P-3）。
+    // 与 create/settle 同一钳制：目标像素不得为负（短屏顶部行）。
+    function animateWidgetResizeTo(inst, tx, ty, tw, th) {
+        if (!inst)
+            return;
+        tx = Math.max(0, Number(tx) || 0);
+        ty = Math.max(0, Number(ty) || 0);
+        tw = Math.max(1, Number(tw) || 1);
+        th = Math.max(1, Number(th) || 1);
+        resizeXAnim.target = inst;
+        resizeXAnim.to = tx;
+        resizeYAnim.target = inst;
+        resizeYAnim.to = ty;
+        resizeWAnim.target = inst;
+        resizeWAnim.to = tw;
+        resizeHAnim.target = inst;
+        resizeHAnim.to = th;
+        resizeXAnim.start();
+        resizeYAnim.start();
+        resizeWAnim.start();
+        resizeHAnim.start();
     }
 
     // ---- mask 与弹层联动 ----
@@ -641,11 +854,27 @@ PanelWindow {
             overflowBannerTimer.restart();
     }
 
+    // A7 resize 冲突反馈状态（可见横幅；单发 Timer，无常驻轮询 A-C3）。
+    property bool resizeRejectedVisible: false
+    function showResizeRejected() {
+        root.resizeRejectedVisible = true;
+        resizeRejectHide.restart();
+    }
+    Timer {
+        id: resizeRejectHide
+        interval: 1200
+        repeat: false
+        onTriggered: root.resizeRejectedVisible = false
+    }
+
     // 横幅渲染层（mask 之上：遮罩不挡横幅，且 mask 无 region 时横幅仍在）。
+    // z:50 高于小部件层（widgetLayer 声明在后会盖住横幅，对抗审查 P1）；
+    // 低于「完成」按钮 z:100。
     Item {
         id: bannerLayer
         anchors.fill: parent
-        visible: root.overflowBannerVisible
+        z: 50
+        visible: root.overflowBannerVisible || root.resizeRejectedVisible
 
         Rectangle {
             anchors.horizontalCenter: parent.horizontalCenter
@@ -659,6 +888,29 @@ PanelWindow {
             Text {
                 anchors.centerIn: parent
                 text: "小部件配置超限：" + root.overflowCount + " 个未显示"
+                color: "#ffffff"
+                font.pixelSize: 13
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+            }
+        }
+
+        // A7 resize 冲突反馈：目标档位放不下（空间不足/越界）时拒绝换档，
+        // 显示可见横幅（不静默失败），单发 Timer 自动消失。topMargin 96
+        // 避开顶部居中的「完成」按钮（y≈48-80），不互相遮挡。
+        Rectangle {
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.top: parent.top
+            anchors.topMargin: 96
+            width: Math.min(360, root.screenWidth - 48)
+            height: 44
+            radius: GlassStyle.RadiusPanelCompact
+            color: "#cc1d1d1f"
+            visible: root.resizeRejectedVisible
+
+            Text {
+                anchors.centerIn: parent
+                text: "无法调整大小：空间不足"
                 color: "#ffffff"
                 font.pixelSize: 13
                 horizontalAlignment: Text.AlignHCenter
@@ -680,6 +932,34 @@ PanelWindow {
         id: dragYAnim
         property: "y"
         duration: Motion.elementMove(null)
+        easing.type: Motion.standardDecel
+    }
+
+    // 换档/回滚动画（A7）：编辑模式 resize 提交/回滚时平滑切换几何。
+    // 独立 NumberAnimation（不挂 Behavior：拖动中的直接 x/y/width/height
+    // 更新不能被自动动画化）；时长/缓动来自 Motion.js（P-3），禁弹簧（P-1）。
+    NumberAnimation {
+        id: resizeXAnim
+        property: "x"
+        duration: Motion.elementResize(null)
+        easing.type: Motion.standardDecel
+    }
+    NumberAnimation {
+        id: resizeYAnim
+        property: "y"
+        duration: Motion.elementResize(null)
+        easing.type: Motion.standardDecel
+    }
+    NumberAnimation {
+        id: resizeWAnim
+        property: "width"
+        duration: Motion.elementResize(null)
+        easing.type: Motion.standardDecel
+    }
+    NumberAnimation {
+        id: resizeHAnim
+        property: "height"
+        duration: Motion.elementResize(null)
         easing.type: Motion.standardDecel
     }
 

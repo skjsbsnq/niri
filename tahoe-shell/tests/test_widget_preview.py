@@ -148,6 +148,23 @@ class WidgetLibraryGalleryContractTests(unittest.TestCase):
         self.assertIn("signal addRequested(string id, string size)", lib)
         self.assertIn("signal addWidgetRequested(string id, string size)", sidebar)
 
+    def test_preview_has_dark_well_for_light_sidebar(self) -> None:
+        # Deployment fix: widget content is white-text + translucent glass
+        # (designed for the wallpaper). On a light-mode sidebar card the
+        # preview was unreadable (white-on-white; only red dot / colored bars
+        # visible). A dark well must sit behind every preview instance.
+        lib = LIBRARY.read_text(encoding="utf-8")
+        self.assertIn('import "TahoeGlass.js" as GlassStyle', lib)
+        self.assertIn("radius: GlassStyle.RadiusPanelCompact", lib)
+        self.assertIn('color: root.darkMode ? "#1c1c1e" : "#2c2c2e"', lib)
+        # The well is declared before the preview instance (renders behind it):
+        # if the well moved after the preview, an opaque well would cover the
+        # preview and the fix would silently break — lock the ordering by
+        # asserting the well's color literal appears before the first preview.
+        before_preview = lib.split("WidgetPreview {", 1)[0]
+        self.assertIn("Rectangle {", before_preview)
+        self.assertIn('color: root.darkMode ? "#1c1c1e" : "#2c2c2e"', before_preview)
+
     def test_gallery_keeps_present_and_failure_feedback(self) -> None:
         lib = LIBRARY.read_text(encoding="utf-8")
         # A4 behavior preserved: present widgets are marked and not clickable,

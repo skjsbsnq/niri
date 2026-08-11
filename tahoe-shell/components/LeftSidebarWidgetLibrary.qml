@@ -3,6 +3,7 @@ pragma ComponentBehavior: Bound
 import QtQuick
 import QtQuick.Layouts
 import "Motion.js" as Motion
+import "TahoeGlass.js" as GlassStyle
 import "settings/SettingsTheme.js" as Theme
 import "widgets/WidgetGrid.js" as Grid
 
@@ -349,6 +350,16 @@ Item {
                                     width: previewW
                                     height: previewH
                                     clip: true
+
+                                    // 预览井：小部件内容为白字 + 半透明白玻璃，
+                                    // 为桌面壁纸场景设计。浅色侧栏卡片上会白字
+                                    // 白底不可见（部署实测：只见红点/彩色条），
+                                    // 故预览区先垫深色底，保证真实预览可读。
+                                    Rectangle {
+                                        anchors.fill: parent
+                                        radius: GlassStyle.RadiusPanelCompact
+                                        color: root.darkMode ? "#1c1c1e" : "#2c2c2e"
+                                    }
 
                                     WidgetPreview {
                                         anchors.fill: parent

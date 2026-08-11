@@ -57,3 +57,21 @@
 ## 最终结论
 
 Epicurus 1×CONFIRMED（C1 presentIds）已修并真机复验；Poincare 无 CONFIRMED。双触发（P1）亦已修并真机复验（loadCount=1）。其余 PLAUSIBLE 已记录理由。全部确认问题已修 → 允许 commit。
+
+---
+
+## 部署修复追加记录（2026-08-11，浅色模式预览可读性）
+
+**用户实测报告**：库 tab 四个小部件预览「只有非透明部分能看清楚——只见小红点、'今天 11'、系统监控三个颜色条」。
+
+**根因**：侧栏浅色模式下卡片为纯白 `#ffffff`；小部件内容（白字 + `#3dffffff` 24% 半透明白玻璃）为桌面壁纸场景设计，白字白底对比度 ≈1.05:1 不可见，只剩红点/彩色条等不透明元素。
+
+**修复**（`LeftSidebarWidgetLibrary.qml`）：previewArea 内、WidgetPreview 之前新增不透明深色预览井 `Rectangle`（`radius: GlassStyle.RadiusPanelCompact`；`color: root.darkMode ? "#1c1c1e" : "#2c2c2e"`）。浅色模式有效底 ≈RGB(94,94,94)，白字对比 >10:1；深色模式井比卡片深一档，无退化。仅 11 行视觉代码 + 测试。
+
+**审查**：2 个子代理（Dalton APPROVE；Parfit APPROVE）。
+- Dalton：CONFIRMED 1 条 —— 新测试的顺序断言判别力弱（`before_preview` 内含既有 `Rectangle {`，井删除/移后均不失败）→ **已修**：顺序断言改为「井的颜色字面量必须出现在首个 `WidgetPreview {` 之前」，删除/移动井均会使测试失败。
+- Parfit：无 CONFIRMED；PLAUSIBLE 2 条（预览四角极小像素透卡色 —— 与桌面小部件圆角透壁纸语义一致，不构成可读性问题；预览恒为深底与浅色壁纸实际外观有偏差 —— 属让「真实预览」在浅色模式成立的必要设计取舍）。
+
+**验证**：
+- 真机截图像素核验：修复前日历预览区 2903 白 / 0 深；修复后 64 白（文字像素）/ 2740 深（井+玻璃），文字可读。
+- pytest：1117 passed + 318 subtests；qmllint 零新增错误。

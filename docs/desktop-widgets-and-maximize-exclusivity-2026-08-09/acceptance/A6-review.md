@@ -189,3 +189,19 @@
   pendingSettingsRefresh 条件块内）→ Hooke（第 2 轮复核：运行时代码核验
   通过、测试强化有效，APPROVE）。
 - 验收：门控顺序断言 + 全量 pytest 全绿（1150 passed / 1204 subtests）。
+
+**本记录：电池小部件图标与百分比卡在一起**
+- 根因：BatteryWidget 旧布局用 cellSize 绝对偏移（bolt topMargin 0.45*cell、
+  半透明轮廓居中、百分比 bottomMargin 0.22*cell）；上一轮 gap 修复让实例
+  宽高各内缩 12px 后，bolt 与轮廓互相挤压、百分比压上轮廓下沿（截图实测
+  bolt 与轮廓贴合、百分比距轮廓下沿仅 ~19px）。
+- 修复：改为锚链顺序排布 —— 半透明电池轮廓贴顶（size=min(52, W*0.58)）、
+  bolt 叠加其中心（size=min(40, W*0.46)）、百分比锚在轮廓下沿
+  （topMargin=max(2, H*0.04)，font=min(26, W*0.26)）、状态文本贴底；
+  任意实例高度（120–180）下三者互不重叠，低电量变红语义与充电/放电字形
+  不变。
+- 审查：Aquinas（APPROVE；指出测试切片使 0.15/0.22/0.36 等旧偏移断言
+  空转 → 已补强为全视觉块切片 + 补 0.42/0.62）→ Hume（APPROVE；四屏
+  几何一致、手势/删除命中不受遮挡、无平行网格逻辑；极短屏 <640×480
+  边界微叠 3px 不在本轮范围）。
+- 验收：全量 pytest 1152 passed / 1204 subtests。

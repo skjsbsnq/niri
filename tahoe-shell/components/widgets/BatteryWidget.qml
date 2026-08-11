@@ -55,37 +55,44 @@ Widget {
         && root.onBattery
         ? "#ff453a" : "#ffffff"
 
-    // 图标字体字形：充电 e1a3 / 放电 e1a4（与 BatteryPopup 一致）。
+    // ---- 视觉（部署反馈修复：图标与百分比卡在一起）----
+    // 旧布局用 cellSize 绝对偏移（bolt topMargin 0.45*cell、半透明轮廓
+    // 居中、百分比 bottomMargin 0.22*cell）；实例因 gap 内缩 12px 后，
+    // bolt 与轮廓互相挤压、百分比压上轮廓下沿。改为锚链顺序排布：
+    // 轮廓贴顶（bolt 叠加其中心）、百分比锚在轮廓下沿、状态文本贴底 ——
+    // 任意实例高度下三者互不重叠。
     TahoeSymbol {
-        id: icon
+        id: batteryShell
 
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: parent.top
-        anchors.topMargin: Math.round(root.cellSize * 0.45)
-        name: root.charging ? "" : ""
-        color: root.percentColor
-        size: Math.max(20, Math.round(root.cellSize * 0.42))
-        asynchronous: true
-    }
-
-    TahoeSymbol {
-        anchors.centerIn: parent
-        anchors.horizontalCenterOffset: 0
-        anchors.verticalCenterOffset: Math.round(root.cellSize * 0.15)
+        anchors.topMargin: Math.max(4, Math.round(root.height * 0.05))
         name: ""
         color: root.percentColor
-        size: Math.max(34, Math.round(root.cellSize * 0.62))
+        size: Math.min(52, Math.round(root.width * 0.58))
         opacity: 0.5
         asynchronous: true
     }
 
+    // 充电 e1a3 / 放电 e1a4（与 BatteryPopup 一致）：叠加在轮廓中心。
+    TahoeSymbol {
+        id: icon
+
+        anchors.centerIn: batteryShell
+        name: root.charging ? "" : ""
+        color: root.percentColor
+        size: Math.min(40, Math.round(root.width * 0.46))
+        asynchronous: true
+    }
+
+    // 百分比：锚在轮廓下沿 + 固定间隙，永远在图标之下、互不重叠。
     Text {
         anchors.horizontalCenter: parent.horizontalCenter
-        anchors.bottom: parent.bottom
-        anchors.bottomMargin: Math.max(10, Math.round(root.cellSize * 0.22))
+        anchors.top: batteryShell.bottom
+        anchors.topMargin: Math.max(2, Math.round(root.height * 0.04))
         text: root.percentage + "%"
         color: "#ffffff"
-        font.pixelSize: Math.max(18, Math.round(root.cellSize * 0.36))
+        font.pixelSize: Math.min(26, Math.round(root.width * 0.26))
         font.weight: Font.DemiBold
         horizontalAlignment: Text.AlignHCenter
         verticalAlignment: Text.AlignVCenter

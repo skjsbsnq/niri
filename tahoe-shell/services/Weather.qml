@@ -55,6 +55,14 @@ Item {
     property real pendingLatitude: 0
     property real pendingLongitude: 0
     property string pendingLocationName: ""
+    // 手动位置持久化门控（部署反馈：设置里选了城市仍按 IP 查天气）。
+    // 根因：DesktopSettings 的 desktop-settings.json 是 FileView 异步加载，
+    // 本服务 Component.onCompleted 立刻 refresh() 时 manualOverride 还是
+    // 默认 false → 走 IP 定位，且设置加载完成后没有任何路径重发刷新。
+    // 门控：设置未就绪时挂起首次/周期刷新，onLoadedChanged（异步完成回调）
+    // 再驱动一次 refresh()（P-7 双门：早退 + 完成回调重驱）。
+    readonly property bool settingsReady: !!root.settingsService && !!root.settingsService.loaded
+    property bool pendingSettingsRefresh: false
     property bool forecastDone: false
     property bool airDone: false
     property int forecastExitCode: -1
@@ -83,6 +91,9 @@ Item {
 
     Component.onCompleted: {
         root.loadCache(false);
+        // 设置可能尚未从磁盘加载完（manualOverride 还是默认 false）。
+        // refresh() 内部有 settingsReady 早退门：未就绪则挂起，设置加载
+        // 完成（onLoadedChanged）后由下文的 Connections 重驱（P-7）。
         root.refresh();
         refreshTimer.start();
     }
@@ -503,6 +514,14 @@ Item {
             return;
         }
 
+        // 设置未加载完（桌面设置文件异步读盘）→ 挂起本轮刷新，等
+        // settingsReady 置真后由 onLoadedChanged 重驱。避免手动城市被
+        // 默认空值盖过、每次启动都按 IP 查天气。
+        if (root.settingsService && !root.settingsService.loaded) {
+            root.pendingSettingsRefresh = true;
+            return;
+        }
+
         var lat = manualLatitude();
         var lon = manualLongitude();
         if (manualOverrideEnabled() && canUseLocation(lat, lon)) {
@@ -875,7 +894,23 @@ Item {
         return root.dailyForecast.length > 0 || root.hourlyForecast.length > 0;
     }
 
+    function cacheMatchesLocation(cache, lat, lon) {
+        if (!cache || !canUseLocation(numberValue(cache.latitude, NaN), numberValue(cache.longitude, NaN)))
+            return false;
+        // 城市中心坐标容差（度）：手动坐标与缓存坐标一致才视为同一位置。
+        var tolerance = 0.05;
+        return Math.abs(numberValue(cache.latitude, NaN) - lat) <= tolerance
+            && Math.abs(numberValue(cache.longitude, NaN) - lon) <= tolerance;
+    }
+
     function loadCache(stale) {
+        // 设置未加载完 → 不应用缓存（与 refresh 同一早退门，P-7）：手动
+        // 位置可能已持久化，过早应用会把上一会话按 IP 查的缓存当成 fresh
+        // 显示（部署反馈：设了肇庆仍闪北京）。设置就绪后由 Connections
+        // 的 onLoadedChanged 补载。
+        if (root.settingsService && !root.settingsService.loaded)
+            return false;
+
         var text = "";
         try {
             text = cacheFile.text();
@@ -886,11 +921,22 @@ Item {
         if (String(text || "").trim().length === 0)
             return false;
 
+        var cache = null;
         try {
-            return applyCachePayload(JSON.parse(text), stale);
+            cache = JSON.parse(text);
         } catch (e) {
             return false;
         }
+
+        // 手动位置与缓存坐标不一致（例如缓存是上一会话按 IP 查的）→
+        // 丢弃缓存，等真实取数结果写入，避免闪现旧位置。
+        var lat = manualLatitude();
+        var lon = manualLongitude();
+        if (manualOverrideEnabled() && canUseLocation(lat, lon)
+                && !root.cacheMatchesLocation(cache, lat, lon))
+            return false;
+
+        return applyCachePayload(cache, stale);
     }
 
     FileView {
@@ -900,6 +946,24 @@ Item {
         blockWrites: true
         printErrors: false
         onLoaded: root.loadCache(false)
+    }
+
+    // 设置加载完成 → 重驱被挂起的刷新（P-7 完成回调驱动被挡决策）。
+    // settingsService 可能为空（如独立测试/预览容器），null target 为 no-op。
+    Connections {
+        target: root.settingsService
+
+        function onLoadedChanged() {
+            if (!root.settingsReady)
+                return;
+            // 缓存可能在设置就绪前被 loadCache 早退门拒载，设置就绪后补载
+            // （P-7 完成回调驱动被挡决策；幂等：已应用/为空/不匹配则早退）。
+            root.loadCache(false);
+            if (root.pendingSettingsRefresh) {
+                root.pendingSettingsRefresh = false;
+                root.refresh();
+            }
+        }
     }
 
     Process {

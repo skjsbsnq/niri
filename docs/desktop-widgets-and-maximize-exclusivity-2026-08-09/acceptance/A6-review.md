@@ -172,3 +172,20 @@
   ~1px 裁切，均非本轮引入且不阻断）。
 - 验收：几何测试按宿主同款公式扫描逻辑高 720–1600 全绿（886 subtests）；
   全量 pytest 全绿。
+
+**本记录：天气手动位置持久化（设置了肇庆不再按 IP 查询）**
+- 根因：Weather 服务 Component.onCompleted 立刻 refresh()，而 DesktopSettings
+  的 desktop-settings.json 由 FileView 异步加载，此时 weatherManualOverride
+  还是默认 false → 每次启动先按 IP 定位（live 状态实测：desktop-settings.json
+  为肇庆 23.04893/112.46091，weather-cache.json 却是 Beijing 39.90/116.41）；
+  设置加载完成后没有任何路径重发刷新，10 分钟内一直显示 IP 天气。
+- 修复：refresh()/loadCache() 增加 settingsService.loaded 早退门
+  （pendingSettingsRefresh 挂起），Connections.onLoadedChanged 在设置加载
+  完成后重驱 loadCache+refresh（P-7 双门）；loadCache 增加
+  cacheMatchesLocation —— 手动覆盖且缓存坐标与手动坐标不一致（容差 0.05°）
+  时丢弃缓存，不闪现旧 IP 位置。
+- 审查：Lovelace（REJECT：结构测试只锁字符串、不锁控制流位置 → 已强化为
+  函数体内相对位置断言：gate<manual<detect、mismatch<apply、refresh 在
+  pendingSettingsRefresh 条件块内）→ Hooke（第 2 轮复核：运行时代码核验
+  通过、测试强化有效，APPROVE）。
+- 验收：门控顺序断言 + 全量 pytest 全绿（1150 passed / 1204 subtests）。

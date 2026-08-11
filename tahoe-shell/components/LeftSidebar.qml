@@ -33,7 +33,7 @@ PanelWindow {
     // （宿主配置唯一 id，重复添加会被拒绝；不标记会误报「桌面已满」）。
     property var widgetCatalog: ({})
     property var widgetInstances: ({})
-    signal addWidgetRequested(string id)
+    signal addWidgetRequested(string id, string size)
     property bool widgetAddFailed: false
 
     readonly property int screenWidth: Math.max(1, Number(root.screen && root.screen.width) || root.width)
@@ -327,13 +327,16 @@ PanelWindow {
                     widgetCatalog: root.widgetCatalog
                     presentWidgets: root.widgetInstances
                     settingsService: root.settingsService
+                    batteryService: root.batteryService
+                    weatherService: root.weatherService
+                    systemStatsService: root.systemStatsService
                     darkMode: root.darkMode
                     cardsEnter: root.cardsEnter && root.currentTab === "widgets"
                     useSpring: root.useSpring
                     addFailed: root.widgetAddFailed
-                    onAddRequested: function(id) {
+                    onAddRequested: function(id, size) {
                         root.widgetAddFailed = false;
-                        root.addWidgetRequested(id);
+                        root.addWidgetRequested(id, size);
                     }
 
                     Behavior on opacity {

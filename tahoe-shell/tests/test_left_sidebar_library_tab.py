@@ -67,7 +67,7 @@ class LeftSidebarLibraryTabTests(unittest.TestCase):
     def test_library_page_present_with_add_signal(self) -> None:
         self.assertTrue(LIBRARY.is_file(), "LeftSidebarWidgetLibrary.qml must exist")
         lib = LIBRARY.read_text(encoding="utf-8")
-        self.assertIn("signal addRequested(string id)", lib)
+        self.assertIn("signal addRequested(string id, string size)", lib)
         self.assertIn("property var widgetCatalog", lib)
         self.assertIn("property bool addFailed", lib)
         # Already-present widgets are marked and not re-clickable (duplicate ids
@@ -81,7 +81,16 @@ class LeftSidebarLibraryTabTests(unittest.TestCase):
         sidebar = SIDEBAR.read_text(encoding="utf-8")
         self.assertIn("LeftSidebarWidgetLibrary {", sidebar)
         self.assertIn('root.currentTab === "widgets"', sidebar)
-        self.assertIn("signal addWidgetRequested(string id)", sidebar)
+        self.assertIn("signal addWidgetRequested(string id, string size)", sidebar)
+        # A5 gallery: each entry renders a real WidgetPreview with a selectable
+        # size; the size flows through addRequested -> addWidgetRequested.
+        self.assertIn("WidgetPreview {", lib)
+        self.assertIn('source: String(modelData.source || "")', lib)
+        self.assertIn("widgetSize: selectedSize", lib)
+        self.assertIn("SizeChip {", lib)
+        self.assertIn("onClicked: selectedSize = \"small\"", lib)
+        self.assertIn("onClicked: selectedSize = \"medium\"", lib)
+        self.assertIn("onClicked: selectedSize = \"large\"", lib)
 
     def test_registry_single_source_with_sizes(self) -> None:
         host = HOST.read_text(encoding="utf-8")
@@ -105,6 +114,12 @@ class LeftSidebarLibraryTabTests(unittest.TestCase):
         ):
             sizes = re.findall(r'"([a-z]+)"', entry.group("sizes"))
             self.assertIn(entry.group("default"), sizes, entry.group(1))
+        # A5: library entries must carry source + defaultSize from the host
+        # catalog (the gallery previews are created from those, never from a
+        # second registry).
+        lib = LIBRARY.read_text(encoding="utf-8")
+        self.assertIn('"source": String(entry.source || "")', lib)
+        self.assertIn('"defaultSize": String(entry.defaultSize || "small")', lib)
         # Sidebar must consume the host catalog/instances, not define its own.
         shell = SHELL_QML.read_text(encoding="utf-8")
         self.assertIn("widgetCatalog: widgetHost.widgetCatalog", shell)
@@ -119,7 +134,7 @@ class LeftSidebarLibraryTabTests(unittest.TestCase):
         host = HOST.read_text(encoding="utf-8")
         shell = SHELL_QML.read_text(encoding="utf-8")
         # C1: addWidget must not fake-success before the initial load.
-        add = host.split("function addWidget(id) {", 1)[1]
+        add = host.split("function addWidget(id, size) {", 1)[1]
         add = add.split("function removeWidget", 1)[0]
         self.assertIn("!root.loadingComplete", add)
         self.assertIn("return false", add)
@@ -142,14 +157,15 @@ class LeftSidebarLibraryTabTests(unittest.TestCase):
 
     def test_shell_add_path_closes_on_success_feedback_on_full(self) -> None:
         shell = SHELL_QML.read_text(encoding="utf-8")
-        # Handler is wired on the sidebar instance.
-        self.assertIn("onAddWidgetRequested: function(id)", shell)
-        self.assertIn("widgetHost.addWidget(id)", shell)
+        # Handler is wired on the sidebar instance; the selected preview size
+        # is forwarded to the host.
+        self.assertIn("onAddWidgetRequested: function(id, size)", shell)
+        self.assertIn("widgetHost.addWidget(id, size)", shell)
         self.assertIn("shell.closeLeftSidebar()", shell)
         self.assertIn("leftSidebar.widgetAddFailed = true", shell)
         # P-9: the asserted call form must be defined in its scope.
         host = HOST.read_text(encoding="utf-8")
-        self.assertIn("function addWidget(id)", host)
+        self.assertIn("function addWidget(id, size)", host)
 
     def test_library_page_constraints(self) -> None:
         lib = LIBRARY.read_text(encoding="utf-8")
@@ -169,8 +185,15 @@ class LeftSidebarLibraryTabTests(unittest.TestCase):
         # reason (no-space / config-not-ready / unknown entry all show it).
         self.assertIn("无法添加小部件", lib)
         self.assertIn("property bool bannerVisible", lib)
-        # Sizes shown as text next to the name (A4 list item content).
+        # Sizes shown as text next to the name for single-size entries
+        # (A4 list item content kept); multi-size entries expose size chips.
         self.assertIn("尺寸：", lib)
+        self.assertIn("readonly property bool multiSize", lib)
+        self.assertIn("property string selectedSize", lib)
+        # Chips only render declared catalog sizes (no invented third path).
+        self.assertIn("visible: hasSize(\"small\")", lib)
+        self.assertIn("visible: hasSize(\"medium\")", lib)
+        self.assertIn("visible: hasSize(\"large\")", lib)
         # Null-injected catalog is tolerated (standalone preview / tests).
         self.assertIn("Object.keys(root.widgetCatalog || {})", lib)
 

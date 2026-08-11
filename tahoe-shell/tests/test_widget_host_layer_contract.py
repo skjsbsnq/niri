@@ -235,6 +235,25 @@ class WidgetGridContractTests(unittest.TestCase):
         self.assertNotIn("var LIMIT_REGIONS", text)
 
 
+class WidgetA5SizeSelectionContractTests(unittest.TestCase):
+    """A5 contract guards: preview-selected size must reach the host add path
+    through the existing single interface (no parallel add API)."""
+
+    def test_add_widget_accepts_selected_size_only_from_catalog(self) -> None:
+        host = HOST.read_text(encoding="utf-8")
+        add = host.split("function addWidget(id, size) {", 1)[1]
+        add = add.split("function removeWidget", 1)[0]
+        # Only declared catalog sizes are accepted (A7 档位契约一致).
+        self.assertIn("Array.isArray(catalog.sizes)", add)
+        self.assertIn('sizes.indexOf(String(size || ""))', add)
+        # Unknown / empty size falls back to defaultSize, never a phantom tier.
+        self.assertIn('String(catalog.defaultSize || "small")', add)
+        self.assertIn('"size": resolved', add)
+        # The slot search uses the resolved size's span (single grid source).
+        self.assertIn("Grid.colsForSize(resolved)", add)
+        self.assertIn("Grid.rowsForSize(resolved)", add)
+
+
 class WidgetA3ContractTests(unittest.TestCase):
     """A3 contract guards: first widget batch (weather/calendar/system-monitor),
     real host-visible gate, and SystemStats gated on host visibility."""
@@ -326,6 +345,20 @@ class WidgetA3ContractTests(unittest.TestCase):
         self.assertIn("CalendarLogic.monthGrid", text)
         self.assertIn("CalendarLogic.todayDayLabel", text)
 
+    def test_rebuild_assigns_filled_instance_map_once(self) -> None:
+        # A5 对抗审查 C1：实例表必须「填完再整体赋值」。先赋空再逐个
+        # mutation 不触发 QML notify，库页「已添加」快照（presentIds）
+        # 会停在空表；createWidgetInstance 在重建时写入临时表 next。
+        text = HOST.read_text(encoding="utf-8")
+        self.assertIn("function createWidgetInstance(entry, into)", text)
+        self.assertIn("var map = into || root.widgetInstances;", text)
+        self.assertIn("map[entry.id] = obj;", text)
+        rebuild = text.split("function rebuildWidgets() {", 1)[1]
+        rebuild = rebuild.split("onHostVisibleChanged", 1)[0]
+        self.assertIn("var next = {};", rebuild)
+        self.assertIn("root.createWidgetInstance(entry, next);", rebuild)
+        self.assertIn("root.widgetInstances = next;", rebuild)
+
     def test_host_visible_follows_widget_count(self) -> None:
         # A3 判据「宿主隐藏时刷新停止」的真实触发路径：宿主 visible 跟随
         # 实例数（无小部件 → 隐藏 → hostVisible=false → 门控生效）。
@@ -355,7 +388,12 @@ class WidgetA3ContractTests(unittest.TestCase):
         ):
             self.assertIn(f'"{key}": {{ "source": ', text, msg=key)
             self.assertIn(f'"defaultSize": "{size}"', text, msg=key)
-        self.assertIn('var size = String(catalog.defaultSize || "small");', text)
+        # A5: addWidget resolves the selected preview size against the catalog
+        # sizes (single source); unknown sizes fall back to defaultSize.
+        self.assertIn("function addWidget(id, size)", text)
+        self.assertIn('sizes.indexOf(String(size || ""))', text)
+        self.assertIn('String(catalog.defaultSize || "small")', text)
+        self.assertIn('"size": resolved', text)
 
     def test_widget_size_derived_from_span(self) -> None:
         # G-6 / 正确性：实例的 widgetSize 必须从跨度经 WidgetGrid.js 唯一

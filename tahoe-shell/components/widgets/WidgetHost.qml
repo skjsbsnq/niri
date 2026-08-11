@@ -131,11 +131,15 @@ PanelWindow {
     // 直接绑 Object.keys 会卡在旧值）。宿主 visible 依赖它。
     property int widgetInstancesCount: 0
 
-    function createWidgetInstance(entry) {
+    function createWidgetInstance(entry, into) {
+        // into：重建时传入的临时实例表（A5 审查 C1）。实例表必须「填完再
+        // 整体赋值」——先赋空再逐个 mutation 不触发 QML notify，会让
+        // 「已添加」观察者（库页 presentIds）停在空快照。
+        var map = into || root.widgetInstances;
         if (!entry || !root.widgetCatalog[String(entry.id || "")])
             return null;
-        if (root.widgetInstances[entry.id])
-            return root.widgetInstances[entry.id];
+        if (map[entry.id])
+            return map[entry.id];
 
         // source 相对本文件所在目录（components/widgets/），
         // Qt.createComponent 相对 URL 以调用 JS 所在文件目录为基准。
@@ -174,21 +178,25 @@ PanelWindow {
         // hostVisible 用绑定（非一次性初值）：宿主可见性后续变化时
         // 小部件门控实时跟随（createObject 初值是一次性赋值）。
         obj.hostVisible = Qt.binding(function() { return root.hostVisible; });
-        root.widgetInstances[entry.id] = obj;
+        map[entry.id] = obj;
         return obj;
     }
 
     // 重建全部实例（配置或几何变化后）。先销毁旧的（避免 id 重复）。
+    // 实例表填完后再整体赋值一次（不是先赋空再 mutation）：
+    // mutation 不触发 QML 属性变更，先赋空会让库页「已添加」快照
+    // 停在空表（A5 对抗审查 C1）。
     function rebuildWidgets() {
         var old = root.widgetInstances;
-        root.widgetInstances = {};
+        var next = {};
         var keys = Object.keys(old);
         for (var i = 0; i < keys.length; i++)
             old[keys[i]].destroy();
         for (var j = 0; j < root.gridState.grid.length; j++) {
             var entry = root.gridState.grid[j];
-            root.createWidgetInstance(entry);
+            root.createWidgetInstance(entry, next);
         }
+        root.widgetInstances = next;
         root.widgetInstancesCount = Object.keys(root.widgetInstances).length;
         root.updateMask();
         root.refreshSystemStatsDemand();
@@ -286,8 +294,10 @@ PanelWindow {
     }
 
     // ---- 对外 API（A4 库 tab / A6 编辑模式接入点）----
-    // 添加小部件：找空位 → 建实例 → 写盘。
-    function addWidget(id) {
+    // 添加小部件：找空位 → 建实例 → 写盘。size 为 A5 库预览所选档位；
+    // 只有 catalog 声明过的尺寸才是合法档位（与 A7 换档契约一致），
+    // 未知/越权尺寸回退 defaultSize，不创建未注册规格的实例。
+    function addWidget(id, size) {
         // P-7 早退门（对抗审查 C1）：初次加载完成前不得添加。否则会在空
         // 配置上建实例，随后 loadConfig 用磁盘内容覆盖重建销毁它——
         // 「假成功 + 未持久化 + 无反馈」的启动竞态。返回 false 让库页
@@ -299,14 +309,16 @@ PanelWindow {
         var catalog = root.widgetCatalog[String(id || "")];
         if (!catalog)
             return false;
-        var size = String(catalog.defaultSize || "small");
-        var slot = Grid.findSlot(root.gridState, Grid.colsForSize(size), Grid.rowsForSize(size));
+        var sizes = Array.isArray(catalog.sizes) ? catalog.sizes : [];
+        var resolved = String(sizes.indexOf(String(size || "")) >= 0
+            ? String(size) : String(catalog.defaultSize || "small"));
+        var slot = Grid.findSlot(root.gridState, Grid.colsForSize(resolved), Grid.rowsForSize(resolved));
         if (!slot)
             return false;
 
         var nextConfig = root.widgetConfigs.concat([{
             "id": String(id),
-            "size": size,
+            "size": resolved,
             "col": slot.col,
             "row": slot.row
         }]);

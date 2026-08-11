@@ -1087,8 +1087,8 @@ ShellRoot {
                     // A4 库 tab：点击条目 → 本屏 WidgetHost 找空位添加；
                     // 成功 → 关闭侧栏；桌面无空位 → 回灌 widgetAddFailed
                     // 让库 tab 显示可见反馈（不静默失败，侧栏保持打开）。
-                    onAddWidgetRequested: function(id) {
-                        if (widgetHost.addWidget(id)) {
+                    onAddWidgetRequested: function(id, size) {
+                        if (widgetHost.addWidget(id, size)) {
                             shell.closeLeftSidebar();
                         } else {
                             leftSidebar.widgetAddFailed = true;

@@ -156,3 +156,56 @@ function sizeForSpan(cols, rows) {
         return "medium";
     return "small";
 }
+
+// ---- A6 拖动落点（纯函数；宿主拖动提交只读本文件结果）----
+// 像素 → 网格坐标换算（与宿主实例布局公式同一来源，G-6）：
+// - x 左起：col = xPx / cellSize
+// - y 为屏幕坐标（上起），网格行号从底部数起（A2 语义）：
+//   row = (screenHeight - yPx) / cellSize - rows
+function xPxForCell(col, cellSize) {
+    return Math.round(Number(col) * Number(cellSize));
+}
+function yPxForCell(row, rows, cellSize, screenHeight) {
+    return Math.round(Number(screenHeight) - (Number(row) + Number(rows)) * Number(cellSize));
+}
+
+// 小部件左上角像素 → 最近合法网格位（clamp 到网格边界）。
+// cols/rows 为该小部件跨度；返回 {col, row}。
+function snapPosition(cols, rows, xPx, yPx, cellSize, screenHeight) {
+    var cell = Math.max(1, Number(cellSize) || 1);
+    var h = Math.max(1, Number(screenHeight) || 1);
+    var col = Math.round(Number(xPx) / cell);
+    var row = Math.round((h - Number(yPx)) / cell - Number(rows));
+    var maxCol = Math.max(0, GRID_COLS - Number(cols));
+    var maxRow = Math.max(0, GRID_ROWS - Number(rows));
+    return {
+        "col": Math.max(0, Math.min(maxCol, col)),
+        "row": Math.max(0, Math.min(maxRow, row))
+    };
+}
+
+// 落点是否可放置：边界合法 + 与除 id 外的条目无重叠。
+// grid 为 GridState.grid（含 gridX/gridY/cols/rows 的条目数组）。
+function canPlace(grid, id, col, row, cols, rows) {
+    var entries = Array.isArray(grid) ? grid : [];
+    var c = Math.round(Number(col) || 0);
+    var r = Math.round(Number(row) || 0);
+    var w = Math.round(Number(cols) || 0);
+    var h = Math.round(Number(rows) || 0);
+    if (c < 0 || r < 0 || c + w > GRID_COLS || r + h > GRID_ROWS)
+        return false;
+    for (var i = 0; i < entries.length; i++) {
+        var item = entries[i];
+        if (!item)
+            continue;
+        if (id !== undefined && id !== null && String(item.id || "") === String(id))
+            continue;
+        var cx = Number(item.gridX || 0);
+        var cy = Number(item.gridY || 0);
+        var cw = Number(item.cols || 0);
+        var ch = Number(item.rows || 0);
+        if (c < cx + cw && c + w > cx && r < cy + ch && r + h > cy)
+            return false;
+    }
+    return true;
+}

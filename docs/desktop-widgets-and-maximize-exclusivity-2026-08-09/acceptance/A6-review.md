@@ -1,0 +1,94 @@
+# A6 审查记录
+
+日期：2026-08-11
+子代理数：5（第 1 轮 3 个 + 第 2 轮 2 个；其中 Mencius 超时无结果，按子代理协议停止）
+
+## 各子代理结论
+
+### 子代理 1（Linnaeus，第 1 轮）
+- 结论：APPROVE
+- CONFIRMED：无
+- PLAUSIBLE：
+  1. begin/update 拖动逻辑可被掏空而不被测试发现（结构测试风格固有上限）
+  2. 「短按不触发」未被定点守护（需人工运行时验证）
+  3. suppressNextClick 接线只被字符串存在性守护
+  4. onCanceled 是否被 quickshell 真实派发无法静态证实（需人工）
+  5. grid 测试边界盲区（canPlace 负值 / snapPosition cols>GRID_COLS / 屏下沿）
+  6. 「拖动期抑制 hover、阻止宿主尺寸变化」无显式实现（widgets 无 hover、宿主尺寸只随实例数变化，实为空条款）
+
+### 子代理 2（Ramanujan，第 1 轮）
+- 结论：REJECT
+- CONFIRMED：
+  - C1：编辑模式退出不清拖动状态 —— `exitEditMode()`（WidgetHost.qml）只置
+    `editMode=false`，不清 `dragActive/dragWidgetId/dragStart`；拖动可越过编辑
+    模式存活，release 仍 commit 写盘；cancel 不达则 `dragActive` 永久残留，
+    后续 begin 全部早退（拖动永久失效）。
+- PLAUSIBLE：
+  - P1 onCanceled 派发无保障；P2 预览实例创建 2 个 Timer 对象（不启动）；
+    P3 提交动画期间实例被销毁可能悬挂动画 target；P4 完成按钮可能被窗口覆盖
+    （可恢复）；P5 拖动状态双份维护（与 Dock 同构，非 G-6 违规）。
+
+### 子代理 3（Anscombe，第 1 轮）
+- 结论：REJECT
+- CONFIRMED：
+  - C1：落位动画被下一次 begin 截断 —— `beginWidgetDrag` 无条件
+    `dragXAnim.stop()/dragYAnim.stop()`，而 `dragStart` 快照取 `inst.x/inst.y`
+    当前值（动画中间帧）；130ms 内再次按住任意小部件 → 已提交实例冻结在非
+    网格坐标，与已写盘 config 长期不一致；cancel 回滚到中间帧快照而非网格位。
+- PLAUSIBLE：
+  - P1 popup 打开是否触发 MouseArea.onCanceled 无法静态证实；
+    P2 exitEditMode 中途不清 dragActive（与 Ramanujan C1 同根因，标 PLAUSIBLE）；
+    P3 rebuild 不 stop 动画；P4 动画时长忽略 motion profile（`elementMove(null)`
+    恒 balanced，P-3 合规但 reduced 下仍 130ms）；P5 窄屏/矮屏 y 轴网格语义。
+
+### 子代理 4（Laplace，第 2 轮，复核修复）
+- 结论：APPROVE
+- CONFIRMED：无（两条首轮 CONFIRMED 均已闭合）
+- PLAUSIBLE：
+  - P1（已修）：`test_widget_edit_mode.py` exit_block 切片方向错误，
+    `root.clearDrag()` 断言空转（`enterEditMode` 先于 `exitEditMode` 出现，
+    split 不命中）。
+  - P2（已修）：settle/begin/cancel/commit 未做 `Math.max(0,…)` y 钳制，
+    与 createWidgetInstance 不一致（屏高 <540px 顶部行像素为负）。
+  - P3（已修）：退出时仅 `dragPressed=true`（未过阈值）不被 reset，之后移动
+    可把 widget 侧 dragActive 置真（host 门挡住写盘，仅防御不对称）。
+
+### 子代理 5（Mencius，第 2 轮）
+- 结论：无结果（运行超 10 分钟，按子代理协议停止；无可用 MESSAGE）
+
+## 问题处置
+
+| 问题 | 等级 | 处置 | 证据 |
+|---|---|---|---|
+| 编辑模式退出不清拖动状态（Ramanujan C1） | CONFIRMED | 已修 | `exitEditMode()` 拖动中回滚（停动画、恢复 inst.x/y=start.x/y、clearDrag）；Widget.qml `onEditModeChanged` 退出时 resetGesture（dragActive‖dragPressed） |
+| 落位动画截断 → 实例与 config 不一致（Anscombe C1） | CONFIRMED | 已修 | `settleWidgets()` 停动画并把全部实例对齐 config 网格位；`beginWidgetDrag` 先 settle 再从 `Grid.xPxForCell/yPxForCell` 快照（不再用 inst.x/inst.y）；rebuild 停动画 |
+| 测试 exit_block 切片空转（Laplace P1） | PLAUSIBLE | 已修 | 切片终点改为 exitEditMode 之后的注释行，断言紧贴函数体 |
+| 短屏 y 钳制不一致（Laplace P2） | PLAUSIBLE | 已修 | settle/begin/animateWidgetTo 统一 `Math.max(0,…)`，与 createWidgetInstance 一致 |
+| 退出时 dragPressed 残留（Laplace P3） | PLAUSIBLE | 已修 | `onEditModeChanged` 条件改为 `(gesture.dragActive \|\| gesture.dragPressed)` |
+| onCanceled 派发无法静态证实 | PLAUSIBLE | 不修，理由：代码路径完备（Widget.qml onCanceled → cancelWidgetDrag 回滚）；派发本身属运行时行为，roadmap 已列为人工验证判据（执行计划 A6 判据 3） |
+| 预览实例创建 2 个 Timer 对象 | PLAUSIBLE | 不修，理由：两个 Timer 均为一次性手势计时（repeat:false），预览实例 gesture 禁用（interactive=false 且无 widgetHost）→ Timer 永不 start；与 Dock 每图标一个 suppressClickReset Timer 同模式；A5「无新增 Timer」判据语义为「不触发数据刷新」，运行时实测基线以稳定 PID/运行中 Timer 为准 |
+| 提交动画期间实例被销毁 | PLAUSIBLE | 不修，理由：rebuild 已补 stop；Qt QQuickAnimation target 为 QPointer，销毁自动停；仅 130ms 窗口且需删除按钮在动画中点击 |
+| 完成按钮可能被窗口覆盖 | PLAUSIBLE | 不修，理由：Bottom 层小部件系统固有（窗口之上即覆盖）；空白点击退出 + 移开窗口可恢复，非卡死；roadmap 未要求键盘退路 |
+| 拖动状态双份维护（widget/host） | PLAUSIBLE | 不修，理由：与 Dock 既有模式（per-button + root.pointerDragActive）同构，A-C2 要求的模式；host 门保证写盘唯一入口 |
+| 动画时长忽略 motion profile | PLAUSIBLE | 不修，理由：`elementMove(null)` 恒 balanced 不违反 P-3（令牌来源正确）；widgets 无 settingsService 注入，注入属范围外改动 |
+| 短屏 6 行网格超屏高 | PLAUSIBLE | 不修，理由：A2 既有网格语义，非 A6 引入；A6 已保证所有像素路径钳制一致 |
+| 结构测试盲区（掏空 begin/update、短按、suppressNextClick 因果） | PLAUSIBLE | 不修，理由：仓库「源码结构守护」测试风格固有上限，commit/cancel/回滚等关键路径已钉牢；运行时判据列入人工验证 |
+
+## 完成判据核对
+
+| 判据（引 roadmap.md A6） | 是否满足 | 证据 |
+|---|---|---|
+| 长按进入编辑模式；短按不触发；拖动不误触发点击 | 结构是 | 长按：Widget.qml longPressTimer（500ms one-shot）→ enterEditMode；短按：onReleased/onPositionChanged stop；不误触：dragActive 激活置 suppressNextClick + onClicked 消费 + 180ms 复位。短按/不误触的最终判定需人工（部署后） |
+| 拖动改变位置并持久化；重启后位置正确 | 结构是 | commitWidgetDrag：snapPosition+canPlace → updateConfigPosition → animateWidgetTo → persistConfig（恰一次）；loadConfig 重建。重启需人工 |
+| onCanceled 路径完整回滚，不卡死 | 结构是 | Widget.qml onCanceled → cancelWidgetDrag 恢复 inst.x/y=start.x/y + clearDrag + resetGesture；所有退出路径状态归零（exitEditMode/rebuild）。派发需人工 |
+| 拖动期间无写盘 | 是 | begin/update/cancel/exitEditMode 均无 persistConfig（测试断言 + 逐行确认）；commit 恰一次 |
+| 退出编辑模式后抖动动画停止 | 是 | wobble `running: root.editMode && root.interactive` + onRunningChanged 归零 rotation |
+| 通过 A4 库 tab 新添加的小部件同样可被拖动 | 是 | createWidgetInstance 注入 widgetId/widgetHost + editMode Qt.binding（与预置实例同一路径） |
+| pytest 全绿 | 是 | `python -m pytest tests/ -q` → 1136 passed, 318 subtests passed（70.6s） |
+
+## 最终结论
+
+第 1 轮 3 个子代理（1 APPROVE / 2 REJECT，共 2 个 CONFIRMED）→ 已修复 →
+第 2 轮 2 个子代理（1 APPROVE，1 超时无结果）复核确认两条 CONFIRMED 已闭合，
+并把 3 个 PLAUSIBLE 修复。全部 CONFIRMED 已修、测试全绿 → 允许 commit。
+剩余 PLAUSIBLE 均为运行时人工验证项或仓库测试风格固有盲区，已逐条记录处置。

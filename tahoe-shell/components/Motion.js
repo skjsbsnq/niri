@@ -73,6 +73,14 @@ var dockRevealDebounceMs = 40;
 // so a taller panel never leaves a strip at the bottom (T08-fix).
 var dockAutohideSlidePx = 88;
 
+// Widget edit mode (A6). Gesture windows and the wobble half-cycle.
+// The wobble animates content inside the glass (not region geometry) and is
+// a duration-based NumberAnimation — never Spring (P-1). Long-press and
+// click-suppression windows mirror the Dock reorder pattern (A-C2).
+var widgetLongPressMs = 500;
+var widgetSuppressClickMs = 180;
+var widgetWobbleDurationMs = 90;
+
 function dockLaunchBounceHeight(iconSizePx) {
     var size = iconSizePx > 0 ? iconSizePx : 48;
     return size * dockLaunchBounceHeightFactor;

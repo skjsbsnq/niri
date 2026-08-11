@@ -187,12 +187,17 @@ class WidgetBaseContractTests(unittest.TestCase):
                 self.assertIn("cache: false", text, msg=path.name)
 
     def test_no_self_built_polling_in_widget_base_and_battery(self) -> None:
-        # A-C3: widgets must not own polling timers. Host may own only its
-        # one-shot overflow banner timers (bounded, visible feedback).
-        for path in (WIDGET_BASE, WIDGETS / "BatteryWidget.qml"):
-            text = path.read_text(encoding="utf-8")
-            self.assertNotIn("Timer {", text, msg=path.name)
-            self.assertNotIn("repeat: true", text, msg=path.name)
+        # A-C3: widgets must not own polling timers. Battery stays timer-free.
+        # The base class may own only the A6 gesture pair (long-press + click
+        # suppression) — both one-shot (never repeat), durations from Motion.js.
+        text = (WIDGETS / "BatteryWidget.qml").read_text(encoding="utf-8")
+        self.assertNotIn("Timer {", text, msg="BatteryWidget")
+        self.assertNotIn("repeat: true", text, msg="BatteryWidget")
+        base = WIDGET_BASE.read_text(encoding="utf-8")
+        self.assertEqual(base.count("Timer {"), 2, "Widget.qml gesture timers")
+        self.assertNotIn("repeat: true", base)
+        self.assertIn("interval: Motion.widgetLongPressMs", base)
+        self.assertIn("interval: Motion.widgetSuppressClickMs", base)
 
     def test_host_overflow_banner_timers_are_one_shot_gated(self) -> None:
         text = HOST.read_text(encoding="utf-8")
@@ -218,8 +223,15 @@ class WidgetBaseContractTests(unittest.TestCase):
         # P-7 early-exit gate: no writes before initial load completes.
         self.assertIn("if (!root.loadingComplete)", text)
         self.assertIn("return;", text)
-        self.assertNotIn("onPressed", text)
-        self.assertNotIn("onPositionChanged", text)
+        # A6: the four-state callbacks live in Widget.qml (A-C2); the host
+        # drag path must never write while following the pointer — only the
+        # release-side commit calls persistConfig.
+        update = text.split("function updateWidgetDrag(", 1)[1]
+        update = update.split("function commitWidgetDrag(", 1)[0]
+        self.assertNotIn("persistConfig", update)
+        self.assertIn("function beginWidgetDrag(", text)
+        self.assertIn("function commitWidgetDrag(", text)
+        self.assertIn("function cancelWidgetDrag(", text)
 
 
 class WidgetGridContractTests(unittest.TestCase):

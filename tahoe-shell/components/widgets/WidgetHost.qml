@@ -4,6 +4,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Wayland
 import ".."
+import "../Motion.js" as Motion
 import "../TahoeGlass.js" as GlassStyle
 import "WidgetGrid.js" as Grid
 
@@ -131,6 +132,46 @@ PanelWindow {
     // 直接绑 Object.keys 会卡在旧值）。宿主 visible 依赖它。
     property int widgetInstancesCount: 0
 
+    // ---- A6 编辑模式 ----
+    // 任一实例长按进入；「完成」按钮 / 点击桌面空白退出。进入/退出不写盘。
+    property bool editMode: false
+    function enterEditMode() {
+        root.editMode = true;
+    }
+    function exitEditMode() {
+        if (root.dragActive) {
+            // 拖动中退出（完成按钮/空白点击/宿主隐藏）：完整回滚——恢复
+            // 实例网格位 + 清宿主拖动状态 + 实例手势由 editMode 绑定归零，
+            // 不写盘（A-C5）。
+            dragXAnim.stop();
+            dragYAnim.stop();
+            var inst = root.widgetInstances[root.dragWidgetId];
+            var start = root.dragStart;
+            if (inst && start) {
+                inst.x = start.x;
+                inst.y = start.y;
+            }
+            root.clearDrag();
+        } else {
+            // 无拖动：把可能仍在飞的提交/回滚动画直接补送到终点
+            // （实例位置恒等于 config，见 settleWidgets）。
+            root.settleWidgets();
+        }
+        root.editMode = false;
+    }
+    // 宿主隐藏（移除最后一个小部件等）→ 自动退出编辑模式。
+    onVisibleChanged: if (!root.visible) root.exitEditMode()
+    // 编辑模式切换 → 重算 mask（编辑态为全屏输入区，见 buildUnionRegion）。
+    onEditModeChanged: root.updateMask()
+
+    // 拖动状态（Dock 四状态模式的宿主侧，A-C2）：手势在 Widget.qml 的
+    // MouseArea，网格落点/持久化/回滚在本文件。拖动期间只改实例 x/y，
+    // 不重建、不写盘（A-C5：仅 onReleased 的 commit 写一次）。
+    property bool dragActive: false
+    property string dragWidgetId: ""
+    // {id,size,cols,rows,col,row,x,y,grabX,grabY} —— 拖动起点快照。
+    property var dragStart: null
+
     function createWidgetInstance(entry, into) {
         // into：重建时传入的临时实例表（A5 审查 C1）。实例表必须「填完再
         // 整体赋值」——先赋空再逐个 mutation 不触发 QML notify，会让
@@ -156,9 +197,13 @@ PanelWindow {
         // 但 gridState 条目本身不带 size，直接读 entry.size 会恒为 small）。
         var props = {
             "widgetSize": Grid.sizeForSpan(entry.cols, entry.rows),
+            // A6：实例自述 id / 宿主引用（拖动与删除回调入口）；网格像素
+            // 换算唯一来源 WidgetGrid.js（xPxForCell/yPxForCell，G-6）。
+            "widgetId": String(entry.id || ""),
+            "widgetHost": root,
             "cellSize": root.cellSize,
-            "x": Math.max(0, Math.round(entry.gridX * root.cellSize)),
-            "y": Math.max(0, Math.round(root.screenHeight - (entry.gridY + entry.rows) * root.cellSize)),
+            "x": Math.max(0, Grid.xPxForCell(entry.gridX, root.cellSize)),
+            "y": Math.max(0, Grid.yPxForCell(entry.gridY, entry.rows, root.cellSize, root.screenHeight)),
             "width": Math.min(root.widgetMaxWidth, Math.max(1, Math.round(entry.cols * root.cellSize))),
             "height": Math.min(root.widgetMaxHeight, Math.max(1, Math.round(entry.rows * root.cellSize))),
             "previewMode": false
@@ -178,6 +223,9 @@ PanelWindow {
         // hostVisible 用绑定（非一次性初值）：宿主可见性后续变化时
         // 小部件门控实时跟随（createObject 初值是一次性赋值）。
         obj.hostVisible = Qt.binding(function() { return root.hostVisible; });
+        // editMode 同样以绑定注入：进入/退出编辑模式时全部实例实时跟随
+        // （一次性初值会在后续切换时卡在旧值）。
+        obj.editMode = Qt.binding(function() { return root.editMode; });
         map[entry.id] = obj;
         return obj;
     }
@@ -187,6 +235,12 @@ PanelWindow {
     // mutation 不触发 QML 属性变更，先赋空会让库页「已添加」快照
     // 停在空表（A5 对抗审查 C1）。
     function rebuildWidgets() {
+        // 防御性：重建销毁实例前清拖动状态 + 停落位动画（拖动中配置被
+        // 重建的极边缘时序，避免宿主 dragActive 残留卡死或动画指向已销毁
+        // 实例；正常路径无影响）。
+        root.clearDrag();
+        dragXAnim.stop();
+        dragYAnim.stop();
         var old = root.widgetInstances;
         var next = {};
         var keys = Object.keys(old);
@@ -223,6 +277,16 @@ PanelWindow {
     // item 引用必须经 root.maskWidgetItems[i]（文档 id + 属性路径），
     // 不能写 JS 局部变量名（createQmlObject 不捕获调用函数作用域）。
     function buildUnionRegion() {
+        if (root.editMode) {
+            // 编辑模式：全屏输入区 —— 空白点击由 editExitCatcher 退出编辑
+            // 模式，小部件/删除按钮/完成按钮都在此区域内可点。弹层打开时
+            // 仍由 updateMask 的 popupActive 分支置空（弹层优先）。
+            root.maskWidgetItems = [];
+            var editRegionText = "import Quickshell; ";
+            editRegionText += "Region { x: 0; y: 0; width: " + root.screenWidth
+                + "; height: " + root.screenHeight + " }";
+            return Qt.createQmlObject(editRegionText, root, "widgetsEditMask");
+        }
         var widgetList = [];
         var keys = Object.keys(root.widgetInstances);
         for (var i = 0; i < keys.length; i++) {
@@ -350,6 +414,146 @@ PanelWindow {
         return true;
     }
 
+    // ---- A6 拖动 API（Dock 四状态模式的宿主侧）----
+    // 坐标一律经实例 mapToItem(root) 转到宿主坐标系（A-C2，参照
+    // Dock.qml:948）；网格落点/冲突判定唯一来源 WidgetGrid.js。
+    function configEntryFor(id) {
+        var sid = String(id || "");
+        for (var i = 0; i < root.widgetConfigs.length; i++) {
+            if (String(root.widgetConfigs[i].id || "") === sid)
+                return root.widgetConfigs[i];
+        }
+        return null;
+    }
+
+    // 把全部实例对齐到配置网格位：提交/回滚动画（130ms）中途被新拖动
+    // 打断时补送终点，保证「实例位置恒等于 config」（拖动快照与回滚都
+    // 以 config 网格位为基准，不被中间帧污染）。
+    function settleWidgets() {
+        dragXAnim.stop();
+        dragYAnim.stop();
+        var keys = Object.keys(root.widgetInstances);
+        for (var i = 0; i < keys.length; i++) {
+            var inst = root.widgetInstances[keys[i]];
+            var entry = root.configEntryFor(keys[i]);
+            if (!inst || !entry)
+                continue;
+            // 与 createWidgetInstance 同一钳制（短屏顶部行像素可为负）。
+            inst.x = Math.max(0, Grid.xPxForCell(entry.col, root.cellSize));
+            inst.y = Math.max(0, Grid.yPxForCell(entry.row, Grid.rowsForSize(entry.size),
+                root.cellSize, root.screenHeight));
+        }
+    }
+
+    // onPressed 侧：记录起点与抓取偏移（不激活、不写盘）。
+    function beginWidgetDrag(inst, localX, localY) {
+        var id = String(inst && inst.widgetId || "");
+        if (!id || root.dragActive || !root.editMode)
+            return;
+        // 先把上一提交/回滚动画补送到终点，再从 config 网格位快照
+        // （实例此刻的 x/y 才是真实起点；避免动画中间帧污染快照）。
+        root.settleWidgets();
+        var entry = root.configEntryFor(id);
+        if (!entry)
+            return;
+        var p = inst.mapToItem(root, localX, localY);
+        var startX = Math.max(0, Grid.xPxForCell(entry.col, root.cellSize));
+        var startY = Math.max(0, Grid.yPxForCell(entry.row, Grid.rowsForSize(entry.size),
+            root.cellSize, root.screenHeight));
+        root.dragStart = {
+            "id": id,
+            "size": String(entry.size || "small"),
+            "cols": Grid.colsForSize(entry.size),
+            "rows": Grid.rowsForSize(entry.size),
+            "col": Math.round(Number(entry.col) || 0),
+            "row": Math.round(Number(entry.row) || 0),
+            "x": startX,
+            "y": startY,
+            "grabX": Number(p.x) - startX,
+            "grabY": Number(p.y) - startY
+        };
+        root.dragWidgetId = id;
+        root.dragActive = true;
+    }
+
+    // onPositionChanged 侧：实例跟随指针（clamp 屏内），不重建、不写盘。
+    function updateWidgetDrag(inst, localX, localY) {
+        if (!root.dragActive || String(inst && inst.widgetId || "") !== root.dragWidgetId)
+            return;
+        var p = inst.mapToItem(root, localX, localY);
+        var maxX = Math.max(0, root.screenWidth - inst.width);
+        var maxY = Math.max(0, root.screenHeight - inst.height);
+        inst.x = Math.max(0, Math.min(maxX, p.x - root.dragStart.grabX));
+        inst.y = Math.max(0, Math.min(maxY, p.y - root.dragStart.grabY));
+    }
+
+    // onReleased 侧：网格吸附 → 合法则更新配置 + 落位动画 + 写盘一次
+    // （A-C5）；落点非法（重叠）或未移动 → 回滚起点，不写盘。
+    function commitWidgetDrag(inst) {
+        if (!root.dragActive || String(inst && inst.widgetId || "") !== root.dragWidgetId)
+            return;
+        var start = root.dragStart;
+        var target = Grid.snapPosition(start.cols, start.rows, inst.x, inst.y, root.cellSize, root.screenHeight);
+        var movable = Grid.canPlace(root.gridState.grid, start.id, target.col, target.row, start.cols, start.rows);
+        if (movable && (target.col !== start.col || target.row !== start.row)) {
+            root.updateConfigPosition(start.id, target.col, target.row);
+            root.animateWidgetTo(inst, Grid.xPxForCell(target.col, root.cellSize),
+                Grid.yPxForCell(target.row, start.rows, root.cellSize, root.screenHeight));
+            root.persistConfig();
+        } else {
+            root.animateWidgetTo(inst, start.x, start.y);
+        }
+        root.clearDrag();
+    }
+
+    // onCanceled 侧：完整回滚（恢复起点 + 清状态，不写盘）。
+    function cancelWidgetDrag(inst) {
+        if (!root.dragActive || String(inst && inst.widgetId || "") !== root.dragWidgetId)
+            return;
+        dragXAnim.stop();
+        dragYAnim.stop();
+        inst.x = root.dragStart.x;
+        inst.y = root.dragStart.y;
+        root.clearDrag();
+    }
+
+    function clearDrag() {
+        root.dragActive = false;
+        root.dragWidgetId = "";
+        root.dragStart = null;
+    }
+
+    // 更新配置中某条目的网格位置（实例位置由 commit 的落位动画负责，
+    // 不重建对象树）。
+    function updateConfigPosition(id, col, row) {
+        var sid = String(id || "");
+        var next = [];
+        for (var i = 0; i < root.widgetConfigs.length; i++) {
+            var e = root.widgetConfigs[i];
+            if (String(e.id || "") === sid) {
+                next.push({ "id": e.id, "size": e.size, "col": Math.round(col), "row": Math.round(row) });
+            } else {
+                next.push(e);
+            }
+        }
+        root.widgetConfigs = next;
+    }
+
+    // 落位/回滚动画（P-1：禁弹簧；时长/缓动取自 Motion.js，P-3）。
+    function animateWidgetTo(inst, tx, ty) {
+        if (!inst)
+            return;
+        // 与 create/settle 同一钳制：目标像素不得为负（短屏顶部行）。
+        tx = Math.max(0, Number(tx) || 0);
+        ty = Math.max(0, Number(ty) || 0);
+        dragXAnim.target = inst;
+        dragXAnim.to = tx;
+        dragYAnim.target = inst;
+        dragYAnim.to = ty;
+        dragXAnim.start();
+        dragYAnim.start();
+    }
+
     // ---- mask 与弹层联动 ----
     onPopupActiveChanged: root.updateMask()
 
@@ -409,6 +613,66 @@ PanelWindow {
                 horizontalAlignment: Text.AlignHCenter
                 verticalAlignment: Text.AlignVCenter
             }
+        }
+    }
+
+    // 拖动落位动画（A6）：编辑模式提交/回滚时把实例平滑吸附到网格。
+    // 声明为独立 NumberAnimation（不挂 Behavior：拖动中的直接 x/y 更新
+    // 不能被自动动画化）；时长/缓动来自 Motion.js（P-3），禁弹簧（P-1）。
+    NumberAnimation {
+        id: dragXAnim
+        property: "x"
+        duration: Motion.elementMove(null)
+        easing.type: Motion.standardDecel
+    }
+    NumberAnimation {
+        id: dragYAnim
+        property: "y"
+        duration: Motion.elementMove(null)
+        easing.type: Motion.standardDecel
+    }
+
+    // 编辑模式空白点击退出（A6）：全屏 MouseArea，位于小部件层之下
+    // （小部件手势层在上，优先吃自身事件）。弹层打开时 mask 已置空，
+    // 本层同时停用（双重保险）。
+    MouseArea {
+        id: editExitCatcher
+        anchors.fill: parent
+        enabled: root.editMode && !root.popupActive
+        onClicked: root.exitEditMode()
+    }
+
+    // 编辑模式「完成」按钮（A6）：退出编辑模式的显式入口。位于小部件
+    // 层之上；整层 mask 在编辑态为全屏，本按钮始终可点（无窗口覆盖时）。
+    Item {
+        id: editDoneButton
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.top: parent.top
+        anchors.topMargin: 48
+        width: 76
+        height: 32
+        visible: root.editMode
+        z: 100
+
+        Rectangle {
+            anchors.fill: parent
+            radius: 16
+            color: "#e6ffffff"
+            border.color: "#33000000"
+            border.width: 1
+
+            Text {
+                anchors.centerIn: parent
+                text: "完成"
+                color: "#000000"
+                font.pixelSize: 13
+                font.weight: Font.DemiBold
+            }
+        }
+
+        MouseArea {
+            anchors.fill: parent
+            onClicked: root.exitEditMode()
         }
     }
 

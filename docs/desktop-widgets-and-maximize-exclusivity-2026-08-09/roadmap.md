@@ -4,7 +4,7 @@
 配套文件：`research-report.md`（事实依据）、`constraints.md`（硬约束）、
 `execution-plan.md`（执行与验收）
 
-**任务顺序即执行顺序：C1 → B1 → B2 → B3 → A1 → A2 → A3 → A4 → A5 → A6 → A7 → A8。
+**任务顺序即执行顺序：C1 → B1 → B2 → B3 → A1 → A2 → A3 → A4 → A5 → A6 → A7 → A8 → D1。
 严格串行，不得跳序、不得并行。**
 
 任务粒度已按「一个完整可验收的功能单元」划分。
@@ -19,6 +19,7 @@
 | **C：清理既有文档遗留缺陷** | C1 | 修掉 postmortem §6 中已核实成立的两个缺陷 + 更新过时记录 |
 | **B：修复最大化独占渲染缺陷** | B1 – B3 | 消除三个窗口遮挡现象，为小部件铺平地基 |
 | **A：桌面小部件系统** | A1 – A8 | 实现用户定义的五条需求 + macOS 1:1 外观重做 |
+| **D：稳定与性能缺陷** | D1 | 诊断并修复关闭窗口后 GPU 显存泄漏 |
 
 A 阶段内部按「地基 → 承载 → 内容 → **添加** → 编辑」推进：
 
@@ -485,9 +486,68 @@ G-7（交互/持久化/网格行为不变）、G-8（不加新小部件、不加
 
 ---
 
+---
+
+# 阶段 D：稳定与性能缺陷
+
+## D1 — 诊断并修复「关闭窗口后 GPU 显存泄漏」
+
+**问题引用**：`research-report.md` D-1 ~ D-4
+
+**目标**：确认「关窗后 niri 显存线性增长」的根因并落地缓解：
+诊断证实为 **NVIDIA 驱动保留已释放纹理显存（非 niri 代码泄漏）**，
+回收部分且延迟；交付 = 为 niri 启用驱动 `No VidMem Reuse` profile
+（用户级文件，无需 root）+ 保留 env 门控的显存诊断供长周期复核。
+本机短时实验未观察到 profile 的立竿见影效果，判定为驱动回收时序问题，
+**不以「显存不再增长」作为本任务验收判据**（见完成判据）。
+
+**为何独立成任务**：该泄漏与既有 A/B/C 系列无关，属新的稳定缺陷；
+且根因需先经完整诊断定位（D-1~D-4），确认是否为 niri 代码泄漏后再决定修复路径。
+
+**范围**：
+
+1. **诊断（已完成）**：
+   - niri 增加 live 计数观察（沿用 `NIRI_LIFECYCLE_DIAG` 既有模式，不建
+     平行诊断体系）：`unmapped_windows` / `root_surface` /
+     `thumbnail_content_epochs` / closing lane 条目数 / 含 unmap_snapshot 的
+     tile 数 / `mapped_layer_surfaces` / `closing_layers` / 关窗事件计数 /
+     保留模糊纹理字节。
+   - smithay 仅本地观察补丁（已移除，不入库）：cleanup 时输出
+     `buffers` / `dmabuf_cache` 条目数与 `glDeleteTextures` 调用数。
+   - 受控开/关窗循环（alacritty 小窗 ×10 + 大窗 ×1）对照 nvidia-smi 与
+     诊断日志。**结论：niri/smithay 全部结构归零、glDeleteTextures 正常调用、
+     buffers/dmabuf_cache 恒定，显存仍线性增长 → 驱动堆保留**（D-4/D-5）。
+2. **修复**：编写并安装 NVIDIA 用户级 profile
+   `~/.nv/nvidia-application-profiles-rc`（`GLVidHeapReuseRatio=0`，
+   procname 匹配 niri），重启会话后受控循环如实记录显存增长/回收行为。
+3. **回归**：niri 全量测试绿；受控循环如实记录显存增长与回收（profile 短时
+   未见立竿见影，判为驱动回收时序，不作为通过判据）；A/B 系列既有行为不变；
+   诊断代码保留但默认关闭（零行为变化）。
+
+**约束重点**：`constraints.md` G-5（禁止诊断假数据/占位）、G-6（禁止平行
+状态机与平行诊断体系；诊断必须观察生产状态）、G-7（不得改变既有行为）、
+P-10（部署纪律：先重建、cp .new && mv、`niri --version` 核验）、
+P-11（进程操作限定精确 PID）。
+
+**不做**：不改 niri/smithay 渲染代码（诊断证实无代码泄漏）；不处理
+QML/小部件内存；不添加用户未要求的显存统计 UI；不提交 smithay 本地补丁。
+
+**完成判据**：
+- 诊断记录 `acceptance/D1-diagnostics.md` 含完整证据（日志 + nvidia-smi
+  对照），`research-report.md` D-4/D-5 已回填为实测结论
+- `~/.nv/nvidia-application-profiles-rc`（`GLVidHeapReuseRatio=0`）已安装且
+  与驱动读取路径/自带 profile 格式一致；受控循环（≥10 轮小窗 + ≥1 轮大窗）
+  实测显存仍每轮增长（+8 MiB/轮）、回收部分且延迟——如实记录为
+  「profile 短时未见立竿见影，判为驱动回收时序」，**不作为通过判据**
+- niri `cargo test` 全绿（含既有回归：`lifecycle_observe.rs`、
+  `lifecycle_controller.rs`、`lifecycle_command.rs`、`fullscreen.rs`、
+  `floating.rs`）
+- 部署后人工验证：正常开/关窗口、最小化/恢复、最大化无回归
+- `acceptance/D1-review.md` 存在且独立子代理 APPROVE
+
 ## 路线图完成判据（全局）
 
-全部 12 个任务完成后，须满足：
+全部 13 个任务完成后，须满足：
 
 1. postmortem §6 中已核实成立的遗留缺陷（C-1、C-2）已修，过时记录（C-3）已更新
 2. 用户报告的三个窗口遮挡现象**均消失**（人工验证）

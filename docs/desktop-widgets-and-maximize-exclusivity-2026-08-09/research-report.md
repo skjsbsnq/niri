@@ -462,3 +462,103 @@ postmortem 的记录已过时。**本次任务需更新 postmortem 文档，划�
 
 详见同目录 `roadmap.md`（任务分解）、`constraints.md`（硬约束）、
 `execution-plan.md`（执行计划与验收）。
+
+
+---
+
+## 第五部分：D — 关闭窗口后 GPU 显存泄漏（D-1）
+
+### D-1 现象与量化 `[实测]`
+
+用户报告：nvidia-smi 中 niri 进程显存从开机 ~100 MiB 一路涨到 1 GB+，
+关闭窗口后不回落，与「打开/关闭窗口」直接相关。
+
+2026-08-12 在真实会话上的受控实测（nvidia-smi 进程表，PID 1290）：
+
+| 实验 | 结果 |
+|---|---|
+| 空闲 70 秒 | niri 867 MiB 纹丝不动 |
+| 开/关 alacritty（800×635 逻辑）20 轮 | 1326 → 1486 MiB，**每轮恰好 +8 MiB，完美线性** |
+| 开/关 300×80 大窗 1 轮 | 一轮净增 **+125 MiB**（与窗口尺寸成比例） |
+| `window-close off`（禁用关闭动画）3 轮 | 仍每轮 +8 MiB（与动画无关） |
+| 关窗后强制全量重绘（do-screen-transition） | 泄漏不释放（非延迟释放） |
+| Firefox 最大化开→关（用户实测） | 一次涨几十 MiB |
+
+结论 `[实测]`：**每关闭一个窗口，niri 进程的显存读数增长与窗口尺寸成正比**
+（小窗约 +8 MiB/轮；最大化/大窗一轮几十到一百多 MiB），20 轮无收敛；
+后续完整诊断（D-4/D-5）证明这是 **NVIDIA 驱动保留已释放纹理显存**，
+回收部分且延迟（用户实测「有时回收、有时不回收」），非 niri 代码泄漏。
+
+### D-2 排除项 `[实测]`（含后来修正的结论）
+
+- 非关闭动画纹理：`window-close off` 后泄漏量完全相同。
+- 非「延迟到下一帧才释放」：强制全量重绘后仍不释放。
+- 非窗口工作集：窗口已全部关闭仍继续增长。
+- ~~非 NVIDIA 驱动堆~~ **此条最初被排除，经完整诊断（D-5）后推翻**：
+  早期仅凭「20 轮线性不收敛」判断，遗漏了驱动堆在组合器 GL 用法下的
+  高水位特征；带 smithay 计数后确认**就是驱动堆保留**。
+
+### D-3 上游对照 `[代码] + [外部]`
+
+- niri-wm/niri#1869（关窗后显存不释放，plateau 650MB–1GB）→ 26.04 已由
+  PR #3404（dead surface hook）修复；本 fork 已包含该修复
+  （`niri/src/handlers/compositor.rs:543-567`）。
+- niri-wm/niri#4372（26.04 + NVIDIA：Firefox 每实例 +~70 MiB 不释放，
+  NVIDIA profile 无效，未结案）——与 D-1 现象高度吻合。
+- Smithay/smithay#1562（关窗 VRAM 泄漏，niri/cosmic 均报；niri 侧定论为
+  dead surface hook，已修）。
+
+### D-4 根因（2026-08-12）
+
+**结论 `[实测]`：不是 niri / smithay 代码泄漏——API 层资源全部释放
+（结构归零 + `glDeleteTextures` 正常调用），但 nvidia-smi 的 niri 显存读数
+仍随开/关窗增长且回收部分、延迟。显存保留发生在 NVIDIA 驱动侧。**
+
+**机制归属 `[未确认]`**：上游资料（niri wiki / #1962 / NVIDIA egl-wayland#126）
+将其归因于 GL 驱动 per-process reuse heap（`GLVidHeapReuseRatio`），本机安装
+该 profile 后短时实验**未观察到立竿见影**，故「具体是 reuse heap」为上游
+推断而非本机实测；本机只确认「GL 对象已删、显存读数仍保留」。
+
+候选保留点（D-4 初版三条）经诊断**全部排除**：
+
+1. ~~客户端导入纹理的 GlesTexture clone 被 niri 侧持有~~：live 计数显示
+   closing_entries=0、unmap_snapshot_tiles=0、unmapped_windows=0、
+   root_surface 回到基线、retained_blur_mib 回到 16.6 基线。
+2. ~~`unmapped_windows` / `root_surface` 等 map 持有死对象~~：各 map 长度
+   在 churn 后全部回到基线。
+3. ~~smithay buffers/dmabuf_cache 未清理~~：`buffers=2` 全程恒定，
+   `dmabuf_cache` 回到 30；且 **`glDeleteTextures` 有 161 条 cleanup 事件
+   （合计 546 次调用；含大窗轮共 268 条/683 次）**
+   （全部发生在受控 churn 期间），证明纹理已在 GL API 层释放。
+
+即：**API 层全部释放，显存仍线性增长 → 驱动层保留**。
+
+
+### D-5 修复与验证 `[实测] + [外部]`
+
+- **修复**：为 niri 启用 NVIDIA 驱动自带的 `No VidMem Reuse` profile
+  （`GLVidHeapReuseRatio=0`）。驱动内置规则只匹配 plasmashell /
+  cosmic-comp / Hyprland / Xwayland / libkwin 等，**不含 niri**，需自行配置。
+  用户级文件（无需 root）：`~/.nv/nvidia-application-profiles-rc`。
+- **验证方法**：装 profile 后重启会话，跑 10 轮小窗 + 1 轮大窗受控循环，
+  如实记录 niri 显存增长/回收（对照 D-1 基线的每轮 +8 MiB；
+  社区报告预期回落至 ~100–200 MiB，见下实测）。
+- **实测补充（2026-08-12，profile 已装）**：+8 MiB/轮增长仍在（10 轮后
+  +82 MiB），关闭 3 个大窗口后 niri 仅立即回落 ~30 MiB，随后 2 分钟持平——
+  **驱动回收是部分、延迟、时序相关的**（用户亦观察到「有时回收、有时不回收」：
+  开机时回收快，长时间/高水位后回收慢且不完整）。`GLVidHeapReuseRatio=0`
+  是社区广泛验证的缓解手段（#1962：2.5 GiB→168 MiB），但本机短时实验未观察到
+  立竿见影的效果；保留该配置并建议长周期观察。
+- **计数口径勘误**：`glDeleteTextures` 的 smithay 本地补丁按「每次 cleanup
+  批次的删除数」打印：10 轮小窗阶段共 **161 条 cleanup 事件（合计 546 次
+  调用）**，含大窗轮共 **268 条 / 683 次**；`dmabuf_cache` churn 峰值 **34**
+  （非 33），`buffers` 在启动瞬间出现过 1、受控循环期间恒为 2。
+- **最终代码计数**：`unmapped_inserted/removed` 与 `dmabuf_hook_added/removed`
+  在最终交付代码中四路径全部配对（诊断用中间构建曾缺 unmapped 移除计数，
+  日志中 `+1/-0` 即来自该中间构建；live 计数不受影响）。
+- 上游对照：niri-wm/niri#1962（wiki 记载 profile 方案，2.5 GiB→168 MiB）、
+  NVIDIA/egl-wayland#126（NVIDIA 工程师 cubanismo：组合器典型 GL 用法下
+  驱动保留启发式不理想，非真泄漏）。
+- **D1 交付物**：niri 侧 env 门控显存诊断（`NIRI_LIFECYCLE_DIAG=1` 时输出
+  live 计数与关窗事件计数）保留，供以后复核；smithay 本地观察补丁为
+  临时手段，已移除不入库。

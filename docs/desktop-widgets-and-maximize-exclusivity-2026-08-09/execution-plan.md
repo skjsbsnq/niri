@@ -203,6 +203,36 @@ QS_PID=$(pgrep -x quickshell | head -1) && kill $QS_PID
 
 ---
 
+### 2.7 D1 显存泄漏实测（部署后）
+
+```sh
+# 受控开/关窗循环（alacritty，Wayland 原生）
+vram(){ nvidia-smi | awk '/niri/ && /1290/ {print $(NF-1)}' | tr -d ' MiB'; }
+echo "B niri=$(vram)MiB"
+for r in $(seq 1 10); do
+  alacritty >/dev/null 2>&1 & P=$!; sleep 2; kill $P 2>/dev/null; sleep 2
+  echo "r$r niri=$(vram)MiB"
+done
+sleep 15
+echo "end+15s niri=$(vram)MiB"
+# 记录：修复前为每轮 +8 MiB 线性；修复（profile）后如实记录增长与回收行为（见第 4 章 D1）
+```
+
+```sh
+# 大窗对照（如实记录增长/回收是否随尺寸成比例）
+vram(){ nvidia-smi | awk '/niri/ && /1290/ {print $(NF-1)}' | tr -d ' MiB'; }
+alacritty -o window.dimensions.columns=300 -o window.dimensions.lines=80 & P=$!
+sleep 5; kill $P 2>/dev/null; sleep 15
+echo "big-round niri=$(vram)MiB"
+```
+
+诊断日志（`NIRI_LIFECYCLE_DIAG=1` 重启后）：
+- 每 5 秒一行的 live 计数：`unmapped_windows` / `root_surface` /
+  closing lanes / unmap_snapshot tiles / `mapped_layer_surfaces` /
+  `closing_layers`
+- smithay 本地补丁的 cleanup 计数：`buffers` / `dmabuf_cache` /
+  `glDeleteTextures`
+
 ## 第 3 章：独立子代理审查机制
 
 ### 3.1 硬性要求
@@ -373,6 +403,23 @@ QS_PID=$(pgrep -x quickshell | head -1) && kill $QS_PID
 
 ---
 
+### D1
+- `cargo test` 全绿，重点：`lifecycle_observe.rs`、
+  `layout/tests/lifecycle_controller.rs`、`tests/lifecycle_command.rs`、
+  `tests/fullscreen.rs`、`tests/floating.rs`、`layout/tests.rs`
+- **显存实测（安装 profile 并重启后）**：
+  1. 10 轮小窗 + 1 轮大窗受控循环：如实记录每轮 +8 MiB 增长与部分/延迟回收
+     （profile 短时未见立竿见影，判为驱动回收时序；`research-report.md` D-5）
+  2. 空闲 60 秒显存稳定，不操作不涨
+  3. 用户复现路径（Firefox 最大化开→关）如实记录增长与回收行为
+- **诊断证据（已归档）**：`acceptance/D1-diagnostics.md` 附日志与
+  nvidia-smi 对照（niri live 计数全部归零 + smithay buffers 恒定 +
+  `glDeleteTextures` 161 条 cleanup 事件/546 次调用（含大窗轮 268 条/683 次）→ 驱动保留）
+- **人工验证（部署后）**：
+  1. 正常打开/关闭窗口 → 视觉与改动前一致
+  2. 最小化/恢复、最大化/取消最大化 → 布局与动画正确
+  3. 桌面小部件与玻璃显示无回归（A2–A8 既有行为）
+
 ## 第 5 章：任务索引与状态跟踪
 
 按顺序执行。完成一个才能开始下一个（G-1）。
@@ -391,6 +438,7 @@ QS_PID=$(pgrep -x quickshell | head -1) && kill $QS_PID
 | 10 | A6 长按编辑 + 拖动移位 | QML | 3 | 是 | 完成（8e3658b） |
 | 11 | A7 边缘 resize 三档切换 | QML | 2 | 是 | 完成（f5f6a68） |
 | 12 | A8 小部件外观 macOS 1:1 高仿全面重做 | QML | 2 | 是 | 完成（7bc0891） |
+| 13 | D1 诊断并修复关窗 GPU 显存泄漏 | Rust + 文档 | 3 | 是 | 完成（2adddcc3，驱动侧；profile 已装，效果待长周期观察） |
 
 **每完成一个任务，把该行「状态」改为「完成（<commit sha>）」并提交本文件。**
 

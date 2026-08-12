@@ -151,6 +151,8 @@ def managed_block_for_field(field: str) -> str:
         return "blur"
     if field.startswith("input."):
         return "input"
+    if field.startswith("gestures."):
+        return "gestures"
     if field.startswith("animations."):
         return "animations"
     raise KdlEditError(f"unsupported field: {field}")
@@ -921,6 +923,74 @@ def read_input_text(text: str) -> dict[str, Any]:
     return {"keyboard": keyboard, "touchpad": touchpad, "output": read_output_text(text)}
 
 
+# --- gestures (hot corners) ----------------------------------------------
+# niri hot-corners semantics (niri/src/niri.rs is_inside_hot_corner):
+# - `off` disables every hot corner;
+# - if no corner is explicitly set, niri falls back to top-left;
+# - otherwise a corner is active only when its flag is set.
+# The settings UI exposes a single boolean "左上角热区打开概览" which writes
+# an explicit `top-left` (enabled) or `off` (disabled) block so the state is
+# never ambiguous.
+
+HOT_CORNER_FLAGS = ("off", "top-left", "top-right", "bottom-left", "bottom-right")
+HOT_CORNER_FLAG_RE = re.compile(
+    r"^\s*(?:" + "|".join(HOT_CORNER_FLAGS) + r")(?:\s+(?:true|false|on|off))?\s*$"
+)
+
+
+def read_gestures_text(text: str) -> dict[str, Any]:
+    lines = text.splitlines(True)
+    gestures = find_top_level_block_or_none(lines, "gestures")
+    hot = (
+        find_child_block(lines, gestures[0], gestures[1], "hot-corners")
+        if gestures is not None
+        else None
+    )
+    if hot is None:
+        # Absent block: niri falls back to the top-left hot corner.
+        return {"hot_corner_overview_enabled": True}
+    if flag_state_in_block(lines, hot, "off", default=False):
+        return {"hot_corner_overview_enabled": False}
+    top_left = flag_state_in_block(lines, hot, "top-left", default=False)
+    top_right = flag_state_in_block(lines, hot, "top-right", default=False)
+    bottom_left = flag_state_in_block(lines, hot, "bottom-left", default=False)
+    bottom_right = flag_state_in_block(lines, hot, "bottom-right", default=False)
+    enabled = top_left or not (top_right or bottom_left or bottom_right)
+    return {"hot_corner_overview_enabled": enabled}
+
+
+def set_hot_corner_flag(lines: list[str], block: tuple[int, int], enabled: bool) -> None:
+    """Rewrite a hot-corners block body to exactly one target flag, preserving
+    comments and any non-flag lines."""
+    target = "top-left" if enabled else "off"
+    indent = block_child_indent(lines, block)
+    new_body: list[str] = []
+    inserted = False
+    for index in range(block[0] + 1, block[1]):
+        body = uncommented_body(lines[index]).strip()
+        if HOT_CORNER_FLAG_RE.match(body):
+            if not inserted:
+                new_body.append(f"{indent}{target}\n")
+                inserted = True
+            continue
+        new_body.append(lines[index])
+    if not inserted:
+        new_body.append(f"{indent}{target}\n")
+    lines[block[0] + 1:block[1]] = new_body
+
+
+def update_gestures_text(text: str, field: str, raw_value: str) -> str:
+    if field != "gestures.hot_corner_overview.enabled":
+        raise KdlEditError(f"unsupported gestures field: {field}")
+    lines = text.splitlines(True)
+    gestures = find_top_level_block(lines, "gestures")
+    hot = find_child_block(lines, gestures[0], gestures[1], "hot-corners")
+    if hot is None:
+        hot = create_child_block(lines, gestures, "hot-corners", [])
+    set_hot_corner_flag(lines, hot, parse_bool(raw_value))
+    return "".join(lines)
+
+
 # --- animations (S5.3) ----------------------------------------------------
 # Spring params for the spring-based actions present in the config. Each action
 # node holds a single `spring damping-ratio=X stiffness=Y epsilon=Z` line; the
@@ -1359,6 +1429,14 @@ def build_writable_field_specs() -> dict[str, dict[str, str]]:
         "0.5..4.0",
         "bounded_number; exactly one top-level output block is required",
         "single output block",
+    )
+
+    add(
+        "gestures.hot_corner_overview.enabled",
+        "gestures.hot-corners.top-left/off",
+        "boolean",
+        bool_validation,
+        "gestures",
     )
 
     add(
@@ -1956,6 +2034,9 @@ def update_field(text: str, field: str, raw_value: str) -> str:
             raise KdlEditError(f"unsupported input field: {field}")
         return "".join(lines)
 
+    if field.startswith("gestures."):
+        return update_gestures_text(text, field, raw_value)
+
     if field.startswith("animations."):
         if field == "animations.layer_animations_enabled":
             return update_layer_animations_enabled_text(text, raw_value)
@@ -2065,6 +2146,7 @@ def read_command(args: argparse.Namespace) -> None:
         "glass": read_glass_text(text),
         "blur": read_blur_text(text),
         "input": read_input_text(text),
+        "gestures": read_gestures_text(text),
         "animations": read_animations_text(text),
         "binds": read_binds_text(text),
     })
@@ -2085,6 +2167,7 @@ def write_command(args: argparse.Namespace) -> None:
         "glass": read_glass_text(updated),
         "blur": read_blur_text(updated),
         "input": read_input_text(updated),
+        "gestures": read_gestures_text(updated),
         "animations": read_animations_text(updated),
         "binds": read_binds_text(updated),
     })

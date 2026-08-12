@@ -18,6 +18,17 @@ input {
 }
 // tahoe-managed: end input
 
+// tahoe-managed: begin gestures
+gestures {
+    // 设置页「左上角热区打开概览」开关显式写 hot-corners：
+    // 开启 = top-left；关闭 = off。显式写出避免 niri 的
+    // 「无角时默认左上角」回退造成歧义。
+    hot-corners {
+        top-left
+    }
+}
+// tahoe-managed: end gestures
+
 output "eDP-2" {
     mode "2560x1600@239.998"
     scale 1.25

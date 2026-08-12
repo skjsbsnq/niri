@@ -53,6 +53,9 @@ Item {
     property bool touchpadNaturalScroll: true
     property bool touchpadDwt: false
     property real touchpadAccelSpeed: 0
+    // 左上角热区打开概览（niri gestures.hot-corners）。默认 true 与 niri
+    // 「无显式角时回退左上角」的行为一致；设置页开关显式写 top-left/off。
+    property bool hotCornerOverviewEnabled: true
     property string outputName: ""
     property real outputScale: 1
     property bool outputPresent: false
@@ -384,6 +387,14 @@ Item {
         root.writeField("animations.layer_animations_enabled", next);
     }
 
+    function setHotCornerOverviewEnabled(enabled) {
+        var next = !!enabled;
+        if (root.hotCornerOverviewEnabled === next)
+            return;
+        root.hotCornerOverviewEnabled = next;
+        root.writeField("gestures.hot_corner_overview.enabled", next);
+    }
+
     function writeField(field, value) {
         root.lastError = "";
         var next = root.pending;
@@ -494,6 +505,13 @@ Item {
         }
     }
 
+    function applyGestures(gestures) {
+        if (!gestures)
+            return;
+        if (gestures.hot_corner_overview_enabled !== undefined)
+            root.hotCornerOverviewEnabled = !!gestures.hot_corner_overview_enabled;
+    }
+
     function applyAnimations(anim) {
         if (!anim || !anim.actions)
             return;
@@ -548,6 +566,7 @@ Item {
             root.applyGlass(payload.glass);
             root.applyBlur(payload.blur);
             root.applyInput(payload.input);
+            root.applyGestures(payload.gestures);
             root.applyAnimations(payload.animations);
             root.applyBinds(payload.binds);
             root.lastError = "";
@@ -569,6 +588,7 @@ Item {
             root.applyGlass(payload.glass);
             root.applyBlur(payload.blur);
             root.applyInput(payload.input);
+            root.applyGestures(payload.gestures);
             root.applyAnimations(payload.animations);
             root.applyBinds(payload.binds);
             root.lastError = "";

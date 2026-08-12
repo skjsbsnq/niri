@@ -17,6 +17,14 @@ input {
 }
 // tahoe-managed: end input
 
+// tahoe-managed: begin gestures
+gestures {
+    hot-corners {
+        top-left
+    }
+}
+// tahoe-managed: end gestures
+
 output "eDP-1" {
     scale 1.25
 }

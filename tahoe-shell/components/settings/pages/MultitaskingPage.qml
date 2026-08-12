@@ -101,6 +101,28 @@ Flickable {
 
         Controls.TahoeSection {
             theme: page.theme
+            title: "概览"
+            subtitle: "窗口总览热角开关"
+
+            Controls.TahoeListRow {
+                theme: page.theme
+                label: "左上角热区打开概览"
+                detail: page.niri && page.niri.hotCornerOverviewEnabled
+                    ? "鼠标移到屏幕左上角时自动打开概览"
+                    : "已关闭；需要时可在「窗口管理器 → 快捷键」或此处重新打开"
+                iconCode: "\ue868"
+                checkable: true
+                checked: page.niri && page.niri.hotCornerOverviewEnabled
+                enabled: !!page.niri
+                onToggled: function(checked) {
+                    if (page.niri)
+                        page.niri.setHotCornerOverviewEnabled(checked);
+                }
+            }
+        }
+
+        Controls.TahoeSection {
+            theme: page.theme
             title: "窗口管理"
             subtitle: "布局、动画、玻璃与快捷键"
 

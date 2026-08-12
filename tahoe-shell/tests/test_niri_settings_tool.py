@@ -78,7 +78,7 @@ class NiriSettingsToolTests(unittest.TestCase):
     def test_writable_field_specs_are_an_explicit_whitelist(self) -> None:
         fields = set(niri_settings_tool.WRITABLE_FIELD_SPECS)
 
-        self.assertEqual(len(fields), 72)
+        self.assertEqual(len(fields), 73)
         for field in (
             "layout.gaps",
             "glass.panel.refraction",
@@ -88,6 +88,7 @@ class NiriSettingsToolTests(unittest.TestCase):
             "output.scale",
             "animations.layer_animations_enabled",
             "animations.profile",
+            "gestures.hot_corner_overview.enabled",
             "animations.overview_open_close.epsilon",
         ):
             spec = niri_settings_tool.WRITABLE_FIELD_SPECS[field]
@@ -698,6 +699,71 @@ layer-rule {
             animated = niri_settings_tool.MOTION_PROFILE_LAYERS[profile]["launchpad"]
             self.assertEqual(animated["layer-open"]["transform-duration-ms"], 340, profile)
             self.assertEqual(animated["layer-close"]["transform-duration-ms"], 240, profile)
+
+
+    def test_hot_corner_overview_read_defaults(self) -> None:
+        # niri: absent hot-corners block falls back to top-left (enabled).
+        original = TAHOE_PHASE0.read_text(encoding="utf-8")
+        self.assertTrue(niri_settings_tool.read_gestures_text(original)["hot_corner_overview_enabled"])
+
+    def test_hot_corner_overview_write_roundtrip(self) -> None:
+        original = TAHOE_PHASE0.read_text(encoding="utf-8")
+        field = "gestures.hot_corner_overview.enabled"
+
+        def hot_corners_body(text: str) -> str:
+            start = text.index("hot-corners {") + len("hot-corners {")
+            end = text.index("\n    }", start)
+            return text[start:end]
+
+        disabled = niri_settings_tool.update_field(original, field, "false")
+        self.assertFalse(niri_settings_tool.read_gestures_text(disabled)["hot_corner_overview_enabled"])
+        self.assertIn("hot-corners {", disabled)
+        # Block body (not comments) must be exactly the `off` flag.
+        body = hot_corners_body(disabled)
+        self.assertIn("off", body)
+        self.assertNotIn("top-left", body)
+        # idempotent
+        self.assertEqual(niri_settings_tool.update_field(disabled, field, "false"), disabled)
+
+        reenabled = niri_settings_tool.update_field(disabled, field, "true")
+        self.assertTrue(niri_settings_tool.read_gestures_text(reenabled)["hot_corner_overview_enabled"])
+        body = hot_corners_body(reenabled)
+        self.assertNotIn("off", body)
+        self.assertIn("top-left", body)
+        self.assertEqual(reenabled, original)
+
+    def test_hot_corner_read_mirrors_niri_fallback_semantics(self) -> None:
+        # Explicit non-top-left corners disable the top-left fallback.
+        original = TAHOE_PHASE0.read_text(encoding="utf-8")
+        with_corner = original.replace(
+            "hot-corners {\n        top-left\n    }",
+            "hot-corners {\n        top-right\n    }",
+            1,
+        )
+        self.assertFalse(niri_settings_tool.read_gestures_text(with_corner)["hot_corner_overview_enabled"])
+        # off always disables.
+        off = original.replace(
+            "hot-corners {\n        top-left\n    }",
+            "hot-corners {\n        off\n    }",
+            1,
+        )
+        self.assertFalse(niri_settings_tool.read_gestures_text(off)["hot_corner_overview_enabled"])
+
+    def test_hot_corner_write_requires_managed_gestures_block(self) -> None:
+        text = read_fixture("managed.kdl")
+        self.assertTrue(niri_settings_tool.read_gestures_text(text)["hot_corner_overview_enabled"])
+        disabled = niri_settings_tool.update_field(text, "gestures.hot_corner_overview.enabled", "false")
+        self.assertFalse(niri_settings_tool.read_gestures_text(disabled)["hot_corner_overview_enabled"])
+
+        # A config without any gestures block must refuse writes (managed target).
+        text_without = text.replace(
+            "// tahoe-managed: begin gestures\ngestures {\n    hot-corners {\n        top-left\n    }\n}\n// tahoe-managed: end gestures\n\n",
+            "",
+            1,
+        )
+        self.assertTrue(niri_settings_tool.read_gestures_text(text_without)["hot_corner_overview_enabled"])
+        with self.assertRaises(niri_settings_tool.KdlEditError):
+            niri_settings_tool.update_field(text_without, "gestures.hot_corner_overview.enabled", "false")
 
 
 if __name__ == "__main__":

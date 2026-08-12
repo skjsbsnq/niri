@@ -44,14 +44,16 @@ function widgetFill(darkMode) {
 function widgetStroke(darkMode) {
     return darkMode ? "#40ffffff" : "#2e000000";
 }
-// macOS widget card curvature: small/medium ≈ 24% of the short edge
-// (capped 40px), large ≈ 14% (capped 48px) — matches Sonoma/Sequoia
-// small/medium/large cards. size + minDim come from the widget instance.
+// macOS widget card curvature: small/medium ≈ 15% of the short edge
+// (capped 24px), large ≈ 10% (capped 36px). Deployment feedback (A8):
+// the original 24%/14% caps read as exaggerated on the desktop; 22-24px
+// small/medium and 31-34px large match macOS Notification Center widgets.
+// size + minDim come from the widget instance.
 function widgetRadius(size, minDim) {
     var m = Math.max(1, Math.round(Number(minDim) || 1));
     if (String(size || "") === "large")
-        return Math.min(48, Math.round(m * 0.14));
-    return Math.min(40, Math.round(m * 0.24));
+        return Math.min(36, Math.round(m * 0.10));
+    return Math.min(24, Math.round(m * 0.15));
 }
 
 var StrokePanel = "#24ffffff";

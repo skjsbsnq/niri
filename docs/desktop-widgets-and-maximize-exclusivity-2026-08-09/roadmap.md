@@ -423,9 +423,9 @@ macOS Sonoma/Sequoia 桌面小部件的 1:1 高仿外观：自适应磨砂玻璃
    - 新增 `widgetFill(darkMode)` / `widgetStroke(darkMode)`：
      深色 = 半透明白玻璃（约 24% 白）+ 白色细描边；浅色 = 近白玻璃
      （约 90% 白）+ 深色细描边（macOS 浅/深外观自适应）。
-   - 新增 `widgetRadius(size, minDim)`：small/medium 曲率 ≈ 24% 短边
-     （上限 40px）、large ≈ 14% 短边（上限 48px），照 macOS 小/中/大
-     卡片曲率。
+   - 新增 `widgetRadius(size, minDim)`：small/medium 曲率 ≈ 15% 短边
+     （上限 24px）、large ≈ 10% 短边（上限 36px），照 macOS 小/中/大
+     卡片曲率（部署反馈：初版 24%/14% 上限过圆，已收敛）。
    - **删除**静态 `FillWidget` / `StrokeWidget`（G-6：不保留与自适应
      令牌并存的第二条路径）。
 

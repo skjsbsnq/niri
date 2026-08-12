@@ -63,3 +63,13 @@
 ## 最终结论
 全部子代理 APPROVE；CONFIRMED 为 0；PLAUSIBLE 已修 2 项、记录不修 6 项。
 允许 commit。
+
+## 部署反馈补记（2026-08-12）
+
+用户部署后反馈「圆角太夸张」。处置：
+- `TahoeGlass.js` `widgetRadius` 收敛：small/medium 由 `min(40, m*0.24)`
+  改为 `min(24, m*0.15)`（典型 22–24px）；large 由 `min(48, m*0.14)`
+  改为 `min(36, m*0.10)`（典型 31–34px）。
+- 同步更新 `test_widget_dock_visual_contract.py` 曲率断言与
+  `roadmap.md` A8 描述；库预览井随同函数自动跟随。
+- 回归：全量 pytest 1177 passed；无 SpringAnimation / 硬编码 duration。

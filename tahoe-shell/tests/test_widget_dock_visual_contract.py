@@ -89,12 +89,13 @@ class WidgetDockVisualContractTests(unittest.TestCase):
         self.assertLessEqual(max(light[1], light[2], light[3]), 0x10)
 
     def test_widget_radius_macos_curvature(self) -> None:
-        # macOS small/medium cards: ~24% of the short edge, capped 40px;
-        # large: ~14%, capped 48px.
+        # macOS small/medium cards: ~15% of the short edge, capped 24px;
+        # large: ~10%, capped 36px (deployment feedback: the original
+        # 24%/14% caps read as exaggerated on the desktop).
         self.assertIn("function widgetRadius(size, minDim)", self.glass)
         self.assertIn('String(size || "") === "large"', self.glass)
-        self.assertIn("Math.min(48, Math.round(m * 0.14))", self.glass)
-        self.assertIn("Math.min(40, Math.round(m * 0.24))", self.glass)
+        self.assertIn("Math.min(36, Math.round(m * 0.10))", self.glass)
+        self.assertIn("Math.min(24, Math.round(m * 0.15))", self.glass)
 
     def test_widget_base_exposes_macos_text_scale(self) -> None:
         # Widgets must read the adaptive text palette from the base instead of

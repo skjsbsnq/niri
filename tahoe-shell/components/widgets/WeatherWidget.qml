@@ -145,28 +145,26 @@ Widget {
         return arr.slice(start, start + 5);
     }
 
-    // ---- 视觉（照 macOS 天气小部件：左当前天气 + 右大图标 + 底部逐时条）----
-    // 部署反馈：44px 大字 + 52px 逐时条在小部件 2 行高度里放不下，顶部
-    // Column 溢出并把「今日 x° ~ y°」压进/贴上逐时条。修复：收窄外边距、
-    // 逐时条降到 50px、当前温度字号降到 34 并给各文本显式高度，使内容
-    // 总高（≈85px）稳定小于 topArea 可用高；topArea 再设 clip 兜底，极端
-    // 矮屏只裁切不重叠。
-    readonly property color textPrimary: "#ffffff"
-    readonly property color textSecondary: "#c7ffffff"
-    readonly property color textSoft: "#8affffff"
-    readonly property real hourlyH: 50
-    // 外边距（内容区四周留白；与 Calendar/SystemMonitor 的 12 相比略窄，
-    // 因为本组件还有逐时条要容纳）。单处定义供布局与测试使用。
-    readonly property real contentMargin: 10
+    // ---- 视觉（A8：照 macOS 天气小部件：左当前天气 + 右大图标 +
+    // 底部逐时条）----
+    // 历史约束：顶部 Column 曾溢出把「今日 x° ~ y°」压进逐时条；现给
+    // 各文本显式高度、逐时条内容显式定高（11+16+13+spacing 4 = 45 ≤
+    // hourlyH 46），任意字体度量都不溢出；topArea 再设 clip 兜底，极端
+    // 矮屏只裁切不重叠（A3 起的不变式）。
+    // A8：文字色阶读基类 root.text*（深浅外观自适应，勿在此硬编码白字）。
+    readonly property real hourlyH: 46
+    // 外边距（内容区四周留白，macOS 卡片 12–14px 档）。单处定义供布局与
+    // 测试使用。
+    readonly property real contentMargin: 12
     // 顶部可用高：实例高 - 上下边距 - 逐时条 - 与逐时条的固定间隙。
     readonly property real topAreaH: Math.max(0, root.height - 2 * root.contentMargin - root.hourlyH - 4)
-    // 固定行（位置 14 + 描述 14 + 今日 13 + spacing 2×3 = 47）之外的
-    // 余量给当前温度行：矮屏收缩（最小 26）、高屏封顶 38。这样逻辑高
+    // 固定行（位置 14 + 描述 14 + 今日 14 + spacing 2×3 = 48）之外的
+    // 余量给当前温度行：矮屏收缩（最小 26）、高屏封顶 36。这样逻辑高
     // 720–1600 全范围 Column 总高 = fixedRowsH + tempRowH ≤ topAreaH
     // （审查 C1/C2：1366×768 与 761/762 边界不再把「今日」行裁掉）。
-    readonly property real fixedRowsH: 14 + 14 + 13 + 2 * 3
+    readonly property real fixedRowsH: 14 + 14 + 14 + 2 * 3
     readonly property real tempRowMinH: 26
-    readonly property real tempRowMaxH: 38
+    readonly property real tempRowMaxH: 36
     readonly property real tempRowH: Math.max(root.tempRowMinH, Math.min(root.tempRowMaxH, root.topAreaH - root.fixedRowsH))
 
     Item {
@@ -210,7 +208,8 @@ Widget {
                     verticalAlignment: Text.AlignVCenter
                     text: root.hasData && root.locationName.length > 0 ? root.locationName : "--"
                     color: root.textSecondary
-                    font.pixelSize: 11
+                    font.pixelSize: 13
+                    font.weight: Font.Medium
                     elide: Text.ElideRight
                 }
 
@@ -229,7 +228,7 @@ Widget {
                     Text {
                         text: root.tempUnit() === "f" ? "°F" : "°C"
                         color: root.textSecondary
-                        font.pixelSize: 13
+                        font.pixelSize: 14
                         font.weight: Font.Medium
                         anchors.bottom: parent.bottom
                         anchors.bottomMargin: 5
@@ -242,14 +241,14 @@ Widget {
                     verticalAlignment: Text.AlignVCenter
                     text: root.hasData ? root.currentText : (root.weatherService && root.weatherService.updating ? "正在获取天气" : "暂无天气")
                     color: root.textPrimary
-                    font.pixelSize: 11
+                    font.pixelSize: 13
                     font.weight: Font.DemiBold
                     elide: Text.ElideRight
                 }
 
                 Text {
                     width: parent.width
-                    height: 13
+                    height: 14
                     verticalAlignment: Text.AlignVCenter
                     text: {
                         if (!root.hasData)
@@ -259,8 +258,8 @@ Widget {
                             return "";
                         return "今日 " + root.fmtTemp(root.currentLowC, false) + "° ~ " + root.fmtTemp(root.currentHighC, false) + "°";
                     }
-                    color: root.textSoft
-                    font.pixelSize: 11
+                    color: root.textTertiary
+                    font.pixelSize: 13
                     elide: Text.ElideRight
                     visible: text.length > 0
                 }
@@ -286,28 +285,34 @@ Widget {
 
                     width: hourlyRow.width / Math.max(1, hourlyRepeater.count)
                     height: parent.height
-                    spacing: 3
+                    spacing: 2
 
+                    // 显式高度：12 + 16 + 13 + spacing 4 = 45 ≤ hourlyH 46，
+                    // 不受字体行高度量影响（审查 P2）。
                     Text {
                         anchors.horizontalCenter: parent.horizontalCenter
+                        height: 12
+                        verticalAlignment: Text.AlignVCenter
                         text: root.fmtHour(modelData.time)
                         color: root.textSecondary
-                        font.pixelSize: 10
+                        font.pixelSize: 11
                     }
 
                     TahoeSymbol {
                         anchors.horizontalCenter: parent.horizontalCenter
                         name: WeatherCodes.materialIcon(Number(modelData.weatherCode), modelData.isDay === false)
                         color: root.textPrimary
-                        size: 18
+                        size: 16
                         asynchronous: true
                     }
 
                     Text {
                         anchors.horizontalCenter: parent.horizontalCenter
+                        height: 13
+                        verticalAlignment: Text.AlignVCenter
                         text: root.fmtTemp(Number(modelData.temperatureC), false)
                         color: root.textPrimary
-                        font.pixelSize: 11
+                        font.pixelSize: 12
                         font.weight: Font.Medium
                     }
                 }

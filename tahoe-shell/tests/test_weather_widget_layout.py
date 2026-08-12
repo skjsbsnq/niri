@@ -34,14 +34,14 @@ def extract_value(text: str, pattern: str) -> float:
 class WeatherWidgetLayoutTests(unittest.TestCase):
     def test_load_bearing_values_are_locked(self) -> None:
         text = WIDGET.read_text(encoding="utf-8")
-        self.assertIn("readonly property real hourlyH: 50", text)
-        self.assertIn("readonly property real contentMargin: 10", text)
+        self.assertIn("readonly property real hourlyH: 46", text)
+        self.assertIn("readonly property real contentMargin: 12", text)
         self.assertIn("readonly property real tempRowMinH: 26", text)
-        self.assertIn("readonly property real tempRowMaxH: 38", text)
+        self.assertIn("readonly property real tempRowMaxH: 36", text)
         self.assertIn("anchors.margins: root.contentMargin", text)
         self.assertIn("spacing: 2", text)
-        self.assertIn("height: 14", text)
-        self.assertIn("height: 13", text)
+        # 三行文本均为 14px 行高（13px 字号），今日行不再独小。
+        self.assertGreaterEqual(text.count("height: 14"), 3)
         self.assertIn("height: root.tempRowH", text)
         # 自适应公式：温度行高度 = clamp(topAreaH - fixed, min, max)。
         self.assertIn("root.tempRowH", text)
@@ -65,7 +65,7 @@ class WeatherWidgetLayoutTests(unittest.TestCase):
         spacing = extract_value(top_section, r"spacing: (\d+)")
         loc_h = 14
         cond_h = 14
-        today_h = 13
+        today_h = 14
         temp_min = extract_value(widget_text, r"readonly property real tempRowMinH: (\d+)")
         temp_max = extract_value(widget_text, r"readonly property real tempRowMaxH: (\d+)")
         top_gap = 4
@@ -122,7 +122,7 @@ class WeatherWidgetLayoutTests(unittest.TestCase):
         top_reserved = extract_value(host_text, r"readonly property int topReserved: (\d+)")
         for height in range(720, 1601):
             self.assert_geometry_fits(1920, height, top_reserved, gap, hourly_h,
-                                      margin, spacing, 14, 14, 13, temp_min,
+                                      margin, spacing, 14, 14, 14, temp_min,
                                       temp_max, 4)
 
     def test_today_line_is_preserved(self) -> None:

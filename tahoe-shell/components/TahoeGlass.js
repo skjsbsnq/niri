@@ -34,10 +34,25 @@ var FillTopBar = "#33ffffff";
 var FillPill = "#59ffffff";
 var FillLauncher = "#3dffffff";
 var FillBackdrop = "#26ffffff";
-// Desktop widgets use the macOS dark widget plate: the wallpaper remains
-// softly visible through blur, while white content keeps stable contrast even
-// over bright artwork. This is intentionally denser than menu liquid glass.
-var FillWidget = "#b82c2c2e";
+// Desktop widgets (A8): macOS Sonoma/Sequoia adaptive glass. Dark mode =
+// translucent white glass (~24%) + white hairline; light mode = near-white
+// glass (~90%) + subtle dark hairline. Text/icon colors adapt via the
+// widget's darkMode (see Widget.qml textPrimary/textSecondary/textTertiary).
+function widgetFill(darkMode) {
+    return darkMode ? "#3dffffff" : "#e6ffffff";
+}
+function widgetStroke(darkMode) {
+    return darkMode ? "#40ffffff" : "#2e000000";
+}
+// macOS widget card curvature: small/medium ≈ 24% of the short edge
+// (capped 40px), large ≈ 14% (capped 48px) — matches Sonoma/Sequoia
+// small/medium/large cards. size + minDim come from the widget instance.
+function widgetRadius(size, minDim) {
+    var m = Math.max(1, Math.round(Number(minDim) || 1));
+    if (String(size || "") === "large")
+        return Math.min(48, Math.round(m * 0.14));
+    return Math.min(40, Math.round(m * 0.24));
+}
 
 var StrokePanel = "#24ffffff";
 var StrokePanelBright = "#34ffffff";
@@ -46,7 +61,6 @@ var StrokeTopBar = "#14ffffff";
 var StrokePill = "#48ffffff";
 var StrokeLauncher = "#32ffffff";
 var StrokeToast = "#34ffffff";
-var StrokeWidget = "#2effffff";
 
 function radiusForMaterial(material) {
     switch (material) {

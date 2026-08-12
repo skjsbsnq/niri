@@ -56,6 +56,9 @@ Item {
         }
         var props = {
             "previewMode": true,
+            // A8：预览井恒为深色底（A5 可读性修复），预览实例固定深色外观，
+            // 与桌面卡片深色玻璃一致。
+            "darkMode": true,
             "x": 0,
             "y": 0
         };

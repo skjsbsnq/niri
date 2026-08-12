@@ -36,9 +36,9 @@ Item {
     property real cellSize: 100
 
     // ---- 玻璃（每小部件 1 个 region，见 P-5 计数）----
-    // macOS desktop widgets read as calm, dense plates rather than interactive
-    // menu glass. Keep the compositor blur/shadow, but use the lower-refraction
-    // panel profile and a dedicated dark backplate for reliable contrast.
+    // A8：macOS Sonoma/Sequoia 自适应磨砂玻璃卡片 —— 填充/描边随
+    // darkMode 切换（TahoeGlass.js widgetFill/widgetStroke），曲率随
+    // 档位与短边（widgetRadius）。region 几何仍禁弹簧（P-1）。
     property string material: GlassStyle.MaterialPanel
     property real materialAlpha: 1
     property bool glassBlur: true
@@ -53,8 +53,20 @@ Item {
     readonly property bool dataRefreshActive: root.hostVisible && !root.previewMode
     // previewMode（A5 库预览）：禁用交互与数据刷新。
     property bool previewMode: false
+    // A8 深浅外观：由宿主以 Qt.binding 注入（shell.darkMode）。玻璃填充、
+    // 描边与全部文字/图标颜色据此切换（macOS 浅/深外观自适应）。
+    property bool darkMode: false
     // 小部件本身体积内的指针事件由宿主 mask 覆盖（点击直达小部件）。
     readonly property bool interactive: !root.previewMode
+
+    // ---- A8 macOS 自适应文字色阶（widgets 单一来源，勿在子类另建）----
+    // 与 SettingsTheme 同款 macOS 色板；子类一律读 root.text*，不得
+    // 硬编码 #ffffff（浅色外观下会白字白底不可读）。
+    readonly property color textPrimary: root.darkMode ? "#f5f7fb" : "#1d1d1f"
+    readonly property color textSecondary: root.darkMode ? "#c3ccd6" : "#721d1d1f"
+    readonly property color textTertiary: root.darkMode ? "#94a0ad" : "#5f6870"
+    // 卡片曲率（macOS 小/中/大曲率，TahoeGlass.js 唯一来源）。
+    readonly property real widgetRadius: GlassStyle.widgetRadius(root.widgetSize, Math.min(root.width, root.height))
 
     // ---- A6 编辑模式 ----
     // 由宿主以 Qt.binding 注入（进入/退出编辑模式时全部实例实时跟随）。
@@ -95,14 +107,14 @@ Item {
     GlassPanel {
         parent: root
         anchors.fill: parent
-        radius: GlassStyle.RadiusPanelCompact
+        radius: root.widgetRadius
         material: root.material
         materialAlpha: root.materialAlpha
         blur: root.glassBlur
         shadow: root.glassShadow
-        fillColor: GlassStyle.FillWidget
-        strokeColor: GlassStyle.StrokeWidget
-        regionRadius: GlassStyle.RadiusPanelCompact
+        fillColor: GlassStyle.widgetFill(root.darkMode)
+        strokeColor: GlassStyle.widgetStroke(root.darkMode)
+        regionRadius: root.widgetRadius
         regionItem: root
         useItemRegion: true
         pressInteractionEnabled: false
@@ -335,25 +347,28 @@ Item {
     }
 
     // 删除按钮（A6）：编辑模式显示；点击经宿主真正销毁实例 + 写盘一次。
+    // A8 外观：macOS 编辑态圆形徽标 —— 深灰底 + 白「−」，深浅外观通用
+    // （白底徽标在浅色壁纸上不可见），位置/z 层级不变（z:20）。
     Rectangle {
         id: deleteButton
         anchors.right: parent.right
         anchors.top: parent.top
         anchors.rightMargin: 6
         anchors.topMargin: 6
-        width: 24
-        height: 24
-        radius: 12
-        color: "#e6ff453a"
+        width: 22
+        height: 22
+        radius: width / 2
+        color: "#cc000000"
         visible: root.editMode && root.interactive
         z: 20
 
         Text {
             anchors.centerIn: parent
-            text: "×"
+            anchors.verticalCenterOffset: -1
+            text: "−"
             color: "#ffffff"
             font.pixelSize: 15
-            font.weight: Font.DemiBold
+            font.weight: Font.Medium
         }
 
         MouseArea {

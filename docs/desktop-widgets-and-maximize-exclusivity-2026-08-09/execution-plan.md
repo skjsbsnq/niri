@@ -358,6 +358,19 @@ QS_PID=$(pgrep -x quickshell | head -1) && kill $QS_PID
 - 非编辑模式下小部件点击行为正常
 - `pytest` 全绿
 
+### A8（小部件外观 macOS 1:1 重做 —— 视觉专项，回归从严）
+- A2–A7 的全部回归项（网格 / 三档 / 添加 / 预览 / 编辑 / 拖动 /
+  resize / 持久化 / mask / 输入策略全部不变）
+- **深/浅外观切换**：小部件玻璃、文字、图标颜色立即跟随
+  `shell.darkMode`（人工验证，无需重启）
+- 编辑模式删除徽标 / 「完成」胶囊风格正确（人工验证）
+- 库预览井圆角与桌面卡片曲率一致（人工验证）
+- 视觉契约测试（`test_widget_dock_visual_contract.py` /
+  `test_battery_widget_layout.py` / `test_weather_widget_layout.py` /
+  `test_widget_preview.py`）按新 macOS 契约更新后全绿
+- 禁弹簧 / 禁硬编码 duration 断言（`components/widgets/`）全过
+- `pytest` 全绿
+
 ---
 
 ## 第 5 章：任务索引与状态跟踪
@@ -377,6 +390,7 @@ QS_PID=$(pgrep -x quickshell | head -1) && kill $QS_PID
 | 9 | A5 库实时预览 | QML | 2 | 是 | 完成（a0c9d8b + f2a5c63 部署修复） |
 | 10 | A6 长按编辑 + 拖动移位 | QML | 3 | 是 | 完成（8e3658b） |
 | 11 | A7 边缘 resize 三档切换 | QML | 2 | 是 | 完成（f5f6a68） |
+| 12 | A8 小部件外观 macOS 1:1 高仿全面重做 | QML | 2 | 是 | 进行中 |
 
 **每完成一个任务，把该行「状态」改为「完成（<commit sha>）」并提交本文件。**
 

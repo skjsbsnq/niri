@@ -47,17 +47,15 @@ Widget {
         }
     }
 
-    // ---- 视觉（照 macOS 日历小部件：月/年头 + 周首字母 + 42 格月历）----
-    readonly property color textPrimary: "#ffffff"
-    readonly property color textSecondary: "#c7ffffff"
-    readonly property color textDim: "#59ffffff"
-    readonly property color todayRed: "#ff453a"
+    // ---- 视觉（A8：照 macOS 日历小部件：月/年头 + 周首字母 + 42 格
+    // 月历；文字色阶读基类 root.text*，深浅外观自适应）----
+    readonly property color todayRed: root.darkMode ? "#ff453a" : "#ff3b30"
     readonly property real cellW: Math.max(1, (root.width - 24) / 7)
     // 网格可用高度 = 小部件高 - 上下边距 - 头部/周行（42 格分 6 行）。
     readonly property real gridTop: 12 + root.headerH + 4 + root.weekdayH + 6
     readonly property real cellH: Math.max(1, Math.floor((root.height - root.gridTop - 12) / 6))
-    readonly property real headerH: 24
-    readonly property real weekdayH: 16
+    readonly property real headerH: 26
+    readonly property real weekdayH: 18
 
     Item {
         anchors.fill: parent
@@ -76,7 +74,7 @@ Widget {
                 anchors.verticalCenter: parent.verticalCenter
                 text: root.title
                 color: root.textPrimary
-                font.pixelSize: 15
+                font.pixelSize: 13
                 font.weight: Font.DemiBold
                 elide: Text.ElideRight
             }
@@ -85,7 +83,7 @@ Widget {
                 anchors.verticalCenter: parent.verticalCenter
                 text: root.todayLabel.length > 0 ? "今天 " + root.todayLabel : ""
                 color: root.todayRed
-                font.pixelSize: 12
+                font.pixelSize: 13
                 font.weight: Font.Medium
                 visible: root.todayLabel.length > 0
             }
@@ -107,7 +105,7 @@ Widget {
                     height: parent.height
                     text: modelData
                     color: root.textSecondary
-                    font.pixelSize: 10
+                    font.pixelSize: 11
                     horizontalAlignment: Text.AlignHCenter
                     verticalAlignment: Text.AlignVCenter
                 }
@@ -148,8 +146,8 @@ Widget {
                         text: modelData.day
                         color: modelData.isToday ? "#ffffff"
                             : modelData.inMonth ? (modelData.isWeekend ? root.textSecondary : root.textPrimary)
-                            : root.textDim
-                        font.pixelSize: 11
+                            : root.textTertiary
+                        font.pixelSize: Math.min(13, Math.max(10, Math.round(root.cellH - 1)))
                         font.weight: modelData.isToday ? Font.DemiBold : Font.Normal
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter

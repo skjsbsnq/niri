@@ -35,6 +35,9 @@ PanelWindow {
     property var batteryService
     property var weatherService
     property var systemStatsService
+    // A8 深浅外观（shell.darkMode 注入）：传给每个小部件实例与「完成」
+    // 按钮，玻璃/文字/图标颜色随外观自适应（macOS 行为）。
+    property bool darkMode: false
 
     // 宿主可见性（真实门控源）：注入到每个小部件 hostVisible，
     // 宿主隐藏 → dataRefreshActive=false → 刷新/动画停止（A3 判据）。
@@ -263,6 +266,9 @@ PanelWindow {
         // editMode 同样以绑定注入：进入/退出编辑模式时全部实例实时跟随
         // （一次性初值会在后续切换时卡在旧值）。
         obj.editMode = Qt.binding(function() { return root.editMode; });
+        // darkMode 同样以绑定注入：深浅外观切换时全部实例实时跟随
+        // （A8 自适应玻璃，一次性初值会在切换时卡在旧值）。
+        obj.darkMode = Qt.binding(function() { return root.darkMode; });
         map[entry.id] = obj;
         return obj;
     }
@@ -987,15 +993,15 @@ PanelWindow {
 
         Rectangle {
             anchors.fill: parent
-            radius: 16
-            color: "#e6ffffff"
-            border.color: "#33000000"
+            radius: height / 2
+            color: root.darkMode ? "#e6ffffff" : "#ffffff"
+            border.color: root.darkMode ? "#33000000" : "#1a000000"
             border.width: 1
 
             Text {
                 anchors.centerIn: parent
                 text: "完成"
-                color: "#000000"
+                color: root.darkMode ? "#000000" : "#1d1d1f"
                 font.pixelSize: 13
                 font.weight: Font.DemiBold
             }

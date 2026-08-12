@@ -919,6 +919,8 @@ ShellRoot {
                 id: widgetHost
 
                 screen: modelData
+                // A8：深浅外观注入小部件宿主（玻璃/文字/图标自适应）。
+                darkMode: shell.darkMode
                 popupActive: shell.topBarPopupOpenFor(shell.appMenuOpen, modelData)
                     || shell.topBarPopupOpenFor(shell.applicationMenuOpen, modelData)
                     || shell.topBarPopupOpenFor(shell.controlCenterOpen, modelData)

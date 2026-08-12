@@ -355,9 +355,11 @@ Item {
                                     // 为桌面壁纸场景设计。浅色侧栏卡片上会白字
                                     // 白底不可见（部署实测：只见红点/彩色条），
                                     // 故预览区先垫深色底，保证真实预览可读。
+                                    // A8：井圆角跟随新卡片曲率（widgetRadius），
+                                    // 与实际桌面卡片一致。
                                     Rectangle {
                                         anchors.fill: parent
-                                        radius: GlassStyle.RadiusPanelCompact
+                                        radius: GlassStyle.widgetRadius(selectedSize, Math.min(previewW, previewH))
                                         color: root.darkMode ? "#1c1c1e" : "#2c2c2e"
                                     }
 

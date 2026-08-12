@@ -155,7 +155,9 @@ class WidgetLibraryGalleryContractTests(unittest.TestCase):
         # visible). A dark well must sit behind every preview instance.
         lib = LIBRARY.read_text(encoding="utf-8")
         self.assertIn('import "TahoeGlass.js" as GlassStyle', lib)
-        self.assertIn("radius: GlassStyle.RadiusPanelCompact", lib)
+        # A8: preview well follows the new macOS card curvature so the preview
+        # matches the actual desktop card shape.
+        self.assertIn("radius: GlassStyle.widgetRadius(selectedSize, Math.min(previewW, previewH))", lib)
         self.assertIn('color: root.darkMode ? "#1c1c1e" : "#2c2c2e"', lib)
         # The well is declared before the preview instance (renders behind it):
         # if the well moved after the preview, an opaque well would cover the

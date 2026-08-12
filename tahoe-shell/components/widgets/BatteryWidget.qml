@@ -8,6 +8,8 @@ import ".."
 // 遵守 A-C3：本组件不建任何 Timer / 不 spawn 进程，只读注入的
 // batteryService；previewMode 下显示真实当前值但不随事件刷新
 // （A5 库预览禁止数据刷新）。
+// A8：外观照 macOS Sonoma 电池小部件 —— 居中电池图标 + 大百分比 +
+// 状态说明，颜色随深浅外观自适应（充电绿 / 低电量红 / 常规主色）。
 Widget {
     id: root
 
@@ -49,69 +51,87 @@ Widget {
     readonly property bool charging: root.available && (root.live ? root._liveCharging : root._snapCharging)
     readonly property bool onBattery: root.available && (root.live ? root._liveOnBattery : root._snapOnBattery)
 
-    // 低电量着色（照 BatteryPopup 语义：≤15% 且使用电池时警示色）。
-    readonly property color percentColor: root.available
-        && root.percentage <= 15
-        && root.onBattery
-        ? "#ff453a" : "#ffffff"
-
-    // ---- 视觉（部署反馈修复：图标与百分比卡在一起）----
-    // 旧布局用 cellSize 绝对偏移（bolt topMargin 0.45*cell、半透明轮廓
-    // 居中、百分比 bottomMargin 0.22*cell）；实例因 gap 内缩 12px 后，
-    // bolt 与轮廓互相挤压、百分比压上轮廓下沿。改为锚链顺序排布：
-    // 轮廓贴顶（bolt 叠加其中心）、百分比锚在轮廓下沿、状态文本贴底 ——
-    // 任意实例高度下三者互不重叠。
-    TahoeSymbol {
-        id: batteryShell
-
-        anchors.horizontalCenter: parent.horizontalCenter
-        anchors.top: parent.top
-        anchors.topMargin: Math.max(4, Math.round(root.height * 0.05))
-        name: ""
-        color: root.percentColor
-        size: Math.min(52, Math.round(root.width * 0.58))
-        opacity: 0.5
-        asynchronous: true
+    // ---- 视觉（A8：照 macOS Sonoma 电池小部件）----
+    // 居中列：电池图标（充电绿 / 低电量红 / 常规自适应）+ 大百分比
+    // （Semibold，随卡片宽度缩放）+ 状态说明（secondary）。
+    // 颜色全部跟随 root.textPrimary / root.textSecondary（深/浅外观
+    // 自适应），不再固定白字。
+    readonly property color percentColor: {
+        if (!root.available)
+            return root.textPrimary;
+        if (root.percentage <= 15 && root.onBattery)
+            return root.darkMode ? "#ff453a" : "#ff3b30";
+        if (root.charging)
+            return root.darkMode ? "#30d158" : "#34c759";
+        return root.textPrimary;
     }
+    // 图标尺寸随卡片宽度缩放（small ~27px、medium/large 封顶 40px），
+    // 百分比同理（small ~34px、封顶 44px）—— 三档都能完整容纳。
+    readonly property real iconSize: Math.min(40, Math.max(26, Math.round(root.width * 0.16)))
+    readonly property real percentSize: Math.min(44, Math.max(30, Math.round(root.width * 0.2)))
 
-    // 充电 e1a3 / 放电 e1a4（与 BatteryPopup 一致）：叠加在轮廓中心。
-    TahoeSymbol {
-        id: icon
+    Item {
+        anchors.fill: parent
+        anchors.margins: 14
 
-        anchors.centerIn: batteryShell
-        name: root.charging ? "" : ""
-        color: root.percentColor
-        size: Math.min(40, Math.round(root.width * 0.46))
-        asynchronous: true
-    }
+        Column {
+            anchors.centerIn: parent
+            width: parent.width
+            spacing: Math.max(2, Math.round(root.height * 0.03))
 
-    // 百分比：锚在轮廓下沿 + 固定间隙，永远在图标之下、互不重叠。
-    Text {
-        anchors.horizontalCenter: parent.horizontalCenter
-        anchors.top: batteryShell.bottom
-        anchors.topMargin: Math.max(2, Math.round(root.height * 0.04))
-        text: root.percentage + "%"
-        color: "#ffffff"
-        font.pixelSize: Math.min(26, Math.round(root.width * 0.26))
-        font.weight: Font.DemiBold
-        horizontalAlignment: Text.AlignHCenter
-        verticalAlignment: Text.AlignVCenter
-    }
+            // 电池轮廓 + 充放电 bolt（与 BatteryPopup 同款字形）。
+            Item {
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: root.iconSize
+                height: root.iconSize
 
-    Text {
-        anchors.horizontalCenter: parent.horizontalCenter
-        anchors.bottom: parent.bottom
-        anchors.bottomMargin: 2
-        text: {
-            if (!root.live || !root.available)
-                return "";
-            if (root.batteryService && root.batteryService.stateText.length > 0)
-                return root.batteryService.stateText;
-            return root.charging ? "充电中" : "";
+                TahoeSymbol {
+                    id: batteryShell
+
+                    anchors.fill: parent
+                    name: "\ue1db"
+                    color: root.percentColor
+                    opacity: 0.55
+                    asynchronous: true
+                }
+
+                TahoeSymbol {
+                    anchors.centerIn: batteryShell
+                    name: root.charging ? "\ue1a3" : "\ue1a4"
+                    color: root.percentColor
+                    size: Math.round(root.iconSize * 0.8)
+                    asynchronous: true
+                }
+            }
+
+            // 大百分比。
+            Text {
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: root.percentage + "%"
+                color: root.percentColor
+                font.pixelSize: root.percentSize
+                font.weight: Font.DemiBold
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+                lineHeight: 1.0
+            }
+
+            // 状态说明（贴底语义由 Column 中心布局承担，不再绝对锚定）。
+            Text {
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: {
+                    if (!root.live || !root.available)
+                        return "";
+                    if (root.batteryService && root.batteryService.stateText.length > 0)
+                        return root.batteryService.stateText;
+                    return root.charging ? "正在充电" : "";
+                }
+                color: root.textSecondary
+                font.pixelSize: 12
+                horizontalAlignment: Text.AlignHCenter
+                verticalAlignment: Text.AlignVCenter
+                visible: text.length > 0
+            }
         }
-        color: "#b3ffffff"
-        font.pixelSize: Math.max(10, Math.round(root.cellSize * 0.16))
-        horizontalAlignment: Text.AlignHCenter
-        visible: text.length > 0
     }
 }

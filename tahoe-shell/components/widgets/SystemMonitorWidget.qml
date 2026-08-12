@@ -75,12 +75,11 @@ Widget {
         return (n / (1024 * 1024)).toFixed(1) + " MB/s";
     }
 
-    // ---- 视觉（macOS 系统色：CPU 蓝 / 内存绿 / 磁盘紫 + 细圆条）----
-    readonly property color textPrimary: "#ffffff"
-    readonly property color textSecondary: "#c7ffffff"
-    readonly property color colorCpu: "#0a84ff"
-    readonly property color colorRam: "#30d158"
-    readonly property color colorDisk: "#bf5af2"
+    // ---- 视觉（A8：macOS 系统色：CPU 蓝 / 内存绿 / 磁盘紫 + 细圆条；
+    // 文字色阶读基类 root.text*，深浅外观自适应）----
+    readonly property color colorCpu: root.darkMode ? "#0a84ff" : "#007aff"
+    readonly property color colorRam: root.darkMode ? "#30d158" : "#34c759"
+    readonly property color colorDisk: root.darkMode ? "#bf5af2" : "#af52de"
 
     component MetricBar: Column {
         id: metricBar
@@ -116,7 +115,7 @@ Widget {
             width: parent.width
             height: 5
             radius: Math.round(height / 2)
-            color: "#33ffffff"
+            color: root.darkMode ? "#2effffff" : "#1a000000"
 
             Rectangle {
                 width: Math.max(0, Math.min(parent.width, parent.width * (metricBar.available ? metricBar.value : 0) / 100))
@@ -172,7 +171,7 @@ Widget {
             anchors.verticalCenter: parent.verticalCenter
             text: "↓ " + root.fmtBytes(root.netDown) + "   ↑ " + root.fmtBytes(root.netUp)
             color: root.textSecondary
-            font.pixelSize: 10
+            font.pixelSize: 11
         }
     }
 }
